@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Manejo {{ safra_label }} - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Manejo {{ safra_label }}</h4>
+<p class="text-muted small">
+    Fazendas e doencas atualmente em Atencao ou Perigo. Os 3 ingredientes
+    ativos mais eficazes de cada grupo (quando disponiveis) vem da
+    biblioteca de fungicidas da aba <strong>Fungicidas</strong> (admin) --
+    veja a lista completa e as fontes por la. Isso NAO substitui a
+    avaliacao de um agronomo responsavel.
+</p>
+
+{% if not no_access and not any_whatsapp_configured %}
+<div class="alert alert-warning small">
+    Nenhum numero de WhatsApp cadastrado ainda -- um admin precisa marcar,
+    na aba Usuarios, quais fazendas cada usuario deve receber relatorio
+    (coluna "Receber relatorios"), e a pessoa precisa ter configurado o
+    proprio numero em <strong>📱 Meu WhatsApp</strong> (no menu).
+</div>
+{% endif %}
+
+{% if no_access %}
+<div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
+{% elif not sites_data %}
+<div class="alert alert-info">Nenhuma fazenda encontrada.</div>
+{% else %}
+<form method="post" action="{{ url_for('save_recommendations') }}" id="notesForm">
+    <input type="hidden" name="safra" value="{{ safra }}">
+</form>
+
+<form method="post" action="{{ url_for('send_selected_whatsapp') }}" id="whatsappBulkForm">
+    <input type="hidden" name="safra" value="{{ safra }}">
+</form>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <div class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" id="selectAllFarms">
+        <label class="form-check-label small" for="selectAllFarms">Selecionar todas</label>
+    </div>
+    <button type="submit" form="whatsappBulkForm" class="btn btn-sm btn-outline-success" {% if not any_whatsapp_configured %}disabled{% endif %}>
+        📲 Enviar selecionados por WhatsApp
+    </button>
+</div>
+
+{% for site_group in sites_data %}
+{% set outer_loop = loop %}
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+            <input class="form-check-input farm-select-checkbox mt-0" type="checkbox" name="site_name" value="{{ site_group.site }}" form="whatsappBulkForm" title="Selecionar para envio em lote">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
+                <span class="toggle-icon">▶</span> {{ site_group.site }}
+            </button>
+            <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center gap-1 mb-0">
+                <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                <input type="hidden" name="safra" value="{{ safra }}">
+                <select name="cultura" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+                    <option value="" {% if not site_group.cultura %}selected{% endif %}>(vazio)</option>
+                    {% for c in culturas_ativas %}
+                    <option value="{{ c }}" {% if c == site_group.cultura %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% if site_group.leitura_data %}
+            <span class="text-muted small">leitura de {{ site_group.leitura_data }}</span>
+            {% endif %}
+            {% if site_group.dias_desde_atualizacao is not none and site_group.dias_desde_atualizacao > 120 %}
+            <span class="badge bg-warning text-dark" title="Cultura definida ha {{ site_group.dias_desde_atualizacao }} dias -- confirme se ainda esta certa">
+                ⚠ ha {{ site_group.dias_desde_atualizacao }}d
+            </span>
+            {% endif %}
+            <div class="ms-auto d-flex gap-2">
+                <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" class="mb-0">
+                    <input type="hidden" name="safra" value="{{ safra }}">
+                    <button type="submit" class="btn btn-sm btn-outline-success" {% if not site_group.whatsapp_destinos or site_group.nivel_dados == 'bloqueado' %}disabled{% endif %}
+                            title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% elif site_group.whatsapp_destinos %}Enviar para {{ site_group.whatsapp_destinos }} numero(s){% else %}Nenhum numero cadastrado pra essa fazenda ainda{% endif %}">
+                        📲 Enviar por WhatsApp{% if site_group.whatsapp_destinos %} ({{ site_group.whatsapp_destinos }}){% endif %}
+                    </button>
+                </form>
+                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn" {% if not site_group.whatsapp_text %}disabled{% endif %}
+                        data-text="{{ site_group.whatsapp_text }}"
+                        title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
+                    📋 Copiar recomendacao
+                </button>
+            </div>
+        </div>
+        <div class="d-none mt-2" id="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
+        {% if not site_group.diseases %}
+        <div class="alert alert-info small mb-3">Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.</div>
+        {% endif %}
+
+        <div class="mini-thumbs">
+            {% for t in site_group.thumbnails %}
+            <div class="mini-card card-{{ 'perigo' if t.status == 'Perigo' else ('atencao' if t.status == 'Atencao' else 'normal') }}">
+                <div class="valor">{{ t.concentracao if t.concentracao is not none else '-' }}</div>
+                <div class="doenca">{{ t.doenca }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if site_group.weather %}
+        {% set origem = (site_group.weather.cidade ~ '/' ~ site_group.weather.uf ~ ' · ' if site_group.weather.cidade else '') ~ 'Fonte: ' ~ site_group.weather.fonte %}
+        <div class="small text-muted mt-2 mb-2 d-flex flex-wrap gap-3 align-items-center">
+            <span>
+                🌡️ {{ site_group.weather.temperatura_atual }}°C
+                {% if site_group.weather.umidade_atual is not none %}· 💧 {{ site_group.weather.umidade_atual }}% umidade{% endif %}
+                {% if site_group.weather.chuva_atual_mm is not none %}· 🌧️ {{ site_group.weather.chuva_atual_mm }} mm agora{% endif %}
+                · {{ origem }}
+            </span>
+            {% if site_group.weather.previsao_3_dias %}
+            <span>
+                Previsao:
+                {% for d in site_group.weather.previsao_3_dias %}
+                <strong>{{ d.data[5:] }}</strong>: {{ d.chuva_mm }}mm ({{ d.temp_min }}-{{ d.temp_max }}°C){% if not loop.last %}, {% endif %}
+                {% endfor %}
+                · {{ origem }}
+            </span>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% for row in site_group.diseases %}
+        <div class="{% if not loop.last %}border-bottom pb-3 mb-3{% endif %}">
+            <div>
+                <span class="badge {{ 'bg-danger' if row.status == 'Perigo' else 'bg-warning text-dark' }}">
+                    {{ row.status }}
+                </span>
+                <strong class="ms-2">{{ row.rotulo }}</strong>
+            </div>
+
+            {% if (row.quimicos and row.quimicos.itens) or (row.biologicos and row.biologicos.itens) %}
+            <div class="mt-2">
+                <label class="form-label small fw-bold mb-1">Recomendações das Instituições de Pesquisa</label>
+                <div class="manual-note-box small">
+                    {% if row.biologicos and row.biologicos.itens %}
+                    <div><strong>Biológicos:</strong> {% for p in row.biologicos.itens[:3] %}{{ p.ingrediente }}{% if p.classe %} ({{ row.classe_label.get(p.classe, p.classe) }}){% endif %}{% if not loop.last %} // {% endif %}{% endfor %}</div>
+                    {% endif %}
+                    {% if row.quimicos and row.quimicos.itens %}
+                    <div><strong>Químicos:</strong> {% for p in row.quimicos.itens[:3] %}{{ p.ingrediente }}{% if p.classe %} ({{ row.classe_label.get(p.classe, p.classe) }}){% endif %}{% if not loop.last %} // {% endif %}{% endfor %}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <div class="mt-3 pt-3 border-top">
+            <form method="post" action="{{ url_for('save_estoque_rapido') }}">
+                <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                <input type="hidden" name="safra" value="{{ safra }}">
+                <label class="form-label small fw-bold d-block mb-1">Produtos Fazenda</label>
+                <div class="row gx-3">
+                    {% for tipo, titulo in [('quimico', 'Químicos'), ('biologico', 'Biológicos')] %}
+                    <div class="col-12 col-md-6 mb-2">
+                        <div class="small fw-bold mb-1">{{ titulo }}</div>
+                        <div class="estoque-rapido-rows">
+                        {% for item in site_group.estoque_rapido[tipo] %}
+                        <div class="d-flex gap-1 mb-1 estoque-rapido-row">
+                            <input type="text" name="data_{{ tipo }}" class="form-control form-control-sm" style="max-width: 100px;" value="{{ item.data_anotacao }}" placeholder="Data/Anotacao">
+                            <input type="text" name="nome_{{ tipo }}" class="form-control form-control-sm" value="{{ item.nome }}" placeholder="Nome do produto">
+                        </div>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Salvar estoque</button>
+            </form>
+        </div>
+
+        <div class="mt-3 pt-3 border-top">
+            <label class="form-label small fw-bold d-block mb-2">Anotações</label>
+            {% for row in site_group.diseases %}
+            <div class="mb-2">
+                <div class="small text-muted mb-1">{{ row.rotulo }}</div>
+                <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
+                <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
+                <textarea name="nota" form="notesForm" class="form-control auto-grow-textarea" rows="5" placeholder="Ex.: produto, dose, epoca de aplicacao, observacoes do agronomo...">{{ row.nota }}</textarea>
+            </div>
+            {% endfor %}
+        </div>
+
+        </div>
+    </div>
+</div>
+{% endfor %}
+<button type="submit" form="notesForm" class="btn btn-success">Salvar anotacoes</button>
+<script>
+function autoGrowTextarea(el) {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+}
+document.querySelectorAll('.auto-grow-textarea').forEach(function (el) {
+    autoGrowTextarea(el);
+    el.addEventListener('input', function () { autoGrowTextarea(el); });
+});
+document.querySelectorAll('.copy-recomendacao-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var text = btn.dataset.text || '';
+        var original = btn.textContent;
+        function marcarCopiado() {
+            btn.textContent = '✅ Copiado!';
+            setTimeout(function () { btn.textContent = original; }, 2000);
+        }
+        function marcarFalha() {
+            btn.textContent = '⚠️ Copie manualmente (Ctrl+C)';
+            setTimeout(function () { btn.textContent = original; }, 3000);
+        }
+        function copiarComTextarea() {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+            document.body.removeChild(ta);
+            if (ok) { marcarCopiado(); } else { marcarFalha(); }
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(marcarCopiado).catch(copiarComTextarea);
+        } else {
+            copiarComTextarea();
+        }
+    });
+});
+document.querySelectorAll('.estoque-rapido-rows').forEach(function (container) {
+    container.addEventListener('input', function (e) {
+        var row = e.target.closest('.estoque-rapido-row');
+        if (!row || row !== container.lastElementChild || row.dataset.grown) return;
+        row.dataset.grown = '1';
+        var clone = row.cloneNode(true);
+        delete clone.dataset.grown;
+        clone.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
+        container.appendChild(clone);
+    });
+});
+document.querySelectorAll('.farm-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var body = document.getElementById(btn.dataset.target);
+        var icon = btn.querySelector('.toggle-icon');
+        var expanded = !body.classList.contains('d-none');
+        body.classList.toggle('d-none');
+        icon.textContent = expanded ? '▶' : '▼';
+    });
+});
+var selectAll = document.getElementById('selectAllFarms');
+var farmCheckboxes = document.querySelectorAll('.farm-select-checkbox');
+if (selectAll) {
+    selectAll.addEventListener('change', function () {
+        farmCheckboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+    });
+}
+farmCheckboxes.forEach(function (cb) {
+    cb.addEventListener('change', function () {
+        if (!cb.checked) { selectAll.checked = false; }
+        else if (Array.from(farmCheckboxes).every(function (c) { return c.checked; })) { selectAll.checked = true; }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

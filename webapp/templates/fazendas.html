@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Fazendas - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Fazendas</h4>
+<p class="text-muted small">
+    Cadastro dos fungicidas e biologicos que cada fazenda tem comprado, por
+    safra (<strong>Safra</strong> e <strong>2 Safra</strong>) e, dentro de
+    cada safra, por momento de aplicacao -- <strong>TS</strong> (tratamento
+    de sementes) e <strong>Folha</strong> (aplicacao foliar). Preencha a
+    data/anotacao, o nome do produto e o ingrediente ativo; linhas em
+    branco sao ignoradas ao salvar. Comeca com 3 linhas em cada grade --
+    ao preencher a ultima, uma nova aparece sozinha, sem limite de linhas.
+    Logo abaixo de Folha, tem tambem <strong>Dados de Plantio</strong>
+    (data, talhao, variedade, ciclo em dias) e <strong>Dados de
+    Aplicacoes</strong> (data, talhao, fungicidas usados) -- essas duas
+    comecam com 1 linha e crescem do mesmo jeito. Clique no nome da
+    fazenda para ver e editar o estoque. A cultura atual de cada safra e'
+    definida na aba Manejo (Safra / 2ª Safra / 3ª Safra), do lado do nome
+    da fazenda.
+</p>
+
+{% if no_access %}
+<div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
+{% elif not sites_data %}
+<div class="alert alert-info">Nenhuma fazenda cadastrada ainda.</div>
+{% else %}
+{% for site_group in sites_data %}
+{% set farm_idx = loop.index0 %}
+<div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
+    <div class="card-body">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="farm-body-{{ farm_idx }}">
+            <span class="toggle-icon">▶</span> {{ site_group.site }}
+        </button>
+        <div class="d-none mt-3" id="farm-body-{{ farm_idx }}">
+            <div class="d-flex gap-2 mb-3">
+                {% for safra_group in site_group.safras %}
+                <button type="button" class="btn btn-sm safra-toggle {% if loop.first %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                        data-target="safra-body-{{ farm_idx }}-{{ safra_group.safra }}">
+                    {{ safra_group.titulo }}
+                </button>
+                {% endfor %}
+            </div>
+            {% for safra_group in site_group.safras %}
+            <div class="{% if not loop.first %}d-none{% endif %}" id="safra-body-{{ farm_idx }}-{{ safra_group.safra }}">
+                <form method="post" action="{{ url_for('save_farm_produtos') }}">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <input type="hidden" name="safra" value="{{ safra_group.safra }}">
+                    {% for secao in safra_group.secoes %}
+                    <div class="mb-3 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+                        <div class="fw-bold mb-2">{{ secao.titulo }}</div>
+                        <div class="row gx-4">
+                            {% for grupo in secao.grupos %}
+                            <div class="col-12 col-lg-6 mb-3">
+                                <div class="small text-muted mb-1">{{ grupo.titulo }}</div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0 produtos-table">
+                                        <thead>
+                                            <tr><th>Data/Anotacao</th><th>Nome do produto</th><th>Ingrediente ativo</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for linha in grupo.linhas %}
+                                            <tr>
+                                                <td><input type="text" name="data_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.data_anotacao }}"></td>
+                                                <td><input type="text" name="nome_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.nome }}"></td>
+                                                <td><input type="text" name="ia_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.ingrediente_ativo }}"></td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-success btn-sm">Salvar produtos de {{ site_group.site }} ({{ safra_group.titulo }})</button>
+                </form>
+
+                <div class="mt-3 pt-3 border-top">
+                    <div class="fw-bold mb-2">Dados de Plantio</div>
+                    <form method="post" action="{{ url_for('save_farm_plantio') }}">
+                        <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                        <input type="hidden" name="safra" value="{{ safra_group.safra }}">
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-2 produtos-table">
+                                <thead>
+                                    <tr><th>Data plantio</th><th>Talhao</th><th>Variedade</th><th>Ciclo (Dias)</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% for linha in safra_group.plantio %}
+                                    <tr>
+                                        <td><input type="text" name="data_plantio" class="form-control form-control-sm" value="{{ linha.data_plantio }}"></td>
+                                        <td><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
+                                        <td><input type="text" name="variedade" class="form-control form-control-sm" value="{{ linha.variedade }}"></td>
+                                        <td><input type="text" name="ciclo_dias" class="form-control form-control-sm" value="{{ linha.ciclo_dias }}"></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm">Salvar dados de plantio</button>
+                    </form>
+                </div>
+
+                <div class="mt-3 pt-3 border-top">
+                    <div class="fw-bold mb-2">Dados de Aplicacoes</div>
+                    <form method="post" action="{{ url_for('save_farm_aplicacoes') }}">
+                        <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                        <input type="hidden" name="safra" value="{{ safra_group.safra }}">
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-2 produtos-table">
+                                <thead>
+                                    <tr><th>Data Aplicacao</th><th>Talhao</th><th>Fungicidas Quimicos</th><th>Fungicidas Biologicos</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% for linha in safra_group.aplicacoes %}
+                                    <tr>
+                                        <td><input type="text" name="data_aplicacao" class="form-control form-control-sm" value="{{ linha.data_aplicacao }}"></td>
+                                        <td><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
+                                        <td><input type="text" name="fungicidas_quimicos" class="form-control form-control-sm" value="{{ linha.fungicidas_quimicos }}"></td>
+                                        <td><input type="text" name="fungicidas_biologicos" class="form-control form-control-sm" value="{{ linha.fungicidas_biologicos }}"></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm">Salvar dados de aplicacoes</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+
+            {% if site_group.estacoes_proximas %}
+            <div class="mt-3 pt-3 border-top">
+                <form method="post" action="{{ url_for('save_weather_station_override') }}">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="form-label small text-muted d-block mb-1">Estacao meteorologica de referencia para a previsao (clima da fazenda vem da Open-Meteo, na coordenada escolhida aqui):</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="estacao_codigo" value=""
+                            id="est_{{ farm_idx }}_fazenda" {% if not site_group.estacao_selecionada %}checked{% endif %}>
+                        <label class="form-check-label small" for="est_{{ farm_idx }}_fazenda">Coordenada da propria fazenda (padrao)</label>
+                    </div>
+                    {% for estacao in site_group.estacoes_proximas %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="estacao_codigo" value="{{ estacao.codigo }}"
+                            id="est_{{ farm_idx }}_{{ loop.index0 }}" {% if site_group.estacao_selecionada == estacao.codigo %}checked{% endif %}>
+                        <label class="form-check-label small" for="est_{{ farm_idx }}_{{ loop.index0 }}">
+                            📡 {{ estacao.cidade }}/{{ estacao.uf }} ({{ estacao.codigo }}) -- {{ estacao.distancia_km }} km
+                        </label>
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary d-block mt-2">Salvar estacao de referencia</button>
+                </form>
+            </div>
+            {% endif %}
+
+            <div class="mt-3 pt-3 border-top">
+                <form method="post" action="{{ url_for('save_whatsapp_days') }}">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp nestes dias (as {{ '%02d'|format(7) }}h):</label>
+                    {% for idx, label in weekday_labels %}
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
+                            id="wd_{{ farm_idx }}_{{ idx }}" {% if idx in site_group.selected_days %}checked{% endif %}>
+                        <label class="form-check-label small" for="wd_{{ farm_idx }}_{{ idx }}">{{ label }}</label>
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary d-block mt-2">Salvar agenda</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+<script>
+document.querySelectorAll('.farm-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var body = document.getElementById(btn.dataset.target);
+        var icon = btn.querySelector('.toggle-icon');
+        var expanded = !body.classList.contains('d-none');
+        body.classList.toggle('d-none');
+        icon.textContent = expanded ? '▶' : '▼';
+    });
+});
+document.querySelectorAll('table.produtos-table tbody').forEach(function (tbody) {
+    tbody.addEventListener('input', function (e) {
+        var row = e.target.closest('tr');
+        if (!row || row !== tbody.lastElementChild || row.dataset.grown) return;
+        row.dataset.grown = '1';
+        var clone = row.cloneNode(true);
+        delete clone.dataset.grown;
+        clone.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
+        tbody.appendChild(clone);
+    });
+});
+document.querySelectorAll('.safra-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var group = btn.parentElement;
+        group.querySelectorAll('.safra-toggle').forEach(function (b) {
+            b.classList.remove('btn-success');
+            b.classList.add('btn-outline-secondary');
+        });
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-success');
+        var container = group.parentElement;
+        container.querySelectorAll('[id^="safra-body-"]').forEach(function (el) {
+            el.classList.add('d-none');
+        });
+        document.getElementById(btn.dataset.target).classList.remove('d-none');
+    });
+});
+
+// Vindo de um clique no pino do Mapa (?site=...) -- abre direto a fazenda
+// em questao, sem precisar procurar na lista.
+(function () {
+    var siteParam = new URLSearchParams(window.location.search).get('site');
+    if (!siteParam) return;
+    var card = document.querySelector('[data-site="' + CSS.escape(siteParam) + '"]');
+    if (!card) return;
+    var toggleBtn = card.querySelector('.farm-toggle');
+    var body = document.getElementById(toggleBtn.dataset.target);
+    if (body.classList.contains('d-none')) { toggleBtn.click(); }
+    // Sem "behavior: smooth" -- depende de requestAnimationFrame, que
+    // pode nao rodar se a aba nao estiver em primeiro plano no momento
+    // do carregamento, deixando o scroll parado em 0.
+    card.scrollIntoView({ block: 'start' });
+})();
+</script>
+{% endif %}
+{% endblock %}

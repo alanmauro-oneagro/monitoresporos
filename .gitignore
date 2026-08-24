@@ -1,0 +1,21 @@
+# Segredos -- nunca versionar (senhas, chaves de sessao, credenciais)
+bioscout_cred.xml
+webapp/secret_key.bin
+webapp/whatsapp-bridge/auth_info/
+
+# Banco de dados local -- muda a cada acao no site, nao e' codigo-fonte.
+# Hospedado, precisa estar num disco persistente, nao no repositorio
+# (senao um novo deploy sobrescreveria os dados de producao com o que
+# estava commitado).
+webapp/bioscout_web.db
+
+# Dependencias (reinstaladas no build da hospedagem)
+node_modules/
+webapp/node-runtime/
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs locais
+logs/

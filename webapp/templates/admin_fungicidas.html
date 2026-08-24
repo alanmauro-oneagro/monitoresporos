@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Fungicidas - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Biblioteca de fungicidas</h4>
+<p class="text-muted small">
+    Ingredientes ativos sugeridos por doenca (quimico e biologico), com a
+    fonte usada em cada grupo, para todas as doencas que ja apareceram na
+    aba <strong>Doencas</strong>. Use as setas ▲/▼ para mover um ingrediente
+    para cima ou para baixo -- so os 3 primeiros de cada grupo aparecem nas
+    abas Manejo, entao mover o melhor tratamento da sua regiao para
+    o topo garante que ele apareca la. Edite o texto quando algo nao fizer
+    sentido para a sua realidade -- a mudanca vale para todas as fazendas
+    que tiverem aquela doenca em alerta. Doencas novas que ainda nao tem
+    nada pesquisado aparecem marcadas em "Sem dados ainda" -- pesquise
+    fontes (Embrapa, Agrolink/Agrofit-MAPA, universidades) e adicione no
+    <code>fungicida_data.py</code>.
+</p>
+
+<form method="post">
+{% for d in doencas_data %}
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">{{ d.rotulo }}</h5>
+            {% if d.sem_dados %}
+            <span class="badge bg-secondary">Sem dados ainda</span>
+            {% endif %}
+        </div>
+        {% if d.sem_dados %}
+        <p class="text-muted small mb-0">
+            Essa doenca ainda nao tem ingredientes ativos cadastrados na
+            biblioteca. Pesquise fontes confiaveis (Embrapa, Agrolink/Agrofit-MAPA,
+            extensao universitaria) e adicione uma entrada em
+            <code>fungicida_data.py</code>.
+        </p>
+        {% endif %}
+        {% for g in d.grupos %}
+        <div class="mb-3">
+            <div class="small text-muted mb-1">
+                {{ g.titulo }}
+                {% if g.fonte %}
+                -- fonte: <a href="{{ g.fonte_url }}" target="_blank" rel="noopener">{{ g.fonte }}</a>
+                {% endif %}
+            </div>
+            {% if not g.linhas %}
+            <div class="small text-muted fst-italic mb-2">Nenhum ingrediente {{ g.tipo }} encontrado nessa fonte.</div>
+            {% endif %}
+            {% for linha in g.linhas %}
+            <div class="row gx-2 align-items-center mb-2">
+                <input type="hidden" name="row_id" value="{{ linha.row_id }}">
+                <input type="hidden" name="key__{{ linha.row_id }}" value="{{ linha.key }}">
+                <div class="col-7 col-md-9">
+                    <input type="text" name="ingrediente__{{ linha.row_id }}" class="form-control form-control-sm" value="{{ linha.ingrediente }}">
+                </div>
+                <div class="col-3 col-md-2">
+                    <select name="classe__{{ linha.row_id }}" class="form-select form-select-sm">
+                        {% for code, label in classes %}
+                        <option value="{{ code }}" {% if code == linha.classe %}selected{% endif %}>{{ code ~ ' -- ' if code else '' }}{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-2 col-md-1 d-flex gap-1">
+                    <form method="post" action="{{ url_for('mover_fungicida_item') }}">
+                        <input type="hidden" name="doenca" value="{{ linha.doenca }}">
+                        <input type="hidden" name="tipo" value="{{ linha.tipo }}">
+                        <input type="hidden" name="idx" value="{{ linha.idx }}">
+                        <input type="hidden" name="direction" value="up">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary px-2" title="Mover para cima" {% if not linha.pode_subir %}disabled{% endif %}>▲</button>
+                    </form>
+                    <form method="post" action="{{ url_for('mover_fungicida_item') }}">
+                        <input type="hidden" name="doenca" value="{{ linha.doenca }}">
+                        <input type="hidden" name="tipo" value="{{ linha.tipo }}">
+                        <input type="hidden" name="idx" value="{{ linha.idx }}">
+                        <input type="hidden" name="direction" value="down">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary px-2" title="Mover para baixo" {% if not linha.pode_descer %}disabled{% endif %}>▼</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+<button type="submit" class="btn btn-success">Salvar recomendacoes</button>
+</form>
+<script>
+document.querySelectorAll('form[action$="/mover"]').forEach(function (form) {
+    form.addEventListener('submit', function () {
+        sessionStorage.setItem('fungicidas_scroll', window.scrollY);
+    });
+});
+(function () {
+    var saved = sessionStorage.getItem('fungicidas_scroll');
+    if (saved !== null) {
+        sessionStorage.removeItem('fungicidas_scroll');
+        window.scrollTo(0, parseInt(saved, 10));
+    }
+})();
+</script>
+{% endblock %}

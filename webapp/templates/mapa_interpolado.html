@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+{% block title %}Mapa Interpolado - OneAgro{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #farm-map { height: 60vh; min-height: 380px; width: 100%; border-radius: 0.5rem; }
+    .mapa-pin-icon { background: transparent; border: none; }
+    .mapa-tooltip { font-size: 0.8rem; }
+    .mapa-tt-title { font-weight: 700; }
+    .mapa-tt-data { font-size: 0.7rem; opacity: 0.75; margin-bottom: 0.25rem; }
+    .mapa-tt-row { display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+    .mapa-tt-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; display: inline-block; flex: none; }
+    .mapa-tt-perigo .mapa-tt-dot { background: #ff6b6b; }
+    .mapa-tt-atencao .mapa-tt-dot { background: #ffd43b; }
+    .mapa-tt-normal .mapa-tt-dot { background: #51cf66; }
+    .mapa-tt-doenca { flex: 1 1 auto; }
+    .mapa-tt-valor { font-weight: 700; margin-left: 0.5rem; }
+    .ponto-virtual-card { border: 1px solid #e2d9fb; border-radius: 0.5rem; padding: 0.9rem; margin-bottom: 0.9rem; background: #faf8ff; }
+</style>
+{% endblock %}
+{% block content %}
+<h4 class="mb-2">Mapa Interpolado <span class="text-muted small fw-normal">(pontos estimados)</span></h4>
+<div class="alert alert-warning py-1 px-2 small mb-2">
+    ⚠️ Estimativa por interpolacao, nao e' leitura real -- so usa fazendas reais dentro do raio. Defina quem ve
+    cada ponto na aba <strong>Usuarios</strong>.
+</div>
+
+<div class="card shadow-sm mt-2 mb-3">
+    <div class="card-body">
+        <h6 class="fw-bold mb-2">Adicionar ponto estimado</h6>
+        <p class="text-muted small mb-2">Clique no mapa no final da pagina pra marcar onde vai o ponto (pode arrastar o pino depois de marcado), ou digite a coordenada direto -- isso so posiciona uma previa, ainda nao cria nada. O ponto so e' criado de verdade ao clicar em "💾 Salvar Ponto". Os circulos amarelos ao redor das fazendas mostram, em tempo real, a area de alcance do raio escolhido.</p>
+        <form method="post" action="{{ url_for('adicionar_ponto_virtual') }}" id="form-novo-ponto">
+            <div class="border rounded p-2 mb-3" style="background:#faf8ff;">
+                <label class="form-label small fw-bold mb-1">Raio de interpolacao (km) <span class="fw-normal text-muted">-- padrao: 120 km</span></label>
+                <p class="text-muted small mb-2">So as fazendas reais dentro desse raio entram na estimativa. Separado dos outros campos porque e' o mesmo valor padrao sugerido pra qualquer ponto -- ajuste so se souber que precisa de um raio diferente.</p>
+                <input type="number" name="raio_km" id="novo-raio" class="form-control form-control-sm" style="max-width: 160px;" min="1" step="1" value="120" required>
+            </div>
+
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-12 col-md-4">
+                    <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
+                    <input type="text" name="nome" class="form-control form-control-sm" placeholder="Ex.: Area Norte" required>
+                </div>
+                <div class="col-6 col-md-4">
+                    <label class="form-label small text-muted mb-1">Latitude</label>
+                    <input type="text" name="lat" id="novo-lat" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-6 col-md-4">
+                    <label class="form-label small text-muted mb-1">Longitude</label>
+                    <input type="text" name="lon" id="novo-lon" class="form-control form-control-sm" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-sm btn-outline-primary">💾 Salvar Ponto</button>
+        </form>
+    </div>
+</div>
+
+<h6 class="fw-bold mt-4 mb-2">Pontos estimados cadastrados</h6>
+{% if not pontos_virtuais %}
+<div class="alert alert-info small">Nenhum ponto estimado ainda -- use o formulario acima.</div>
+{% endif %}
+{% for ponto in pontos_virtuais %}
+<div class="ponto-virtual-card">
+    <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+        <strong>{{ ponto.nome }}</strong>
+        <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
+        <div class="ms-auto d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}">✏️ Editar</button>
+            <form method="post" action="{{ url_for('remover_ponto_virtual') }}" class="mb-0"
+                  onsubmit="return confirm('Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga tambem permissoes, agenda de WhatsApp e anotacoes ligadas a ele.');">
+                <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Remover</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="d-none border rounded p-2 mb-2" id="editar-ponto-{{ loop.index0 }}" style="background:#fff;">
+        <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <div class="col-12 col-md-4">
+                <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
+                <input type="text" name="nome" class="form-control form-control-sm" value="{{ ponto.nome }}" required>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Latitude</label>
+                <input type="text" name="lat" class="form-control form-control-sm" value="{{ ponto.lat }}" required>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Longitude</label>
+                <input type="text" name="lon" class="form-control form-control-sm" value="{{ ponto.lon }}" required>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Raio (km)</label>
+                <input type="number" name="raio_km" class="form-control form-control-sm" value="{{ ponto.raio_km|int }}" min="1" step="1" required>
+            </div>
+            <div class="col-6 col-md-2">
+                <button type="submit" class="btn btn-sm btn-outline-primary w-100">Salvar</button>
+            </div>
+        </form>
+    </div>
+
+    {% if not ponto.estacoes_usadas %}
+    <div class="alert alert-secondary small mb-2">Nenhuma fazenda real dentro do raio de {{ ponto.raio_km|int }} km -- sem estacao pra interpolar, esse ponto nao gera estimativa (nao aparece em nenhuma outra tela ate ter uma fazenda real por perto ou o raio aumentar).</div>
+    {% endif %}
+
+    <p class="text-muted small mb-0 mt-2 pt-2 border-top">
+        Doencas, produtos, plantio, aplicacoes e agenda de envio automatico por WhatsApp desse ponto ficam nas
+        abas <strong>Painel de Alertas</strong>, <strong>Fazendas</strong> e <strong>Manejo</strong>,
+        junto com as demais.
+    </p>
+</div>
+{% endfor %}
+
+<h6 class="fw-bold mt-4 mb-2">Mapa</h6>
+<p class="text-muted small mb-1">
+    Clique no pino de uma fazenda (real ou ponto estimado) pra abrir ela direto na aba Fazendas. Linhas amarelas:
+    divisas de pais/estado (IBGE). Linha laranja: rodovia BR-163 (OpenStreetMap). Pinos azuis 📡:
+    todas as estacoes automaticas do INMET em operacao nos estados onde ha fazenda ou ponto estimado cadastrado --
+    ajuda a ver a rede de referencia disponivel na regiao antes de escolher onde marcar um novo ponto. Circulos
+    amarelos: alcance do raio escolhido ao redor de cada fazenda real; o ponto sendo adicionado usa o mesmo
+    estilo, tambem em amarelo.
+</p>
+<div id="farm-map"></div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+    var sites = {{ sites_data | tojson }};
+    var LOGO_URL = '{{ url_for("static", filename="oneagro-logo.png") }}';
+    var PIN_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
+        '<defs><clipPath id="mapaPinClip"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
+        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#ffffff" stroke="#0a1f44" stroke-width="2.5"/>' +
+        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClip)"/>' +
+        '</svg>';
+
+    var farmIcon = L.divIcon({
+        html: PIN_SVG, className: 'mapa-pin-icon',
+        iconSize: [40, 52], iconAnchor: [20, 52], tooltipAnchor: [0, -46],
+    });
+    // Mesmo pino, so que amarelo claro em vez de branco -- unica marca
+    // visual de que e' uma fazenda criada por interpolacao.
+    var VIRTUAL_PIN_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
+        '<defs><clipPath id="mapaPinClipVirtual"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
+        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#fff3bf" stroke="#0a1f44" stroke-width="2.5"/>' +
+        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClipVirtual)"/>' +
+        '</svg>';
+    var virtualIcon = L.divIcon({
+        html: VIRTUAL_PIN_SVG, className: 'mapa-pin-icon',
+        iconSize: [40, 52], iconAnchor: [20, 52], tooltipAnchor: [0, -46],
+    });
+    var novoIcon = L.divIcon({
+        html: '<div style="background:#fff;border:3px solid #7048e8;border-radius:50%;' +
+            'width:18px;height:18px;"></div>',
+        className: 'mapa-pin-icon', iconSize: [18, 18], iconAnchor: [9, 9],
+    });
+    // Tamanho 40% menor que o pino de estacao do Mapa normal -- aqui
+    // aparecem TODAS as estacoes da regiao (nao so as em uso), fica
+    // cheio de pino, e o menor ajuda a nao poluir o mapa.
+    var stationIcon = L.divIcon({
+        html: '<div style="background:#1971c2;border:1px solid #ffffff;border-radius:50%;' +
+            'width:13px;height:13px;display:flex;align-items:center;justify-content:center;' +
+            'font-size:7px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">📡</div>',
+        className: 'mapa-pin-icon',
+        iconSize: [13, 13],
+        iconAnchor: [7, 7],
+        tooltipAnchor: [0, -8],
+    });
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function buildTooltipHtml(site) {
+        var rows = site.cards.map(function (c) {
+            var cls = c.status === 'Perigo' ? 'perigo' : (c.status === 'Atencao' ? 'atencao' : 'normal');
+            var valor = (c.concentracao === null || c.concentracao === undefined) ? '-' : c.concentracao;
+            return '<div class="mapa-tt-row mapa-tt-' + cls + '">' +
+                '<span class="mapa-tt-dot"></span>' +
+                '<span class="mapa-tt-doenca">' + escapeHtml(c.doenca) + '</span>' +
+                '<span class="mapa-tt-valor">' + escapeHtml(valor) + '</span>' +
+                '</div>';
+        }).join('');
+        return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.site) + '</div>' +
+            '<div class="mapa-tt-data">Leitura de ' + escapeHtml(site.ultima_leitura) + '</div>' + rows + '</div>';
+    }
+
+    function buildStationTooltipHtml(estacao) {
+        return '<div class="mapa-tooltip"><div class="mapa-tt-title">📡 ' + escapeHtml(estacao.cidade) + '/' + escapeHtml(estacao.uf) + '</div>' +
+            '<div class="mapa-tt-data">Estacao INMET ' + escapeHtml(estacao.codigo) + '</div></div>';
+    }
+
+    var map = L.map('farm-map');
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Imagens &copy; Esri -- Source: Esri, Maxar, Earthstar Geographics',
+        maxZoom: 19,
+    }).addTo(map);
+
+    var BOUNDARY_COLOR = '#ffe100';
+    var IBGE_BASE = 'https://servicodados.ibge.gov.br/api/v3/malhas';
+
+    function addBoundaryLayer(url, weight, color) {
+        return fetch(url)
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (geojson) {
+                if (!geojson) return null;
+                L.geoJSON(geojson, {
+                    style: { color: color || BOUNDARY_COLOR, weight: weight, fill: false, opacity: 0.9 },
+                    interactive: false,
+                }).addTo(map);
+                return geojson;
+            })
+            .catch(function () { return null; /* IBGE fora do ar ou sem internet -- so nao mostra essa camada */ });
+    }
+
+    // Divisas oficiais do IBGE em amarelo: pais (leve) e estados (leve, um
+    // pedido so, cobrindo o Brasil inteiro -- nao filtra por UF aqui pra
+    // manter simples, ja que essa tela e' pra escolher pontos em qualquer
+    // lugar, nao so perto das fazendas ja cadastradas).
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2);
+
+    // BR-163 (Guaranta do Norte/PA ate a fronteira em Mundo Novo/MS) via
+    // Overpass (OpenStreetMap), em laranja.
+    var OVERPASS_URL = 'https://overpass-api.de/api/interpreter?data=' +
+        encodeURIComponent('[out:json][timeout:90];way["ref"="BR-163"];out geom;');
+    fetch(OVERPASS_URL)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            if (!data || !data.elements) return;
+            data.elements.forEach(function (way) {
+                if (!way.geometry) return;
+                var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
+                L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
+            });
+        })
+        .catch(function () { /* Overpass fora do ar ou sem internet -- so nao mostra a rodovia */ });
+
+    var FAZENDAS_URL = '{{ url_for("fazendas") }}';
+    // Mesmo pino da fazenda real, so que amarelo claro pra um ponto
+    // estimado -- sem circulo de raio nem outro icone uma vez que o
+    // ponto ja foi criado, so a cor do pino diferencia.
+    sites.forEach(function (site) {
+        L.marker([site.lat, site.lon], { icon: site.virtual ? virtualIcon : farmIcon })
+            .addTo(map)
+            .bindTooltip(buildTooltipHtml(site), { direction: 'top', sticky: true, opacity: 0.95 })
+            // Clique no pino leva pra aquela fazenda na aba Fazendas --
+            // hover continua so mostrando o tooltip, sem navegar.
+            .on('click', function () {
+                window.location.href = FAZENDAS_URL + '?site=' + encodeURIComponent(site.site);
+            });
+    });
+
+    // Todas as estacoes automaticas do INMET nos estados onde ha fazenda
+    // ou ponto estimado (nao so a mais proxima de cada um) -- da uma
+    // visao completa da rede de referencia disponivel antes de escolher
+    // onde marcar um ponto novo.
+    var estacoes = {{ estacoes | tojson }};
+    estacoes.forEach(function (estacao) {
+        L.marker([estacao.lat, estacao.lon], { icon: stationIcon })
+            .addTo(map)
+            .bindTooltip(buildStationTooltipHtml(estacao), { direction: 'top', sticky: true, opacity: 0.95 });
+    });
+
+    // Alcance do raio escolhido em volta de cada fazenda REAL, ao vivo --
+    // ajuda a decidir onde colocar o ponto novo vendo quais estacoes
+    // cobririam aquele lugar. Amarelo (mesmo estilo do circulo do ponto
+    // sendo adicionado), atualiza sozinho conforme o campo raio_km muda.
+    var circulosEstacoes = [];
+    function atualizarCirculosEstacoes(raioKm) {
+        circulosEstacoes.forEach(function (c) { map.removeLayer(c); });
+        circulosEstacoes = [];
+        if (!raioKm || raioKm <= 0) return;
+        sites.filter(function (s) { return !s.virtual; }).forEach(function (s) {
+            var c = L.circle([s.lat, s.lon], {
+                radius: raioKm * 1000, color: '#ffd43b', weight: 1,
+                fillColor: '#ffffff', fillOpacity: 0.2, interactive: false,
+            }).addTo(map);
+            circulosEstacoes.push(c);
+        });
+    }
+
+    var latlngs = sites.map(function (s) { return [s.lat, s.lon]; });
+    if (latlngs.length === 1) {
+        map.setView(latlngs[0], 8);
+    } else if (latlngs.length > 1) {
+        map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
+    } else {
+        map.setView([-12, -55], 5);
+    }
+
+    // Clique no mapa marca/arrasta o pino do novo ponto e preenche lat/lon
+    // do formulario -- o raio ja desenha um circulo de referencia, que
+    // acompanha o campo "raio_km" ao digitar.
+    var latInput = document.getElementById('novo-lat');
+    var lonInput = document.getElementById('novo-lon');
+    var raioInput = document.getElementById('novo-raio');
+    var novoMarker = null;
+    var novoCirculo = null;
+
+    // Lembra o ultimo raio digitado (localStorage, so nesse navegador) --
+    // senao toda vez que a pagina recarrega (ex.: logo apos adicionar um
+    // ponto) o campo volta pro padrao de 120 km, obrigando a digitar de
+    // novo se a pessoa estiver cadastrando varios pontos com o mesmo
+    // raio custom.
+    var RAIO_STORAGE_KEY = 'mapaInterpolado.raioKm';
+    var raioSalvo = localStorage.getItem(RAIO_STORAGE_KEY);
+    if (raioSalvo) { raioInput.value = raioSalvo; }
+    raioInput.addEventListener('input', function () {
+        if (raioInput.value) { localStorage.setItem(RAIO_STORAGE_KEY, raioInput.value); }
+    });
+
+    function atualizarPreview(latlng) {
+        latInput.value = latlng.lat.toFixed(6);
+        lonInput.value = latlng.lng.toFixed(6);
+        if (!novoMarker) {
+            novoMarker = L.marker(latlng, { icon: novoIcon, draggable: true }).addTo(map);
+            novoMarker.on('drag', function (ev) { atualizarPreview(ev.target.getLatLng()); });
+        } else {
+            novoMarker.setLatLng(latlng);
+        }
+        var raio = parseFloat(raioInput.value) || 0;
+        if (novoCirculo) { map.removeLayer(novoCirculo); }
+        if (raio > 0) {
+            novoCirculo = L.circle(latlng, {
+                radius: raio * 1000, color: '#ffd43b', weight: 2,
+                fillColor: '#ffffff', fillOpacity: 0.2,
+            }).addTo(map);
+        }
+    }
+
+    map.on('click', function (e) { atualizarPreview(e.latlng); });
+
+    // O ponto so pode ser criado clicando em "Salvar Ponto" -- aperta
+    // Enter em qualquer campo do formulario (nome, latitude, longitude,
+    // raio) normalmente submeteria a pagina sozinho, criando o ponto
+    // sem querer antes da pessoa conferir os dados.
+    document.getElementById('form-novo-ponto').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') { e.preventDefault(); }
+    });
+
+
+    raioInput.addEventListener('input', function () {
+        atualizarCirculosEstacoes(parseFloat(raioInput.value) || 0);
+        if (novoMarker) atualizarPreview(novoMarker.getLatLng());
+    });
+    atualizarCirculosEstacoes(parseFloat(raioInput.value) || 0);
+
+    document.querySelectorAll('.editar-ponto-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById(btn.dataset.target).classList.toggle('d-none');
+        });
+    });
+})();
+</script>
+{% endblock %}

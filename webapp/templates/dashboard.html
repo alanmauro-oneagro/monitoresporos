@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Painel de Alertas - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-3">Alertas por fazenda</h4>
+
+{% if no_access %}
+<div class="alert alert-warning">
+    Seu usuario ainda nao tem nenhuma fazenda liberada para visualizacao.
+    Peca a um administrador para configurar suas permissoes.
+</div>
+{% elif not cards_by_site %}
+<div class="alert alert-info">Nenhum dado encontrado ainda.</div>
+{% endif %}
+
+{% for site, cards in cards_by_site.items() %}
+{% set status = dados_status_by_site.get(site) %}
+<div class="site-heading d-flex align-items-center flex-wrap gap-2 {% if status and status.nivel_dados == 'bloqueado' %}site-heading-bloqueado{% elif status and status.nivel_dados == 'atencao' %}site-heading-atencao{% endif %}">
+    <span>{{ status.nome_exibicao if status else site }}</span>
+    {% if weather_by_site.get(site) %}
+    <span class="site-weather-badge">
+        💧 {{ weather_by_site[site].umidade ~ '%' if weather_by_site[site].umidade is not none else '-' }}
+        &nbsp;🌧️ {{ weather_by_site[site].chuva ~ ' mm' if weather_by_site[site].chuva is not none else '-' }}
+        <span class="site-weather-date">(leitura {{ weather_by_site[site].data }})</span>
+    </span>
+    {% endif %}
+    {% if status and status.nivel_dados %}
+    <span class="badge ms-auto {{ 'bg-danger' if status.nivel_dados == 'bloqueado' else 'bg-warning text-dark' }}"
+          title="Estacao sem leitura nova ha {{ status.dias_sem_leitura }} dias{% if status.nivel_dados == 'bloqueado' %} -- envio/copia da recomendacao por WhatsApp bloqueado na aba Manejo{% endif %}">
+        {{ '🚫' if status.nivel_dados == 'bloqueado' else '📡⚠' }} sem leitura ha {{ status.dias_sem_leitura }}d
+    </span>
+    {% endif %}
+</div>
+<div class="row">
+    {% for card in cards %}
+    <div class="col-disease-5">
+        <div class="disease-card card-{{ 'perigo' if card.status == 'Perigo' else ('atencao' if card.status == 'Atencao' else 'normal') }}">
+            <div class="valor">{{ card.concentracao if card.concentracao is not none else '-' }}</div>
+            <div class="doenca">{{ card.doenca }}</div>
+            {% if card.cientifico %}<div class="cientifico">{{ card.cientifico }}</div>{% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+{% endblock %}

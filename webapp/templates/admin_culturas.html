@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Nome Culturas - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Nome Culturas</h4>
+<p class="text-muted small">
+    Ate 10 culturas disponiveis para o seletor "Cultura atual" (aba
+    Manejo) e para a matriz de doencas (aba Doencas). Deixe uma
+    caixa em branco para nao usar aquele espaco -- pode preencher depois.
+</p>
+
+<form method="post">
+    <div class="row gx-3">
+        {% for i in range(10) %}
+        <div class="col-6 col-md-4 col-lg-3 mb-3">
+            <label class="form-label small text-muted">Cultura {{ i + 1 }}</label>
+            <input type="text" name="nome_{{ i }}" class="form-control" value="{{ nomes[i] if i < nomes|length else '' }}">
+        </div>
+        {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-success">Salvar culturas</button>
+</form>
+{% endblock %}

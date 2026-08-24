@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Meu WhatsApp - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Meu WhatsApp</h4>
+<p class="text-muted small">
+    Seu numero pessoal, pra onde vao os relatorios das fazendas marcadas
+    pra voce (aba Usuarios, coluna "Receber relatorios"). Os relatorios saem
+    do WhatsApp do administrador -- voce so precisa manter seu numero certo
+    aqui, sem precisar de nenhuma configuracao extra da sua parte.
+</p>
+
+<div class="card shadow-sm" style="max-width: 420px;">
+    <div class="card-body">
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">Seu numero (com codigo do pais, sem + nem espacos)</label>
+                <input type="text" name="telefone" class="form-control" value="{{ telefone }}" placeholder="5511999999999" required>
+            </div>
+            <button type="submit" name="action" value="save" class="btn btn-outline-success">Salvar</button>
+            <button type="submit" name="action" value="test" class="btn btn-success">Salvar e enviar teste</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

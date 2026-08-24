@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Doencas - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Nomes das doencas</h4>
+<p class="text-muted small">
+    O BioScout reporta os nomes em ingles. Aqui voce define como cada um
+    aparece no nosso site. Doencas novas que o BioScout passar a reportar
+    aparecem aqui automaticamente (com o nome em ingles como padrao) assim
+    que forem detectadas nos dados -- e' so vir aqui e traduzir. O nome
+    cientifico do fungo vem preenchido sozinho quando o BioScout ja manda
+    essa informacao nas leituras; edite se estiver faltando ou errado.
+</p>
+
+{% if not doencas %}
+<div class="alert alert-info">Nenhuma doenca encontrada nos dados ainda.</div>
+{% else %}
+<form method="post">
+    <table class="table bg-white shadow-sm align-middle">
+        <thead>
+            <tr><th>Nome original (BioScout, em ingles)</th><th>Nome no nosso site</th><th>Nome cientifico do fungo</th></tr>
+        </thead>
+        <tbody>
+        {% for d in doencas %}
+            <tr>
+                <td>{{ d.en }}</td>
+                <td>
+                    <input type="hidden" name="display_name_en" value="{{ d.en }}">
+                    <input type="text" name="nome_pt" class="form-control" value="{{ d.pt }}" required>
+                </td>
+                <td>
+                    <input type="text" name="nome_cientifico" class="form-control fst-italic" value="{{ d.cientifico }}" placeholder="Ex.: Phakopsora pachyrhizi">
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <button type="submit" class="btn btn-success">Salvar nomes</button>
+</form>
+
+<h4 class="mb-2 mt-4">Doencas x Culturas</h4>
+<p class="text-muted small">
+    Marque em quais culturas cada doenca deve aparecer quando o filtro de
+    "Cultura atual" estiver ativo (aba Manejo). Doenca sem nenhuma
+    marcacao aqui NUNCA e' escondida pelo filtro -- aparece sempre, pra nao
+    sumir um alerta novo/desconhecido por engano. Uma doenca pode valer
+    para mais de uma cultura. As colunas vem da aba
+    <strong>Nome Culturas</strong> (menu ⋮).
+</p>
+
+{% if not culturas_ativas %}
+<div class="alert alert-info">Nenhuma cultura cadastrada ainda -- va em Nome Culturas (menu ⋮) para adicionar.</div>
+{% else %}
+<form method="post">
+    <input type="hidden" name="form_id" value="matriz_culturas">
+    <div class="table-responsive">
+        <table class="table table-sm bg-white shadow-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Doenca</th>
+                    {% for cultura in culturas_ativas %}
+                    <th class="text-center">{{ cultura }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+            {% for d in matriz %}
+                {% set doenca_loop = loop %}
+                <tr>
+                    <td>
+                        {{ d.pt }}
+                        <input type="hidden" name="doenca_en" value="{{ d.en }}">
+                    </td>
+                    {% for cultura in culturas_ativas %}
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input" name="culturas__{{ doenca_loop.index0 }}" value="{{ cultura }}" {% if cultura in d.marcadas %}checked{% endif %}>
+                    </td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <button type="submit" class="btn btn-success">Salvar matriz</button>
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

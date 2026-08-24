@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}Mapa - OneAgro{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #farm-map { height: 75vh; min-height: 420px; width: 100%; border-radius: 0.5rem; }
+    .mapa-pin-icon { background: transparent; border: none; }
+    .mapa-tooltip { font-size: 0.8rem; }
+    .mapa-tt-title { font-weight: 700; }
+    .mapa-tt-data { font-size: 0.7rem; opacity: 0.75; margin-bottom: 0.25rem; }
+    .mapa-tt-row { display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+    .mapa-tt-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; display: inline-block; flex: none; }
+    .mapa-tt-perigo .mapa-tt-dot { background: #ff6b6b; }
+    .mapa-tt-atencao .mapa-tt-dot { background: #ffd43b; }
+    .mapa-tt-normal .mapa-tt-dot { background: #51cf66; }
+    .mapa-tt-doenca { flex: 1 1 auto; }
+    .mapa-tt-valor { font-weight: 700; margin-left: 0.5rem; }
+</style>
+{% endblock %}
+{% block content %}
+<h4 class="mb-3">Mapa das fazendas</h4>
+
+{% if no_access %}
+<div class="alert alert-warning">
+    Seu usuario ainda nao tem nenhuma fazenda liberada para visualizacao.
+    Peca a um administrador para configurar suas permissoes.
+</div>
+{% elif not sites_data %}
+<div class="alert alert-info">Nenhuma fazenda com coordenada cadastrada ainda.</div>
+{% else %}
+<p class="text-muted small">
+    Passe o mouse sobre um pino para ver os alertas daquela estacao, ou
+    clique para abrir direto aquela fazenda na aba Fazendas. As
+    linhas amarelas mostram as divisas de pais e estado, as linhas brancas
+    mostram as divisas de municipio (fonte: IBGE -- pode levar alguns
+    segundos para carregar) e a linha laranja e' a rodovia BR-163 de ponta
+    a ponta (fonte: OpenStreetMap). Os pinos azuis 📡 sao so as estacoes do
+    INMET que estao realmente sendo usadas como base pra alguma fazenda
+    (a mais proxima de cada uma, ou a escolhida manualmente na aba
+    Fazendas) -- so como referencia de localizacao/cidade, os dados de
+    clima do app vem da Open-Meteo.
+</p>
+<div id="farm-map"></div>
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% if sites_data %}
+<script>
+(function () {
+    var sites = {{ sites_data | tojson }};
+
+    // A logo (static/oneagro-logo.png) e' bem larga (folha + "oneagro"
+    // escrito) -- preserveAspectRatio="xMinYMid slice" com uma caixa
+    // quadrada corta exatamente o quadrado da esquerda (a folha), sem
+    // precisar de nenhum recorte manual da imagem.
+    var LOGO_URL = '{{ url_for("static", filename="oneagro-logo.png") }}';
+    var PIN_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
+        '<defs><clipPath id="mapaPinClip"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
+        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#ffffff" stroke="#0a1f44" stroke-width="2.5"/>' +
+        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClip)"/>' +
+        '</svg>';
+
+    var farmIcon = L.divIcon({
+        html: PIN_SVG,
+        className: 'mapa-pin-icon',
+        iconSize: [40, 52],
+        iconAnchor: [20, 52],
+        tooltipAnchor: [0, -46],
+    });
+
+    // Mesmo pino, so que amarelo claro em vez de branco -- unica marca
+    // visual de que e' uma fazenda criada por interpolacao (o nome ja
+    // segue o padrao '"{nome}" - OneAgro', essa e' so uma pista extra
+    // rapida de identificar no mapa).
+    var VIRTUAL_PIN_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
+        '<defs><clipPath id="mapaPinClipVirtual"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
+        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#fff3bf" stroke="#0a1f44" stroke-width="2.5"/>' +
+        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClipVirtual)"/>' +
+        '</svg>';
+
+    var virtualIcon = L.divIcon({
+        html: VIRTUAL_PIN_SVG,
+        className: 'mapa-pin-icon',
+        iconSize: [40, 52],
+        iconAnchor: [20, 52],
+        tooltipAnchor: [0, -46],
+    });
+
+    var stationIcon = L.divIcon({
+        html: '<div style="background:#1971c2;border:2px solid #ffffff;border-radius:50%;' +
+            'width:22px;height:22px;display:flex;align-items:center;justify-content:center;' +
+            'font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">📡</div>',
+        className: 'mapa-pin-icon',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+        tooltipAnchor: [0, -14],
+    });
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function buildTooltipHtml(site) {
+        var rows = site.cards.map(function (c) {
+            var cls = c.status === 'Perigo' ? 'perigo' : (c.status === 'Atencao' ? 'atencao' : 'normal');
+            var valor = (c.concentracao === null || c.concentracao === undefined) ? '-' : c.concentracao;
+            return '<div class="mapa-tt-row mapa-tt-' + cls + '">' +
+                '<span class="mapa-tt-dot"></span>' +
+                '<span class="mapa-tt-doenca">' + escapeHtml(c.doenca) + '</span>' +
+                '<span class="mapa-tt-valor">' + escapeHtml(valor) + '</span>' +
+                '</div>';
+        }).join('');
+        return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.site) + '</div>' +
+            '<div class="mapa-tt-data">Leitura de ' + escapeHtml(site.ultima_leitura) + '</div>' + rows + '</div>';
+    }
+
+    function buildStationTooltipHtml(estacao) {
+        var titulo = '<div class="mapa-tooltip"><div class="mapa-tt-title">📡 ' + escapeHtml(estacao.cidade) + '/' + escapeHtml(estacao.uf) + '</div>';
+        if (!estacao.fazendas.length) {
+            return titulo + '<div class="mapa-tt-data">Estacao INMET ' + escapeHtml(estacao.codigo) + ' -- referencia da regiao</div></div>';
+        }
+        var fazendasHtml = estacao.fazendas.map(function (f) {
+            return '<div class="mapa-tt-row">' +
+                '<span class="mapa-tt-doenca">' + escapeHtml(f.site) + '</span>' +
+                '<span class="mapa-tt-valor">' + escapeHtml(f.distancia_km) + ' km</span>' +
+                '</div>';
+        }).join('');
+        return titulo + '<div class="mapa-tt-data">Estacao INMET ' + escapeHtml(estacao.codigo) + ' -- mais proxima de:</div>' + fazendasHtml + '</div>';
+    }
+
+    var map = L.map('farm-map');
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Imagens &copy; Esri -- Source: Esri, Maxar, Earthstar Geographics',
+        maxZoom: 19,
+    }).addTo(map);
+
+    var BOUNDARY_COLOR = '#ffe100';
+    var MUNICIPIO_COLOR = '#ffffff';
+    var IBGE_BASE = 'https://servicodados.ibge.gov.br/api/v3/malhas';
+
+    function addBoundaryLayer(url, weight, color) {
+        return fetch(url)
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (geojson) {
+                if (!geojson) return null;
+                L.geoJSON(geojson, {
+                    style: { color: color || BOUNDARY_COLOR, weight: weight, fill: false, opacity: 0.9 },
+                    interactive: false,
+                }).addTo(map);
+                return geojson;
+            })
+            .catch(function () { return null; /* IBGE fora do ar ou sem internet -- so nao mostra essa camada */ });
+    }
+
+    // Ray casting simples (Polygon/MultiPolygon) so pra descobrir em qual
+    // estado cada fazenda esta, usando o mesmo geojson de estados que ja
+    // baixamos pra desenhar as divisas -- evita depender de geocoding externo.
+    function pointInRing(pt, ring) {
+        var x = pt[0], y = pt[1], inside = false;
+        for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+            var intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+    function pointInRings(pt, rings) {
+        if (!pointInRing(pt, rings[0])) return false;
+        for (var k = 1; k < rings.length; k++) {
+            if (pointInRing(pt, rings[k])) return false;
+        }
+        return true;
+    }
+    function pointInGeometry(pt, geom) {
+        if (geom.type === 'Polygon') return pointInRings(pt, geom.coordinates);
+        if (geom.type === 'MultiPolygon') return geom.coordinates.some(function (poly) { return pointInRings(pt, poly); });
+        return false;
+    }
+    function findUfCodes(ufGeojson) {
+        var codes = {};
+        sites.forEach(function (site) {
+            var pt = [site.lon, site.lat];
+            var feature = ufGeojson.features.find(function (f) { return pointInGeometry(pt, f.geometry); });
+            if (feature) codes[feature.properties.codarea] = true;
+        });
+        return Object.keys(codes);
+    }
+
+    // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
+    // (leve, um pedido so) e municipios (pesado -- so busca dos estados
+    // onde realmente tem fazenda, senao seria o Brasil inteiro).
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
+        .then(function (ufGeojson) {
+            if (!ufGeojson) return;
+            findUfCodes(ufGeojson).forEach(function (codarea) {
+                addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
+            });
+        });
+
+    // BR-163 (Guaranta do Norte/PA ate a fronteira em Mundo Novo/MS) via
+    // Overpass (dados do OpenStreetMap) -- busca todos os trechos com essa
+    // referencia e desenha cada um como uma linha laranja, ponta a ponta.
+    var OVERPASS_URL = 'https://overpass-api.de/api/interpreter?data=' +
+        encodeURIComponent('[out:json][timeout:90];way["ref"="BR-163"];out geom;');
+    fetch(OVERPASS_URL)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            if (!data || !data.elements) return;
+            data.elements.forEach(function (way) {
+                if (!way.geometry) return;
+                var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
+                L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
+            });
+        })
+        .catch(function () { /* Overpass fora do ar ou sem internet -- so nao mostra a rodovia */ });
+
+    var FAZENDAS_URL = '{{ url_for("fazendas") }}';
+    var latlngs = sites.map(function (s) { return [s.lat, s.lon]; });
+    sites.forEach(function (site) {
+        L.marker([site.lat, site.lon], { icon: site.virtual ? virtualIcon : farmIcon })
+            .addTo(map)
+            .bindTooltip(buildTooltipHtml(site), { direction: 'top', sticky: true, opacity: 0.95 })
+            // Clique no pino leva direto pra aquela fazenda na aba
+            // Fazendas (ja aberta e com scroll ate ela) -- hover continua
+            // so mostrando o tooltip de alertas, sem navegar.
+            .on('click', function () {
+                window.location.href = FAZENDAS_URL + '?site=' + encodeURIComponent(site.site);
+            });
+    });
+
+    var estacoes = {{ estacoes | tojson }};
+    estacoes.forEach(function (estacao) {
+        L.marker([estacao.lat, estacao.lon], { icon: stationIcon })
+            .addTo(map)
+            .bindTooltip(buildStationTooltipHtml(estacao), { direction: 'top', sticky: true, opacity: 0.95 });
+    });
+
+    if (latlngs.length === 1) {
+        map.setView(latlngs[0], 14);
+    } else {
+        map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
+    }
+})();
+</script>
+{% endif %}
+{% endblock %}
