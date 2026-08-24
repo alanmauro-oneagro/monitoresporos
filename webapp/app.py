@@ -1634,11 +1634,30 @@ def _bootstrap_once():
     teria seu proprio agendador e mandaria cada relatorio agendado em
     duplicidade."""
     models.init_db()
+    _bootstrap_admin_from_env()
     threading.Thread(target=_whatsapp_scheduler_loop, daemon=True).start()
+
+
+def _bootstrap_admin_from_env():
+    """Cria o primeiro usuario administrador a partir de
+    `ADMIN_BOOTSTRAP_USERNAME`/`ADMIN_BOOTSTRAP_PASSWORD` (variaveis de
+    ambiente), se as duas estiverem definidas e esse usuario ainda nao
+    existir -- alternativa ao `setup_admin.py` (que pede senha
+    interativamente) pra hospedagem onde nao da pra abrir um terminal
+    dentro do container. So roda uma vez (usuario ja existente e'
+    ignorado); nao apaga nem sobrescreve senha de ninguem."""
+    username = os.environ.get("ADMIN_BOOTSTRAP_USERNAME")
+    password = os.environ.get("ADMIN_BOOTSTRAP_PASSWORD")
+    if not username or not password:
+        return
+    if models.get_user_by_username(username):
+        return
+    models.create_user(username, password, is_admin=True)
 
 
 if __name__ == "__main__":
     models.init_db()
+    _bootstrap_admin_from_env()
     # so inicia o agendador uma vez (o reloader do Flask sobe o processo 2x em modo debug)
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
         threading.Thread(target=_whatsapp_scheduler_loop, daemon=True).start()
