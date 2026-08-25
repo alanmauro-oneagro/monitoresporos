@@ -1645,6 +1645,28 @@ def admin_delete_user(user_id):
     return redirect(url_for("admin_users"))
 
 
+EXCEL_EXPORT_DIR = os.environ.get("EXCEL_EXPORT_DIR", r"C:\Users\AlanMauro\OneDrive\OneAgro\Relatorios Site")
+
+
+def _save_export_copy_local(conteudo, filename):
+    """Salva uma copia do Excel exportado direto numa pasta do
+    computador (dentro do OneDrive, que sincroniza sozinho) -- so tenta
+    isso rodando local no Windows (onde `EXCEL_EXPORT_DIR` de fato
+    existe); no site hospedado (Railway/Linux) esse caminho nao existe
+    de verdade, entao nem tenta -- o download pelo navegador continua
+    funcionando do mesmo jeito nos dois casos."""
+    if not Path(POWERSHELL_EXE).exists():
+        return None
+    try:
+        export_dir = Path(EXCEL_EXPORT_DIR)
+        export_dir.mkdir(parents=True, exist_ok=True)
+        destino = export_dir / filename
+        destino.write_bytes(conteudo)
+        return destino
+    except OSError:
+        return None
+
+
 @app.route("/admin/exportar")
 @alan_mauro_required
 def admin_exportar():
@@ -1653,6 +1675,10 @@ def admin_exportar():
     outra conta -- ver base.html)."""
     buffer = export_excel.build_workbook()
     filename = f"bioscout_export_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    conteudo = buffer.getvalue()
+    destino = _save_export_copy_local(conteudo, filename)
+    if destino:
+        flash(f"Copia tambem salva em {destino}.", "success")
     return send_file(
         buffer, as_attachment=True, download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
