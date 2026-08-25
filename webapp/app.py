@@ -17,7 +17,7 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
     current_user,
@@ -1270,38 +1270,6 @@ def save_estoque_rapido():
         models.set_farm_produtos(site_name, safra, models.MOMENTO_ESTOQUE_RAPIDO, tipo, linhas)
     flash(f"Estoque de '{site_name}' salvo.", "success")
     return redirect(url_for("recommendations", safra=safra))
-
-
-@app.route("/admin/whatsapp", methods=["GET", "POST"])
-@admin_required
-def admin_whatsapp():
-    if request.method == "POST":
-        action = request.form.get("action")
-        phone = re.sub(r"\D", "", request.form.get("phone", ""))
-        if not _is_valid_phone(phone):
-            flash("Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999).", "error")
-        elif action == "pair":
-            ok, result = whatsapp.request_pairing_code(phone)
-            if ok:
-                status = whatsapp.get_status()
-                return render_template("admin_whatsapp.html", status=status, pairing_code=result)
-            flash(f"Falha ao gerar codigo: {result}", "error")
-        else:
-            ok, message = whatsapp.send_whatsapp(
-                phone, "BioScout: mensagem de teste. Se voce recebeu isso, o WhatsApp esta funcionando corretamente!",
-            )
-            flash(("Mensagem de teste enviada! Confira o WhatsApp desse numero." if ok else f"Falha no teste: {message}"),
-                  "success" if ok else "error")
-        return redirect(url_for("admin_whatsapp"))
-
-    status = whatsapp.get_status()
-    return render_template("admin_whatsapp.html", status=status)
-
-
-@app.route("/admin/whatsapp/status")
-@admin_required
-def admin_whatsapp_status():
-    return jsonify(whatsapp.get_status())
 
 
 @app.route("/recommendations/save", methods=["POST"])
