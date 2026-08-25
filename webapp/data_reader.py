@@ -48,12 +48,14 @@ DEFAULT_DOENCA_CULTURA = {
 
 
 def get_doenca(display_name, translations=None):
-    """translations (dict opcional, vindo do banco) tem prioridade sobre o
-    mapa padrao abaixo -- e' o que a aba de admin "Doencas" edita. Se a
-    doenca for desconhecida dos dois, mostra o nome em ingles mesmo (nunca
-    quebra por causa de uma doenca nova no BioScout)."""
+    """translations (dict {en: {"nome_pt", "nome_cientifico"}}, vindo do
+    banco -- ver `models.get_all_disease_translations`) tem prioridade
+    sobre o mapa padrao abaixo -- e' o que a aba de admin "Doencas"
+    edita. Se a doenca for desconhecida dos dois, mostra o nome em
+    ingles mesmo (nunca quebra por causa de uma doenca nova no
+    BioScout)."""
     if translations and display_name in translations:
-        return translations[display_name]
+        return translations[display_name]["nome_pt"]
     return DOENCA_MAP.get(display_name, display_name)
 
 
@@ -194,10 +196,11 @@ def get_dashboard_data(permitted_site_names=None, translations=None):
         danger = _to_float(row.get("dangerConcentrationThreshold"))
         status = compute_status(conc or 0, warn, danger)
         w = weather_lookup.get((row.get("deviceUserFriendlyId"), dt.date().isoformat()))
+        cientifico_salvo = translations.get(disease, {}).get("nome_cientifico") if translations else None
         card = {
             "doenca": get_doenca(disease, translations),
             "doenca_en": disease,
-            "cientifico": row.get("scientificName"),
+            "cientifico": cientifico_salvo or row.get("scientificName"),
             "concentracao": round(conc, 1) if conc is not None else None,
             "status": status,
             "data": dt.date().isoformat(),

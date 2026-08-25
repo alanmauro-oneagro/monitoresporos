@@ -334,10 +334,15 @@ def set_whatsapp_days(site_name, weekdays):
 
 
 def get_all_disease_translations():
+    """chave: display_name_en -> {nome_pt, nome_cientifico} -- os dois
+    campos editaveis na aba Doencas, pra quem monta os cartoes de alerta
+    (Painel/Mapa/Manejo) usar o que foi editado ali em vez do valor cru
+    que vem da leitura do BioScout (ver `data_reader.get_dashboard_data`,
+    que so cai pro valor cru quando nao ha nome cientifico salvo)."""
     conn = get_db()
-    rows = conn.execute("SELECT display_name_en, nome_pt FROM disease_translations").fetchall()
+    rows = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico FROM disease_translations").fetchall()
     conn.close()
-    return {r["display_name_en"]: r["nome_pt"] for r in rows}
+    return {r["display_name_en"]: {"nome_pt": r["nome_pt"], "nome_cientifico": r["nome_cientifico"] or ""} for r in rows}
 
 
 def get_all_disease_info():
