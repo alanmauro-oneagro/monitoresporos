@@ -17,6 +17,10 @@
     @media (min-width: 768px) {
         body {
             background-image: linear-gradient(rgba(10, 31, 68, 0.25), rgba(10, 31, 68, 0.25)), url("{{ url_for('static', filename='login-bg-desktop.jpg') }}");
+            /* A estacao fica mais pra direita na foto -- desloca o
+               enquadramento nessa direcao (em vez de centralizado) pra
+               ela ficar mais visivel, em vez de cortada/apertada. */
+            background-position: 75% center;
         }
     }
 </style>
