@@ -23,8 +23,7 @@
 
 <div class="card shadow-sm mt-2 mb-3">
     <div class="card-body">
-        <h6 class="fw-bold mb-2">Adicionar ponto estimado</h6>
-        <p class="text-muted small mb-2">Clique no mapa no final da pagina pra marcar onde vai o ponto (pode arrastar o pino depois de marcado), ou digite a coordenada direto -- isso so posiciona uma previa, ainda nao cria nada. O ponto so e' criado de verdade ao clicar em "💾 Salvar Ponto". Os circulos amarelos ao redor das fazendas mostram, em tempo real, a area de alcance do raio escolhido.</p>
+        <h6 class="fw-bold mb-2">Adicionar Ponto</h6>
         <form method="post" action="{{ url_for('adicionar_ponto_virtual') }}" id="form-novo-ponto">
             <div class="border rounded p-2 mb-3" style="background:#faf8ff;">
                 <label class="form-label small fw-bold mb-1">Raio de interpolacao (km) <span class="fw-normal text-muted">-- padrao: 120 km</span></label>
@@ -117,6 +116,13 @@
     escolher onde marcar um novo ponto. Circulos amarelos: alcance do raio escolhido ao redor de cada fazenda
     real; o ponto sendo adicionado usa o mesmo estilo, tambem em amarelo.
 </p>
+<div class="position-relative mb-2" style="max-width: 420px;">
+    <div class="input-group input-group-sm">
+        <input type="text" id="busca-local" class="form-control" placeholder="Buscar cidade/localidade...">
+        <button type="button" id="busca-local-btn" class="btn btn-outline-secondary">🔍 Buscar</button>
+    </div>
+    <div id="busca-local-resultados" class="list-group position-absolute w-100" style="z-index: 1000; top: 100%;"></div>
+</div>
 <div id="farm-map"></div>
 {% endblock %}
 {% block extra_scripts %}
@@ -159,12 +165,12 @@
     // cheio de pino, e o menor ajuda a nao poluir o mapa.
     var stationIcon = L.divIcon({
         html: '<div style="background:#1971c2;border:1px solid #ffffff;border-radius:50%;' +
-            'width:13px;height:13px;display:flex;align-items:center;justify-content:center;' +
-            'font-size:7px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">📡</div>',
+            'width:6.5px;height:6.5px;display:flex;align-items:center;justify-content:center;' +
+            'font-size:3.5px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">📡</div>',
         className: 'mapa-pin-icon',
-        iconSize: [13, 13],
-        iconAnchor: [7, 7],
-        tooltipAnchor: [0, -8],
+        iconSize: [6.5, 6.5],
+        iconAnchor: [3.5, 3.5],
+        tooltipAnchor: [0, -4],
     });
 
     function escapeHtml(s) {
@@ -375,6 +381,59 @@
     }
 
     map.on('click', function (e) { atualizarPreview(e.latlng); });
+
+    // Busca de cidade/localidade (Nominatim/OpenStreetMap, geocodificacao
+    // gratuita, sem API key) -- so busca ao clicar/apertar Enter (nao a
+    // cada letra, pra nao estourar o limite de uso do servico). Escolher
+    // um resultado leva o mapa pra la e ja marca a previa do ponto no
+    // centro, igual um clique no mapa faria.
+    var buscaInput = document.getElementById('busca-local');
+    var buscaBtn = document.getElementById('busca-local-btn');
+    var buscaResultados = document.getElementById('busca-local-resultados');
+
+    function limparResultadosBusca() {
+        buscaResultados.innerHTML = '';
+    }
+
+    function buscarLocal() {
+        var termo = buscaInput.value.trim();
+        if (!termo) return;
+        buscaResultados.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
+        fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=br&q=' + encodeURIComponent(termo))
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (resultados) {
+                if (!resultados || !resultados.length) {
+                    buscaResultados.innerHTML = '<div class="list-group-item small text-muted">Nenhum resultado encontrado.</div>';
+                    return;
+                }
+                buscaResultados.innerHTML = '';
+                resultados.forEach(function (r) {
+                    var item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'list-group-item list-group-item-action small';
+                    item.textContent = r.display_name;
+                    item.addEventListener('click', function () {
+                        var latlng = L.latLng(parseFloat(r.lat), parseFloat(r.lon));
+                        map.setView(latlng, 12);
+                        atualizarPreview(latlng);
+                        limparResultadosBusca();
+                        buscaInput.value = r.display_name;
+                    });
+                    buscaResultados.appendChild(item);
+                });
+            })
+            .catch(function () {
+                buscaResultados.innerHTML = '<div class="list-group-item small text-danger">Erro ao buscar -- tente de novo.</div>';
+            });
+    }
+
+    buscaBtn.addEventListener('click', buscarLocal);
+    buscaInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); buscarLocal(); }
+    });
+    document.addEventListener('click', function (e) {
+        if (!buscaResultados.contains(e.target) && e.target !== buscaInput) { limparResultadosBusca(); }
+    });
 
     // O ponto so pode ser criado clicando em "Salvar Ponto" -- aperta
     // Enter em qualquer campo do formulario (nome, latitude, longitude,
