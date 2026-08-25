@@ -190,6 +190,15 @@ app = Flask(__name__)
 app.secret_key = _load_or_create_secret_key()
 
 
+@app.after_request
+def _no_cache(response):
+    """Sem isso, o botao 'voltar' do navegador depois de 'Sair' mostra a
+    pagina anterior direto do cache local, sem pedir login de novo."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
 @app.context_processor
 def _inject_nav_safras():
     """`models.SAFRAS` disponivel em toda pagina que estende base.html --
