@@ -3,12 +3,21 @@
 {% block extra_head %}
 <style>
     body {
-        background-image: linear-gradient(rgba(10, 31, 68, 0.25), rgba(10, 31, 68, 0.25)), url("{{ url_for('static', filename='login-bg.jpg') }}");
+        /* Foto vertical (celular) por padrao -- a foto larga (paisagem)
+           so entra a partir do breakpoint de desktop, senao o
+           background-size:cover corta as laterais numa tela alta e
+           estreita e a estacao (o assunto da foto) pode sair do quadro. */
+        background-image: linear-gradient(rgba(10, 31, 68, 0.25), rgba(10, 31, 68, 0.25)), url("{{ url_for('static', filename='login-bg-mobile.jpg') }}");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
         min-height: 100vh;
+    }
+    @media (min-width: 768px) {
+        body {
+            background-image: linear-gradient(rgba(10, 31, 68, 0.25), rgba(10, 31, 68, 0.25)), url("{{ url_for('static', filename='login-bg-desktop.jpg') }}");
+        }
     }
 </style>
 {% endblock %}
