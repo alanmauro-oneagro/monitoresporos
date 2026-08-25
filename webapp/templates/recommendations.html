@@ -111,7 +111,7 @@ html { font-size: 14px; }
             </span>
             {% if site_group.weather.previsao_3_dias %}
             <span>
-                Previsao:
+                <strong>Previsao:</strong>
                 {% for d in site_group.weather.previsao_3_dias %}
                 <strong>{{ d.data[8:10] }}/{{ d.data[5:7] }}</strong>: {{ d.chuva_mm }}mm ({{ d.temp_min }}-{{ d.temp_max }}°C){% if not loop.last %}, {% endif %}
                 {% endfor %}
@@ -147,6 +147,19 @@ html { font-size: 14px; }
         {% endfor %}
 
         <div class="mt-3 pt-3 border-top">
+            <label class="form-label small fw-bold d-block mb-2">Anotações</label>
+            {% for row in site_group.diseases %}
+            <div class="mb-2" data-autosave-group>
+                <div class="small fw-bold mb-1">{{ row.rotulo }}</div>
+                <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
+                <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
+                <textarea name="nota" form="notesForm" class="form-control auto-grow-textarea" rows="5" placeholder="Ex.: produto, dose, epoca de aplicacao, observacoes do agronomo...">{{ row.nota }}</textarea>
+                <span class="autosave-status small"></span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-3 pt-3 border-top">
             <form method="post" action="{{ url_for('save_estoque_rapido') }}" data-autosave>
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <input type="hidden" name="safra" value="{{ safra }}">
@@ -168,19 +181,6 @@ html { font-size: 14px; }
                 </div>
                 <span class="autosave-status small ms-2"></span>
             </form>
-        </div>
-
-        <div class="mt-3 pt-3 border-top">
-            <label class="form-label small fw-bold d-block mb-2">Anotações</label>
-            {% for row in site_group.diseases %}
-            <div class="mb-2" data-autosave-group>
-                <div class="small text-muted mb-1">{{ row.rotulo }}</div>
-                <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
-                <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
-                <textarea name="nota" form="notesForm" class="form-control auto-grow-textarea" rows="5" placeholder="Ex.: produto, dose, epoca de aplicacao, observacoes do agronomo...">{{ row.nota }}</textarea>
-                <span class="autosave-status small"></span>
-            </div>
-            {% endfor %}
         </div>
 
         </div>
