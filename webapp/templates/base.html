@@ -29,6 +29,18 @@
         @media (min-width: 768px) { .col-disease-5 { flex: 0 0 33.3333%; max-width: 33.3333%; } }
         @media (min-width: 992px) { .col-disease-5 { flex: 0 0 25%; max-width: 25%; } }
         @media (min-width: 1200px) { .col-disease-5 { flex: 0 0 20%; max-width: 20%; } }
+        @media (max-width: 575.98px) {
+            /* 3 caixas de doenca por linha em celular ficam bem mais
+               estreitas que o design original previa -- reduz
+               preenchimento/fonte pra caber sem tanta quebra de linha
+               (nome da doenca e nome cientifico eram os que mais
+               sofriam) e deixa o grid com aparencia mais uniforme. */
+            .col-disease-5 { padding: 0 0.3rem; }
+            .disease-card { padding: 0.5rem 0.4rem; margin-bottom: 0.5rem; }
+            .disease-card .valor { font-size: 1.15rem; }
+            .disease-card .doenca { font-size: 0.68rem; padding: 0.1rem 0.3rem; }
+            .disease-card .cientifico { font-size: 0.6rem; margin-top: 0.2rem; }
+        }
         .site-heading { background: #c6e0b4; color: #155724; border-radius: 0.4rem; padding: 0.5rem 0.9rem; margin: 1.2rem 0 0.6rem; font-weight: 700; }
         .site-heading-atencao { background: #ffd43b; color: #282828; }
         .site-heading-bloqueado { background: #ff6b6b; color: #282828; }
