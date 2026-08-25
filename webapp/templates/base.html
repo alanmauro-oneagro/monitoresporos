@@ -34,15 +34,23 @@
         .manual-note-box { background: #f8f9fa; border: 1px solid #e2e5e8; border-radius: 0.4rem; padding: 0.6rem 0.7rem; }
         .auto-grow-textarea { overflow-y: hidden; resize: none; }
         .dropdown-item-custom:hover { background: #f4f6f4; }
+        .navbar-toggler { border: 1px solid #63b445; padding: 0.25rem 0.5rem; }
+        @media (max-width: 991.98px) {
+            #mainNavMenu.mobile-nav-open { display: flex !important; }
+            #mainNavMenu .nav-link { padding: 0.4rem 0; }
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-<nav class="navbar navbar-expand" style="background:#ffffff; border-bottom: 3px solid #63b445;">
+<nav class="navbar navbar-expand-lg" style="background:#ffffff; border-bottom: 3px solid #63b445;">
     <div class="container">
         <a class="navbar-brand" href="https://www.oneagro.com.br/" target="_blank" rel="noopener"><img src="{{ url_for('static', filename='oneagro-logo.png') }}" alt="OneAgro"></a>
         {% if current_user.is_authenticated %}
-        <div class="d-flex gap-3 align-items-center">
+        <button type="button" class="navbar-toggler" id="navToggleBtn" aria-label="Abrir menu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="d-none d-lg-flex flex-column flex-lg-row gap-2 gap-lg-3 align-items-lg-center w-100" id="mainNavMenu">
             <a class="nav-link text-white" href="{{ url_for('mapa') }}">Mapa</a>
             <a class="nav-link text-white" href="{{ url_for('fazendas') }}">Fazendas</a>
             <a class="nav-link text-white" href="{{ url_for('dashboard') }}">Alertas</a>
@@ -71,6 +79,18 @@
 </nav>
 <script>
 (function () {
+    // Menu hambúrguer do mobile -- separado do mecanismo generico de
+    // dropdown abaixo (que fecha "os outros" ao abrir um), senao abrir o
+    // submenu "⋮" (Configuracoes) de dentro do menu mobile fecharia o
+    // menu inteiro junto.
+    var navToggle = document.getElementById('navToggleBtn');
+    var navMenu = document.getElementById('mainNavMenu');
+    if (navToggle && navMenu) {
+        navToggle.addEventListener('click', function () {
+            navMenu.classList.toggle('mobile-nav-open');
+        });
+    }
+
     var menus = [];
     document.querySelectorAll('[data-dropdown-toggle]').forEach(function (toggle) {
         var menu = document.getElementById(toggle.dataset.dropdownToggle);

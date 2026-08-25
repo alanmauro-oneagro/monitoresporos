@@ -15,6 +15,7 @@
 <div class="alert alert-info">Nenhuma doenca encontrada nos dados ainda.</div>
 {% else %}
 <form method="post">
+    <div class="table-responsive">
     <table class="table bg-white shadow-sm align-middle">
         <thead>
             <tr><th>Nome original (BioScout, em ingles)</th><th>Nome no nosso site</th><th>Nome cientifico do fungo</th></tr>
@@ -34,6 +35,7 @@
         {% endfor %}
         </tbody>
     </table>
+    </div>
     <button type="submit" class="btn btn-success">Salvar nomes</button>
 </form>
 
