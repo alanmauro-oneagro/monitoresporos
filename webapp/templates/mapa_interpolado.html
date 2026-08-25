@@ -28,13 +28,15 @@
 
 <div class="row g-3 mt-2 mb-3">
     <div class="col-mapa-interpolado-mapa">
-        <h6 class="fw-bold mb-2">Mapa</h6>
-        <div class="position-relative mb-2" style="max-width: 420px;">
-            <div class="input-group input-group-sm">
-                <input type="text" id="busca-local" class="form-control" placeholder="Buscar cidade/localidade...">
-                <button type="button" id="busca-local-btn" class="btn btn-outline-secondary">🔍 Buscar</button>
+        <div class="border rounded p-2 mb-4" style="background:#faf8ff;">
+            <h6 class="fw-bold mb-2">Mapa</h6>
+            <div class="position-relative" style="max-width: 420px;">
+                <div class="input-group input-group-sm">
+                    <input type="text" id="busca-local" class="form-control" placeholder="Buscar cidade/localidade...">
+                    <button type="button" id="busca-local-btn" class="btn btn-outline-secondary">🔍 Buscar</button>
+                </div>
+                <div id="busca-local-resultados" class="list-group position-absolute w-100" style="z-index: 1000; top: 100%;"></div>
             </div>
-            <div id="busca-local-resultados" class="list-group position-absolute w-100" style="z-index: 1000; top: 100%;"></div>
         </div>
         <div id="farm-map"></div>
     </div>
