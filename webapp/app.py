@@ -17,7 +17,7 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
     current_user,
@@ -30,6 +30,7 @@ import models
 import fungicida_data
 import data_reader
 import bioscout_fetch
+import export_excel
 import whatsapp
 import weather_forecast
 import inmet_stations
@@ -673,6 +674,18 @@ def admin_required(view):
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
         if not current_user.is_authenticated or not current_user.is_admin:
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+ALAN_MAURO_USERNAME = "Alan Mauro"  # unico usuario com acesso a "Editar cadastro" e a exportacao Excel
+
+
+def alan_mauro_required(view):
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.username != ALAN_MAURO_USERNAME:
             abort(403)
         return view(*args, **kwargs)
     return wrapped
@@ -1546,7 +1559,7 @@ def admin_create_user():
 
 
 @app.route("/admin/users/<int:user_id>/editar", methods=["GET", "POST"])
-@admin_required
+@alan_mauro_required
 def admin_edit_user(user_id):
     user_row = models.get_user_by_id(user_id)
     if not user_row:
@@ -1653,6 +1666,20 @@ def admin_delete_user(user_id):
         models.delete_user(user_id)
         flash("Usuario excluido.", "success")
     return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/exportar")
+@alan_mauro_required
+def admin_exportar():
+    """Relatorio Excel (cadastro/Fazendas/Manejo das 3 safras) -- so
+    `ALAN_MAURO_USERNAME` tem acesso (aba escondida no menu pra qualquer
+    outra conta -- ver base.html)."""
+    buffer = export_excel.build_workbook()
+    filename = f"bioscout_export_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        buffer, as_attachment=True, download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.route("/admin/users/<int:user_id>/permissions", methods=["GET", "POST"])

@@ -28,7 +28,9 @@
                 </a>
             </td>
             <td class="d-flex gap-2">
+                {% if current_user.username == 'Alan Mauro' %}
                 <a href="{{ url_for('admin_edit_user', user_id=u.id) }}" class="btn btn-sm btn-outline-primary">Editar cadastro</a>
+                {% endif %}
                 <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" onsubmit="return confirm('Redefinir a senha de {{ u.username }} para a senha padrao?');">
                     <button type="submit" class="btn btn-sm btn-outline-secondary">Redefinir senha</button>
                 </form>
