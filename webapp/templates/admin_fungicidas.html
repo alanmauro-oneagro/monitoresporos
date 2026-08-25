@@ -2,19 +2,6 @@
 {% block title %}Fungicidas - OneAgro{% endblock %}
 {% block content %}
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
-<p class="text-muted small">
-    Ingredientes ativos sugeridos por doenca (quimico e biologico), com a
-    fonte usada em cada grupo, para todas as doencas que ja apareceram na
-    aba <strong>Doencas</strong>. Use as setas ▲/▼ para mover um ingrediente
-    para cima ou para baixo -- so os 3 primeiros de cada grupo aparecem nas
-    abas Manejo, entao mover o melhor tratamento da sua regiao para
-    o topo garante que ele apareca la. Edite o texto quando algo nao fizer
-    sentido para a sua realidade -- a mudanca vale para todas as fazendas
-    que tiverem aquela doenca em alerta. Doencas novas que ainda nao tem
-    nada pesquisado aparecem marcadas em "Sem dados ainda" -- pesquise
-    fontes (Embrapa, Agrolink/Agrofit-MAPA, universidades) e adicione no
-    <code>fungicida_data.py</code>.
-</p>
 
 <form method="post">
 {% for d in doencas_data %}
@@ -84,6 +71,20 @@
 {% endfor %}
 <button type="submit" class="btn btn-success">Salvar recomendacoes</button>
 </form>
+
+<p class="text-muted small mt-4 pt-3 border-top">
+    Ingredientes ativos sugeridos por doenca (quimico e biologico), com a
+    fonte usada em cada grupo, para todas as doencas que ja apareceram na
+    aba <strong>Doencas</strong>. Use as setas ▲/▼ para mover um ingrediente
+    para cima ou para baixo -- so os 3 primeiros de cada grupo aparecem nas
+    abas Manejo, entao mover o melhor tratamento da sua regiao para
+    o topo garante que ele apareca la. Edite o texto quando algo nao fizer
+    sentido para a sua realidade -- a mudanca vale para todas as fazendas
+    que tiverem aquela doenca em alerta. Doencas novas que ainda nao tem
+    nada pesquisado aparecem marcadas em "Sem dados ainda" -- pesquise
+    fontes (Embrapa, Agrolink/Agrofit-MAPA, universidades) e adicione no
+    <code>fungicida_data.py</code>.
+</p>
 <script>
 document.querySelectorAll('form[action$="/mover"]').forEach(function (form) {
     form.addEventListener('submit', function () {

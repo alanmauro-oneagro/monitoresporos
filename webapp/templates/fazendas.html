@@ -2,22 +2,6 @@
 {% block title %}Fazendas - OneAgro{% endblock %}
 {% block content %}
 <h4 class="mb-2">Fazendas</h4>
-<p class="text-muted small">
-    Cadastro dos fungicidas e biologicos que cada fazenda tem comprado, por
-    safra (<strong>Safra</strong> e <strong>2 Safra</strong>) e, dentro de
-    cada safra, por momento de aplicacao -- <strong>TS</strong> (tratamento
-    de sementes) e <strong>Folha</strong> (aplicacao foliar). Preencha a
-    data/anotacao, o nome do produto e o ingrediente ativo; linhas em
-    branco sao ignoradas ao salvar. Comeca com 3 linhas em cada grade --
-    ao preencher a ultima, uma nova aparece sozinha, sem limite de linhas.
-    Logo abaixo de Folha, tem tambem <strong>Dados de Plantio</strong>
-    (data, talhao, variedade, ciclo em dias) e <strong>Dados de
-    Aplicacoes</strong> (data, talhao, fungicidas usados) -- essas duas
-    comecam com 1 linha e crescem do mesmo jeito. Clique no nome da
-    fazenda para ver e editar o estoque. A cultura atual de cada safra e'
-    definida na aba Manejo (Safra / 2ª Safra / 3ª Safra), do lado do nome
-    da fazenda.
-</p>
 
 {% if no_access %}
 <div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
@@ -227,4 +211,21 @@ document.querySelectorAll('.safra-toggle').forEach(function (btn) {
 })();
 </script>
 {% endif %}
+
+<p class="text-muted small mt-4 pt-3 border-top">
+    Cadastro dos fungicidas e biologicos que cada fazenda tem comprado, por
+    safra (<strong>Safra</strong> e <strong>2 Safra</strong>) e, dentro de
+    cada safra, por momento de aplicacao -- <strong>TS</strong> (tratamento
+    de sementes) e <strong>Folha</strong> (aplicacao foliar). Preencha a
+    data/anotacao, o nome do produto e o ingrediente ativo; linhas em
+    branco sao ignoradas ao salvar. Comeca com 3 linhas em cada grade --
+    ao preencher a ultima, uma nova aparece sozinha, sem limite de linhas.
+    Logo abaixo de Folha, tem tambem <strong>Dados de Plantio</strong>
+    (data, talhao, variedade, ciclo em dias) e <strong>Dados de
+    Aplicacoes</strong> (data, talhao, fungicidas usados) -- essas duas
+    comecam com 1 linha e crescem do mesmo jeito. Clique no nome da
+    fazenda para ver e editar o estoque. A cultura atual de cada safra e'
+    definida na aba Manejo (Safra / 2ª Safra / 3ª Safra), do lado do nome
+    da fazenda.
+</p>
 {% endblock %}

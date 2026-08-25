@@ -28,7 +28,8 @@
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda com coordenada cadastrada ainda.</div>
 {% else %}
-<p class="text-muted small">
+<div id="farm-map"></div>
+<p class="text-muted small mt-3 pt-3 border-top">
     Passe o mouse sobre um pino para ver os alertas daquela estacao, ou
     clique para abrir direto aquela fazenda na aba Fazendas. As
     linhas amarelas mostram as divisas de pais e estado, as linhas brancas
@@ -40,7 +41,6 @@
     Fazendas) -- so como referencia de localizacao/cidade, os dados de
     clima do app vem da Open-Meteo.
 </p>
-<div id="farm-map"></div>
 {% endif %}
 {% endblock %}
 {% block extra_scripts %}
