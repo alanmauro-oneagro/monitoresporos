@@ -1,5 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Entrar - OneAgro{% endblock %}
+{% block extra_head %}
+<style>
+    body {
+        background-image: linear-gradient(rgba(10, 31, 68, 0.25), rgba(10, 31, 68, 0.25)), url("{{ url_for('static', filename='login-bg.jpg') }}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        min-height: 100vh;
+    }
+</style>
+{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-12 col-sm-8 col-md-5">
