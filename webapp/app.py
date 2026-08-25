@@ -229,7 +229,7 @@ def _fetch_configured():
 def _run_fetch_in_background():
     try:
         if BIOSCOUT_USERNAME and BIOSCOUT_PASSWORD:
-            bioscout_fetch.fetch_incremental(
+            bioscout_fetch.fetch_recent(
                 data_reader.DATA_DIR, BIOSCOUT_USERNAME, BIOSCOUT_PASSWORD, log=lambda msg: None
             )
             error = None

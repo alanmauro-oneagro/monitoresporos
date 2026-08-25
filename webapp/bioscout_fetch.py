@@ -1,20 +1,29 @@
-"""Busca incremental de dados do BioScout (sites + contagem de esporos +
-clima) em Python puro -- equivalente do `Fetch-BioScoutData.ps1 -SkipExtras`
-(pula spraylogs/relatorios de site, que so o Build-Report/Refresh-Dashboard
+"""Busca dados recentes do BioScout (sites + contagem de esporos + clima)
+em Python puro -- versao do `Fetch-BioScoutData.ps1 -SkipExtras` (pula
+spraylogs/relatorios de site, que so o Build-Report/Refresh-Dashboard
 locais usam) que roda em qualquer lugar, sem precisar de Windows/PowerShell.
 Usado pelo site hospedado (Railway/Linux), onde o script original nao pode
 rodar -- ver `_run_fetch_in_background` em `app.py`.
+
+So busca uma janela deslizante dos ultimos `LOOKBACK_DAYS` dias (nao o
+historico completo desde 2025-10-01 -- o dashboard web so olha a leitura
+mais recente por doenca/fazenda, nao precisa de mais que isso, e assim cada
+clique em "Forcar atualizacao" e' rapido, uma chamada por site em vez de
+meses de historico). O merge por chave (`_merge_csv`) so atualiza ou
+adiciona linha, nunca remove -- se uma estacao nao aparecer na janela (sem
+leitura nova), a ultima leitura que ja tinha no CSV fica exatamente como
+estava, nunca "some".
 
 So usa `urllib` (biblioteca padrao), sem dependencia nova."""
 import csv
 import json
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 API_BASE = "https://rest.bioscout.com.au"
-SINCE_DATE = "2025-10-01"
+LOOKBACK_DAYS = 16
 
 
 def _http_json(url, headers=None, method="GET", body=None):
@@ -98,20 +107,14 @@ def _merge_csv(new_rows, path, key_props):
             writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
-def _add_months(dt, n):
-    month = dt.month - 1 + n
-    year = dt.year + month // 12
-    month = month % 12 + 1
-    return dt.replace(year=year, month=month)
-
-
-def fetch_incremental(data_dir, username, password, log=print):
-    """Busca sites + spore_counts + weather, incremental (so refaz o mes
-    atual + meses novos desde o ultimo `lastCompletedMonth`). Grava em
-    `data_dir` (sites.csv, spore_counts.csv, weather.csv, sync_state.json)."""
+def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=print):
+    """Busca sites + spore_counts + weather dos ultimos `lookback_days`
+    dias (janela unica, sem historico). Grava em `data_dir` (sites.csv,
+    spore_counts.csv, weather.csv) -- o merge por chave preserva qualquer
+    leitura mais antiga ja salva la, mesmo que a estacao nao apareca
+    nessa janela."""
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
-    state_path = data_dir / "sync_state.json"
 
     log("Autenticando...")
     token = _get_auth_token(username, password)
@@ -128,60 +131,33 @@ def fetch_incremental(data_dir, username, password, log=print):
     site_ids = [s.get("siteId") for s in sites]
     log(f"Sites OneAgro/Brasil: {len(site_ids)} (de {len(all_sites)} totais na conta)")
 
-    state = {"lastCompletedMonth": None}
-    if state_path.exists():
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-
-    start = datetime.strptime(SINCE_DATE, "%Y-%m-%d")
     end = datetime.now()
-    months = []
-    cursor = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    while cursor <= end:
-        months.append(cursor)
-        cursor = _add_months(cursor, 1)
+    start = end - timedelta(days=lookback_days)
+    from_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    to_iso = end.strftime("%Y-%m-%dT%H:%M:%SZ")
+    log(f"Janela: ultimos {lookback_days} dias ({from_iso} -> {to_iso})")
 
-    start_idx = 0
-    if state.get("lastCompletedMonth"):
-        last_completed = datetime.strptime(state["lastCompletedMonth"], "%Y-%m-%d")
-        for i, month in enumerate(months):
-            if month > last_completed:
-                start_idx = i
-                break
-            start_idx = i + 1
-    months_to_fetch = months[start_idx:]
-    log(f"Meses a buscar: {len(months_to_fetch)}")
+    try:
+        qs = "&".join(f"SiteIds={sid}" for sid in site_ids)
+        url = f"{API_BASE}/api/service-subscriptions/counts?From={from_iso}&To={to_iso}&{qs}"
+        counts = _http_json(url, headers=headers)
+        _merge_csv(counts, data_dir / "spore_counts.csv", ["tapeScanId", "particulateId"])
+        log(f"  contagem de esporos: {len(counts)} registros")
+    except Exception as exc:
+        log(f"  erro contagem de esporos: {exc}")
 
-    for month_start in months_to_fetch:
-        month_end = min(_add_months(month_start, 1), end)
-        from_iso = month_start.strftime("%Y-%m-%dT%H:%M:%SZ")
-        to_iso = month_end.strftime("%Y-%m-%dT%H:%M:%SZ")
-        log(f"Mes {month_start.strftime('%Y-%m')} ({from_iso} -> {to_iso})")
-
+    weather_rows = []
+    for site_id in site_ids:
         try:
-            qs = "&".join(f"SiteIds={sid}" for sid in site_ids)
-            url = f"{API_BASE}/api/service-subscriptions/counts?From={from_iso}&To={to_iso}&{qs}"
-            counts = _http_json(url, headers=headers)
-            _merge_csv(counts, data_dir / "spore_counts.csv", ["tapeScanId", "particulateId"])
-            log(f"  contagem de esporos: {len(counts)} registros")
+            w = _http_json(
+                f"{API_BASE}/api/Weather/readings/sites?SiteId={site_id}&StartDate={from_iso}&EndDate={to_iso}",
+                headers=headers,
+            )
+            if w:
+                weather_rows.extend(w)
         except Exception as exc:
-            log(f"  erro contagem de esporos: {exc}")
-
-        month_weather = []
-        for site_id in site_ids:
-            try:
-                w = _http_json(
-                    f"{API_BASE}/api/Weather/readings/sites?SiteId={site_id}&StartDate={from_iso}&EndDate={to_iso}",
-                    headers=headers,
-                )
-                if w:
-                    month_weather.extend(w)
-            except Exception as exc:
-                log(f"  erro clima site {site_id}: {exc}")
-        _merge_csv(month_weather, data_dir / "weather.csv", ["deviceId", "dateMeasured"])
-        log(f"  clima: {len(month_weather)} registros")
-
-        if month_end < end:
-            state["lastCompletedMonth"] = month_start.strftime("%Y-%m-%d")
-            state_path.write_text(json.dumps(state), encoding="utf-8")
+            log(f"  erro clima site {site_id}: {exc}")
+    _merge_csv(weather_rows, data_dir / "weather.csv", ["deviceId", "dateMeasured"])
+    log(f"  clima: {len(weather_rows)} registros")
 
     log(f"Concluido. Dados em {data_dir}")
