@@ -115,7 +115,8 @@
 <h6 class="fw-bold mt-4 mb-2">Mapa</h6>
 <p class="text-muted small mb-1">
     Clique no pino de uma fazenda (real ou ponto estimado) pra abrir ela direto na aba Fazendas. Linhas amarelas:
-    divisas de pais/estado (IBGE). Linha laranja: rodovia BR-163 (OpenStreetMap). Pinos azuis 📡:
+    divisas de pais/estado (IBGE). Linhas brancas: divisas de municipio (IBGE), nos estados onde ha fazenda,
+    ponto estimado ou estacao. Linha laranja: rodovia BR-163 (OpenStreetMap). Pinos azuis 📡:
     todas as estacoes automaticas do INMET em operacao nos estados onde ha fazenda ou ponto estimado cadastrado --
     ajuda a ver a rede de referencia disponivel na regiao antes de escolher onde marcar um novo ponto. Circulos
     amarelos: alcance do raio escolhido ao redor de cada fazenda real; o ponto sendo adicionado usa o mesmo
@@ -128,6 +129,7 @@
 <script>
 (function () {
     var sites = {{ sites_data | tojson }};
+    var estacoes = {{ estacoes | tojson }};
     var LOGO_URL = '{{ url_for("static", filename="oneagro-logo.png") }}';
     var PIN_SVG =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
@@ -202,6 +204,7 @@
     }).addTo(map);
 
     var BOUNDARY_COLOR = '#ffe100';
+    var MUNICIPIO_COLOR = '#ffffff';
     var IBGE_BASE = 'https://servicodados.ibge.gov.br/api/v3/malhas';
 
     function addBoundaryLayer(url, weight, color) {
@@ -218,12 +221,54 @@
             .catch(function () { return null; /* IBGE fora do ar ou sem internet -- so nao mostra essa camada */ });
     }
 
-    // Divisas oficiais do IBGE em amarelo: pais (leve) e estados (leve, um
-    // pedido so, cobrindo o Brasil inteiro -- nao filtra por UF aqui pra
-    // manter simples, ja que essa tela e' pra escolher pontos em qualquer
-    // lugar, nao so perto das fazendas ja cadastradas).
+    // Ray casting simples (Polygon/MultiPolygon), igual o Mapa normal --
+    // descobre em qual estado cada fazenda/ponto/estacao esta, usando o
+    // mesmo geojson de estados que ja baixamos pra desenhar as divisas.
+    function pointInRing(pt, ring) {
+        var x = pt[0], y = pt[1], inside = false;
+        for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+            var intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+    function pointInRings(pt, rings) {
+        if (!pointInRing(pt, rings[0])) return false;
+        for (var k = 1; k < rings.length; k++) {
+            if (pointInRing(pt, rings[k])) return false;
+        }
+        return true;
+    }
+    function pointInGeometry(pt, geom) {
+        if (geom.type === 'Polygon') return pointInRings(pt, geom.coordinates);
+        if (geom.type === 'MultiPolygon') return geom.coordinates.some(function (poly) { return pointInRings(pt, poly); });
+        return false;
+    }
+    function findUfCodes(ufGeojson, points) {
+        var codes = {};
+        points.forEach(function (pt) {
+            var feature = ufGeojson.features.find(function (f) { return pointInGeometry(pt, f.geometry); });
+            if (feature) codes[feature.properties.codarea] = true;
+        });
+        return Object.keys(codes);
+    }
+
+    // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
+    // (leve, um pedido so) e municipios (pesado -- so busca dos estados
+    // onde ha fazenda, ponto estimado ou estacao, igual o Mapa normal --
+    // assim que um desses entrar num estado novo, ele ja ganha as mesmas
+    // linhas de municipio automaticamente).
+    var ufReferencePoints = sites.map(function (s) { return [s.lon, s.lat]; })
+        .concat(estacoes.map(function (e) { return [e.lon, e.lat]; }));
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
-    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2);
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
+        .then(function (ufGeojson) {
+            if (!ufGeojson) return;
+            findUfCodes(ufGeojson, ufReferencePoints).forEach(function (codarea) {
+                addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
+            });
+        });
 
     // BR-163 (Guaranta do Norte/PA ate a fronteira em Mundo Novo/MS) via
     // Overpass (OpenStreetMap), em laranja.
@@ -260,7 +305,6 @@
     // ou ponto estimado (nao so a mais proxima de cada um) -- da uma
     // visao completa da rede de referencia disponivel antes de escolher
     // onde marcar um ponto novo.
-    var estacoes = {{ estacoes | tojson }};
     estacoes.forEach(function (estacao) {
         L.marker([estacao.lat, estacao.lon], { icon: stationIcon })
             .addTo(map)
