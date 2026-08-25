@@ -86,13 +86,3 @@ def estacao_mais_proxima(lat, lon):
     a distancia em km -- ou None se o catalogo nao estiver disponivel."""
     proximas = estacoes_mais_proximas(lat, lon, n=1)
     return proximas[0] if proximas else None
-
-
-def estacoes_por_uf(ufs):
-    """Todas as estacoes automaticas do INMET em operacao nos estados
-    informados (siglas, ex. {"MT", "MS", "PR"}) -- usado pra plotar no
-    mapa a rede inteira de referencia da regiao, nao so a mais proxima de
-    cada fazenda."""
-    if not ufs:
-        return []
-    return [e for e in get_estacoes() if e["uf"] in ufs]

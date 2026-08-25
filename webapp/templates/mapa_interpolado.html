@@ -20,10 +20,6 @@
 {% endblock %}
 {% block content %}
 <h4 class="mb-2">Mapa Interpolado <span class="text-muted small fw-normal">(pontos estimados)</span></h4>
-<div class="alert alert-warning py-1 px-2 small mb-2">
-    ⚠️ Estimativa por interpolacao, nao e' leitura real -- so usa fazendas reais dentro do raio. Defina quem ve
-    cada ponto na aba <strong>Usuarios</strong>.
-</div>
 
 <div class="card shadow-sm mt-2 mb-3">
     <div class="card-body">
@@ -115,12 +111,11 @@
 <h6 class="fw-bold mt-4 mb-2">Mapa</h6>
 <p class="text-muted small mb-1">
     Clique no pino de uma fazenda (real ou ponto estimado) pra abrir ela direto na aba Fazendas. Linhas amarelas:
-    divisas de pais/estado (IBGE). Linhas brancas: divisas de municipio (IBGE), nos estados onde ha fazenda,
-    ponto estimado ou estacao. Linha laranja: rodovia BR-163 (OpenStreetMap). Pinos azuis 📡:
-    todas as estacoes automaticas do INMET em operacao nos estados onde ha fazenda ou ponto estimado cadastrado --
-    ajuda a ver a rede de referencia disponivel na regiao antes de escolher onde marcar um novo ponto. Circulos
-    amarelos: alcance do raio escolhido ao redor de cada fazenda real; o ponto sendo adicionado usa o mesmo
-    estilo, tambem em amarelo.
+    divisas de pais/estado (IBGE). Linhas brancas: divisas de municipio (IBGE), nos estados onde ha fazenda ou
+    ponto estimado. Linha laranja: rodovia BR-163 (OpenStreetMap). Pinos azuis 📡: todas as estacoes automaticas
+    do INMET no Brasil -- ajuda a ver a rede de referencia disponivel em qualquer regiao do pais antes de
+    escolher onde marcar um novo ponto. Circulos amarelos: alcance do raio escolhido ao redor de cada fazenda
+    real; o ponto sendo adicionado usa o mesmo estilo, tambem em amarelo.
 </p>
 <div id="farm-map"></div>
 {% endblock %}
@@ -160,7 +155,7 @@
         className: 'mapa-pin-icon', iconSize: [18, 18], iconAnchor: [9, 9],
     });
     // Tamanho 40% menor que o pino de estacao do Mapa normal -- aqui
-    // aparecem TODAS as estacoes da regiao (nao so as em uso), fica
+    // aparecem TODAS as estacoes do Brasil (nao so as em uso), fica
     // cheio de pino, e o menor ajuda a nao poluir o mapa.
     var stationIcon = L.divIcon({
         html: '<div style="background:#1971c2;border:1px solid #ffffff;border-radius:50%;' +
@@ -256,11 +251,12 @@
 
     // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
     // (leve, um pedido so) e municipios (pesado -- so busca dos estados
-    // onde ha fazenda, ponto estimado ou estacao, igual o Mapa normal --
-    // assim que um desses entrar num estado novo, ele ja ganha as mesmas
-    // linhas de municipio automaticamente).
-    var ufReferencePoints = sites.map(function (s) { return [s.lon, s.lat]; })
-        .concat(estacoes.map(function (e) { return [e.lon, e.lat]; }));
+    // onde ha fazenda ou ponto estimado; nao usa as estacoes aqui porque
+    // agora elas sao a rede inteira do Brasil -- senao seria sempre
+    // linha de municipio em todo estado do pais). Assim que uma fazenda
+    // ou ponto entrar num estado novo, ele ja ganha as mesmas linhas de
+    // municipio automaticamente.
+    var ufReferencePoints = sites.map(function (s) { return [s.lon, s.lat]; });
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
         .then(function (ufGeojson) {
@@ -301,9 +297,9 @@
             });
     });
 
-    // Todas as estacoes automaticas do INMET nos estados onde ha fazenda
-    // ou ponto estimado (nao so a mais proxima de cada um) -- da uma
-    // visao completa da rede de referencia disponivel antes de escolher
+    // Todas as estacoes automaticas do INMET no Brasil (nao so as de
+    // algum estado especifico) -- da uma visao completa da rede de
+    // referencia disponivel em qualquer lugar do pais antes de escolher
     // onde marcar um ponto novo.
     estacoes.forEach(function (estacao) {
         L.marker([estacao.lat, estacao.lon], { icon: stationIcon })

@@ -162,21 +162,6 @@ def _weather_coords_all():
     return resultado
 
 
-def _estacoes_regiao(coords_dict):
-    """Todas as estacoes automaticas do INMET nos estados cobertos pelas
-    coordenadas informadas (fazendas reais e virtuais, mesmo as que ainda
-    nao tem estimativa) -- acha o estado de cada coordenada pela estacao
-    mais proxima e depois lista TODAS as estacoes desses estados, pra dar
-    uma visao completa da rede de referencia disponivel na regiao (nao so
-    a mais proxima de cada fazenda)."""
-    ufs = set()
-    for lat, lon in coords_dict.values():
-        estacao = inmet_stations.estacao_mais_proxima(lat, lon)
-        if estacao:
-            ufs.add(estacao["uf"])
-    return inmet_stations.estacoes_por_uf(ufs)
-
-
 def _load_or_create_secret_key():
     if "BIOSCOUT_WEB_SECRET" in os.environ:
         return os.environ["BIOSCOUT_WEB_SECRET"]
@@ -910,10 +895,10 @@ def mapa_interpolado():
     sites_data.sort(key=lambda s: s["site"])
     pontos_virtuais.sort(key=lambda p: p["nome"])
 
-    coords_todos = dict(coords_reais)
-    for vf in models.get_all_virtual_farms():
-        coords_todos[vf["site_name"]] = (vf["lat"], vf["lon"])
-    estacoes = _estacoes_regiao(coords_todos)
+    # Todas as estacoes do Brasil aqui (nao so as dos estados com fazenda/
+    # ponto, como no Mapa normal) -- essa tela e' justamente pra escolher
+    # onde criar um ponto novo, em qualquer lugar do pais.
+    estacoes = inmet_stations.get_estacoes()
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, estacoes=estacoes,

@@ -343,14 +343,14 @@ público — ainda não configurado, combinamos deixar para depois.
     estacao de referencia" abaixo), quando houver. Passe o mouse pra ver
     o codigo e a distancia ate a fazenda que ela serve.
   - No **Mapa Interpolado** (admin): **todas** as estacoes automaticas do
-    INMET em operacao nos estados cobertos por qualquer coordenada do
-    sistema -- fazenda real ou ponto estimado, mesmo um ponto ainda sem
-    estimativa (`estacoes_por_uf` em `inmet_stations.py`, chamada por
-    `_estacoes_regiao` em `app.py`; o estado de cada coordenada e'
-    descoberto pela estacao mais proxima dela). Da uma visao completa da
-    rede de referencia disponivel na regiao, util pra decidir onde
-    colocar um novo ponto estimado -- por ter muito mais pino nessa tela,
-    o icone e' 40% menor que no Mapa normal, pra nao poluir.
+    INMET no Brasil inteiro (`inmet_stations.get_estacoes()`, sem filtro
+    de UF) -- essa tela e' justamente pra escolher onde criar um ponto
+    novo em qualquer lugar do pais, entao mostra a rede de referencia
+    completa de cara. Por ter muito mais pino nessa tela, o icone e' 40%
+    menor que no Mapa normal, pra nao poluir. As linhas brancas de
+    municipio (IBGE), essas sim, continuam limitadas aos estados com
+    fazenda ou ponto estimado (nao as estacoes, que agora sao nacionais
+    -- senao seria o Brasil inteiro em linha de municipio).
 - **Escolha da estacao de referencia por fazenda** (aba **Fazendas**): logo
   abaixo dos dados de cada fazenda, um seletor mostra as 2 estacoes do
   INMET mais pertas dela (`inmet_stations.estacoes_mais_proximas`) e a
