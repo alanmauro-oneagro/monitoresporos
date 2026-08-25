@@ -36,14 +36,32 @@
         .dropdown-item-custom:hover { background: #f4f6f4; }
         .navbar-toggler { border: 1px solid #63b445; padding: 0.25rem 0.5rem; }
         @media (max-width: 991.98px) {
-            #mainNavMenu.mobile-nav-open { display: flex !important; }
+            /* Sobrepoe o conteudo da pagina (nao empurra pra baixo) --
+               posicionado relativo ao <nav> (que ganha position:relative
+               logo abaixo), escapando do padding do .container pra
+               cobrir a largura toda. */
+            #mainNavMenu.mobile-nav-open {
+                display: flex !important;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                margin: 0;
+                background: #ffffff;
+                padding: 1rem 1.5rem 1.25rem;
+                box-shadow: 0 8px 16px rgba(0,0,0,0.18);
+                border-bottom: 3px solid #63b445;
+                z-index: 1040;
+                max-height: calc(100vh - 60px);
+                overflow-y: auto;
+            }
             #mainNavMenu .nav-link { padding: 0.4rem 0; }
         }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-<nav class="navbar navbar-expand-lg" style="background:#ffffff; border-bottom: 3px solid #63b445;">
+<nav class="navbar navbar-expand-lg" style="background:#ffffff; border-bottom: 3px solid #63b445; position: relative;">
     <div class="container">
         <a class="navbar-brand" href="https://www.oneagro.com.br/" target="_blank" rel="noopener"><img src="{{ url_for('static', filename='oneagro-logo.png') }}" alt="OneAgro"></a>
         {% if current_user.is_authenticated %}
@@ -86,8 +104,16 @@
     var navToggle = document.getElementById('navToggleBtn');
     var navMenu = document.getElementById('mainNavMenu');
     if (navToggle && navMenu) {
-        navToggle.addEventListener('click', function () {
+        navToggle.addEventListener('click', function (e) {
+            e.stopPropagation();
             navMenu.classList.toggle('mobile-nav-open');
+        });
+        // Clicar fora do menu (no conteudo da pagina por baixo, agora
+        // que ele sobrepoe em vez de empurrar) fecha ele.
+        document.addEventListener('click', function (e) {
+            if (navMenu.classList.contains('mobile-nav-open') && !navMenu.contains(e.target)) {
+                navMenu.classList.remove('mobile-nav-open');
+            }
         });
     }
 
