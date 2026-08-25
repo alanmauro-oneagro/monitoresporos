@@ -1674,7 +1674,7 @@ def admin_exportar():
     `ALAN_MAURO_USERNAME` tem acesso (aba escondida no menu pra qualquer
     outra conta -- ver base.html)."""
     buffer = export_excel.build_workbook()
-    filename = f"bioscout_export_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    filename = f"OneAgro_Export_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     conteudo = buffer.getvalue()
     destino = _save_export_copy_local(conteudo, filename)
     if destino:
