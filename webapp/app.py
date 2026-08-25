@@ -1479,12 +1479,32 @@ def _is_valid_phone(phone):
     return phone.isdigit() and 10 <= len(phone) <= 15
 
 
+def _telefone_from_form(form):
+    """Monta o telefone (so digitos) a partir das duas caixas do
+    formulario -- codigo do pais (padrao Brasil, 55) + numero -- pra
+    evitar o erro comum de esquecer o codigo do pais na frente."""
+    codigo = re.sub(r"\D", "", form.get("codigo_pais", ""))
+    numero = re.sub(r"\D", "", form.get("numero_telefone", ""))
+    return codigo + numero
+
+
+def _split_phone(telefone):
+    """Separa um telefone ja salvo (so digitos) em (codigo_pais, numero)
+    pra preencher as duas caixas ao reabrir o formulario -- assume Brasil
+    (55) como padrao, que e' o caso de praticamente todo cadastro atual;
+    numero de outro pais ainda funciona, so aparece inteiro na caixa do
+    numero pra conferir/ajustar manualmente."""
+    if telefone.startswith("55") and len(telefone) > 10:
+        return "55", telefone[2:]
+    return "55", telefone
+
+
 @app.route("/admin/users/create", methods=["POST"])
 @admin_required
 def admin_create_user():
     username = request.form.get("username", "").strip()
     email = request.form.get("email", "").strip()
-    telefone = re.sub(r"\D", "", request.form.get("telefone", ""))
+    telefone = _telefone_from_form(request.form)
     is_admin = request.form.get("is_admin") == "on"
     if not username:
         flash("Usuario e obrigatorio.", "error")
@@ -1514,7 +1534,7 @@ def admin_edit_user(user_id):
         abort(404)
     if request.method == "POST":
         email = request.form.get("email", "").strip()
-        telefone = re.sub(r"\D", "", request.form.get("telefone", ""))
+        telefone = _telefone_from_form(request.form)
         if not _is_valid_email(email):
             flash("Informe um email valido.", "error")
         elif not _is_valid_phone(telefone):
@@ -1523,8 +1543,16 @@ def admin_edit_user(user_id):
             models.set_user_contato(user_id, email, telefone)
             flash(f"Cadastro de '{user_row['username']}' atualizado.", "success")
             return redirect(url_for("admin_users"))
-        return render_template("admin_edit_user.html", user=user_row, email=email, telefone=telefone)
-    return render_template("admin_edit_user.html", user=user_row, email=user_row["email"] or "", telefone=user_row["telefone"] or "")
+        codigo_pais, numero_telefone = _split_phone(telefone)
+        return render_template(
+            "admin_edit_user.html", user=user_row, email=email,
+            codigo_pais=codigo_pais, numero_telefone=numero_telefone,
+        )
+    codigo_pais, numero_telefone = _split_phone(user_row["telefone"] or "")
+    return render_template(
+        "admin_edit_user.html", user=user_row, email=user_row["email"] or "",
+        codigo_pais=codigo_pais, numero_telefone=numero_telefone,
+    )
 
 
 @app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
@@ -1564,7 +1592,7 @@ def change_password():
 def meu_whatsapp():
     if request.method == "POST":
         action = request.form.get("action")
-        telefone = re.sub(r"\D", "", request.form.get("telefone", ""))
+        telefone = _telefone_from_form(request.form)
         if not _is_valid_phone(telefone):
             flash("Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999).", "error")
         else:
@@ -1579,7 +1607,8 @@ def meu_whatsapp():
                 flash("Seu telefone foi salvo.", "success")
         return redirect(url_for("meu_whatsapp"))
     user_row = models.get_user_by_id(int(current_user.id))
-    return render_template("meu_whatsapp.html", telefone=user_row["telefone"] or "")
+    codigo_pais, numero_telefone = _split_phone(user_row["telefone"] or "")
+    return render_template("meu_whatsapp.html", codigo_pais=codigo_pais, numero_telefone=numero_telefone)
 
 
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])

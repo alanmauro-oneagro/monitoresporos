@@ -10,9 +10,15 @@
                 <label class="form-label">Email</label>
                 <input type="email" name="email" class="form-control" value="{{ email }}" required>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Telefone (com codigo do pais, sem + nem espacos)</label>
-                <input type="text" name="telefone" class="form-control" value="{{ telefone }}" placeholder="5511999999999" required>
+            <div class="mb-3 row g-2">
+                <div class="col-4 col-sm-3">
+                    <label class="form-label">Codigo do pais</label>
+                    <input type="text" name="codigo_pais" class="form-control" value="{{ codigo_pais }}" placeholder="55" required>
+                </div>
+                <div class="col-8 col-sm-9">
+                    <label class="form-label">Telefone (DDD + numero, sem espacos)</label>
+                    <input type="text" name="numero_telefone" class="form-control" value="{{ numero_telefone }}" placeholder="11999999999" required>
+                </div>
             </div>
             <button type="submit" class="btn btn-success">Salvar</button>
             <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Cancelar</a>
