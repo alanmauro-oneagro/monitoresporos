@@ -244,7 +244,12 @@ def _maybe_auto_refresh():
     """Chamado ao abrir Painel/Recomendacoes: se os dados estao velhos e
     nenhuma busca esta rodando, dispara uma atualizacao sozinha em segundo
     plano (nao trava a pagina -- ela mostra os dados que tiver agora).
-    Retorna True se uma busca nova foi iniciada agora."""
+    Retorna True se uma busca nova foi iniciada agora. O script de busca
+    e' PowerShell (so existe no Windows) -- hospedado (Railway/Render,
+    Linux) essa busca nunca completaria de verdade, entao nem tenta nem
+    avisa nada nesse caso (os dados la sao a foto do momento do deploy)."""
+    if not Path(POWERSHELL_EXE).exists():
+        return False
     age = _data_age_seconds()
     if age is None or age > AUTO_REFRESH_MAX_AGE_SECONDS:
         return _start_fetch_if_not_running()
