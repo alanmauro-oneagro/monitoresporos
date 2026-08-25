@@ -89,7 +89,7 @@ def _fazendas_aplicacoes_rows():
 def _manejo_cultura_rows():
     rows = []
     for (site_name, safra), info in models.get_all_farm_culturas().items():
-        rows.append([site_name, SAFRA_LABELS.get(safra, safra), info["cultura"] or "", info["updated_at"] or ""])
+        rows.append([site_name, SAFRA_LABELS.get(safra, safra), info["cultura"] or "", models.fmt_data_br(info["updated_at"]) or ""])
     rows.sort(key=lambda r: (r[0].lower(), r[1]))
     return rows
 

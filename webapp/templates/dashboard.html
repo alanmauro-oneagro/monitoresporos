@@ -25,7 +25,7 @@
     <span class="site-weather-badge">
         💧 {{ weather_by_site[site].umidade ~ '%' if weather_by_site[site].umidade is not none else '-' }}
         &nbsp;🌧️ {{ weather_by_site[site].chuva ~ ' mm' if weather_by_site[site].chuva is not none else '-' }}
-        <span class="site-weather-date">(leitura {{ weather_by_site[site].data }})</span>
+        <span class="site-weather-date">(leitura {{ weather_by_site[site].data | data_br }})</span>
     </span>
     {% endif %}
     {% if status and status.nivel_dados %}

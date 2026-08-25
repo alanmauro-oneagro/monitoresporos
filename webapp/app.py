@@ -175,6 +175,7 @@ def _load_or_create_secret_key():
 
 app = Flask(__name__)
 app.secret_key = _load_or_create_secret_key()
+app.jinja_env.filters["data_br"] = models.fmt_data_br
 
 
 @app.after_request
@@ -436,7 +437,7 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     relatorio, nao mais logo abaixo do titulo. Ordem do cabecalho: titulo
     -> Clima agora (uma linha em branco abaixo do nome da fazenda) ->
     Cultura -> Resumo (sempre antes da primeira doenca)."""
-    rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
     if weather and weather.get("cidade"):
         rodape_data += f" · {weather['cidade']}/{weather['uf']}"
 
@@ -836,7 +837,7 @@ def mapa():
             "lon": lon,
             "virtual": site in virtual_names,
             "cards": sorted(cards, key=lambda c: c["doenca"]),
-            "ultima_leitura": max(c["data"] for c in cards),
+            "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)),
         })
         if estacao:
             entry = estacoes_by_codigo.setdefault(estacao["codigo"], {
@@ -870,7 +871,7 @@ def mapa_interpolado():
         sites_data.append({
             "site": site, "lat": lat, "lon": lon, "virtual": False,
             "cards": sorted(cards, key=lambda c: c["doenca"]),
-            "ultima_leitura": max(c["data"] for c in cards),
+            "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)),
         })
 
     pontos_virtuais = []
@@ -880,6 +881,7 @@ def mapa_interpolado():
         )
         pontos_virtuais.append({
             **vf,
+            "criado_em": models.fmt_data_br(vf["criado_em"]),
             "cards": cards,
             "estacoes_usadas": estacoes_usadas,
         })
@@ -887,7 +889,7 @@ def mapa_interpolado():
             sites_data.append({
                 "site": vf["site_name"], "lat": vf["lat"], "lon": vf["lon"], "virtual": True,
                 "cards": cards,
-                "ultima_leitura": max(c["data"] for c in cards),
+                "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)),
                 "raio_km": vf["raio_km"],
                 "estacoes_usadas": estacoes_usadas,
             })

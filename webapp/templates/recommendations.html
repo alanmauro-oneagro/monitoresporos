@@ -64,7 +64,7 @@ html { font-size: 14px; }
                 <span class="autosave-status small"></span>
             </form>
             {% if site_group.leitura_data %}
-            <span class="text-muted small">leitura de {{ site_group.leitura_data }}</span>
+            <span class="text-muted small">leitura de {{ site_group.leitura_data | data_br }}</span>
             {% endif %}
             {% if site_group.dias_desde_atualizacao is not none and site_group.dias_desde_atualizacao > 120 %}
             <span class="badge bg-warning text-dark" title="Cultura definida ha {{ site_group.dias_desde_atualizacao }} dias -- confirme se ainda esta certa">
@@ -113,7 +113,7 @@ html { font-size: 14px; }
             <span>
                 Previsao:
                 {% for d in site_group.weather.previsao_3_dias %}
-                <strong>{{ d.data[5:] }}</strong>: {{ d.chuva_mm }}mm ({{ d.temp_min }}-{{ d.temp_max }}°C){% if not loop.last %}, {% endif %}
+                <strong>{{ d.data[8:10] }}/{{ d.data[5:7] }}</strong>: {{ d.chuva_mm }}mm ({{ d.temp_min }}-{{ d.temp_max }}°C){% if not loop.last %}, {% endif %}
                 {% endfor %}
                 · {{ origem }}
             </span>

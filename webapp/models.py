@@ -1,10 +1,35 @@
 """Esquema do banco (SQLite) e funcoes de acesso a usuarios/permissoes/fazendas."""
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 import data_reader
+
+
+def fmt_data_br(value):
+    """Converte "YYYY-MM-DD" ou "YYYY-MM-DD HH:MM:SS" (formatos usados
+    internamente pelos dados/banco) pro padrao brasileiro dd/mm/aa (ou
+    dd/mm/aa HH:MM, se tiver hora) -- usado em toda tela/relatorio que
+    mostra uma data pro usuario (registrado como filtro Jinja "data_br"
+    em app.py, e chamado direto aqui pelo export_excel.py e por rotas
+    que montam texto antes de renderizar, ex. o Mapa). Devolve o valor
+    original se nao reconhecer o formato, nunca quebra a pagina por
+    causa disso."""
+    if not value:
+        return value
+    text = str(value).strip()
+    for fmt_in, fmt_out in (
+        ("%Y-%m-%d %H:%M:%S", "%d/%m/%y %H:%M"),
+        ("%Y-%m-%dT%H:%M:%S", "%d/%m/%y %H:%M"),
+        ("%Y-%m-%d", "%d/%m/%y"),
+    ):
+        try:
+            return datetime.strptime(text, fmt_in).strftime(fmt_out)
+        except ValueError:
+            continue
+    return value
 
 # Local (padrao): banco fica do lado do codigo, em webapp/bioscout_web.db --
 # nada muda pra quem ja usa assim. Hospedado (Railway/Render), o disco do
