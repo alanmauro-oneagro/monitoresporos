@@ -3,7 +3,12 @@
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-    #farm-map { height: 60vh; min-height: 380px; width: 100%; border-radius: 0.5rem; }
+    #farm-map { height: 90vh; min-height: 570px; width: 100%; border-radius: 0.5rem; }
+    .col-mapa-interpolado-mapa, .col-mapa-interpolado-form { flex: 0 0 100%; max-width: 100%; }
+    @media (min-width: 992px) {
+        .col-mapa-interpolado-mapa { flex: 0 0 80%; max-width: 80%; }
+        .col-mapa-interpolado-form { flex: 0 0 20%; max-width: 20%; }
+    }
     .mapa-pin-icon { background: transparent; border: none; }
     .mapa-tooltip { font-size: 0.8rem; }
     .mapa-tt-title { font-weight: 700; }
@@ -22,7 +27,7 @@
 <h4 class="mb-2">Mapa Interpolado</h4>
 
 <div class="row g-3 mt-2 mb-3">
-    <div class="col-12 col-lg-9">
+    <div class="col-mapa-interpolado-mapa">
         <h6 class="fw-bold mb-2">Mapa</h6>
         <div class="position-relative mb-2" style="max-width: 420px;">
             <div class="input-group input-group-sm">
@@ -33,7 +38,7 @@
         </div>
         <div id="farm-map"></div>
     </div>
-    <div class="col-12 col-lg-3">
+    <div class="col-mapa-interpolado-form">
         <div class="card shadow-sm h-100">
             <div class="card-body">
                 <h6 class="fw-bold mb-2">Adicionar Ponto</h6>
