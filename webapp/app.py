@@ -1533,6 +1533,7 @@ def admin_edit_user(user_id):
     if not user_row:
         abort(404)
     if request.method == "POST":
+        action = request.form.get("action")
         email = request.form.get("email", "").strip()
         telefone = _telefone_from_form(request.form)
         if not _is_valid_email(email):
@@ -1541,7 +1542,17 @@ def admin_edit_user(user_id):
             flash("Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999).", "error")
         else:
             models.set_user_contato(user_id, email, telefone)
-            flash(f"Cadastro de '{user_row['username']}' atualizado.", "success")
+            if action == "test":
+                ok, message = whatsapp.send_whatsapp(
+                    telefone, "BioScout: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
+                )
+                flash(
+                    f"Cadastro de '{user_row['username']}' atualizado. "
+                    + ("Mensagem de teste enviada!" if ok else f"Falha no teste: {message}"),
+                    "success" if ok else "error",
+                )
+            else:
+                flash(f"Cadastro de '{user_row['username']}' atualizado.", "success")
             return redirect(url_for("admin_users"))
         codigo_pais, numero_telefone = _split_phone(telefone)
         return render_template(

@@ -20,7 +20,8 @@
                     <input type="text" name="numero_telefone" class="form-control" value="{{ numero_telefone }}" placeholder="11999999999" required>
                 </div>
             </div>
-            <button type="submit" class="btn btn-success">Salvar</button>
+            <button type="submit" name="action" value="save" class="btn btn-outline-success">Salvar</button>
+            <button type="submit" name="action" value="test" class="btn btn-success">Salvar e enviar teste</button>
             <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Cancelar</a>
         </form>
     </div>
