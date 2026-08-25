@@ -35,6 +35,14 @@
         .auto-grow-textarea { overflow-y: hidden; resize: none; }
         .dropdown-item-custom:hover { background: #f4f6f4; }
         .navbar-toggler { border: 1px solid #63b445; padding: 0.25rem 0.5rem; }
+        @media (min-width: 992px) {
+            /* Compacta o menu pra caber tudo numa linha so, alinhado a
+               direita, sem precisar dar zoom out pra visualizar todos
+               os itens. */
+            .navbar-brand img { height: 26px; }
+            #mainNavMenu { gap: 0.05rem !important; flex-wrap: nowrap; }
+            #mainNavMenu .nav-link { padding: 0.5rem 0.35rem; font-size: 0.8rem; white-space: nowrap; }
+        }
         @media (max-width: 991.98px) {
             /* Sobrepoe o conteudo da pagina (nao empurra pra baixo) --
                posicionado relativo ao <nav> (que ganha position:relative
@@ -78,6 +86,9 @@
             <a class="nav-link text-white" href="{{ url_for('recommendations', safra=safra_key) }}">Manejo {{ safra_label }}</a>
             {% endfor %}
             <a class="nav-link text-white" href="https://new.bioscout.com.au/#Spore%20Graphs" target="_blank" rel="noopener">BioScout</a>
+            <a class="nav-link text-white" href="{{ url_for('change_password') }}" title="Trocar senha">Trocar senha</a>
+            <a class="nav-link text-white" href="{{ url_for('meu_whatsapp') }}" title="Meu WhatsApp">Meu WhatsApp</a>
+            <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>
             {% if current_user.is_admin %}
             <div class="position-relative">
                 <button type="button" class="btn btn-link nav-link text-white p-0" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮</button>
@@ -90,9 +101,6 @@
                 </div>
             </div>
             {% endif %}
-            <a class="nav-link text-white" href="{{ url_for('meu_whatsapp') }}" title="Meu WhatsApp">Meu WhatsApp</a>
-            <a class="nav-link text-white" href="{{ url_for('change_password') }}" title="Trocar senha">Trocar senha</a>
-            <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>
         </div>
         {% endif %}
     </div>
