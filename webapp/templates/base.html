@@ -77,7 +77,7 @@
             {% endfor %}
             <a class="nav-link text-white" href="https://new.bioscout.com.au/#Spore%20Graphs" target="_blank" rel="noopener">BioScout</a>
             {% if current_user.is_admin %}
-            <div class="position-relative ms-auto">
+            <div class="position-relative">
                 <button type="button" class="btn btn-link nav-link text-white p-0" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮</button>
                 <div id="settingsMenu" class="d-none position-absolute end-0 bg-white shadow rounded mt-2 py-1" style="min-width: 160px; z-index: 1050;">
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_users') }}">Usuarios</a>
@@ -88,7 +88,7 @@
                 </div>
             </div>
             {% endif %}
-            <a class="nav-link text-white{% if not current_user.is_admin %} ms-auto{% endif %}" href="{{ url_for('meu_whatsapp') }}" title="Meu WhatsApp">Meu WhatsApp</a>
+            <a class="nav-link text-white" href="{{ url_for('meu_whatsapp') }}" title="Meu WhatsApp">Meu WhatsApp</a>
             <a class="nav-link text-white" href="{{ url_for('change_password') }}" title="Trocar senha">Trocar senha</a>
             <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>
         </div>
