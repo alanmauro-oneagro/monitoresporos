@@ -26,7 +26,7 @@
         <h6 class="fw-bold mb-2">Adicionar Ponto</h6>
         <form method="post" action="{{ url_for('adicionar_ponto_virtual') }}" id="form-novo-ponto">
             <div class="border rounded p-2 mb-3 d-flex align-items-center gap-2 flex-wrap" style="background:#faf8ff;">
-                <label class="form-label small fw-bold mb-0" for="novo-raio">Raio de interpolacao (km) <span class="fw-normal text-muted">-- padrao: 120 km</span></label>
+                <label class="form-label small fw-bold mb-0" for="novo-raio">Raio de interpolacao (km)</label>
                 <input type="number" name="raio_km" id="novo-raio" class="form-control form-control-sm" style="max-width: 100px;" min="1" step="1" value="120" required>
             </div>
 
