@@ -20,6 +20,13 @@
                     <input type="text" name="numero_telefone" class="form-control" value="{{ numero_telefone }}" placeholder="11999999999" required>
                 </div>
             </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="is_admin" id="edit_is_admin" {% if is_admin %}checked{% endif %}>
+                <label class="form-check-label" for="edit_is_admin">
+                    Administrador -- marcado = <strong>Adm</strong> (acesso a tudo);
+                    desmarcado = <strong>Usuario</strong> (so as fazendas liberadas)
+                </label>
+            </div>
             <button type="submit" name="action" value="save" class="btn btn-outline-success">Salvar</button>
             <button type="submit" name="action" value="test" class="btn btn-success">Salvar e enviar teste</button>
             <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Cancelar</a>

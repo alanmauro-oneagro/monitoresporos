@@ -869,7 +869,7 @@ def get_all_users():
     return rows
 
 
-DEFAULT_PASSWORD = "One1234"  # senha de todo usuario novo, e pra onde o botao "Redefinir senha" volta
+DEFAULT_PASSWORD = "Oneagro01!"  # senha de todo usuario novo, e pra onde o botao "Redefinir senha" volta
 
 
 def create_user(username, password, is_admin=False, email="", telefone=""):
@@ -938,15 +938,21 @@ def set_user_password(user_id, password):
     conn.close()
 
 
-def set_user_contato(user_id, email, telefone):
-    """Edita email/telefone de um usuario ja existente -- usuarios criados
-    antes desse campo existir (ou com dado errado) ficam sem jeito de
-    corrigir sem isso."""
+def set_user_contato(user_id, email, telefone, is_admin=None):
+    """Edita email/telefone (e opcionalmente o status de admin) de um
+    usuario ja existente -- usuarios criados antes desse campo existir
+    (ou com dado errado) ficam sem jeito de corrigir sem isso."""
     conn = get_db()
-    conn.execute(
-        "UPDATE users SET email = ?, telefone = ? WHERE id = ?",
-        (email, telefone, user_id),
-    )
+    if is_admin is None:
+        conn.execute(
+            "UPDATE users SET email = ?, telefone = ? WHERE id = ?",
+            (email, telefone, user_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE users SET email = ?, telefone = ?, is_admin = ? WHERE id = ?",
+            (email, telefone, 1 if is_admin else 0, user_id),
+        )
     conn.commit()
     conn.close()
 

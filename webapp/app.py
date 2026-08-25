@@ -1504,12 +1504,15 @@ def admin_edit_user(user_id):
         action = request.form.get("action")
         email = request.form.get("email", "").strip()
         telefone = _telefone_from_form(request.form)
-        if not _is_valid_email(email):
+        is_admin = request.form.get("is_admin") == "on"
+        if str(user_id) == current_user.id and not is_admin:
+            flash("Voce nao pode remover seu proprio acesso de administrador.", "error")
+        elif not _is_valid_email(email):
             flash("Informe um email valido.", "error")
         elif not _is_valid_phone(telefone):
             flash("Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999).", "error")
         else:
-            models.set_user_contato(user_id, email, telefone)
+            models.set_user_contato(user_id, email, telefone, is_admin=is_admin)
             if action == "test":
                 ok, message = whatsapp.send_whatsapp(
                     telefone, "BioScout: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
@@ -1525,12 +1528,12 @@ def admin_edit_user(user_id):
         codigo_pais, numero_telefone = _split_phone(telefone)
         return render_template(
             "admin_edit_user.html", user=user_row, email=email,
-            codigo_pais=codigo_pais, numero_telefone=numero_telefone,
+            codigo_pais=codigo_pais, numero_telefone=numero_telefone, is_admin=is_admin,
         )
     codigo_pais, numero_telefone = _split_phone(user_row["telefone"] or "")
     return render_template(
         "admin_edit_user.html", user=user_row, email=user_row["email"] or "",
-        codigo_pais=codigo_pais, numero_telefone=numero_telefone,
+        codigo_pais=codigo_pais, numero_telefone=numero_telefone, is_admin=bool(user_row["is_admin"]),
     )
 
 
