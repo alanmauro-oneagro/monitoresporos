@@ -698,6 +698,32 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/dashboard/atualizar", methods=["POST"])
+@login_required
+def dashboard_atualizar():
+    """Botao 'Forcar atualizacao' do Painel -- pede uma busca nova sem
+    esperar os dados ficarem velhos (os 15 min do `_maybe_auto_refresh`).
+    So funciona onde o script de busca (PowerShell) roda -- no site
+    hospedado (Railway/Render, Linux) essa busca nunca completaria de
+    verdade, entao avisa isso em vez de fingir que funcionou."""
+    if not Path(POWERSHELL_EXE).exists():
+        flash(
+            "Essa atualizacao manual so funciona no computador onde a busca de "
+            "dados roda (Windows/PowerShell) -- no site hospedado os dados vem "
+            "prontos do ultimo deploy.",
+            "error",
+        )
+    elif _start_fetch_if_not_running():
+        flash(
+            "Busca de dados nova comecou em segundo plano. Atualize a pagina "
+            "daqui a pouco para ver os dados mais recentes.",
+            "success",
+        )
+    else:
+        flash("Ja tem uma busca de dados em andamento -- aguarde ela terminar.", "success")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -748,13 +774,11 @@ def dashboard():
             "nome_exibicao": nomes_virtuais.get(site, site),
         }
 
-    # Ordem fixa do Painel: primeiro as fazendas importadas do BioScout
-    # (ordem alfabetica pelo proprio nome), depois as fazendas
-    # virtuais/estimadas, criadas aqui no site (ordem alfabetica pelo
-    # nome limpo -- ver `nome_exibicao`).
-    sites_reais = sorted(s for s in cards_by_site if s not in nomes_virtuais)
-    sites_virtuais = sorted((s for s in cards_by_site if s in nomes_virtuais), key=lambda s: nomes_virtuais[s])
-    cards_by_site = {s: cards_by_site[s] for s in sites_reais + sites_virtuais}
+    # Ordem do Painel: por data da leitura mais recente (weather_by_site
+    # ja' calculou isso por fazenda, real ou virtual), da mais nova pra
+    # mais velha.
+    sites_ordenados = sorted(cards_by_site, key=lambda s: weather_by_site[s]["data"], reverse=True)
+    cards_by_site = {s: cards_by_site[s] for s in sites_ordenados}
 
     return render_template(
         "dashboard.html", cards_by_site=cards_by_site, no_access=False,

@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Fazendas - OneAgro{% endblock %}
+{% block extra_head %}
+<style>
+/* Pagina com muita tabela/formulario -- reduz a base (rem) pra tudo
+   ficar mais compacto numa visualizacao a 100%, sem precisar dar zoom
+   out no navegador. */
+html { font-size: 14px; }
+</style>
+{% endblock %}
 {% block content %}
 <h4 class="mb-2">Fazendas</h4>
 

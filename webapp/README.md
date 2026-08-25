@@ -419,12 +419,10 @@ público — ainda não configurado, combinamos deixar para depois.
   dentro da caixa -- pagina ficou mais enxuta, so concentracao + status +
   nome cientifico.
 
-  **Ordem fixa das fazendas**: primeiro todas as fazendas importadas do
-  BioScout (CSV), em ordem alfabetica pelo nome; depois todas as fazendas
-  virtuais/estimadas criadas pelo Mapa Interpolado, tambem em ordem
-  alfabetica (pelo nome limpo, `nome_exibicao`) -- nunca misturadas nem
-  intercaladas. Reordenado no fim de `dashboard()` (`app.py`), depois de
-  montar `cards_by_site`.
+  **Ordem das fazendas**: por data da leitura mais recente (real ou
+  virtual/estimada), da mais nova pra mais velha -- usa o mesmo `data`
+  ja calculado em `weather_by_site`. Reordenado no fim de `dashboard()`
+  (`app.py`), depois de montar `cards_by_site`.
 - **Atualizacao automatica**: toda vez que o Mapa, Painel de Alertas ou
   Recomendacoes e' aberto -- seja abrindo o site pela primeira vez (cai no
   Mapa) ou dando F5/clicando no botao de recarregar do navegador em
@@ -433,9 +431,12 @@ público — ainda não configurado, combinamos deixar para depois.
   a pagina, e nao dispara duas buscas ao mesmo tempo -- `_maybe_auto_refresh`
   / `_start_fetch_if_not_running` em `app.py`, chamado em `mapa()`,
   `dashboard()` e `recommendations()`). Esse intervalo de 15 min esta
-  fixo em `AUTO_REFRESH_MAX_AGE_SECONDS`, ajuste se quiser. Nao tem botao
-  manual de "Atualizar dados" -- so a automatica, do jeito que pediram
-  (atualizar so ao abrir/recarregar, nao um botao a parte).
+  fixo em `AUTO_REFRESH_MAX_AGE_SECONDS`, ajuste se quiser. O Painel de
+  Alertas tambem tem um botao manual "🔄 Forcar atualizacao"
+  (`dashboard_atualizar` em `app.py`) pra nao esperar os 15 min -- em
+  ambos os casos, so funciona onde o PowerShell existe (Windows); no
+  site hospedado (Linux) a busca nunca completaria de verdade, entao o
+  botao avisa isso em vez de fingir que funcionou.
 - **Aba Mapa**: e' a **aba inicial** -- login e a rota `/` redirecionam pra
   ca (`url_for("mapa")` em `login()`/`index()` no `app.py`), e o link
   "Mapa" e' o primeiro no menu (depois vem "Fazendas", "Painel de
