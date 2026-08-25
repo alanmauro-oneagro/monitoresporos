@@ -5,7 +5,7 @@
 
 <div class="card shadow-sm" style="max-width: 420px;">
     <div class="card-body">
-        <form method="post">
+        <form method="post" data-autosave>
             <div class="mb-2">
                 <label class="form-label">Email</label>
                 <input type="email" name="email" class="form-control" value="{{ email }}" required>
@@ -27,9 +27,9 @@
                     desmarcado = <strong>Usuario</strong> (so as fazendas liberadas)
                 </label>
             </div>
-            <button type="submit" name="action" value="save" class="btn btn-outline-success">Salvar</button>
-            <button type="submit" name="action" value="test" class="btn btn-success">Salvar e enviar teste</button>
-            <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" name="action" value="test" class="btn btn-success">Enviar teste por WhatsApp</button>
+            <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Voltar</a>
+            <span class="autosave-status small ms-2"></span>
         </form>
     </div>
 </div>

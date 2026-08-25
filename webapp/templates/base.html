@@ -148,6 +148,73 @@
         });
     });
 })();
+
+(function () {
+    // Salvamento automatico: qualquer <form data-autosave> dispara um
+    // POST (com header X-Autosave, pra rota devolver JSON em vez de
+    // redirecionar) 900ms depois do ultimo campo editado, sem precisar de
+    // botao "Salvar" -- evita perder a posicao de rolagem numa pagina
+    // longa (Fazendas, Manejo) so pra ver a confirmacao. Escuta no
+    // `document` (nao em cada form) porque alguns campos usam o atributo
+    // `form="outroId"` pra pertencer a um form que nao e' ancestral no
+    // DOM (ex.: anotacoes em recommendations.html) -- so `campo.form`
+    // acha o form certo nesse caso, delegar no document cobre os dois.
+    var timers = new WeakMap();
+    function statusFor(field, form) {
+        var explicit = field.closest('[data-autosave-group]');
+        if (explicit) return explicit.querySelector('.autosave-status');
+        return form.querySelector('.autosave-status');
+    }
+    function formActionUrl(form) {
+        // NAO usar form.action direto -- se o form tiver um campo/botao
+        // chamado "action" (ex.: o botao "Enviar teste" em
+        // admin_edit_user.html/meu_whatsapp.html), ele sobrescreve essa
+        // propriedade nativa (named-getter do HTMLFormElement), e
+        // form.action deixa de ser a URL. getAttribute pega o valor do
+        // atributo puro, sem esse problema; sem atributo action=, o
+        // navegador manda pra propria pagina, entao cai nesse default.
+        return form.getAttribute('action') || location.href;
+    }
+    function doSave(form, status) {
+        if (status) { status.textContent = 'Salvando...'; status.className = 'autosave-status small ms-2 text-muted'; }
+        fetch(formActionUrl(form), {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-Autosave': '1' },
+        }).then(function (resp) {
+            return resp.json().catch(function () { return { ok: resp.ok }; });
+        }).then(function (data) {
+            if (!status) return;
+            clearTimeout(status._clearTimer);
+            status.textContent = data.ok ? '✓ Salvo' : ('⚠ ' + (data.message || 'Erro ao salvar'));
+            status.className = 'autosave-status small ms-2 ' + (data.ok ? 'text-success' : 'text-danger');
+            status._clearTimer = setTimeout(function () { status.textContent = ''; }, 2500);
+        }).catch(function () {
+            if (!status) return;
+            clearTimeout(status._clearTimer);
+            status.textContent = '⚠ Sem conexao -- tente de novo';
+            status.className = 'autosave-status small ms-2 text-danger';
+        });
+    }
+    function schedule(form, field) {
+        clearTimeout(timers.get(form));
+        var status = statusFor(field, form);
+        if (status) {
+            clearTimeout(status._clearTimer);
+            status.textContent = 'Editando...';
+            status.className = 'autosave-status small ms-2 text-muted';
+        }
+        timers.set(form, setTimeout(function () { doSave(form, status); }, 900));
+    }
+    ['input', 'change'].forEach(function (evtName) {
+        document.addEventListener(evtName, function (e) {
+            var field = e.target;
+            var form = field.form;
+            if (!form || !form.hasAttribute('data-autosave')) return;
+            schedule(form, field);
+        });
+    });
+})();
 </script>
 <div class="container mt-3">
     {% with messages = get_flashed_messages(with_categories=true) %}

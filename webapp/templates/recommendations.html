@@ -25,7 +25,7 @@ html { font-size: 14px; }
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda encontrada.</div>
 {% else %}
-<form method="post" action="{{ url_for('save_recommendations') }}" id="notesForm">
+<form method="post" action="{{ url_for('save_recommendations') }}" id="notesForm" data-autosave>
     <input type="hidden" name="safra" value="{{ safra }}">
 </form>
 
@@ -52,15 +52,16 @@ html { font-size: 14px; }
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
                 <span class="toggle-icon">▶</span> {{ site_group.site }}
             </button>
-            <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center gap-1 mb-0">
+            <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center gap-1 mb-0" data-autosave>
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <input type="hidden" name="safra" value="{{ safra }}">
-                <select name="cultura" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+                <select name="cultura" class="form-select form-select-sm" style="width: auto;">
                     <option value="" {% if not site_group.cultura %}selected{% endif %}>(vazio)</option>
                     {% for c in culturas_ativas %}
                     <option value="{{ c }}" {% if c == site_group.cultura %}selected{% endif %}>{{ c }}</option>
                     {% endfor %}
                 </select>
+                <span class="autosave-status small"></span>
             </form>
             {% if site_group.leitura_data %}
             <span class="text-muted small">leitura de {{ site_group.leitura_data }}</span>
@@ -146,7 +147,7 @@ html { font-size: 14px; }
         {% endfor %}
 
         <div class="mt-3 pt-3 border-top">
-            <form method="post" action="{{ url_for('save_estoque_rapido') }}">
+            <form method="post" action="{{ url_for('save_estoque_rapido') }}" data-autosave>
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <input type="hidden" name="safra" value="{{ safra }}">
                 <label class="form-label small fw-bold d-block mb-1">Produtos Fazenda</label>
@@ -165,18 +166,19 @@ html { font-size: 14px; }
                     </div>
                     {% endfor %}
                 </div>
-                <button type="submit" class="btn btn-sm btn-outline-secondary">Salvar estoque</button>
+                <span class="autosave-status small ms-2"></span>
             </form>
         </div>
 
         <div class="mt-3 pt-3 border-top">
             <label class="form-label small fw-bold d-block mb-2">Anotações</label>
             {% for row in site_group.diseases %}
-            <div class="mb-2">
+            <div class="mb-2" data-autosave-group>
                 <div class="small text-muted mb-1">{{ row.rotulo }}</div>
                 <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
                 <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
                 <textarea name="nota" form="notesForm" class="form-control auto-grow-textarea" rows="5" placeholder="Ex.: produto, dose, epoca de aplicacao, observacoes do agronomo...">{{ row.nota }}</textarea>
+                <span class="autosave-status small"></span>
             </div>
             {% endfor %}
         </div>
@@ -185,7 +187,6 @@ html { font-size: 14px; }
     </div>
 </div>
 {% endfor %}
-<button type="submit" form="notesForm" class="btn btn-success">Salvar anotacoes</button>
 <script>
 function autoGrowTextarea(el) {
     el.style.height = 'auto';

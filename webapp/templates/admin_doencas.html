@@ -6,7 +6,7 @@
 {% if not doencas %}
 <div class="alert alert-info">Nenhuma doenca encontrada nos dados ainda.</div>
 {% else %}
-<form method="post">
+<form method="post" data-autosave>
     <div class="table-responsive">
     <table class="table bg-white shadow-sm align-middle">
         <thead>
@@ -28,7 +28,7 @@
         </tbody>
     </table>
     </div>
-    <button type="submit" class="btn btn-success">Salvar nomes</button>
+    <span class="autosave-status small ms-2"></span>
 </form>
 
 <p class="text-muted small mt-3 pt-3 border-top">
@@ -45,7 +45,7 @@
 {% if not culturas_ativas %}
 <div class="alert alert-info">Nenhuma cultura cadastrada ainda -- va em Nome Culturas (menu ⋮) para adicionar.</div>
 {% else %}
-<form method="post">
+<form method="post" data-autosave>
     <input type="hidden" name="form_id" value="matriz_culturas">
     <div class="table-responsive">
         <table class="table table-sm bg-white shadow-sm align-middle">
@@ -75,7 +75,7 @@
             </tbody>
         </table>
     </div>
-    <button type="submit" class="btn btn-success">Salvar matriz</button>
+    <span class="autosave-status small ms-2"></span>
 </form>
 {% endif %}
 

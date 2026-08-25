@@ -758,12 +758,7 @@ def dashboard_atualizar():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    if _maybe_auto_refresh():
-        flash(
-            "Os dados tinham mais de 15 minutos -- uma busca nova comecou sozinha em "
-            "segundo plano. Atualize a pagina daqui a pouco para ver os dados mais recentes.",
-            "success",
-        )
+    _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
     if current_user.is_admin:
         permitted = None  # admin ve todas as fazendas
     else:
@@ -822,12 +817,7 @@ def dashboard():
 @app.route("/mapa")
 @login_required
 def mapa():
-    if _maybe_auto_refresh():
-        flash(
-            "Os dados tinham mais de 15 minutos -- uma busca nova comecou sozinha em "
-            "segundo plano. Atualize a pagina daqui a pouco para ver os dados mais recentes.",
-            "success",
-        )
+    _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
     if current_user.is_admin:
         permitted = None  # admin ve todas as fazendas
     else:
@@ -1004,12 +994,7 @@ def recommendations_default():
 def recommendations(safra):
     if safra not in SAFRA_LABELS:
         abort(404)
-    if _maybe_auto_refresh():
-        flash(
-            "Os dados tinham mais de 15 minutos -- uma busca nova comecou sozinha em "
-            "segundo plano. Atualize a pagina daqui a pouco para ver os dados mais recentes.",
-            "success",
-        )
+    _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
     if current_user.is_admin:
         permitted = None
     else:
@@ -1096,6 +1081,17 @@ def _safra_or_default(form):
     return safra if safra in SAFRA_LABELS else "safra1"
 
 
+def _save_response(message, endpoint=None, ok=True, **redirect_kwargs):
+    """Resposta padrao de toda rota de salvar: se veio do salvamento
+    automatico (header X-Autosave, ver base.html), devolve JSON pro
+    JS mostrar o status sem recarregar a pagina; senao (JS desabilitado,
+    ou chamada direta) cai no flash + redirect classico de sempre."""
+    if request.headers.get("X-Autosave") == "1":
+        return {"ok": ok, "message": message}
+    flash(message, "success" if ok else "error")
+    return redirect(url_for(endpoint, **redirect_kwargs)) if endpoint else redirect(request.referrer or url_for("mapa"))
+
+
 @app.route("/recommendations/whatsapp/<path:site_name>", methods=["POST"])
 @login_required
 def send_site_whatsapp(site_name):
@@ -1148,8 +1144,7 @@ def save_whatsapp_days():
         abort(403)
     days = {int(v) for v in request.form.getlist("weekday")}
     models.set_whatsapp_days(site_name, days)
-    flash(f"Agenda de WhatsApp de '{site_name}' salva.", "success")
-    return redirect(url_for("fazendas"))
+    return _save_response(f"Agenda de WhatsApp de '{site_name}' salva.", "fazendas")
 
 
 @app.route("/fazendas")
@@ -1233,14 +1228,13 @@ def save_farm_cultura():
         abort(400)
     models.set_farm_cultura(site_name, safra, cultura)
     if cultura:
-        flash(
+        message = (
             f"Cultura de '{site_name}' na {SAFRA_LABELS[safra]} definida como {cultura} -- "
-            "essa aba passa a mostrar so doencas dessa cultura.",
-            "success",
+            "essa aba passa a mostrar so doencas dessa cultura."
         )
     else:
-        flash(f"Filtro de cultura removido de '{site_name}' na {SAFRA_LABELS[safra]}.", "success")
-    return redirect(url_for("recommendations", safra=safra))
+        message = f"Filtro de cultura removido de '{site_name}' na {SAFRA_LABELS[safra]}."
+    return _save_response(message, "recommendations", safra=safra)
 
 
 @app.route("/fazendas/estacao-clima/save", methods=["POST"])
@@ -1254,10 +1248,10 @@ def save_weather_station_override():
     estacao_codigo = request.form.get("estacao_codigo", "")
     models.set_weather_station_override(site_name, estacao_codigo)
     if estacao_codigo:
-        flash(f"Previsao de '{site_name}' agora usa a estacao {estacao_codigo} como referencia.", "success")
+        message = f"Previsao de '{site_name}' agora usa a estacao {estacao_codigo} como referencia."
     else:
-        flash(f"Previsao de '{site_name}' volta a usar a coordenada da propria fazenda.", "success")
-    return redirect(url_for("fazendas"))
+        message = f"Previsao de '{site_name}' volta a usar a coordenada da propria fazenda."
+    return _save_response(message, "fazendas")
 
 
 @app.route("/fazendas/save", methods=["POST"])
@@ -1276,8 +1270,7 @@ def save_farm_produtos():
             ativos = request.form.getlist(f"ia_{momento}_{tipo}")
             linhas = list(zip(datas, nomes, ativos))
             models.set_farm_produtos(site_name, safra, momento, tipo, linhas)
-    flash(f"Produtos de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "success")
-    return redirect(url_for("fazendas"))
+    return _save_response(f"Produtos de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
 
 
 @app.route("/fazendas/plantio/save", methods=["POST"])
@@ -1295,8 +1288,7 @@ def save_farm_plantio():
     ciclos = request.form.getlist("ciclo_dias")
     linhas = list(zip(datas, talhoes, variedades, ciclos))
     models.set_farm_plantio(site_name, safra, linhas)
-    flash(f"Dados de plantio de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "success")
-    return redirect(url_for("fazendas"))
+    return _save_response(f"Dados de plantio de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
 
 
 @app.route("/fazendas/aplicacoes/save", methods=["POST"])
@@ -1314,8 +1306,7 @@ def save_farm_aplicacoes():
     biologicos = request.form.getlist("fungicidas_biologicos")
     linhas = list(zip(datas, talhoes, quimicos, biologicos))
     models.set_farm_aplicacoes(site_name, safra, linhas)
-    flash(f"Dados de aplicacoes de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "success")
-    return redirect(url_for("fazendas"))
+    return _save_response(f"Dados de aplicacoes de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
 
 
 @app.route("/recommendations/estoque/save", methods=["POST"])
@@ -1332,8 +1323,7 @@ def save_estoque_rapido():
         nomes = request.form.getlist(f"nome_{tipo}")
         linhas = [(data, nome, "") for data, nome in zip(datas, nomes)]
         models.set_farm_produtos(site_name, safra, models.MOMENTO_ESTOQUE_RAPIDO, tipo, linhas)
-    flash(f"Estoque de '{site_name}' salvo.", "success")
-    return redirect(url_for("recommendations", safra=safra))
+    return _save_response(f"Estoque de '{site_name}' salvo.", "recommendations", safra=safra)
 
 
 @app.route("/recommendations/save", methods=["POST"])
@@ -1351,8 +1341,7 @@ def save_recommendations():
         if allowed_sites is not None and site not in allowed_sites:
             continue  # usuario nao tem permissao para essa fazenda -- ignora
         models.save_recommendation_note(site, doenca, nota.strip())
-    flash("Anotacoes salvas.", "success")
-    return redirect(url_for("recommendations", safra=_safra_or_default(request.form)))
+    return _save_response("Anotacoes salvas.", "recommendations", safra=_safra_or_default(request.form))
 
 
 @app.route("/admin/doencas", methods=["GET", "POST"])
@@ -1364,8 +1353,7 @@ def admin_doencas():
             for idx, doenca_en in enumerate(doenca_ens):
                 culturas = request.form.getlist(f"culturas__{idx}")
                 models.set_doenca_culturas(doenca_en, culturas)
-            flash("Matriz doenca x cultura atualizada.", "success")
-            return redirect(url_for("admin_doencas"))
+            return _save_response("Matriz doenca x cultura atualizada.", "admin_doencas")
 
         display_names = request.form.getlist("display_name_en")
         nomes_pt = request.form.getlist("nome_pt")
@@ -1374,8 +1362,7 @@ def admin_doencas():
             nome_pt = nome_pt.strip()
             if nome_pt:
                 models.save_disease_translation(display_name_en, nome_pt, nome_cientifico.strip())
-        flash("Nomes de doencas atualizados.", "success")
-        return redirect(url_for("admin_doencas"))
+        return _save_response("Nomes de doencas atualizados.", "admin_doencas")
 
     _load_translations()  # garante linhas novas + nome cientifico pre-preenchido
     info = models.get_all_disease_info()
@@ -1400,8 +1387,7 @@ def admin_culturas():
     if request.method == "POST":
         nomes = [request.form.get(f"nome_{i}", "").strip() for i in range(10)]
         models.set_culturas(nomes)
-        flash("Nomes de culturas atualizados.", "success")
-        return redirect(url_for("admin_culturas"))
+        return _save_response("Nomes de culturas atualizados.", "admin_culturas")
 
     return render_template("admin_culturas.html", nomes=models.get_culturas())
 
@@ -1430,8 +1416,7 @@ def admin_fungicidas():
                 models.delete_fungicida_override(doenca, tipo, idx)
             else:
                 models.save_fungicida_override(doenca, tipo, idx, ingrediente, classe, False)
-        flash("Recomendacoes de fungicidas atualizadas.", "success")
-        return redirect(url_for("admin_fungicidas"))
+        return _save_response("Recomendacoes de fungicidas atualizadas.", "admin_fungicidas")
 
     overrides = models.get_all_fungicida_overrides()
     translations = _load_translations()
@@ -1569,31 +1554,34 @@ def admin_edit_user(user_id):
         email = request.form.get("email", "").strip()
         telefone = _telefone_from_form(request.form)
         is_admin = request.form.get("is_admin") == "on"
+        error = None
         if str(user_id) == current_user.id and not is_admin:
-            flash("Voce nao pode remover seu proprio acesso de administrador.", "error")
+            error = "Voce nao pode remover seu proprio acesso de administrador."
         elif not _is_valid_email(email):
-            flash("Informe um email valido.", "error")
+            error = "Informe um email valido."
         elif not _is_valid_phone(telefone):
-            flash("Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999).", "error")
-        else:
-            models.set_user_contato(user_id, email, telefone, is_admin=is_admin)
-            if action == "test":
-                ok, message = whatsapp.send_whatsapp(
-                    telefone, "BioScout: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
-                )
-                flash(
-                    f"Cadastro de '{user_row['username']}' atualizado. "
-                    + ("Mensagem de teste enviada!" if ok else f"Falha no teste: {message}"),
-                    "success" if ok else "error",
-                )
-            else:
-                flash(f"Cadastro de '{user_row['username']}' atualizado.", "success")
+            error = "Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999)."
+        if error:
+            if request.headers.get("X-Autosave") == "1":
+                return {"ok": False, "message": error}
+            flash(error, "error")
+            codigo_pais, numero_telefone = _split_phone(telefone)
+            return render_template(
+                "admin_edit_user.html", user=user_row, email=email,
+                codigo_pais=codigo_pais, numero_telefone=numero_telefone, is_admin=is_admin,
+            )
+        models.set_user_contato(user_id, email, telefone, is_admin=is_admin)
+        if action == "test":
+            ok, message = whatsapp.send_whatsapp(
+                telefone, "BioScout: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
+            )
+            flash(
+                f"Cadastro de '{user_row['username']}' atualizado. "
+                + ("Mensagem de teste enviada!" if ok else f"Falha no teste: {message}"),
+                "success" if ok else "error",
+            )
             return redirect(url_for("admin_users"))
-        codigo_pais, numero_telefone = _split_phone(telefone)
-        return render_template(
-            "admin_edit_user.html", user=user_row, email=email,
-            codigo_pais=codigo_pais, numero_telefone=numero_telefone, is_admin=is_admin,
-        )
+        return _save_response(f"Cadastro de '{user_row['username']}' atualizado.", "admin_users")
     codigo_pais, numero_telefone = _split_phone(user_row["telefone"] or "")
     return render_template(
         "admin_edit_user.html", user=user_row, email=user_row["email"] or "",
@@ -1640,18 +1628,20 @@ def meu_whatsapp():
         action = request.form.get("action")
         telefone = _telefone_from_form(request.form)
         if not _is_valid_phone(telefone):
-            flash("Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999).", "error")
-        else:
-            models.set_user_whatsapp(int(current_user.id), telefone)
-            if action == "test":
-                ok, message = whatsapp.send_whatsapp(
-                    telefone, "BioScout: mensagem de teste. Se voce recebeu isso, seu numero esta certo!",
-                )
-                flash(("Mensagem de teste enviada! Confira seu WhatsApp." if ok else f"Falha no teste: {message}"),
-                      "success" if ok else "error")
-            else:
-                flash("Seu telefone foi salvo.", "success")
-        return redirect(url_for("meu_whatsapp"))
+            error = "Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999)."
+            if request.headers.get("X-Autosave") == "1":
+                return {"ok": False, "message": error}
+            flash(error, "error")
+            return redirect(url_for("meu_whatsapp"))
+        models.set_user_whatsapp(int(current_user.id), telefone)
+        if action == "test":
+            ok, message = whatsapp.send_whatsapp(
+                telefone, "BioScout: mensagem de teste. Se voce recebeu isso, seu numero esta certo!",
+            )
+            flash(("Mensagem de teste enviada! Confira seu WhatsApp." if ok else f"Falha no teste: {message}"),
+                  "success" if ok else "error")
+            return redirect(url_for("meu_whatsapp"))
+        return _save_response("Seu telefone foi salvo.", "meu_whatsapp")
     user_row = models.get_user_by_id(int(current_user.id))
     codigo_pais, numero_telefone = _split_phone(user_row["telefone"] or "")
     return render_template("meu_whatsapp.html", codigo_pais=codigo_pais, numero_telefone=numero_telefone)
@@ -1691,8 +1681,7 @@ def admin_user_permissions(user_id):
     if request.method == "POST":
         selected_ids = {int(v) for v in request.form.getlist("site_ids")}
         models.set_user_permissions(user_id, selected_ids)
-        flash(f"Permissoes de '{user_row['username']}' atualizadas.", "success")
-        return redirect(url_for("admin_users"))
+        return _save_response(f"Permissoes de '{user_row['username']}' atualizadas.", "admin_users")
     all_sites = models.get_all_sites()
     permitted_ids = models.get_user_permitted_site_ids(user_id)
     return render_template(
@@ -1709,8 +1698,9 @@ def admin_user_reports(user_id):
     if request.method == "POST":
         selected_ids = {int(v) for v in request.form.getlist("site_ids")}
         models.set_user_report_permissions(user_id, selected_ids)
-        flash(f"Fazendas que '{user_row['username']}' recebe relatorio de WhatsApp foram atualizadas.", "success")
-        return redirect(url_for("admin_users"))
+        return _save_response(
+            f"Fazendas que '{user_row['username']}' recebe relatorio de WhatsApp foram atualizadas.", "admin_users"
+        )
     all_sites = models.get_all_sites()
     report_ids = models.get_user_report_site_ids(user_id)
     return render_template(

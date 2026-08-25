@@ -3,7 +3,7 @@
 {% block content %}
 <h4 class="mb-2">Fazendas que "{{ user.username }}" recebe relatorio de WhatsApp</h4>
 
-<form method="post">
+<form method="post" data-autosave>
     <div class="card shadow-sm" style="max-width: 480px;">
         <div class="card-body">
             <div class="form-check border-bottom pb-2 mb-2">
@@ -19,8 +19,8 @@
             {% endfor %}
         </div>
     </div>
-    <button type="submit" class="btn btn-success mt-3">Salvar</button>
-    <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary mt-3">Cancelar</a>
+    <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary mt-3">Voltar</a>
+    <span class="autosave-status small ms-2"></span>
 </form>
 
 <p class="text-muted small mt-4 pt-3 border-top">

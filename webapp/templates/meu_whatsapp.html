@@ -5,7 +5,7 @@
 
 <div class="card shadow-sm" style="max-width: 420px;">
     <div class="card-body">
-        <form method="post">
+        <form method="post" data-autosave>
             <div class="mb-3 row g-2">
                 <div class="col-3 col-sm-2">
                     <label class="form-label text-nowrap">DDI</label>
@@ -16,8 +16,8 @@
                     <input type="text" name="numero_telefone" class="form-control" value="{{ numero_telefone }}" placeholder="11999999999" required>
                 </div>
             </div>
-            <button type="submit" name="action" value="save" class="btn btn-outline-success">Salvar</button>
-            <button type="submit" name="action" value="test" class="btn btn-success">Salvar e enviar teste</button>
+            <button type="submit" name="action" value="test" class="btn btn-success">Enviar teste por WhatsApp</button>
+            <span class="autosave-status small ms-2"></span>
         </form>
     </div>
 </div>

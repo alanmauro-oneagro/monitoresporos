@@ -3,7 +3,7 @@
 {% block content %}
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
 
-<form method="post">
+<form method="post" data-autosave>
 {% for d in doencas_data %}
 <div class="card shadow-sm mb-3">
     <div class="card-body">
@@ -47,20 +47,12 @@
                     </select>
                 </div>
                 <div class="col-2 col-md-1 d-flex gap-1">
-                    <form method="post" action="{{ url_for('mover_fungicida_item') }}">
-                        <input type="hidden" name="doenca" value="{{ linha.doenca }}">
-                        <input type="hidden" name="tipo" value="{{ linha.tipo }}">
-                        <input type="hidden" name="idx" value="{{ linha.idx }}">
-                        <input type="hidden" name="direction" value="up">
-                        <button type="submit" class="btn btn-sm btn-outline-secondary px-2" title="Mover para cima" {% if not linha.pode_subir %}disabled{% endif %}>▲</button>
-                    </form>
-                    <form method="post" action="{{ url_for('mover_fungicida_item') }}">
-                        <input type="hidden" name="doenca" value="{{ linha.doenca }}">
-                        <input type="hidden" name="tipo" value="{{ linha.tipo }}">
-                        <input type="hidden" name="idx" value="{{ linha.idx }}">
-                        <input type="hidden" name="direction" value="down">
-                        <button type="submit" class="btn btn-sm btn-outline-secondary px-2" title="Mover para baixo" {% if not linha.pode_descer %}disabled{% endif %}>▼</button>
-                    </form>
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-2 fungicida-mover-btn"
+                            data-doenca="{{ linha.doenca }}" data-tipo="{{ linha.tipo }}" data-idx="{{ linha.idx }}" data-direction="up"
+                            title="Mover para cima" {% if not linha.pode_subir %}disabled{% endif %}>▲</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-2 fungicida-mover-btn"
+                            data-doenca="{{ linha.doenca }}" data-tipo="{{ linha.tipo }}" data-idx="{{ linha.idx }}" data-direction="down"
+                            title="Mover para baixo" {% if not linha.pode_descer %}disabled{% endif %}>▼</button>
                 </div>
             </div>
             {% endfor %}
@@ -69,7 +61,7 @@
     </div>
 </div>
 {% endfor %}
-<button type="submit" class="btn btn-success">Salvar recomendacoes</button>
+<span class="autosave-status small"></span>
 </form>
 
 <p class="text-muted small mt-4 pt-3 border-top">
@@ -86,9 +78,23 @@
     <code>fungicida_data.py</code>.
 </p>
 <script>
-document.querySelectorAll('form[action$="/mover"]').forEach(function (form) {
-    form.addEventListener('submit', function () {
+// Botoes simples (nao <form>) de proposito -- um <form> por linha ficaria
+// aninhado dentro do form grande de "Salvar recomendacoes" (autosave), e
+// HTML nao permite form dentro de form (o navegador fecha o form de fora
+// no primeiro </form> interno que encontrar, quebrando o autosave de
+// quase todas as linhas). Reordenar ainda muda a pagina toda (a ordem
+// muda pra todo mundo), entao continua recarregando -- so restaura a
+// posicao de rolagem depois, como antes.
+document.querySelectorAll('.fungicida-mover-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
         sessionStorage.setItem('fungicidas_scroll', window.scrollY);
+        fetch("{{ url_for('mover_fungicida_item') }}", {
+            method: 'POST',
+            body: new URLSearchParams({
+                doenca: btn.dataset.doenca, tipo: btn.dataset.tipo,
+                idx: btn.dataset.idx, direction: btn.dataset.direction,
+            }),
+        }).then(function () { location.reload(); });
     });
 });
 (function () {
