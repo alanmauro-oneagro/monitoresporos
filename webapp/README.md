@@ -433,10 +433,28 @@ público — ainda não configurado, combinamos deixar para depois.
   `dashboard()` e `recommendations()`). Esse intervalo de 15 min esta
   fixo em `AUTO_REFRESH_MAX_AGE_SECONDS`, ajuste se quiser. O Painel de
   Alertas tambem tem um botao manual "🔄 Forcar atualizacao"
-  (`dashboard_atualizar` em `app.py`) pra nao esperar os 15 min -- em
-  ambos os casos, so funciona onde o PowerShell existe (Windows); no
-  site hospedado (Linux) a busca nunca completaria de verdade, entao o
-  botao avisa isso em vez de fingir que funcionou.
+  (`dashboard_atualizar` em `app.py`) pra nao esperar os 15 min.
+
+  **Duas formas de buscar** (`_run_fetch_in_background` em `app.py`
+  escolhe qual usar, nessa ordem):
+  1. `BIOSCOUT_USERNAME` + `BIOSCOUT_PASSWORD` (variaveis de ambiente) --
+     busca em Python puro (`bioscout_fetch.py`, so `urllib`/stdlib, sem
+     dependencia nova), roda em qualquer lugar (inclusive Railway/Linux).
+     E' o equivalente do `Fetch-BioScoutData.ps1 -SkipExtras` (so
+     sites+esporos+clima -- spraylogs/relatorios de site ficam de fora,
+     pois so o Build-Report/Refresh-Dashboard locais usam isso). Grava em
+     `BIOSCOUT_DATA_DIR` (variavel de ambiente; se nao setada, cai no
+     `../data` local) -- no site hospedado, aponte pra dentro do mesmo
+     volume persistente do banco (ex.: `/data/bioscout`), senao os CSVs
+     buscados se perdem no proximo deploy igual a `BIOSCOUT_DB_PATH` sem
+     volume perdia o banco.
+  2. Sem essas variaveis: cai no script `Fetch-BioScoutData.ps1` local
+     (so existe no Windows, usa `bioscout_cred.xml`) -- comportamento
+     original, inalterado.
+
+  Sem nenhuma das duas configuradas, `_fetch_configured()` retorna
+  False e nem a automatica nem o botao manual tentam nada (avisam em vez
+  de fingir que funcionaram).
 - **Aba Mapa**: e' a **aba inicial** -- login e a rota `/` redirecionam pra
   ca (`url_for("mapa")` em `login()`/`index()` no `app.py`), e o link
   "Mapa" e' o primeiro no menu (depois vem "Fazendas", "Painel de

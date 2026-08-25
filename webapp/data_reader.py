@@ -2,10 +2,11 @@
 os dados do dashboard web -- mesma logica de status/cores do BioScoutDashboard.xlsx
 (aba Alertas do Dia), para nao duplicar regras de negocio em dois lugares."""
 import csv
+import os
 from pathlib import Path
 from datetime import datetime
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR = Path(os.environ.get("BIOSCOUT_DATA_DIR", str(Path(__file__).parent.parent / "data")))
 
 DOENCA_MAP = {
     "General Alternaria": "Mancha de Alternaria",

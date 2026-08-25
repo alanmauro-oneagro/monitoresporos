@@ -29,6 +29,7 @@ from datetime import datetime
 import models
 import fungicida_data
 import data_reader
+import bioscout_fetch
 import whatsapp
 import weather_forecast
 import inmet_stations
@@ -208,21 +209,38 @@ def _inject_nav_safras():
 
 FETCH_SCRIPT = Path(__file__).parent.parent / "Fetch-BioScoutData.ps1"
 POWERSHELL_EXE = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-SPORE_CSV = Path(__file__).parent.parent / "data" / "spore_counts.csv"
+SPORE_CSV = data_reader.DATA_DIR / "spore_counts.csv"
 AUTO_REFRESH_MAX_AGE_SECONDS = 15 * 60  # se os dados tiverem mais que isso, atualiza sozinho ao abrir a pagina
+BIOSCOUT_USERNAME = os.environ.get("BIOSCOUT_USERNAME")
+BIOSCOUT_PASSWORD = os.environ.get("BIOSCOUT_PASSWORD")
 
 _fetch_lock = threading.Lock()
 _fetch_state = {"running": False, "last_error": None}
 
 
+def _fetch_configured():
+    """True se tem algum jeito de buscar dados novos: credenciais em
+    variavel de ambiente (funciona em qualquer lugar, inclusive no site
+    hospedado) ou o script PowerShell local (so existe no Windows, onde
+    roda o `bioscout_cred.xml`)."""
+    return bool(BIOSCOUT_USERNAME and BIOSCOUT_PASSWORD) or Path(POWERSHELL_EXE).exists()
+
+
 def _run_fetch_in_background():
     try:
-        result = subprocess.run(
-            [POWERSHELL_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(FETCH_SCRIPT), "-SkipExtras"],
-            capture_output=True, text=True,
-        )
+        if BIOSCOUT_USERNAME and BIOSCOUT_PASSWORD:
+            bioscout_fetch.fetch_incremental(
+                data_reader.DATA_DIR, BIOSCOUT_USERNAME, BIOSCOUT_PASSWORD, log=lambda msg: None
+            )
+            error = None
+        else:
+            result = subprocess.run(
+                [POWERSHELL_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(FETCH_SCRIPT), "-SkipExtras"],
+                capture_output=True, text=True,
+            )
+            error = None if result.returncode == 0 else (result.stderr[-300:] or result.stdout[-300:])
         with _fetch_lock:
-            _fetch_state["last_error"] = None if result.returncode == 0 else (result.stderr[-300:] or result.stdout[-300:])
+            _fetch_state["last_error"] = error
     except Exception as exc:  # nunca deixa a thread morrer silenciosamente
         with _fetch_lock:
             _fetch_state["last_error"] = str(exc)
@@ -253,11 +271,10 @@ def _maybe_auto_refresh():
     """Chamado ao abrir Painel/Recomendacoes: se os dados estao velhos e
     nenhuma busca esta rodando, dispara uma atualizacao sozinha em segundo
     plano (nao trava a pagina -- ela mostra os dados que tiver agora).
-    Retorna True se uma busca nova foi iniciada agora. O script de busca
-    e' PowerShell (so existe no Windows) -- hospedado (Railway/Render,
-    Linux) essa busca nunca completaria de verdade, entao nem tenta nem
-    avisa nada nesse caso (os dados la sao a foto do momento do deploy)."""
-    if not Path(POWERSHELL_EXE).exists():
+    Retorna True se uma busca nova foi iniciada agora. So funciona se
+    `_fetch_configured()` -- ou BIOSCOUT_USERNAME/BIOSCOUT_PASSWORD (busca
+    em Python, roda em qualquer lugar) ou o script PowerShell local."""
+    if not _fetch_configured():
         return False
     age = _data_age_seconds()
     if age is None or age > AUTO_REFRESH_MAX_AGE_SECONDS:
@@ -703,14 +720,15 @@ def logout():
 def dashboard_atualizar():
     """Botao 'Forcar atualizacao' do Painel -- pede uma busca nova sem
     esperar os dados ficarem velhos (os 15 min do `_maybe_auto_refresh`).
-    So funciona onde o script de busca (PowerShell) roda -- no site
-    hospedado (Railway/Render, Linux) essa busca nunca completaria de
-    verdade, entao avisa isso em vez de fingir que funcionou."""
-    if not Path(POWERSHELL_EXE).exists():
+    Funciona tanto local (script PowerShell) quanto no site hospedado
+    (BIOSCOUT_USERNAME/BIOSCOUT_PASSWORD, busca em Python -- ver
+    `bioscout_fetch.py`); sem nenhum dos dois configurados, avisa em vez
+    de fingir que funcionou."""
+    if not _fetch_configured():
         flash(
-            "Essa atualizacao manual so funciona no computador onde a busca de "
-            "dados roda (Windows/PowerShell) -- no site hospedado os dados vem "
-            "prontos do ultimo deploy.",
+            "Nenhuma busca de dados configurada nesse ambiente (nem "
+            "BIOSCOUT_USERNAME/BIOSCOUT_PASSWORD, nem o script local) -- avise "
+            "um administrador.",
             "error",
         )
     elif _start_fetch_if_not_running():
