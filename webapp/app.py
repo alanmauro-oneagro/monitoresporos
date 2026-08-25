@@ -1410,7 +1410,8 @@ def admin_fungicidas():
 
     doencas_data = []
     row_counter = 0
-    for doenca_en, rotulo in sorted(translations.items(), key=lambda kv: kv[1]):
+    for doenca_en, info in sorted(translations.items(), key=lambda kv: kv[1]["nome_pt"]):
+        rotulo = info["nome_pt"]
         rec = fungicida_data.get_recomendacao(doenca_en)
         if not rec:
             doencas_data.append({"doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True})
