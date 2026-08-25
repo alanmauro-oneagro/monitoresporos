@@ -1573,7 +1573,7 @@ def admin_edit_user(user_id):
         models.set_user_contato(user_id, email, telefone, is_admin=is_admin)
         if action == "test":
             ok, message = whatsapp.send_whatsapp(
-                telefone, "BioScout: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
+                telefone, "OneAgro: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
             )
             flash(
                 f"Cadastro de '{user_row['username']}' atualizado. "
@@ -1636,7 +1636,7 @@ def meu_whatsapp():
         models.set_user_whatsapp(int(current_user.id), telefone)
         if action == "test":
             ok, message = whatsapp.send_whatsapp(
-                telefone, "BioScout: mensagem de teste. Se voce recebeu isso, seu numero esta certo!",
+                telefone, "OneAgro: mensagem de teste. Se voce recebeu isso, seu numero esta certo!",
             )
             flash(("Mensagem de teste enviada! Confira seu WhatsApp." if ok else f"Falha no teste: {message}"),
                   "success" if ok else "error")

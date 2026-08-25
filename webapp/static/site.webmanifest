@@ -1,6 +1,6 @@
 {
-  "name": "BioScout Monitor",
-  "short_name": "BioScout",
+  "name": "OneAgro Monitor",
+  "short_name": "OneAgro",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f6f4",
