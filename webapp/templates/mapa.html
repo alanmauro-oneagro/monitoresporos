@@ -181,10 +181,18 @@
         if (geom.type === 'MultiPolygon') return geom.coordinates.some(function (poly) { return pointInRings(pt, poly); });
         return false;
     }
-    function findUfCodes(ufGeojson) {
+    // Pontos de referencia pra descobrir quais estados precisam de
+    // divisas de municipio: fazendas E estacoes INMET -- assim, se uma
+    // estacao nova entrar num estado que ainda nao tem fazenda nenhuma,
+    // esse estado ja aparece com os mesmos elementos (linhas brancas de
+    // municipio) automaticamente, sem precisar tocar em nada aqui.
+    var estacoes = {{ estacoes | tojson }};
+    var ufReferencePoints = sites.map(function (s) { return [s.lon, s.lat]; })
+        .concat(estacoes.map(function (e) { return [e.lon, e.lat]; }));
+
+    function findUfCodes(ufGeojson, points) {
         var codes = {};
-        sites.forEach(function (site) {
-            var pt = [site.lon, site.lat];
+        points.forEach(function (pt) {
             var feature = ufGeojson.features.find(function (f) { return pointInGeometry(pt, f.geometry); });
             if (feature) codes[feature.properties.codarea] = true;
         });
@@ -193,12 +201,12 @@
 
     // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
     // (leve, um pedido so) e municipios (pesado -- so busca dos estados
-    // onde realmente tem fazenda, senao seria o Brasil inteiro).
+    // onde realmente tem fazenda ou estacao, senao seria o Brasil inteiro).
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
         .then(function (ufGeojson) {
             if (!ufGeojson) return;
-            findUfCodes(ufGeojson).forEach(function (codarea) {
+            findUfCodes(ufGeojson, ufReferencePoints).forEach(function (codarea) {
                 addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
             });
         });
@@ -234,7 +242,6 @@
             });
     });
 
-    var estacoes = {{ estacoes | tojson }};
     estacoes.forEach(function (estacao) {
         L.marker([estacao.lat, estacao.lon], { icon: stationIcon })
             .addTo(map)
