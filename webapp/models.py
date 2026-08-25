@@ -1,11 +1,19 @@
 """Esquema do banco (SQLite) e funcoes de acesso a usuarios/permissoes/fazendas."""
+import os
 import sqlite3
 from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 import data_reader
 
-DB_PATH = Path(__file__).parent / "bioscout_web.db"
+# Local (padrao): banco fica do lado do codigo, em webapp/bioscout_web.db --
+# nada muda pra quem ja usa assim. Hospedado (Railway/Render), o disco do
+# container e' apagado a cada deploy -- BIOSCOUT_DB_PATH deve apontar pra
+# um caminho dentro de um volume persistente (ex.: /data/bioscout_web.db),
+# senao TODO usuario/permissao/fazenda virtual cadastrado pelo site some no
+# proximo deploy.
+DB_PATH = Path(os.environ.get("BIOSCOUT_DB_PATH", str(Path(__file__).parent / "bioscout_web.db")))
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def get_db():
