@@ -40,6 +40,32 @@ def _fmt_ingrediente(item, classe_label):
     return item["ingrediente"]
 
 
+def _caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, classe_label):
+    """Caixa cinza com os ingredientes recomendados pelas instituicoes de
+    pesquisa (biblioteca da aba Fungicidas) -- mesmo destaque visual da
+    tela de Recomendacoes (`.manual-note-box`), pra deixar claro que essa
+    parte NAO e' uma anotacao da fazenda."""
+    linhas = [Paragraph("Recomendações das Instituições de Pesquisa", ParagraphStyle(
+        "RecInst", parent=_ESTILO_NORMAL, fontName="Helvetica-Bold", spaceAfter=3,
+    ))]
+    if biologicos_itens:
+        ativos = " // ".join(_fmt_ingrediente(p, classe_label) for p in biologicos_itens)
+        linhas.append(Paragraph(f"<b>Biologicos:</b> {ativos}", _ESTILO_NORMAL))
+    if quimicos_itens:
+        ativos = " // ".join(_fmt_ingrediente(p, classe_label) for p in quimicos_itens)
+        linhas.append(Paragraph(f"<b>Quimicos:</b> {ativos}", _ESTILO_NORMAL))
+    caixa = Table([[linhas]], colWidths=[17.4 * cm])
+    caixa.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), CINZA_CLARO),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    return caixa
+
+
 def _tabela_padrao(headers, rows, col_widths):
     data = [headers] + rows
     tbl = Table(data, colWidths=col_widths, repeatRows=1)
@@ -111,6 +137,7 @@ def build_recommendation_pdf(
         story.append(Paragraph(f"<b>Resumo:</b> {', '.join(partes_resumo)}", _ESTILO_NORMAL))
 
     story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
+    fontes_pesquisadas = []
     if not diseases:
         story.append(Paragraph("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.", _ESTILO_NORMAL))
     else:
@@ -123,12 +150,13 @@ def build_recommendation_pdf(
             ))
             biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
             quimicos_itens = d["quimicos"]["itens"][:3] if d.get("quimicos") else None
-            if biologicos_itens:
-                ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens)
-                story.append(Paragraph(f"Biologicos: {ativos}", _ESTILO_NORMAL))
-            if quimicos_itens:
-                ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens)
-                story.append(Paragraph(f"Quimicos: {ativos}", _ESTILO_NORMAL))
+            if biologicos_itens or quimicos_itens:
+                story.append(Spacer(1, 3))
+                story.append(_caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, d["classe_label"]))
+                story.append(Spacer(1, 3))
+                for grupo in (d.get("biologicos"), d.get("quimicos")):
+                    if grupo and grupo.get("fonte"):
+                        fontes_pesquisadas.append(grupo["fonte"].split(" -- ")[0])
             story.append(Paragraph(f"Obs.: {d.get('nota') or '-'}", _ESTILO_NORMAL))
 
     produtos = produtos or {}
@@ -179,6 +207,12 @@ def build_recommendation_pdf(
         rodape = f"Fonte do clima: {weather['fonte']}" + (f" · {rodape_data}" if rodape_data else "")
     if rodape:
         story.append(Paragraph(rodape, _ESTILO_SUBTITULO))
+    if fontes_pesquisadas:
+        fontes_unicas = sorted(set(fontes_pesquisadas))
+        story.append(Paragraph(
+            f"Instituicoes de pesquisa consultadas para as recomendacoes acima: {' · '.join(fontes_unicas)}.",
+            ParagraphStyle("Fontes", parent=_ESTILO_SUBTITULO, fontSize=8),
+        ))
     story.append(Paragraph(
         "Isso nao substitui a avaliacao de um agronomo responsavel.",
         ParagraphStyle("Aviso", parent=_ESTILO_SUBTITULO, fontSize=8),
