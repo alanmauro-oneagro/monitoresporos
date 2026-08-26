@@ -72,11 +72,6 @@ html { font-size: 14px; }
             </span>
             {% endif %}
             <div class="ms-auto d-flex gap-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn" {% if not site_group.whatsapp_text %}disabled{% endif %}
-                        data-text="{{ site_group.whatsapp_text }}"
-                        title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
-                    📋 Copiar recomendacao
-                </button>
                 {% if site_group.whatsapp_text %}
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
                    title="Gerar PDF com clima, recomendacoes, produtos, datas de plantio e de pulverizacao -- pra encaminhar pra alguem">
@@ -88,6 +83,11 @@ html { font-size: 14px; }
                     📄 Recomendacao (PDF)
                 </button>
                 {% endif %}
+                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn" {% if not site_group.whatsapp_text %}disabled{% endif %}
+                        data-text="{{ site_group.whatsapp_text }}"
+                        title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
+                    📋 Copiar recomendacao
+                </button>
                 <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" class="mb-0">
                     <input type="hidden" name="safra" value="{{ safra }}">
                     <button type="submit" class="btn btn-sm btn-outline-success" {% if not site_group.whatsapp_destinos or site_group.nivel_dados == 'bloqueado' %}disabled{% endif %}
