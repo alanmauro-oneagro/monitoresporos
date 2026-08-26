@@ -31,6 +31,7 @@ import fungicida_data
 import data_reader
 import bioscout_fetch
 import export_excel
+import export_pdf
 import whatsapp
 import weather_forecast
 import inmet_stations
@@ -1116,6 +1117,47 @@ def send_selected_whatsapp():
     if falhas:
         flash(f"Falha ao enviar para: {', '.join(falhas)}.", "error")
     return redirect(url_for("recommendations", safra=safra))
+
+
+@app.route("/recommendations/pdf/<path:site_name>")
+@login_required
+def recommendation_pdf(site_name):
+    """PDF com o mesmo conteudo do relatorio de WhatsApp (clima, cultura,
+    doencas em Atencao/Perigo, produtos ja disponiveis) mais as datas de
+    plantio e de pulverizacao daquela safra (aba Fazendas) -- pra
+    encaminhar por email/impressao em vez de copiar texto."""
+    if not current_user.is_admin:
+        allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
+        if site_name not in allowed:
+            abort(403)
+    safra = _safra_or_default(request.args)
+    translations = _load_translations()
+    raw_cards = _resolve_site_cards(site_name, translations)
+    culturas_by_site = models.get_all_farm_culturas()
+    cards_by_site = _filter_cards_by_cultura(
+        {site_name: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
+    )
+    notes = models.get_all_recommendation_notes()
+    diseases = _build_site_diseases(site_name, cards_by_site.get(site_name, []), notes)
+    coords = _weather_coords_all()
+    weather = _get_weather_for_site(site_name, coords)
+    produtos = _farm_produtos_estoque(site_name, safra)
+    cultura = _cultura_label(site_name, safra, culturas_by_site)
+    plantio_linhas = models.get_all_farm_plantio().get(site_name, {}).get(safra, [])
+    aplicacoes_linhas = models.get_all_farm_aplicacoes().get(site_name, {}).get(safra, [])
+    is_virtual = models.get_virtual_farm(site_name) is not None
+    nome_fazenda = site_name.split('"')[1] if is_virtual and site_name.count('"') >= 2 else (
+        site_name.split(" - ", 1)[1] if " - " in site_name else site_name
+    )
+    rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
+
+    buffer = export_pdf.build_recommendation_pdf(
+        nome_fazenda, SAFRA_LABELS[safra], diseases, weather=weather, produtos=produtos,
+        cultura=cultura, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
+        rodape_data=rodape_data,
+    )
+    filename = f"Recomendacao_{nome_fazenda}_{datetime.now().strftime('%Y%m%d')}.pdf".replace(" ", "_")
+    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
 @app.route("/recommendations/whatsapp-days/save", methods=["POST"])
