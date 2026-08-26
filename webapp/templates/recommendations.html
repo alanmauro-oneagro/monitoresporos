@@ -45,14 +45,14 @@ html { font-size: 14px; }
 
 {% for site_group in sites_data %}
 {% set outer_loop = loop %}
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
             <input class="form-check-input farm-select-checkbox mt-0" type="checkbox" name="site_name" value="{{ site_group.site }}" form="whatsappBulkForm" title="Selecionar para envio em lote">
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
                 <span class="toggle-icon">▶</span> {{ site_group.site }}
             </button>
-            <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center gap-1 mb-0" data-autosave>
+            <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center gap-1 mb-0" data-autosave data-autosave-reload>
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <input type="hidden" name="safra" value="{{ safra }}">
                 <select name="cultura" class="form-select form-select-sm" style="width: auto;">
@@ -272,6 +272,20 @@ farmCheckboxes.forEach(function (cb) {
         else if (Array.from(farmCheckboxes).every(function (c) { return c.checked; })) { selectAll.checked = true; }
     });
 });
+
+// Depois do reload disparado por um autosave "data-autosave-reload" (ex.:
+// trocar a Cultura atual), volta direto pra fazenda em questao (?site=...)
+// ja aberta, em vez de recarregar a pagina fechada em todas de novo.
+(function () {
+    var siteParam = new URLSearchParams(window.location.search).get('site');
+    if (!siteParam) return;
+    var card = document.querySelector('[data-site="' + CSS.escape(siteParam) + '"]');
+    if (!card) return;
+    var toggleBtn = card.querySelector('.farm-toggle');
+    var body = document.getElementById(toggleBtn.dataset.target);
+    if (body.classList.contains('d-none')) { toggleBtn.click(); }
+    card.scrollIntoView({ block: 'start' });
+})();
 </script>
 {% endif %}
 
