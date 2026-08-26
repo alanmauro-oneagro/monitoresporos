@@ -666,7 +666,7 @@ def admin_required(view):
     return wrapped
 
 
-ALAN_MAURO_USERNAME = "Alan Mauro"  # unico usuario com acesso a "Editar cadastro" e a exportacao Excel
+ALAN_MAURO_USERNAME = "Alan Mauro"  # unico usuario com acesso a "Editar cadastro", exportacao Excel e Configuracoes > WhatsApp
 
 
 def alan_mauro_required(view):
@@ -1745,6 +1745,59 @@ def admin_exportar():
     return send_file(
         buffer, as_attachment=True, download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/admin/whatsapp")
+@alan_mauro_required
+def admin_whatsapp():
+    """Tela de pareamento do WhatsApp corporativo (QR code/codigo de
+    pareamento, teste de envio, trocar numero) -- so' `ALAN_MAURO_USERNAME`
+    tem acesso, ja que controla o remetente usado por TODAS as fazendas."""
+    return render_template("admin_whatsapp.html", status=whatsapp.get_status())
+
+
+@app.route("/admin/whatsapp/status")
+@alan_mauro_required
+def admin_whatsapp_status():
+    """JSON puro pra tela atualizar sozinha (QR code/status de conexao)
+    sem precisar recarregar a pagina inteira."""
+    return whatsapp.get_status()
+
+
+@app.route("/admin/whatsapp/pair-code", methods=["POST"])
+@alan_mauro_required
+def admin_whatsapp_pair_code():
+    phone = request.form.get("phone", "")
+    ok, resultado = whatsapp.request_pairing_code(phone)
+    return {"ok": ok, "code": resultado if ok else None, "error": None if ok else resultado}
+
+
+@app.route("/admin/whatsapp/test", methods=["POST"])
+@alan_mauro_required
+def admin_whatsapp_test():
+    phone = request.form.get("phone", "")
+    texto = (
+        "Teste do BioScout Web -- se voce recebeu essa mensagem, o envio "
+        "de relatorios por WhatsApp esta funcionando corretamente."
+    )
+    ok, mensagem = whatsapp.send_whatsapp(phone, texto)
+    return _save_response(
+        f"Mensagem de teste enviada para {phone}." if ok else f"Falha ao enviar teste: {mensagem}",
+        "admin_whatsapp", ok=ok,
+    )
+
+
+@app.route("/admin/whatsapp/reset", methods=["POST"])
+@alan_mauro_required
+def admin_whatsapp_reset():
+    """Desconecta o numero atual pra poder conectar outro (ex.: trocar o
+    WhatsApp corporativo) -- limpa a sessao salva no whatsapp-bridge e
+    gera um QR code novo."""
+    ok, mensagem = whatsapp.reset_session()
+    return _save_response(
+        "Numero desconectado -- escaneie o novo QR code pra conectar outro." if ok else f"Falha ao desconectar: {mensagem}",
+        "admin_whatsapp", ok=ok,
     )
 
 

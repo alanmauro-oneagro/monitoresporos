@@ -18,6 +18,8 @@
 // so se voce desconectar o aparelho pelo proprio celular (hospedado,
 // esse diretorio precisa estar num disco persistente, senao perde o
 // pareamento a cada deploy).
+const fs = require("fs");
+const path = require("path");
 const express = require("express");
 const pino = require("pino");
 const QRCode = require("qrcode");
@@ -135,6 +137,27 @@ app.get("/qr", (req, res) => {
     }
 });
 
+app.post("/check-number", async (req, res) => {
+    // Debug/validacao: confirma se um numero tem WhatsApp de verdade antes
+    // de mandar (Baileys aceita mandar pra qualquer JID sem erro, mesmo
+    // que o numero nao exista ou o formato esteja errado -- a mensagem so'
+    // "some", sem aviso nenhum).
+    const { phone } = req.body || {};
+    const digits = String(phone || "").replace(/\D/g, "");
+    if (!digits) {
+        return res.status(400).json({ ok: false, error: "phone e obrigatorio" });
+    }
+    if (!connected || !sock) {
+        return res.status(503).json({ ok: false, error: "WhatsApp nao conectado" });
+    }
+    try {
+        const resultado = await sock.onWhatsApp(digits);
+        res.json({ ok: true, resultado });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: String(err) });
+    }
+});
+
 app.post("/send", (req, res) => {
     const { phone, message } = req.body || {};
     if (!phone || !message) {
@@ -146,9 +169,46 @@ app.post("/send", (req, res) => {
     // fila sequencial simples com um espacamento minimo entre mensagens
     sendQueue = sendQueue
         .then(() => new Promise((resolve) => setTimeout(resolve, MIN_DELAY_MS)))
-        .then(() => sock.sendMessage(normalizePhone(phone), { text: message }))
+        .then(async () => {
+            // O numero "oficial" (com o 9o digito, padrao brasileiro atual)
+            // nem sempre bate com o JID de verdade que o WhatsApp usa por
+            // baixo dos panos -- alguns DDDs ainda respondem so' ao formato
+            // de 8 digitos. sendMessage NAO da erro pra um JID que nao
+            // existe, a mensagem so' "some" sem aviso -- por isso confirma
+            // com onWhatsApp() primeiro e usa o JID que ele devolver.
+            const digits = String(phone).replace(/\D/g, "");
+            const [info] = await sock.onWhatsApp(digits).catch(() => []);
+            const jid = (info && info.exists) ? info.jid : normalizePhone(digits);
+            return sock.sendMessage(jid, { text: message });
+        })
         .then(() => res.json({ ok: true }))
         .catch((err) => res.status(500).json({ ok: false, error: String(err) }));
+});
+
+app.post("/reset", async (req, res) => {
+    // Desconecta o numero atual e limpa a sessao salva, pra poder conectar
+    // um numero diferente (ex.: trocar o WhatsApp corporativo) sem precisar
+    // mexer no servidor na mao -- usado pelo botao "Trocar numero" na tela
+    // Configuracoes > WhatsApp do app.
+    try {
+        if (sock) {
+            try { await sock.logout(); } catch (err) { console.log("Logout falhou (ignorando):", err && err.message); }
+            try { sock.end(undefined); } catch (err) { /* ja pode estar fechado */ }
+        }
+        sock = null;
+        connected = false;
+        lastQrDataUrl = null;
+        pairingCodeState = null;
+        if (fs.existsSync(AUTH_DIR)) {
+            fs.readdirSync(AUTH_DIR).forEach((nome) => {
+                try { fs.unlinkSync(path.join(AUTH_DIR, nome)); } catch (err) { /* ignora */ }
+            });
+        }
+        await startSock();
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: String(err) });
+    }
 });
 
 app.listen(PORT, HOST, () => {

@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}WhatsApp - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">WhatsApp</h4>
+
+<div id="status-box" class="alert {{ 'alert-success' if status.connected else 'alert-warning' }}">
+    {% if status.connected %}
+    ✅ Conectado -- os relatorios de todas as fazendas saem por este numero.
+    {% elif status.error %}
+    ⚠ {{ status.error }}
+    {% else %}
+    🔴 Nao conectado -- escaneie o QR code abaixo ou gere um codigo de pareamento.
+    {% endif %}
+</div>
+
+<div class="row g-4">
+    <div class="col-12 col-md-6" id="qr-section" {% if status.connected %}style="display:none"{% endif %}>
+        <div class="card shadow-sm">
+            <div class="card-body text-center">
+                <h6 class="mb-2">Escanear QR code</h6>
+                <div id="qr-container">
+                    {% if status.qr %}
+                    <img src="{{ status.qr }}" alt="QR code" style="max-width: 220px;">
+                    {% else %}
+                    <p class="text-muted small">Gerando QR code...</p>
+                    {% endif %}
+                </div>
+                <p class="text-muted small mt-2 mb-0">
+                    No WhatsApp do celular remetente: Aparelhos conectados >
+                    Conectar um aparelho. O QR expira rapido -- essa pagina
+                    atualiza sozinha.
+                </p>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-3">
+            <div class="card-body">
+                <h6 class="mb-2">Ou gerar codigo de pareamento</h6>
+                <form id="pair-code-form" class="d-flex gap-2">
+                    <input type="text" id="pair-phone" class="form-control form-control-sm"
+                           placeholder="Numero com DDI (ex.: 5511999999999)" required>
+                    <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">Gerar codigo</button>
+                </form>
+                <div id="pair-code-result" class="mt-2 small"></div>
+                <p class="text-muted small mt-2 mb-0">
+                    Alternativa ao QR -- no WhatsApp, Aparelhos conectados >
+                    Conectar com numero de telefone, digite o codigo gerado.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="mb-2">Enviar mensagem de teste</h6>
+                <form method="post" action="{{ url_for('admin_whatsapp_test') }}" class="d-flex gap-2">
+                    <input type="text" name="phone" class="form-control form-control-sm"
+                           placeholder="Numero com DDI (ex.: 5511999999999)" required>
+                    <button type="submit" class="btn btn-sm btn-outline-success text-nowrap" {% if not status.connected %}disabled{% endif %}>
+                        Enviar teste
+                    </button>
+                </form>
+                {% if not status.connected %}
+                <p class="text-muted small mt-2 mb-0">Conecte um numero primeiro pra poder testar.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if status.connected %}
+        <div class="card shadow-sm mt-3">
+            <div class="card-body">
+                <h6 class="mb-2">Trocar numero</h6>
+                <p class="small text-muted">
+                    Desconecta o numero atual (os envios ficam parados ate
+                    conectar outro) e gera um QR code novo -- use pra trocar
+                    o WhatsApp corporativo.
+                </p>
+                <form method="post" action="{{ url_for('admin_whatsapp_reset') }}"
+                      onsubmit="return confirm('Desconectar o WhatsApp atual? Os envios de todas as fazendas ficam parados ate conectar outro numero.');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">🔌 Desconectar / Trocar numero</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<p class="text-muted small mt-4 pt-3 border-top">
+    Os relatorios de todas as fazendas saem por este unico numero (servico
+    <code>whatsapp-bridge</code>, roda junto com o app). So precisa parear
+    uma vez -- a sessao fica salva e sobrevive a reinicios do app; use
+    "Trocar numero" se precisar conectar um WhatsApp diferente (ex.: numero
+    corporativo novo). Essa tela e a exportacao Excel sao as unicas
+    restritas a esta conta, ja que controlam configuracoes que afetam todo
+    mundo de uma vez.
+</p>
+
+<script>
+(function () {
+    var connected = {{ 'true' if status.connected else 'false' }};
+    var timer = null;
+
+    function poll() {
+        fetch('{{ url_for("admin_whatsapp_status") }}')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.connected && !connected) {
+                    // Transicao pra conectado -- recarrega uma vez pra
+                    // mostrar a tela completa (com "Trocar numero" etc.).
+                    location.reload();
+                    return;
+                }
+                connected = data.connected;
+                if (connected) {
+                    clearInterval(timer);
+                    return;
+                }
+                var container = document.getElementById('qr-container');
+                if (data.qr) {
+                    container.innerHTML = '<img src="' + data.qr + '" alt="QR code" style="max-width: 220px;">';
+                } else {
+                    container.innerHTML = '<p class="text-muted small">Gerando QR code...</p>';
+                }
+            })
+            .catch(function () {});
+    }
+
+    if (!connected) {
+        timer = setInterval(poll, 4000);
+    }
+
+    var pairForm = document.getElementById('pair-code-form');
+    if (pairForm) {
+        pairForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var phone = document.getElementById('pair-phone').value;
+            var result = document.getElementById('pair-code-result');
+            result.textContent = 'Gerando...';
+            result.className = 'mt-2 small text-muted';
+            var fd = new FormData();
+            fd.append('phone', phone);
+            fetch('{{ url_for("admin_whatsapp_pair_code") }}', { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    result.textContent = data.ok ? ('Codigo: ' + data.code) : ('Erro: ' + data.error);
+                    result.className = 'mt-2 small ' + (data.ok ? 'text-success fw-bold' : 'text-danger');
+                })
+                .catch(function () {
+                    result.textContent = 'Erro ao gerar codigo.';
+                    result.className = 'mt-2 small text-danger';
+                });
+        });
+    }
+})();
+</script>
+{% endblock %}

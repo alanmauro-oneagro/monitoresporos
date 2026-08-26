@@ -60,6 +60,29 @@ def request_pairing_code(phone):
         return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
 
 
+def reset_session():
+    """Desconecta o numero atual (se houver) e apaga a sessao salva --
+    depois disso, `get_status()` volta a trazer um QR code/codigo de
+    pareamento novo, pra conectar um numero diferente (ex.: trocar o
+    WhatsApp corporativo). Retorna (ok, mensagem_ou_erro)."""
+    try:
+        req = urllib.request.Request(
+            f"{BRIDGE_URL}/reset", data=b"{}",
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = json.load(resp)
+            return (True, "ok") if body.get("ok") else (False, body.get("error", "falha desconhecida"))
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.load(exc)
+            return False, body.get("error", str(exc))
+        except Exception:
+            return False, str(exc)
+    except Exception as exc:
+        return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
+
+
 def send_whatsapp(phone, text):
     """Retorna (ok: bool, mensagem: str)."""
     if not phone:
