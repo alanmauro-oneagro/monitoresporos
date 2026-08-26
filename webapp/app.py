@@ -507,7 +507,7 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
         if quimicos_itens:
             ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens)
             lines.append(f"⚗️ *Quimicos:* {ativos}")
-        lines.append(f"📝 Obs.: {d.get('nota') or '*'}")
+        lines.append(f"📝 Sugestão: {d.get('nota') or '*'}")
         lines.append("")
 
     lines.append(_WHATSAPP_SEPARADOR)
