@@ -40,11 +40,29 @@ def _fmt_ingrediente(item, classe_label):
     return item["ingrediente"]
 
 
+def _caixa(conteudo, fundo=None):
+    """Envolve `conteudo` (lista de flowables) numa caixa de largura
+    total -- com fundo cinza claro (`fundo=CINZA_CLARO`) ou so com borda,
+    sem preenchimento (`fundo=None`, transparente)."""
+    caixa = Table([[conteudo]], colWidths=[17.4 * cm])
+    estilo = [
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]
+    if fundo:
+        estilo.append(("BACKGROUND", (0, 0), (-1, -1), fundo))
+    caixa.setStyle(TableStyle(estilo))
+    return caixa
+
+
 def _caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, classe_label):
-    """Caixa cinza com os ingredientes recomendados pelas instituicoes de
-    pesquisa (biblioteca da aba Fungicidas) -- mesmo destaque visual da
-    tela de Recomendacoes (`.manual-note-box`), pra deixar claro que essa
-    parte NAO e' uma anotacao da fazenda."""
+    """Caixa (sem preenchimento -- so a borda) com os ingredientes
+    recomendados pelas instituicoes de pesquisa (biblioteca da aba
+    Fungicidas), pra deixar claro que essa parte NAO e' uma anotacao da
+    fazenda (essa sim, com fundo cinza -- ver `_caixa`)."""
     linhas = [Paragraph("Recomendações das Instituições de Pesquisa", ParagraphStyle(
         "RecInst", parent=_ESTILO_NORMAL, fontName="Helvetica-Bold", spaceAfter=3,
     ))]
@@ -54,16 +72,7 @@ def _caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, classe_la
     if quimicos_itens:
         ativos = " // ".join(_fmt_ingrediente(p, classe_label) for p in quimicos_itens)
         linhas.append(Paragraph(f"<b>Quimicos:</b> {ativos}", _ESTILO_NORMAL))
-    caixa = Table([[linhas]], colWidths=[17.4 * cm])
-    caixa.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), CINZA_CLARO),
-        ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
-    return caixa
+    return _caixa(linhas, fundo=None)
 
 
 def _tabela_padrao(headers, rows, col_widths):
@@ -163,20 +172,22 @@ def build_recommendation_pdf(
     story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
     tem_produtos = any(produtos.get(tipo) for tipo in ("quimico", "biologico"))
     if not tem_produtos:
-        story.append(Paragraph("Nenhum produto cadastrado para esta fazenda.", _ESTILO_NORMAL))
+        conteudo = [Paragraph("Nenhum produto cadastrado para esta fazenda.", _ESTILO_NORMAL)]
     else:
+        conteudo = []
         for tipo, titulo in (("biologico", "Biologicos"), ("quimico", "Quimicos")):
             itens = produtos.get(tipo) or []
             partes = [
                 f"{p['nome']} ({p['data_anotacao']})" if p.get("data_anotacao") else p["nome"]
                 for p in itens if p.get("nome")
             ]
-            story.append(Paragraph(f"<b>{titulo}:</b> {', '.join(partes) if partes else '-'}", _ESTILO_NORMAL))
+            conteudo.append(Paragraph(f"<b>{titulo}:</b> {', '.join(partes) if partes else '-'}", _ESTILO_NORMAL))
+    story.append(_caixa(conteudo, fundo=CINZA_CLARO))
 
     plantio_linhas = [l for l in (plantio_linhas or []) if any(l.values())]
     story.append(Paragraph("Datas de Plantio", _ESTILO_SECAO))
     if not plantio_linhas:
-        story.append(Paragraph("Nenhum plantio cadastrado para esta safra.", _ESTILO_NORMAL))
+        story.append(_caixa([Paragraph("Nenhum plantio cadastrado para esta safra.", _ESTILO_NORMAL)], fundo=CINZA_CLARO))
     else:
         rows = [
             [models.fmt_data_br(l["data_plantio"]) or "-", l["talhao"] or "-", l["variedade"] or "-", l["ciclo_dias"] or "-"]
@@ -190,7 +201,7 @@ def build_recommendation_pdf(
     aplicacoes_linhas = [l for l in (aplicacoes_linhas or []) if any(l.values())]
     story.append(Paragraph("Datas de Pulverizacao", _ESTILO_SECAO))
     if not aplicacoes_linhas:
-        story.append(Paragraph("Nenhuma pulverizacao cadastrada para esta safra.", _ESTILO_NORMAL))
+        story.append(_caixa([Paragraph("Nenhuma pulverizacao cadastrada para esta safra.", _ESTILO_NORMAL)], fundo=CINZA_CLARO))
     else:
         rows = [
             [models.fmt_data_br(l["data_aplicacao"]) or "-", l["talhao"] or "-", l["fungicidas_quimicos"] or "-", l["fungicidas_biologicos"] or "-"]
