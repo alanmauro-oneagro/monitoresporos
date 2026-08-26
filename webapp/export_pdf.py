@@ -112,7 +112,7 @@ def build_recommendation_pdf(
     story = []
 
     story.append(Paragraph(f"{nome_fazenda} - OneAgro", _ESTILO_TITULO))
-    story.append(Paragraph(f"Manejo {safra_label} · powered by BioScout", _ESTILO_SUBTITULO))
+    story.append(Paragraph(f"Manejo {safra_label}", _ESTILO_SUBTITULO))
 
     if weather:
         partes = []

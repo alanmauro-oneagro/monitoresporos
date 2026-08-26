@@ -1,6 +1,6 @@
 // Servico que usa o WhatsApp de verdade do administrador (via Baileys,
 // protocolo multi-device do WhatsApp) pra mandar os relatorios do
-// BioScout Web -- substitui o CallMeBot. O endpoint /send NAO tem
+// OneAgro Monitor -- substitui o CallMeBot. O endpoint /send NAO tem
 // nenhuma autenticacao -- a seguranca depende inteiramente de isolamento
 // de rede (so o app Flask consegue chamar aqui). Local, isso significa
 // so escutar em 127.0.0.1; hospedado (Railway/Render), significa manter
@@ -50,7 +50,7 @@ async function startSock() {
     sock = makeWASocket({
         auth: state,
         version,
-        browser: ["BioScout Web", "Chrome", "120.0.0"],
+        browser: ["OneAgro Monitor", "Chrome", "120.0.0"],
         logger: pino({ level: "silent" }),
     });
 

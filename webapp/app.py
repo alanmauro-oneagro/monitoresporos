@@ -402,16 +402,16 @@ _WHATSAPP_SEPARADOR = "━" * 15
 
 
 def _whatsapp_titulo(site, is_virtual=False):
-    """'OneAgro - Grupo PIVA' -> '*GRUPO PIVA - OneAgro , powered by
-    BioScout*' -- nome da fazenda em destaque, sem repetir 'OneAgro' duas
-    vezes. Fazenda virtual/estimada usa o padrao '"{nome}" - OneAgro' (ver
+    """'OneAgro - Grupo PIVA' -> '*GRUPO PIVA - OneAgro*' -- nome da
+    fazenda em destaque, sem repetir 'OneAgro' duas vezes. Fazenda
+    virtual/estimada usa o padrao '"{nome}" - OneAgro' (ver
     `models.create_virtual_farm`) -- sem nenhuma marca extra no titulo, o
     padrao de nome diferente e' a unica diferenca visivel."""
     if is_virtual:
         nome_fazenda = site.split('"')[1] if site.count('"') >= 2 else site
     else:
         nome_fazenda = site.split(" - ", 1)[1] if " - " in site else site
-    return f"*{nome_fazenda.upper()} - OneAgro , powered by BioScout*"
+    return f"*{nome_fazenda.upper()} - OneAgro*"
 
 
 def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None):
@@ -1778,7 +1778,7 @@ def admin_whatsapp_pair_code():
 def admin_whatsapp_test():
     phone = request.form.get("phone", "")
     texto = (
-        "Teste do BioScout Web -- se voce recebeu essa mensagem, o envio "
+        "Teste do OneAgro Monitor -- se voce recebeu essa mensagem, o envio "
         "de relatorios por WhatsApp esta funcionando corretamente."
     )
     ok, mensagem = whatsapp.send_whatsapp(phone, texto)

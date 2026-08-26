@@ -13,7 +13,7 @@ import models
 
 def main():
     models.init_db()
-    print("=== Criar usuario administrador do BioScout Web ===")
+    print("=== Criar usuario administrador do OneAgro Monitor ===")
     username = input("Usuario (ex.: seu nome ou e-mail): ").strip()
     if not username:
         print("Usuario nao pode ser vazio.")
