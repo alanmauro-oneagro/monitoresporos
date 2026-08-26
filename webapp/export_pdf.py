@@ -166,7 +166,11 @@ def build_recommendation_pdf(
                 for grupo in (d.get("biologicos"), d.get("quimicos")):
                     if grupo and grupo.get("fonte"):
                         fontes_pesquisadas.append(grupo["fonte"].split(" -- ")[0])
-            story.append(Paragraph(f"Sugestão: {d.get('nota') or '-'}", _ESTILO_NORMAL))
+            story.append(Spacer(1, 3))
+            story.append(_caixa(
+                [Paragraph(f"Sugestão: {d.get('nota') or '-'}", _ESTILO_NORMAL)],
+                fundo=CINZA_CLARO,
+            ))
 
     produtos = produtos or {}
     story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
