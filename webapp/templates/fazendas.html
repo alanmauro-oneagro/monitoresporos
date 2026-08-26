@@ -95,17 +95,6 @@ html { font-size: 14px; }
                 </div>
 
                 <div class="mt-3 pt-3 border-top">
-                    <div class="fw-bold mb-2">Sulco de Plantio</div>
-                    <form method="post" action="{{ url_for('save_farm_sulco_plantio') }}" data-autosave>
-                        <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                        <input type="hidden" name="safra" value="{{ safra_group.safra }}">
-                        <input type="text" name="sulco_plantio" class="form-control form-control-sm" style="max-width: 220px;"
-                               value="{{ safra_group.sulco_plantio }}" placeholder="Ex.: 45 cm">
-                        <span class="autosave-status small ms-2"></span>
-                    </form>
-                </div>
-
-                <div class="mt-3 pt-3 border-top">
                     <div class="fw-bold mb-2">Dados de Aplicacoes</div>
                     <form method="post" action="{{ url_for('save_farm_aplicacoes') }}" data-autosave>
                         <input type="hidden" name="site_name" value="{{ site_group.site }}">
@@ -235,15 +224,15 @@ document.querySelectorAll('.safra-toggle').forEach(function (btn) {
     Cadastro dos fungicidas e biologicos que cada fazenda tem comprado, por
     safra (<strong>Safra</strong> e <strong>2 Safra</strong>) e, dentro de
     cada safra, por momento de aplicacao -- <strong>TS</strong> (tratamento
-    de sementes) e <strong>Folha</strong> (aplicacao foliar). Preencha a
-    data/anotacao, o nome do produto e o ingrediente ativo; linhas em
-    branco sao ignoradas ao salvar. Comeca com 3 linhas em cada grade --
-    ao preencher a ultima, uma nova aparece sozinha, sem limite de linhas.
-    Logo abaixo de Folha, tem tambem <strong>Dados de Plantio</strong>
-    (data, talhao, variedade, ciclo em dias), o <strong>Sulco de
-    Plantio</strong> (texto livre, ex.: "45 cm") e <strong>Dados de
-    Aplicacoes</strong> (data, talhao, fungicidas usados) -- as duas
-    grades comecam com 1 linha e crescem do mesmo jeito. Clique no nome da
+    de sementes), <strong>Sulco</strong> (aplicacao no sulco de plantio) e
+    <strong>Folha</strong> (aplicacao foliar). Preencha a data/anotacao, o
+    nome do produto e o ingrediente ativo; linhas em branco sao ignoradas
+    ao salvar. Comeca com 3 linhas em cada grade -- ao preencher a ultima,
+    uma nova aparece sozinha, sem limite de linhas. Logo abaixo de Folha,
+    tem tambem <strong>Dados de Plantio</strong> (data, talhao, variedade,
+    ciclo em dias) e <strong>Dados de Aplicacoes</strong> (data, talhao,
+    fungicidas usados) -- essas duas comecam com 1 linha e crescem do
+    mesmo jeito. Clique no nome da
     fazenda para ver e editar o estoque. A cultura atual de cada safra e'
     definida na aba Manejo (Safra / 2ª Safra / 3ª Safra), do lado do nome
     da fazenda.

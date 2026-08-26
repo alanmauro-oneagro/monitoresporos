@@ -96,14 +96,13 @@ def _tabela_padrao(headers, rows, col_widths):
 
 def build_recommendation_pdf(
     nome_fazenda, safra_label, diseases, weather=None, produtos=None,
-    cultura=None, sulco_plantio=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
+    cultura=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
 ):
-    """`diseases`/`weather`/`produtos`/`cultura`/`sulco_plantio` tem o
-    mesmo formato usado em `_format_whatsapp_message` (ver app.py);
-    `plantio_linhas` e `aplicacoes_linhas` vem de
-    `models.get_all_farm_plantio`/`get_all_farm_aplicacoes` (lista de
-    dicts), ja filtrados pra fazenda+safra. Retorna um `io.BytesIO` com o
-    PDF pronto."""
+    """`diseases`/`weather`/`produtos`/`cultura` tem o mesmo formato usado
+    em `_format_whatsapp_message` (ver app.py); `plantio_linhas` e
+    `aplicacoes_linhas` vem de `models.get_all_farm_plantio`/
+    `get_all_farm_aplicacoes` (lista de dicts), ja filtrados pra
+    fazenda+safra. Retorna um `io.BytesIO` com o PDF pronto."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
@@ -198,12 +197,6 @@ def build_recommendation_pdf(
             ["Data", "Talhao", "Variedade", "Ciclo (dias)"], rows,
             [3.2 * cm, 4.5 * cm, 6 * cm, 3.2 * cm],
         ))
-
-    story.append(Paragraph("Sulco de Plantio", _ESTILO_SECAO))
-    story.append(_caixa(
-        [Paragraph(sulco_plantio or "Nenhum sulco de plantio cadastrado para esta safra.", _ESTILO_NORMAL)],
-        fundo=CINZA_CLARO,
-    ))
 
     aplicacoes_linhas = [l for l in (aplicacoes_linhas or []) if any(l.values())]
     story.append(Paragraph("Datas de Pulverizacao", _ESTILO_SECAO))

@@ -162,13 +162,6 @@ def init_db():
             fungicidas_biologicos TEXT
         );
 
-        CREATE TABLE IF NOT EXISTS farm_sulco_plantio (
-            site_name TEXT NOT NULL,
-            safra TEXT NOT NULL,
-            sulco TEXT,
-            PRIMARY KEY (site_name, safra)
-        );
-
         CREATE TABLE IF NOT EXISTS farm_culturas (
             site_name TEXT NOT NULL,
             safra TEXT NOT NULL,
@@ -194,6 +187,12 @@ def init_db():
         );
         """
     )
+    # farm_sulco_plantio (campo unico de texto livre pro sulco de plantio)
+    # foi substituida por "sulco" virar um momento normal de farm_produtos
+    # (mesma grade de TS/Folha, com produtos quimicos/biologicos) -- essa
+    # tabela chegou a existir em producao por pouco tempo, entao o DROP
+    # cuida de limpar quem ja tiver ela criada.
+    conn.execute("DROP TABLE IF EXISTS farm_sulco_plantio")
     try:
         conn.execute("ALTER TABLE disease_translations ADD COLUMN nome_cientifico TEXT")
     except sqlite3.OperationalError:
@@ -484,7 +483,7 @@ def move_fungicida_item(doenca, tipo, idx_original, direction, n):
         set_fungicida_ordem(doenca, tipo, order)
 
 
-MOMENTOS = ("ts", "folha")
+MOMENTOS = ("ts", "sulco", "folha")
 TIPOS_PRODUTO = ("quimico", "biologico")
 
 # As safras que cada fazenda acompanha em paralelo (ex.: soja na safra,
@@ -621,33 +620,6 @@ def set_farm_aplicacoes(site_name, safra, linhas):
                 "fungicidas_quimicos, fungicidas_biologicos) VALUES (?, ?, ?, ?, ?, ?)",
                 (site_name, safra, data_aplicacao, talhao, fungicidas_quimicos, fungicidas_biologicos),
             )
-    conn.commit()
-    conn.close()
-
-
-def get_all_farm_sulco_plantio():
-    """chave: (site_name, safra) -> sulco (texto livre, ex.: "45 cm") --
-    so tem linha pra fazenda+safra que ja teve o sulco preenchido."""
-    conn = get_db()
-    rows = conn.execute("SELECT site_name, safra, sulco FROM farm_sulco_plantio").fetchall()
-    conn.close()
-    return {(r["site_name"], r["safra"]): r["sulco"] for r in rows}
-
-
-def set_farm_sulco_plantio(site_name, safra, sulco):
-    """sulco = "" (ou None) remove a linha daquela safra."""
-    conn = get_db()
-    sulco = (sulco or "").strip()
-    if sulco:
-        conn.execute(
-            """
-            INSERT INTO farm_sulco_plantio (site_name, safra, sulco) VALUES (?, ?, ?)
-            ON CONFLICT(site_name, safra) DO UPDATE SET sulco = excluded.sulco
-            """,
-            (site_name, safra, sulco),
-        )
-    else:
-        conn.execute("DELETE FROM farm_sulco_plantio WHERE site_name = ? AND safra = ?", (site_name, safra))
     conn.commit()
     conn.close()
 
@@ -881,7 +853,7 @@ def update_virtual_farm(site_name, nome, lat, lon, raio_km):
     if novo_site_name != site_name:
         for tabela in (
             "sites", "recommendation_notes", "whatsapp_schedule",
-            "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_sulco_plantio", "farm_culturas",
+            "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_culturas",
             "weather_station_overrides",
         ):
             conn.execute(f"UPDATE {tabela} SET site_name=? WHERE site_name=?", (novo_site_name, site_name))
@@ -904,7 +876,6 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM farm_produtos WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_plantio WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_aplicacoes WHERE site_name = ?", (site_name,))
-    conn.execute("DELETE FROM farm_sulco_plantio WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_culturas WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (site_name,))
     conn.commit()

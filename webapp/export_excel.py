@@ -9,7 +9,7 @@ from openpyxl.styles import Font
 
 import models
 
-MOMENTO_LABELS = {"ts": "TS", "folha": "Folha"}
+MOMENTO_LABELS = {"ts": "TS", "sulco": "Sulco", "folha": "Folha"}
 TIPO_LABELS = {"quimico": "Quimico", "biologico": "Biologico"}
 SAFRA_LABELS = dict(models.SAFRAS)
 

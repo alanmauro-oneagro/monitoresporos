@@ -331,20 +331,6 @@ def _cultura_label(site, safra, culturas_by_site):
     return " / ".join(nomes)
 
 
-def _sulco_label(site, safra, sulco_by_site):
-    """Sulco de plantio (texto livre, ex.: "45 cm") pra mostrar no
-    relatorio -- mesma logica de `_cultura_label` (com `safra`, so aquela
-    safra; sem `safra`, uniao das safras com " / ")."""
-    if safra:
-        return sulco_by_site.get((site, safra)) or ""
-    valores = []
-    for s, _ in models.SAFRAS:
-        v = sulco_by_site.get((site, s))
-        if v and v not in valores:
-            valores.append(v)
-    return " / ".join(valores)
-
-
 def _apply_fungicida_overrides(doenca, tipo, itens, overrides):
     """Aplica edicoes feitas pelo admin (tela Fungicidas) sobre a lista
     padrao de ingredientes ativos daquela doenca -- itens sem edicao saem
@@ -428,7 +414,7 @@ def _whatsapp_titulo(site, is_virtual=False):
     return f"*{nome_fazenda.upper()} - OneAgro , powered by BioScout*"
 
 
-def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None, sulco_plantio=None):
+def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None):
     """Monta o relatorio inteiro de uma fazenda numa unica mensagem de
     texto, agrupado POR DOENCA (status, contagem, recomendacao e
     observacao juntos num bloco so, em vez de secoes separadas repetindo
@@ -447,15 +433,11 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     de que o valor e' estimado, pro relatorio ficar igual ao de uma
     fazenda real. `cultura` (nome da cultura atual definida na aba Manejo,
     ou None/"" se ainda estiver "(vazio)") aparece em destaque (negrito,
-    maiuscula), entre o clima e o Resumo. `sulco_plantio` (texto livre da
-    aba Fazendas/Anotacoes de Safra, ex.: "45 cm") vem logo depois da
-    Cultura -- assim como Produtos Fazenda, sempre aparece (mesmo vazio,
-    valor "*") pra manter o mesmo formato de relatorio sempre. A data/hora
-    de atualizacao (e a cidade da estacao de referencia, se houver) fica
-    no rodape do relatorio, nao mais logo abaixo do titulo. Ordem do
-    cabecalho: titulo -> Clima agora (uma linha em branco abaixo do nome
-    da fazenda) -> Cultura -> Sulco de Plantio -> Resumo (sempre antes da
-    primeira doenca)."""
+    maiuscula), entre o clima e o Resumo. A data/hora de atualizacao (e a
+    cidade da estacao de referencia, se houver) fica no rodape do
+    relatorio, nao mais logo abaixo do titulo. Ordem do cabecalho: titulo
+    -> Clima agora (uma linha em branco abaixo do nome da fazenda) ->
+    Cultura -> Resumo (sempre antes da primeira doenca)."""
     rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
     if weather and weather.get("cidade"):
         rodape_data += f" · {weather['cidade']}/{weather['uf']}"
@@ -465,8 +447,6 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
         if cultura:
             partes.append(f"Cultura: *{cultura.upper()}*")
             partes.append("")
-        partes.append(f"Sulco de Plantio: {sulco_plantio or '*'}")
-        partes.append("")
         partes.append("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.")
         partes.append("")
         partes.append(rodape_data)
@@ -507,8 +487,6 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     if cultura:
         lines.append(f"Cultura: *{cultura.upper()}*")
         lines.append("")
-    lines.append(f"Sulco de Plantio: {sulco_plantio or '*'}")
-    lines.append("")
     lines.append(f"📋 *Resumo:* {', '.join(partes_resumo)}")
     lines.append("")
 
@@ -619,10 +597,8 @@ def _send_site_whatsapp(site, safra=None):
     produtos = _farm_produtos_estoque(site, safra)
     is_virtual = models.get_virtual_farm(site) is not None
     cultura = _cultura_label(site, safra, culturas_by_site)
-    sulco_plantio = _sulco_label(site, safra, models.get_all_farm_sulco_plantio())
     text = _format_whatsapp_message(
-        site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura,
-        sulco_plantio=sulco_plantio,
+        site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura
     )
 
     destinos = _site_whatsapp_destinations(site)
@@ -1025,7 +1001,6 @@ def recommendations(safra):
     notes = models.get_all_recommendation_notes()
     coords = _weather_coords_all()
     produtos_by_site = models.get_all_farm_produtos()
-    sulco_by_site = models.get_all_farm_sulco_plantio()
     virtual_names = models.virtual_farm_site_names()
 
     sites_data = []
@@ -1060,13 +1035,11 @@ def recommendations(safra):
         dias_sem_leitura = _dias_sem_leitura(raw_cards_by_site.get(site, []))
         nivel_dados = _nivel_dados_defasados(dias_sem_leitura)
         is_virtual = site in virtual_names
-        sulco_plantio = sulco_by_site.get((site, safra)) or ""
         whatsapp_text = (
             "" if nivel_dados == "bloqueado"
             else _format_whatsapp_message(
                 site, diseases, weather=weather, produtos=_farm_produtos_estoque(site, safra),
                 is_virtual=is_virtual, cultura=cultura_info.get("cultura") or "",
-                sulco_plantio=sulco_plantio,
             )
         )
         sites_data.append({
@@ -1170,7 +1143,6 @@ def recommendation_pdf(site_name):
     weather = _get_weather_for_site(site_name, coords)
     produtos = _farm_produtos_estoque(site_name, safra)
     cultura = _cultura_label(site_name, safra, culturas_by_site)
-    sulco_plantio = _sulco_label(site_name, safra, models.get_all_farm_sulco_plantio())
     plantio_linhas = models.get_all_farm_plantio().get(site_name, {}).get(safra, [])
     aplicacoes_linhas = models.get_all_farm_aplicacoes().get(site_name, {}).get(safra, [])
     is_virtual = models.get_virtual_farm(site_name) is not None
@@ -1181,8 +1153,8 @@ def recommendation_pdf(site_name):
 
     buffer = export_pdf.build_recommendation_pdf(
         nome_fazenda, SAFRA_LABELS[safra], diseases, weather=weather, produtos=produtos,
-        cultura=cultura, sulco_plantio=sulco_plantio, plantio_linhas=plantio_linhas,
-        aplicacoes_linhas=aplicacoes_linhas, rodape_data=rodape_data,
+        cultura=cultura, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
+        rodape_data=rodape_data,
     )
     filename = f"Recomendacao_{nome_fazenda}_{datetime.now().strftime('%Y%m%d')}.pdf".replace(" ", "_")
     return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
@@ -1218,11 +1190,14 @@ def fazendas():
     produtos_by_site = models.get_all_farm_produtos()
     plantio_by_site = models.get_all_farm_plantio()
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
-    sulco_by_site = models.get_all_farm_sulco_plantio()
     all_days = models.get_all_whatsapp_days()
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
-    grades = [("ts", "TS (Tratamento de Sementes)"), ("folha", "Folha (aplicacao foliar)")]
+    grades = [
+        ("ts", "TS (Tratamento de Sementes)"),
+        ("sulco", "Sulco (aplicacao no sulco de plantio)"),
+        ("folha", "Folha (aplicacao foliar)"),
+    ]
     tipos = [("quimico", "Fungicidas quimicos"), ("biologico", "Biologicos")]
 
     sites_data = []
@@ -1256,7 +1231,6 @@ def fazendas():
             safras_data.append({
                 "safra": safra, "titulo": safra_label, "secoes": secoes,
                 "plantio": plantio_linhas, "aplicacoes": aplicacoes_linhas,
-                "sulco_plantio": sulco_by_site.get((site, safra)) or "",
             })
         latlon = coords.get(site)
         estacoes_proximas = inmet_stations.estacoes_mais_proximas(*latlon, n=2) if latlon else []
@@ -1348,20 +1322,6 @@ def save_farm_plantio():
     linhas = list(zip(datas, talhoes, variedades, ciclos))
     models.set_farm_plantio(site_name, safra, linhas)
     return _save_response(f"Dados de plantio de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
-
-
-@app.route("/fazendas/sulco-plantio/save", methods=["POST"])
-@login_required
-def save_farm_sulco_plantio():
-    site_name = request.form.get("site_name")
-    if not current_user.is_admin:
-        allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
-        if site_name not in allowed:
-            abort(403)
-    safra = _safra_or_default(request.form)
-    sulco = request.form.get("sulco_plantio", "")
-    models.set_farm_sulco_plantio(site_name, safra, sulco)
-    return _save_response(f"Sulco de plantio de '{site_name}' ({SAFRA_LABELS[safra]}) salvo.", "fazendas")
 
 
 @app.route("/fazendas/aplicacoes/save", methods=["POST"])
