@@ -232,6 +232,10 @@ def build_recommendation_pdf(
         "Isso nao substitui a avaliacao de um agronomo responsavel.",
         ParagraphStyle("Aviso", parent=_ESTILO_SUBTITULO, fontSize=8),
     ))
+    story.append(Paragraph(
+        "Powered by BioScout",
+        ParagraphStyle("Assinatura", parent=_ESTILO_SUBTITULO, fontSize=8),
+    ))
 
     doc.build(story)
     buffer.seek(0)

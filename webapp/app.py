@@ -437,7 +437,9 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     cidade da estacao de referencia, se houver) fica no rodape do
     relatorio, nao mais logo abaixo do titulo. Ordem do cabecalho: titulo
     -> Clima agora (uma linha em branco abaixo do nome da fazenda) ->
-    Cultura -> Resumo (sempre antes da primeira doenca)."""
+    Cultura -> Resumo (sempre antes da primeira doenca). "Powered by
+    BioScout" e' sempre a ultima linha (assinatura do rodape, em todo
+    relatorio -- com ou sem doenca)."""
     rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
     if weather and weather.get("cidade"):
         rodape_data += f" · {weather['cidade']}/{weather['uf']}"
@@ -450,6 +452,7 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
         partes.append("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.")
         partes.append("")
         partes.append(rodape_data)
+        partes.append("Powered by BioScout")
         return "\n".join(partes)
 
     n_perigo = sum(1 for d in diseases if d["status"] == "Perigo")
@@ -527,6 +530,7 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     if weather:
         lines.append(f"Fonte do clima: {weather['fonte']}")
     lines.append(rodape_data)
+    lines.append("Powered by BioScout")
 
     return "\n".join(lines).strip()
 
