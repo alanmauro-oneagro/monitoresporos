@@ -1190,6 +1190,7 @@ def fazendas():
     produtos_by_site = models.get_all_farm_produtos()
     plantio_by_site = models.get_all_farm_plantio()
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
+    espacamento_by_site = models.get_all_farm_espacamento_plantio()
     all_days = models.get_all_whatsapp_days()
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
@@ -1231,6 +1232,7 @@ def fazendas():
             safras_data.append({
                 "safra": safra, "titulo": safra_label, "secoes": secoes,
                 "plantio": plantio_linhas, "aplicacoes": aplicacoes_linhas,
+                "espacamento": espacamento_by_site.get((site, safra)) or "",
             })
         latlon = coords.get(site)
         estacoes_proximas = inmet_stations.estacoes_mais_proximas(*latlon, n=2) if latlon else []
@@ -1322,6 +1324,20 @@ def save_farm_plantio():
     linhas = list(zip(datas, talhoes, variedades, ciclos))
     models.set_farm_plantio(site_name, safra, linhas)
     return _save_response(f"Dados de plantio de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
+
+
+@app.route("/fazendas/espacamento/save", methods=["POST"])
+@login_required
+def save_farm_espacamento():
+    site_name = request.form.get("site_name")
+    if not current_user.is_admin:
+        allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
+        if site_name not in allowed:
+            abort(403)
+    safra = _safra_or_default(request.form)
+    espacamento = request.form.get("espacamento", "")
+    models.set_farm_espacamento_plantio(site_name, safra, espacamento)
+    return _save_response(f"Espacamento de plantio de '{site_name}' ({SAFRA_LABELS[safra]}) salvo.", "fazendas")
 
 
 @app.route("/fazendas/aplicacoes/save", methods=["POST"])
