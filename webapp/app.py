@@ -1958,6 +1958,42 @@ def admin_relatorio_whatsapp():
     )
 
 
+@app.route("/admin/relatorios/fungicidas")
+@admin_required
+def admin_relatorio_fungicidas():
+    """Visao consolidada de todo quimico da biblioteca de Fungicidas e
+    quais culturas ativas estao marcadas como "Registrado para" --
+    mesmo dado da aba Fungicidas (checkboxes), so' que todo mundo numa
+    tabela so' em vez de abrir card por card."""
+    overrides = models.get_all_fungicida_overrides()
+    registro_bloqueado = models.get_all_fungicida_registro_bloqueado()
+    culturas_ativas = models.get_culturas_ativas()
+    translations = _load_translations()
+
+    linhas = []
+    for doenca_en, info in sorted(translations.items(), key=lambda kv: kv[1]["nome_pt"]):
+        rec = fungicida_data.get_recomendacao(doenca_en)
+        if not rec:
+            continue
+        grupo = rec["quimicos"]
+        n = len(grupo["itens"])
+        ordem = models.get_fungicida_ordem(doenca_en, "quimico", n)
+        for idx in ordem:
+            item = grupo["itens"][idx]
+            override = overrides.get((doenca_en, "quimico", idx))
+            ingrediente = override["ingrediente"] if override else item["ingrediente"]
+            culturas_bloqueadas = registro_bloqueado.get((doenca_en, "quimico", idx), set())
+            linhas.append({
+                "doenca": info["nome_pt"],
+                "ingrediente": ingrediente,
+                "culturas": [(c, c not in culturas_bloqueadas) for c in culturas_ativas],
+            })
+
+    return render_template(
+        "admin_relatorio_fungicidas.html", linhas=linhas, culturas_ativas=culturas_ativas,
+    )
+
+
 @app.route("/admin/users/<int:user_id>/permissions", methods=["GET", "POST"])
 @admin_required
 def admin_user_permissions(user_id):

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Relatorio Fungicidas - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Relatorio de Registro por Cultura (Fungicidas)</h4>
+
+{% if not linhas %}
+<div class="alert alert-info">Nenhum quimico cadastrado ainda na biblioteca de Fungicidas.</div>
+{% else %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Doenca</th>
+                        <th>Quimico</th>
+                        {% for c in culturas_ativas %}
+                        <th class="text-center">{{ c }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in linhas %}
+                    <tr>
+                        <td class="text-nowrap">{{ l.doenca }}</td>
+                        <td>{{ l.ingrediente }}</td>
+                        {% for cultura, registrado in l.culturas %}
+                        <td class="text-center">
+                            {% if registrado %}
+                            <span class="text-success" title="Registrado para {{ cultura }}">✅</span>
+                            {% else %}
+                            <span class="text-danger" title="Sem registro confirmado para {{ cultura }}">⛔</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<p class="text-muted small mt-4 pt-3 border-top">
+    Uma linha por quimico da biblioteca (aba Fungicidas), com o mesmo
+    estado dos checkboxes "Registrado para" de cada item -- ✅ = marcado
+    (aparece nas Recomendacoes/PDF/WhatsApp pra fazendas com aquela
+    cultura), ⛔ = desmarcado (sem registro confirmado, some pra essa
+    cultura). Culturas sem nenhuma doenca associada ainda vem todas ✅ por
+    padrao (ninguem desmarcou). Pra editar, va na aba
+    <strong>Fungicidas</strong>.
+</p>
+{% endblock %}
