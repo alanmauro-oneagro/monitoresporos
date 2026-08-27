@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Relatorios - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Relatorio de Envios por WhatsApp</h4>
+
+<form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+    <div>
+        <label class="form-label small mb-1">Fazenda</label>
+        <select name="site" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">Todas</option>
+            {% for s in sites %}
+            <option value="{{ s }}" {% if s == site_selecionado %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-check mb-1">
+        <input class="form-check-input" type="checkbox" name="falhas" value="1" id="apenas-falhas"
+               {% if apenas_falhas %}checked{% endif %} onchange="this.form.submit()">
+        <label class="form-check-label small" for="apenas-falhas">Mostrar so falhas</label>
+    </div>
+</form>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h6 class="mb-2">Historico de envios</h6>
+        {% if not logs %}
+        <p class="text-muted small mb-0">Nenhum envio registrado ainda{% if apenas_falhas %} (com falha){% endif %}{% if site_selecionado %} pra essa fazenda{% endif %}.</p>
+        {% else %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Data/Hora</th>
+                        <th>Fazenda</th>
+                        <th>Destinatario</th>
+                        <th>Telefone</th>
+                        <th>Status</th>
+                        <th>Detalhe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in logs %}
+                    <tr class="{{ 'table-danger' if not l.ok else '' }}">
+                        <td class="text-nowrap">{{ l.criado_em | data_br }}</td>
+                        <td>{{ l.site_name }}</td>
+                        <td>{{ l.destinatario or '-' }}</td>
+                        <td>{{ l.telefone or '-' }}</td>
+                        <td>
+                            {% if l.ok %}
+                            <span class="badge bg-success">Enviado</span>
+                            {% else %}
+                            <span class="badge bg-danger">Falha</span>
+                            {% endif %}
+                        </td>
+                        <td class="small text-muted">{{ l.mensagem or '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small mt-2 mb-0">Mostrando os {{ logs|length }} envios mais recentes.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h6 class="mb-2">Quem esta cadastrado pra receber</h6>
+        {% if not cadastro %}
+        <p class="text-muted small mb-0">Ninguem cadastrado pra receber relatorio{% if site_selecionado %} dessa fazenda{% endif %} ainda -- aba Usuarios, coluna "Receber relatorios".</p>
+        {% else %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr><th>Fazenda</th><th>Destinatario</th><th>Telefone</th></tr>
+                </thead>
+                <tbody>
+                    {% for c in cadastro %}
+                    <tr>
+                        <td>{{ c.site }}</td>
+                        <td>{{ c.destinatario }}</td>
+                        <td>{{ c.telefone }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<p class="text-muted small mt-4 pt-3 border-top">
+    O historico registra toda tentativa de envio -- manual (botao "Enviar
+    por WhatsApp" ou "Enviar selecionados"), agendado (dias marcados na
+    aba Fazendas) ou bloqueado (estacao com leitura velha demais). Uma
+    linha "Falha" sem destinatario/telefone significa que o envio nem
+    chegou a tentar (fazenda bloqueada ou sem ninguem cadastrado) -- o
+    detalhe explica o motivo. A tabela "Quem esta cadastrado pra receber"
+    mostra o cadastro atual (aba Usuarios), independente de ja ter
+    recebido algo ou nao.
+</p>
+{% endblock %}

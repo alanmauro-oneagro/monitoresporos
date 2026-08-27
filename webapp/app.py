@@ -615,10 +615,12 @@ def _send_site_whatsapp(site, safra=None):
     raw_cards = _resolve_site_cards(site, translations)
     dias_sem_leitura = _dias_sem_leitura(raw_cards)
     if _nivel_dados_defasados(dias_sem_leitura) == "bloqueado":
-        return False, (
+        motivo = (
             f"Estacao de '{site}' sem leitura nova ha {dias_sem_leitura} dias -- "
             "envio bloqueado (dado velho demais pra confiar)."
         )
+        models.log_whatsapp_envio(site, None, None, False, motivo)
+        return False, motivo
     culturas_by_site = models.get_all_farm_culturas()
     cards_by_site = _filter_cards_by_cultura(
         {site: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
@@ -638,11 +640,14 @@ def _send_site_whatsapp(site, safra=None):
 
     destinos = _site_whatsapp_destinations(site)
     if not destinos:
-        return False, f"Nenhum usuario marcado pra receber relatorio de '{site}' (ou nenhum tem telefone cadastrado)."
+        motivo = f"Nenhum usuario marcado pra receber relatorio de '{site}' (ou nenhum tem telefone cadastrado)."
+        models.log_whatsapp_envio(site, None, None, False, motivo)
+        return False, motivo
 
     sucesso, falha = [], []
     for phone, rotulo in destinos:
         ok, message = whatsapp.send_whatsapp(phone, text)
+        models.log_whatsapp_envio(site, rotulo, phone, ok, message)
         (sucesso if ok else falha).append(rotulo if ok else f"{rotulo} ({message})")
     resumo = f"{len(sucesso)}/{len(destinos)} numero(s)"
     if falha:
@@ -1929,6 +1934,27 @@ def admin_whatsapp_reset():
     return _save_response(
         "Numero desconectado -- escaneie o novo QR code pra conectar outro." if ok else f"Falha ao desconectar: {mensagem}",
         "admin_whatsapp", ok=ok,
+    )
+
+
+@app.route("/admin/relatorios/whatsapp")
+@admin_required
+def admin_relatorio_whatsapp():
+    """Historico de envios de WhatsApp (data/hora, fazenda, destinatario,
+    sucesso ou falha) -- um log por numero, alimentado por
+    `_send_site_whatsapp` (manual, "selecionados" e agendado, ver
+    `models.log_whatsapp_envio`)."""
+    site_name = request.args.get("site") or None
+    apenas_falhas = request.args.get("falhas") == "1"
+    logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas)
+    sites = sorted(set(read_sites()) | models.virtual_farm_site_names())
+    cadastro = []
+    for site in ([site_name] if site_name else sites):
+        for r in models.get_site_whatsapp_recipients(site):
+            cadastro.append({"site": site, "destinatario": r["username"], "telefone": r["telefone"]})
+    return render_template(
+        "admin_relatorio_whatsapp.html", logs=logs, sites=sites, cadastro=cadastro,
+        site_selecionado=site_name or "", apenas_falhas=apenas_falhas,
     )
 
 

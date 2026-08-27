@@ -114,6 +114,16 @@ def init_db():
             PRIMARY KEY (site_name, weekday)
         );
 
+        CREATE TABLE IF NOT EXISTS whatsapp_envio_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_name TEXT NOT NULL,
+            destinatario TEXT,
+            telefone TEXT,
+            ok INTEGER NOT NULL,
+            mensagem TEXT,
+            criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS fungicida_overrides (
             doenca TEXT NOT NULL,
             tipo TEXT NOT NULL,
@@ -352,6 +362,42 @@ def set_whatsapp_days(site_name, weekdays):
         )
     conn.commit()
     conn.close()
+
+
+def log_whatsapp_envio(site_name, destinatario, telefone, ok, mensagem):
+    """Registra uma tentativa de envio (uma linha por numero, ou uma
+    linha so' com destinatario/telefone None quando o envio nem chegou
+    a tentar -- fazenda bloqueada por dado velho ou sem ninguem
+    cadastrado pra receber) -- usado pela tela de Relatorios."""
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO whatsapp_envio_log (site_name, destinatario, telefone, ok, mensagem) VALUES (?, ?, ?, ?, ?)",
+        (site_name, destinatario, telefone, 1 if ok else 0, mensagem),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, limit=300):
+    """Historico de envios, mais recente primeiro. `site_name` filtra por
+    uma fazenda; `apenas_falhas` mostra so as tentativas que nao deram
+    certo."""
+    conn = get_db()
+    condicoes, params = [], []
+    if site_name:
+        condicoes.append("site_name = ?")
+        params.append(site_name)
+    if apenas_falhas:
+        condicoes.append("ok = 0")
+    where = f"WHERE {' AND '.join(condicoes)}" if condicoes else ""
+    params.append(limit)
+    rows = conn.execute(
+        f"SELECT site_name, destinatario, telefone, ok, mensagem, criado_em "
+        f"FROM whatsapp_envio_log {where} ORDER BY criado_em DESC, id DESC LIMIT ?",
+        params,
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def get_all_disease_translations():
