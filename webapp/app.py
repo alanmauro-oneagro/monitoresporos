@@ -1612,6 +1612,21 @@ _PESQUISA_REGISTRO_2026_08_26 = {
     ("Dry rot", "quimico", 6): ["Soja", "Algodao", "Milho"],
     ("Dry rot", "quimico", 7): ["Algodao", "Milho"],
     ("Dry rot", "quimico", 9): ["Algodao", "Milho"],
+
+    # Moniliophthora spp. BETA (Soja, Algodao): os 7 ingredientes da
+    # biblioteca vieram da vassoura-de-bruxa do cacaueiro (M. perniciosa,
+    # doenca que soja/algodao nem hospedam) -- quando a soja mostra esse
+    # alerta, a causa real provavelmente e' outra (complexo Diaporthe/
+    # Phomopsis + Colletotrichum + Cercospora, "anomalia das vagens da
+    # soja"), pra qual nenhum destes 7 foi confirmado. Bloqueados os 7
+    # pras duas culturas ate' pesquisar os ativos certos pra essa doenca.
+    ("Moniliophthora spp. BETA", "quimico", 0): ["Soja", "Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 1): ["Soja", "Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 2): ["Soja", "Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 3): ["Soja", "Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 4): ["Soja", "Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 5): ["Soja", "Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 6): ["Soja", "Algodao"],
 }
 
 
