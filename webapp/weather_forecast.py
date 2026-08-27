@@ -9,14 +9,14 @@ OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
 
 def get_weather_forecast(lat, lon):
-    """Retorna dict com clima atual e previsao dos proximos 3 dias, ou None
+    """Retorna dict com clima atual e previsao dos proximos 5 dias, ou None
     se a busca falhar (sem internet, coordenada invalida, etc.)."""
     params = {
         "latitude": lat,
         "longitude": lon,
         "current": "temperature_2m,relative_humidity_2m,precipitation",
         "daily": "precipitation_sum,temperature_2m_max,temperature_2m_min",
-        "forecast_days": 4,
+        "forecast_days": 6,
         "timezone": "auto",
     }
     url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
@@ -46,5 +46,5 @@ def get_weather_forecast(lat, lon):
         "temperatura_atual": current.get("temperature_2m"),
         "umidade_atual": current.get("relative_humidity_2m"),
         "chuva_atual_mm": current.get("precipitation"),
-        "previsao_3_dias": previsao[:3],
+        "previsao_5_dias": previsao[:5],
     }

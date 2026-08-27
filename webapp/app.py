@@ -520,12 +520,12 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
             lines.append("🌤️ *Clima agora:* " + " · ".join(partes))
         else:
             lines.append("🌤️ *Clima agora*")
-        if weather.get("previsao_3_dias"):
+        if weather.get("previsao_5_dias"):
             prev = " | ".join(
                 # dd/mm, mesmo padrao de data do resto do relatorio (nao o
                 # AAAA-MM-DD cru que vem do forecast).
                 f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)"
-                for d in weather["previsao_3_dias"]
+                for d in weather["previsao_5_dias"]
             )
             lines.append(f"Previsao: {prev}")
         lines.append("")

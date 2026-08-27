@@ -124,10 +124,10 @@ def build_recommendation_pdf(
             partes.append(f"Chuva agora: {weather['chuva_atual_mm']} mm")
         if partes:
             story.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
-        if weather.get("previsao_3_dias"):
+        if weather.get("previsao_5_dias"):
             prev = " &nbsp;|&nbsp; ".join(
                 f"<b>{d['data'][8:10]}/{d['data'][5:7]}</b>: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)"
-                for d in weather["previsao_3_dias"]
+                for d in weather["previsao_5_dias"]
             )
             story.append(Paragraph(f"<b>Previsao:</b> {prev}", _ESTILO_NORMAL))
         story.append(Spacer(1, 4))

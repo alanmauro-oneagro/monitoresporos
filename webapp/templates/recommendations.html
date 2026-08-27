@@ -113,21 +113,20 @@ html { font-size: 14px; }
 
         {% if site_group.weather %}
         {% set origem = (site_group.weather.cidade ~ '/' ~ site_group.weather.uf ~ ' · ' if site_group.weather.cidade else '') ~ 'Fonte: ' ~ site_group.weather.fonte %}
-        <div class="small text-muted mt-2 mb-2 d-flex flex-wrap gap-3 align-items-center">
-            <span>
+        <div class="small text-muted mt-2 mb-2">
+            <div>
                 🌡️ {{ site_group.weather.temperatura_atual }}°C
                 {% if site_group.weather.umidade_atual is not none %}· 💧 {{ site_group.weather.umidade_atual }}% umidade{% endif %}
                 {% if site_group.weather.chuva_atual_mm is not none %}· 🌧️ {{ site_group.weather.chuva_atual_mm }} mm agora{% endif %}
                 · {{ origem }}
-            </span>
-            {% if site_group.weather.previsao_3_dias %}
-            <span>
+            </div>
+            {% if site_group.weather.previsao_5_dias %}
+            <div>
                 <strong>Previsao:</strong>
-                {% for d in site_group.weather.previsao_3_dias %}
+                {% for d in site_group.weather.previsao_5_dias %}
                 <strong>{{ d.data[8:10] }}/{{ d.data[5:7] }}</strong>: {{ d.chuva_mm }}mm ({{ d.temp_min }}-{{ d.temp_max }}°C){% if not loop.last %}, {% endif %}
                 {% endfor %}
-                · {{ origem }}
-            </span>
+            </div>
             {% endif %}
         </div>
         {% endif %}
