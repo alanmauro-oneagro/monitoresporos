@@ -54,6 +54,18 @@
                             data-doenca="{{ linha.doenca }}" data-tipo="{{ linha.tipo }}" data-idx="{{ linha.idx }}" data-direction="down"
                             title="Mover para baixo" {% if not linha.pode_descer %}disabled{% endif %}>▼</button>
                 </div>
+                {% if linha.tipo == 'quimico' and culturas_ativas %}
+                <div class="col-12 ps-1 mt-1 d-flex flex-wrap align-items-center gap-2">
+                    <span class="small text-muted">Registrado para:</span>
+                    {% for c in culturas_ativas %}
+                    <div class="form-check form-check-inline mb-0">
+                        <input class="form-check-input" type="checkbox" name="cultura_ok__{{ linha.row_id }}" value="{{ c }}"
+                               id="cultura_ok_{{ linha.row_id }}_{{ loop.index0 }}" {% if c in linha.culturas_registradas %}checked{% endif %}>
+                        <label class="form-check-label small" for="cultura_ok_{{ linha.row_id }}_{{ loop.index0 }}">{{ c }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -75,7 +87,12 @@
     que tiverem aquela doenca em alerta. Doencas novas que ainda nao tem
     nada pesquisado aparecem marcadas em "Sem dados ainda" -- pesquise
     fontes (Embrapa, Agrolink/Agrofit-MAPA, universidades) e adicione no
-    <code>fungicida_data.py</code>.
+    <code>fungicida_data.py</code>. Em cada <strong>Quimico</strong>, marque
+    em "Registrado para" so as culturas que esse produto tem registro
+    (Agrofit/MAPA) -- desmarcar uma cultura tira esse item das
+    Recomendacoes/PDF/WhatsApp so' pra fazendas com aquela cultura atual;
+    sem nenhuma cultura desmarcada (padrao), continua aparecendo pra
+    todas. As colunas vem da aba <strong>Nome Culturas</strong> (menu ⋮).
 </p>
 <script>
 // Botoes simples (nao <form>) de proposito -- um <form> por linha ficaria

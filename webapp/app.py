@@ -331,20 +331,29 @@ def _cultura_label(site, safra, culturas_by_site):
     return " / ".join(nomes)
 
 
-def _apply_fungicida_overrides(doenca, tipo, itens, overrides):
+def _apply_fungicida_overrides(doenca, tipo, itens, overrides, cultura=None, bloqueios=None):
     """Aplica edicoes feitas pelo admin (tela Fungicidas) sobre a lista
     padrao de ingredientes ativos daquela doenca -- itens sem edicao saem
     exatamente como em fungicida_data.py -- e depois reordena conforme os
     botoes "mover pra cima/baixo" (models.get_fungicida_ordem), para que o
     admin possa colocar os melhores tratamentos da regiao no topo (so os 3
-    primeiros aparecem nas abas Recomendacoes)."""
+    primeiros aparecem nas abas Recomendacoes). `cultura`/`bloqueios`
+    (so' para tipo="quimico"): um item marcado como sem registro pra
+    aquela cultura (models.get_all_fungicida_registro_bloqueado) e' tratado
+    como removido nessa fazenda -- sem marcacao nenhuma, continua
+    aparecendo normalmente (nunca esconde por omissao, so' quando alguem
+    desmarca explicitamente)."""
     if not itens:
         return itens
+    bloqueios = bloqueios or {}
     content = []
     for idx, item in enumerate(itens):
         override = overrides.get((doenca, tipo, idx))
+        culturas_bloqueadas = bloqueios.get((doenca, tipo, idx))
         if override and override["removido"]:
             content.append(None)  # historico de remocoes antigas, se houver
+        elif cultura and culturas_bloqueadas and cultura in culturas_bloqueadas:
+            content.append(None)  # sem registro pra essa cultura -- nao recomenda
         elif override:
             content.append({"ingrediente": override["ingrediente"], "classe": override["classe"]})
         else:
@@ -353,29 +362,35 @@ def _apply_fungicida_overrides(doenca, tipo, itens, overrides):
     return [content[i] for i in order if content[i] is not None]
 
 
-def _build_recomendacao_grupo(doenca, tipo, grupo, overrides):
+def _build_recomendacao_grupo(doenca, tipo, grupo, overrides, cultura=None, bloqueios=None):
     """Monta {fonte, fonte_url, itens} de um grupo (quimico/biologico) de uma
-    doenca, ja com as edicoes/remocoes do admin aplicadas."""
+    doenca, ja com as edicoes/remocoes do admin (e o filtro de registro por
+    cultura, so' pra quimicos) aplicados."""
     if not grupo:
         return None
-    itens = _apply_fungicida_overrides(doenca, tipo, grupo["itens"], overrides)
+    itens = _apply_fungicida_overrides(doenca, tipo, grupo["itens"], overrides, cultura=cultura, bloqueios=bloqueios)
     return {"fonte": grupo["fonte"], "fonte_url": grupo["fonte_url"], "itens": itens}
 
 
-def _build_site_diseases(site, cards, notes, fungicida_overrides=None):
+def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=None):
     """A partir dos cartoes (todas as doencas) de uma fazenda, monta a lista
     das que estao em Atencao/Perigo com a recomendacao de fungicida (quando
     houver) e a anotacao manual salva -- usado pela tela de Recomendacoes,
-    pelo envio manual de WhatsApp e pelo envio agendado."""
+    pelo envio manual de WhatsApp e pelo envio agendado. `cultura` (cultura
+    atual da fazenda/safra) filtra os quimicos sem registro pra ela -- ver
+    `_apply_fungicida_overrides`."""
     if fungicida_overrides is None:
         fungicida_overrides = models.get_all_fungicida_overrides()
+    bloqueios = models.get_all_fungicida_registro_bloqueado()
     diseases = []
     for card in cards:
         if card["status"] not in ("Perigo", "Atencao"):
             continue
         doenca_en = card["doenca_en"]
         rec = fungicida_data.get_recomendacao(doenca_en)
-        quimicos = _build_recomendacao_grupo(doenca_en, "quimico", rec["quimicos"], fungicida_overrides) if rec else None
+        quimicos = _build_recomendacao_grupo(
+            doenca_en, "quimico", rec["quimicos"], fungicida_overrides, cultura=cultura, bloqueios=bloqueios,
+        ) if rec else None
         biologicos = _build_recomendacao_grupo(doenca_en, "biologico", rec["biologicos"], fungicida_overrides) if rec else None
         diseases.append({
             "doenca": card["doenca"],
@@ -594,13 +609,13 @@ def _send_site_whatsapp(site, safra=None):
     )
     cards = cards_by_site.get(site, [])
     notes = models.get_all_recommendation_notes()
-    diseases = _build_site_diseases(site, cards, notes)
+    cultura = _cultura_label(site, safra, culturas_by_site)
+    diseases = _build_site_diseases(site, cards, notes, cultura=cultura)
 
     coords = _weather_coords_all()
     weather = _get_weather_for_site(site, coords)
     produtos = _farm_produtos_estoque(site, safra)
     is_virtual = models.get_virtual_farm(site) is not None
-    cultura = _cultura_label(site, safra, culturas_by_site)
     text = _format_whatsapp_message(
         site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura
     )
@@ -1009,7 +1024,8 @@ def recommendations(safra):
 
     sites_data = []
     for site, cards in cards_by_site.items():
-        diseases = _build_site_diseases(site, cards, notes)
+        cultura_info = culturas_by_site.get((site, safra), {})
+        diseases = _build_site_diseases(site, cards, notes, cultura=cultura_info.get("cultura") or "")
         thumbnails = sorted(cards, key=lambda c: c["doenca"])
         existentes = produtos_by_site.get(site, {})
         estoque_rapido = {}
@@ -1022,7 +1038,6 @@ def recommendations(safra):
             while len(linhas) < linhas_min:
                 linhas.append({"data_anotacao": "", "nome": "", "ingrediente_ativo": ""})
             estoque_rapido[tipo] = linhas
-        cultura_info = culturas_by_site.get((site, safra), {})
         dias_desde_atualizacao = None
         if cultura_info.get("updated_at"):
             try:
@@ -1142,11 +1157,11 @@ def recommendation_pdf(site_name):
         {site_name: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
     )
     notes = models.get_all_recommendation_notes()
-    diseases = _build_site_diseases(site_name, cards_by_site.get(site_name, []), notes)
+    cultura = _cultura_label(site_name, safra, culturas_by_site)
+    diseases = _build_site_diseases(site_name, cards_by_site.get(site_name, []), notes, cultura=cultura)
     coords = _weather_coords_all()
     weather = _get_weather_for_site(site_name, coords)
     produtos = _farm_produtos_estoque(site_name, safra)
-    cultura = _cultura_label(site_name, safra, culturas_by_site)
     plantio_linhas = models.get_all_farm_plantio().get(site_name, {}).get(safra, [])
     aplicacoes_linhas = models.get_all_farm_aplicacoes().get(site_name, {}).get(safra, [])
     is_virtual = models.get_virtual_farm(site_name) is not None
@@ -1449,6 +1464,7 @@ def admin_culturas():
 @admin_required
 def admin_fungicidas():
     if request.method == "POST":
+        culturas_ativas = models.get_culturas_ativas()
         for row_id in request.form.getlist("row_id"):
             key = request.form.get(f"key__{row_id}")
             if not key:
@@ -1469,9 +1485,15 @@ def admin_fungicidas():
                 models.delete_fungicida_override(doenca, tipo, idx)
             else:
                 models.save_fungicida_override(doenca, tipo, idx, ingrediente, classe, False)
+            if tipo == "quimico":
+                marcadas = set(request.form.getlist(f"cultura_ok__{row_id}"))
+                bloqueadas = [c for c in culturas_ativas if c not in marcadas]
+                models.set_fungicida_registro_bloqueado(doenca, tipo, idx, bloqueadas)
         return _save_response("Recomendacoes de fungicidas atualizadas.", "admin_fungicidas")
 
     overrides = models.get_all_fungicida_overrides()
+    registro_bloqueado = models.get_all_fungicida_registro_bloqueado()
+    culturas_ativas = models.get_culturas_ativas()
     translations = _load_translations()
 
     doencas_data = []
@@ -1490,6 +1512,7 @@ def admin_fungicidas():
             for posicao, idx in enumerate(ordem):
                 item = grupo["itens"][idx]
                 override = overrides.get((doenca_en, tipo, idx))
+                culturas_bloqueadas = registro_bloqueado.get((doenca_en, tipo, idx), set())
                 linhas.append({
                     "row_id": row_counter,
                     "key": f"{doenca_en}|{tipo}|{idx}",
@@ -1500,6 +1523,7 @@ def admin_fungicidas():
                     "classe": (override["classe"] if override else item["classe"]) or "",
                     "pode_subir": posicao > 0,
                     "pode_descer": posicao < n - 1,
+                    "culturas_registradas": [c for c in culturas_ativas if c not in culturas_bloqueadas],
                 })
                 row_counter += 1
             grupos.append({
@@ -1509,7 +1533,9 @@ def admin_fungicidas():
         doencas_data.append({"doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False})
 
     classes = [("", "Sem classificacao")] + list(fungicida_data.CLASSE_LABEL.items())
-    return render_template("admin_fungicidas.html", doencas_data=doencas_data, classes=classes)
+    return render_template(
+        "admin_fungicidas.html", doencas_data=doencas_data, classes=classes, culturas_ativas=culturas_ativas,
+    )
 
 
 @app.route("/admin/fungicidas/mover", methods=["POST"])

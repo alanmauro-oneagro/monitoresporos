@@ -132,6 +132,14 @@ def init_db():
             PRIMARY KEY (doenca, tipo, posicao)
         );
 
+        CREATE TABLE IF NOT EXISTS fungicida_registro_bloqueado (
+            doenca TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            idx INTEGER NOT NULL,
+            cultura TEXT NOT NULL,
+            PRIMARY KEY (doenca, tipo, idx, cultura)
+        );
+
         CREATE TABLE IF NOT EXISTS farm_produtos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             site_name TEXT NOT NULL,
@@ -488,6 +496,39 @@ def move_fungicida_item(doenca, tipo, idx_original, direction, n):
     if 0 <= vizinho < len(order):
         order[pos], order[vizinho] = order[vizinho], order[pos]
         set_fungicida_ordem(doenca, tipo, order)
+
+
+def get_all_fungicida_registro_bloqueado():
+    """chave: (doenca, tipo, idx) -> set(culturas) SEM registro pra esse
+    item -- ausencia (conjunto vazio) significa que tem registro (ou
+    ainda nao foi conferido), continua aparecendo normalmente nas
+    Recomendacoes/PDF/WhatsApp. So vira bloqueio quando o admin desmarca
+    explicitamente a cultura na aba Fungicidas."""
+    conn = get_db()
+    rows = conn.execute("SELECT doenca, tipo, idx, cultura FROM fungicida_registro_bloqueado").fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        result.setdefault((r["doenca"], r["tipo"], r["idx"]), set()).add(r["cultura"])
+    return result
+
+
+def set_fungicida_registro_bloqueado(doenca, tipo, idx, culturas_bloqueadas):
+    """Substitui o conjunto de culturas SEM registro pra esse item.
+    `culturas_bloqueadas` vazio = tem registro pra todas as culturas
+    ativas (estado padrao, sem nenhuma linha salva)."""
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM fungicida_registro_bloqueado WHERE doenca = ? AND tipo = ? AND idx = ?",
+        (doenca, tipo, idx),
+    )
+    for cultura in culturas_bloqueadas:
+        conn.execute(
+            "INSERT INTO fungicida_registro_bloqueado (doenca, tipo, idx, cultura) VALUES (?, ?, ?, ?)",
+            (doenca, tipo, idx, cultura),
+        )
+    conn.commit()
+    conn.close()
 
 
 MOMENTOS = ("ts", "sulco", "folha")
