@@ -531,6 +531,26 @@ def set_fungicida_registro_bloqueado(doenca, tipo, idx, culturas_bloqueadas):
     conn.close()
 
 
+def bloquear_cultura_nova_em_todos_quimicos(cultura):
+    """Quando uma cultura nova e' cadastrada (aba Nome Culturas), bloqueia
+    ela de saida em TODO quimico ja existente na biblioteca de
+    fungicidas -- ninguem pesquisou registro pra essa cultura ainda,
+    entao o padrao seguro e' exigir confirmacao explicita (o admin
+    marca uma a uma as que de fato tem registro) em vez de assumir
+    que ja esta tudo certo. So afeta quimicos que ja existiam antes
+    dessa cultura ser criada -- chamado uma vez, no momento do cadastro."""
+    import fungicida_data
+    conn = get_db()
+    for doenca_en, rec in fungicida_data.RECOMENDACOES.items():
+        for idx in range(len(rec["quimicos"]["itens"])):
+            conn.execute(
+                "INSERT OR IGNORE INTO fungicida_registro_bloqueado (doenca, tipo, idx, cultura) VALUES (?, 'quimico', ?, ?)",
+                (doenca_en, idx, cultura),
+            )
+    conn.commit()
+    conn.close()
+
+
 MOMENTOS = ("ts", "sulco", "folha")
 TIPOS_PRODUTO = ("quimico", "biologico")
 

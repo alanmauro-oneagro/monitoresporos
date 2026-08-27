@@ -1469,8 +1469,17 @@ def admin_doencas():
 @admin_required
 def admin_culturas():
     if request.method == "POST":
+        culturas_antigas = set(models.get_culturas_ativas())
         nomes = [request.form.get(f"nome_{i}", "").strip() for i in range(10)]
         models.set_culturas(nomes)
+        # Cultura nova (nao existia antes): bloqueia ela de saida em todo
+        # quimico ja cadastrado na biblioteca de Fungicidas -- ninguem
+        # pesquisou registro pra ela ainda, entao comeca desmarcada (o
+        # admin confirma uma a uma as que realmente tem registro), em vez
+        # de herdar "registrado" so por nunca ter sido revisada.
+        for nome in nomes:
+            if nome and nome not in culturas_antigas:
+                models.bloquear_cultura_nova_em_todos_quimicos(nome)
         return _save_response("Nomes de culturas atualizados.", "admin_culturas")
 
     return render_template("admin_culturas.html", nomes=models.get_culturas())
