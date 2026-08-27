@@ -1627,6 +1627,15 @@ _PESQUISA_REGISTRO_2026_08_26 = {
     ("Moniliophthora spp. BETA", "quimico", 4): ["Soja", "Algodao"],
     ("Moniliophthora spp. BETA", "quimico", 5): ["Soja", "Algodao"],
     ("Moniliophthora spp. BETA", "quimico", 6): ["Soja", "Algodao"],
+    # Itens 7-12: pesquisados especificamente pra "anomalia das vagens da
+    # soja" (Diaporthe/Phomopsis + Colletotrichum + Cercospora) -- so'
+    # confirmados pra Soja, nao pra Algodao.
+    ("Moniliophthora spp. BETA", "quimico", 7): ["Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 8): ["Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 9): ["Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 10): ["Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 11): ["Algodao"],
+    ("Moniliophthora spp. BETA", "quimico", 12): ["Algodao"],
 }
 
 

@@ -199,7 +199,16 @@ RECOMENDACOES = {
     },
     "Moniliophthora spp. BETA": {
         "quimicos": {
-            "fonte": "Agrolink/CEPLAC -- vassoura-de-bruxa do cacaueiro (Moniliophthora perniciosa)",
+            "fonte": (
+                "Agrolink/CEPLAC -- vassoura-de-bruxa do cacaueiro (Moniliophthora perniciosa), "
+                "primeiros 7 itens. Quando esse alerta aparece em fazenda de soja, a causa real "
+                "provavelmente NAO e' Moniliophthora (soja nao e' hospedeira) e sim o complexo "
+                "Diaporthe/Phomopsis + Colletotrichum truncatum + Cercospora kikuchii conhecido "
+                "como 'anomalia das vagens da soja' -- itens a partir do 8o vieram dessa pesquisa "
+                "(Agrolink, registros com esses patogenos no rotulo). Ver checkboxes 'Registrado "
+                "para' na aba admin: os 7 primeiros ficam desmarcados pra Soja/Algodao (registro "
+                "de cacau, nao confirmado nessas culturas) e os novos ficam marcados so' pra Soja."
+            ),
             "fonte_url": "https://www.agrolink.com.br/problemas/vassoura-de-bruxa_3046.html",
             "itens": [
                 {"ingrediente": "piraclostrobina + epoxiconazol", "classe": None},
@@ -209,6 +218,12 @@ RECOMENDACOES = {
                 {"ingrediente": "tebuconazol", "classe": None},
                 {"ingrediente": "acibenzolar-S-metilico", "classe": None},
                 {"ingrediente": "azoxistrobina + tebuconazol", "classe": None},
+                {"ingrediente": "piraclostrobina + tiofanato-metilico", "classe": None},
+                {"ingrediente": "tiofanato-metilico + fluazinam", "classe": None},
+                {"ingrediente": "trifloxistrobina + protioconazol", "classe": None},
+                {"ingrediente": "trifloxistrobina + ciproconazol", "classe": None},
+                {"ingrediente": "benzovindiflupir + ciproconazol + difenoconazol", "classe": None},
+                {"ingrediente": "ciproconazol + picoxistrobina + oxicloreto de cobre", "classe": None},
             ],
         },
         "biologicos": {
