@@ -102,7 +102,7 @@
             {% for safra_key, safra_label in nav_safras %}
             <a class="nav-link text-white" href="{{ url_for('recommendations', safra=safra_key) }}">Manejo {{ safra_label }}</a>
             {% endfor %}
-            <a class="nav-link text-white" href="https://new.bioscout.com.au/#Spore%20Graphs" target="_blank" rel="noopener">BioScout</a>
+            <a class="nav-link text-white" href="https://new.bioscout.com.au/" target="_blank" rel="noopener">BioScout</a>
             <a class="nav-link text-white" href="{{ url_for('change_password') }}" title="Trocar senha">Trocar senha</a>
             <a class="nav-link text-white" href="{{ url_for('meu_whatsapp') }}" title="Meu WhatsApp">Meu WhatsApp</a>
             <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>

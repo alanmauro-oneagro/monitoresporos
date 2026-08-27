@@ -38,6 +38,18 @@ import inmet_stations
 import virtual_farms
 from data_reader import read_sites, get_dashboard_data
 
+# Fuso horario do site: Cuiaba-MT (America/Cuiaba, UTC-4 o ano todo -- Brasil
+# aboliu o horario de verao em 2019). Hospedado (Railway/Linux), o container
+# roda em UTC por padrao, entao todo datetime.now() (rodape de relatorio,
+# horario do envio agendado, timestamps do log de WhatsApp) apareceria 4h
+# adiantado sem isso. os.environ + time.tzset() muda o fuso do PROCESSO
+# inteiro (biblioteca C por baixo do datetime.now()) -- tzset() so existe em
+# Linux/Mac, no Windows (dev local) fica sem efeito e usa o fuso do proprio
+# Windows, que ja deve estar certo pra quem roda localmente no Brasil.
+os.environ["TZ"] = "America/Cuiaba"
+if hasattr(time, "tzset"):
+    time.tzset()
+
 WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda ... 6=Domingo (Python date.weekday())
 WHATSAPP_SEND_HOUR = 7  # hora do dia (0-23) em que o envio automatico roda
 WEATHER_CACHE_TTL_SECONDS = 30 * 60  # nao busca de novo na Open-Meteo antes disso, por fazenda

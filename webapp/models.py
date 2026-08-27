@@ -121,7 +121,7 @@ def init_db():
             telefone TEXT,
             ok INTEGER NOT NULL,
             mensagem TEXT,
-            criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+            criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         );
 
         CREATE TABLE IF NOT EXISTS fungicida_overrides (
@@ -782,7 +782,7 @@ def set_farm_cultura(site_name, safra, cultura):
     if cultura:
         conn.execute(
             """
-            INSERT INTO farm_culturas (site_name, safra, cultura, updated_at) VALUES (?, ?, ?, datetime('now'))
+            INSERT INTO farm_culturas (site_name, safra, cultura, updated_at) VALUES (?, ?, ?, datetime('now', 'localtime'))
             ON CONFLICT(site_name, safra) DO UPDATE SET cultura = excluded.cultura, updated_at = excluded.updated_at
             """,
             (site_name, safra, cultura),
@@ -888,7 +888,7 @@ def save_recommendation_note(site_name, doenca, nota):
     conn.execute(
         """
         INSERT INTO recommendation_notes (site_name, doenca, nota, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, datetime('now', 'localtime'))
         ON CONFLICT(site_name, doenca) DO UPDATE SET nota = excluded.nota, updated_at = excluded.updated_at
         """,
         (site_name, doenca, nota),
