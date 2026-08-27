@@ -7,6 +7,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
+import fungicida_data
 import models
 
 MOMENTO_LABELS = {"ts": "TS", "sulco": "Sulco", "folha": "Folha"}
@@ -115,6 +116,68 @@ def _manejo_anotacoes_rows():
     return rows
 
 
+def _add_whatsapp_sheet(wb):
+    """Uma aba so' com os dois blocos da tela "Relatorio WhatsApp":
+    historico de envios (data/hora, fazenda, destinatario, status) e,
+    logo abaixo, quem esta cadastrado pra receber cada fazenda hoje."""
+    ws = wb.create_sheet(title="WhatsApp")
+
+    ws.append(["Historico de Envios"])
+    ws.cell(row=ws.max_row, column=1).font = Font(bold=True, size=12)
+    ws.append(["Data/Hora", "Fazenda", "Destinatario", "Telefone", "Status", "Detalhe"])
+    for cell in ws[ws.max_row]:
+        cell.font = Font(bold=True)
+    for log in models.get_whatsapp_envio_log(limit=1_000_000):
+        ws.append([
+            models.fmt_data_br(log["criado_em"]) or "",
+            log["site_name"], log["destinatario"] or "", log["telefone"] or "",
+            "Enviado" if log["ok"] else "Falha", log["mensagem"] or "",
+        ])
+
+    ws.append([])
+    ws.append(["Cadastrados para Receber"])
+    ws.cell(row=ws.max_row, column=1).font = Font(bold=True, size=12)
+    ws.append(["Fazenda", "Destinatario", "Telefone"])
+    for cell in ws[ws.max_row]:
+        cell.font = Font(bold=True)
+    site_names = sorted(s["site_name"] for s in models.get_all_sites())
+    for site_name in site_names:
+        for r in models.get_site_whatsapp_recipients(site_name):
+            ws.append([site_name, r["username"], r["telefone"]])
+
+    for col in ws.columns:
+        length = max((len(str(c.value)) for c in col if c.value is not None), default=8)
+        ws.column_dimensions[col[0].column_letter].width = min(max(length + 2, 10), 50)
+
+
+def _add_fungicidas_sheet(wb, culturas_ativas):
+    """Uma aba com o mesmo dado da tela "Relatorio Fungicidas": um quimico
+    por linha (doenca + ingrediente) e uma coluna por cultura ativa com
+    "Sim"/"Nao" conforme o checkbox "Registrado para"."""
+    overrides = models.get_all_fungicida_overrides()
+    registro_bloqueado = models.get_all_fungicida_registro_bloqueado()
+    translations = models.get_all_disease_translations()
+
+    rows = []
+    for doenca_en, info in sorted(translations.items(), key=lambda kv: kv[1]["nome_pt"]):
+        rec = fungicida_data.get_recomendacao(doenca_en)
+        if not rec:
+            continue
+        grupo = rec["quimicos"]
+        n = len(grupo["itens"])
+        ordem = models.get_fungicida_ordem(doenca_en, "quimico", n)
+        for idx in ordem:
+            item = grupo["itens"][idx]
+            override = overrides.get((doenca_en, "quimico", idx))
+            ingrediente = override["ingrediente"] if override else item["ingrediente"]
+            culturas_bloqueadas = registro_bloqueado.get((doenca_en, "quimico", idx), set())
+            rows.append([info["nome_pt"], ingrediente] + [
+                "Nao" if c in culturas_bloqueadas else "Sim" for c in culturas_ativas
+            ])
+
+    _write_sheet(wb, "Fungicidas", ["Doenca", "Quimico"] + culturas_ativas, rows)
+
+
 def build_workbook():
     wb = Workbook()
     wb.remove(wb.active)
@@ -126,6 +189,8 @@ def build_workbook():
     _write_sheet(wb, "Manejo - Cultura", ["Fazenda", "Safra", "Cultura", "Atualizado em"], _manejo_cultura_rows())
     _write_sheet(wb, "Manejo - Estoque rapido", ["Fazenda", "Safra", "Tipo", "Data/Anotacao", "Nome do produto"], _manejo_estoque_rows())
     _write_sheet(wb, "Manejo - Anotacoes", ["Fazenda", "Doenca", "Nota"], _manejo_anotacoes_rows())
+    _add_whatsapp_sheet(wb)
+    _add_fungicidas_sheet(wb, models.get_culturas_ativas())
 
     buffer = io.BytesIO()
     wb.save(buffer)

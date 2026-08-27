@@ -706,7 +706,7 @@ def admin_required(view):
     return wrapped
 
 
-ALAN_MAURO_USERNAME = "Alan Mauro"  # unico usuario com acesso a "Editar cadastro", exportacao Excel e Configuracoes > WhatsApp
+ALAN_MAURO_USERNAME = "Alan Mauro"  # unico usuario com acesso a "Editar cadastro", exportacao Excel, Configuracoes > WhatsApp e os Relatorios (WhatsApp/Fungicidas)
 
 
 def alan_mauro_required(view):
@@ -1938,7 +1938,7 @@ def admin_whatsapp_reset():
 
 
 @app.route("/admin/relatorios/whatsapp")
-@admin_required
+@alan_mauro_required
 def admin_relatorio_whatsapp():
     """Historico de envios de WhatsApp (data/hora, fazenda, destinatario,
     sucesso ou falha) -- um log por numero, alimentado por
@@ -1959,7 +1959,7 @@ def admin_relatorio_whatsapp():
 
 
 @app.route("/admin/relatorios/fungicidas")
-@admin_required
+@alan_mauro_required
 def admin_relatorio_fungicidas():
     """Visao consolidada de todo quimico da biblioteca de Fungicidas e
     quais culturas ativas estao marcadas como "Registrado para" --
