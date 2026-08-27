@@ -1663,8 +1663,10 @@ def mover_fungicida_item():
 def admin_users():
     users = models.get_all_users()
     report_counts = {u["id"]: len(models.get_user_report_site_ids(u["id"])) for u in users}
+    permission_counts = {u["id"]: len(models.get_user_permitted_site_ids(u["id"])) for u in users}
     return render_template(
-        "admin_users.html", users=users, default_password=models.DEFAULT_PASSWORD, report_counts=report_counts
+        "admin_users.html", users=users, default_password=models.DEFAULT_PASSWORD,
+        report_counts=report_counts, permission_counts=permission_counts,
     )
 
 

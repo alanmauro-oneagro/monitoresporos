@@ -19,7 +19,9 @@
                 {% if u.is_admin %}
                     <span class="text-muted">Todas (admin)</span>
                 {% else %}
-                    <a href="{{ url_for('admin_user_permissions', user_id=u.id) }}">Editar fazendas</a>
+                    <a href="{{ url_for('admin_user_permissions', user_id=u.id) }}">
+                        Editar fazendas{% if permission_counts.get(u.id) %} ({{ permission_counts[u.id] }}){% endif %}
+                    </a>
                 {% endif %}
             </td>
             <td>

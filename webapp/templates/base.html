@@ -110,15 +110,15 @@
             <div class="position-relative">
                 <button type="button" class="btn btn-link nav-link text-white p-0" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮</button>
                 <div id="settingsMenu" class="d-none position-absolute end-0 bg-white shadow rounded mt-2 py-1" style="min-width: 160px; z-index: 1050;">
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_users') }}">Usuarios</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_doencas') }}">Doencas</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_users') }}">Usuários</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_doencas') }}">Doenças</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_fungicidas') }}">Fungicidas</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_culturas') }}">Nome Culturas</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_culturas') }}">Culturas</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('mapa_interpolado') }}">Mapa Interpolado</a>
                     {% if current_user.username == 'Alan Mauro' %}
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_whatsapp') }}">WhatsApp</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_relatorio_whatsapp') }}">Relatorio WhatsApp</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_relatorio_fungicidas') }}">Relatorio Fungicidas</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_relatorio_whatsapp') }}">Rel. WhatsApp</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_relatorio_fungicidas') }}">Rel. Fungicidas</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_exportar') }}">Exportar</a>
                     {% endif %}
                 </div>
