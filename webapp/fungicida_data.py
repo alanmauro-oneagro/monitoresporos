@@ -200,24 +200,16 @@ RECOMENDACOES = {
     "Moniliophthora spp. BETA": {
         "quimicos": {
             "fonte": (
-                "Agrolink/CEPLAC -- vassoura-de-bruxa do cacaueiro (Moniliophthora perniciosa), "
-                "primeiros 7 itens. Quando esse alerta aparece em fazenda de soja, a causa real "
-                "provavelmente NAO e' Moniliophthora (soja nao e' hospedeira) e sim o complexo "
-                "Diaporthe/Phomopsis + Colletotrichum truncatum + Cercospora kikuchii conhecido "
-                "como 'anomalia das vagens da soja' -- itens a partir do 8o vieram dessa pesquisa "
-                "(Agrolink, registros com esses patogenos no rotulo). Ver checkboxes 'Registrado "
-                "para' na aba admin: os 7 primeiros ficam desmarcados pra Soja/Algodao (registro "
-                "de cacau, nao confirmado nessas culturas) e os novos ficam marcados so' pra Soja."
+                "Agrolink -- quando esse alerta aparece em fazenda de soja, a causa real "
+                "provavelmente NAO e' Moniliophthora (vassoura-de-bruxa do cacaueiro -- soja "
+                "nao e' hospedeira) e sim o complexo Diaporthe/Phomopsis + Colletotrichum "
+                "truncatum + Cercospora kikuchii conhecido como 'anomalia das vagens da soja'. "
+                "Os quimicos abaixo tem registro confirmado pra esses patogenos em soja "
+                "(pesquisa Agrolink/Agrofit, 2026-08-26) -- ver checkbox 'Registrado para' na "
+                "aba admin, marcado so' pra Soja (nao pesquisado pra Algodao)."
             ),
-            "fonte_url": "https://www.agrolink.com.br/problemas/vassoura-de-bruxa_3046.html",
+            "fonte_url": "https://www.agrolink.com.br/problemas/antracnose_1852.html",
             "itens": [
-                {"ingrediente": "piraclostrobina + epoxiconazol", "classe": None},
-                {"ingrediente": "oxicloreto de cobre", "classe": None},
-                {"ingrediente": "hidroxido de cobre", "classe": None},
-                {"ingrediente": "oxido cuproso", "classe": None},
-                {"ingrediente": "tebuconazol", "classe": None},
-                {"ingrediente": "acibenzolar-S-metilico", "classe": None},
-                {"ingrediente": "azoxistrobina + tebuconazol", "classe": None},
                 {"ingrediente": "piraclostrobina + tiofanato-metilico", "classe": None},
                 {"ingrediente": "tiofanato-metilico + fluazinam", "classe": None},
                 {"ingrediente": "trifloxistrobina + protioconazol", "classe": None},
