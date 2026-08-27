@@ -3,6 +3,17 @@
 {% block content %}
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
 
+<form method="post" action="{{ url_for('aplicar_pesquisa_registro') }}" class="mb-3">
+    <button type="submit" class="btn btn-sm btn-outline-primary">
+        🔎 Aplicar pesquisa de registro Agrofit/MAPA (26/08/2026)
+    </button>
+    <span class="text-muted small ms-2">
+        Desmarca os quimicos sem registro confirmado por cultura, pesquisados no Agrofit/Agrolink.
+        Pode clicar mais de uma vez sem problema -- so precisa fazer isso uma vez em cada ambiente
+        (local e o site publicado usam bancos de dados separados).
+    </span>
+</form>
+
 <form method="post" data-autosave>
 {% for d in doencas_data %}
 <div class="card shadow-sm mb-3">

@@ -1560,6 +1560,63 @@ def admin_fungicidas():
     )
 
 
+# Resultado da pesquisa de registro Agrofit/MAPA feita em 2026-08-26 (ver
+# conversa) -- por doenca+cultura, quais quimicos da biblioteca NAO tem
+# registro confirmado (bloqueados). Isso e' dado de runtime (tabela
+# fungicida_registro_bloqueado), nao versionado no banco -- precisa ser
+# aplicado uma vez em cada banco (local e o hospedado no Railway sao
+# arquivos separados). O botao "Aplicar pesquisa de registro" na aba
+# Fungicidas chama isso; pode ser clicado mais de uma vez sem problema
+# (cada chamada so substitui o conjunto bloqueado daquele item, resultado
+# final e' sempre o mesmo).
+_PESQUISA_REGISTRO_2026_08_26 = {
+    ("Target Spot", "quimico", 0): ["Algodao"],
+    ("Target Spot", "quimico", 3): ["Algodao"],
+    ("Target Spot", "quimico", 5): ["Algodao"],
+    ("Target Spot", "quimico", 6): ["Soja", "Algodao"],
+    ("Target Spot", "quimico", 7): ["Algodao"],
+    ("Target Spot", "quimico", 8): ["Soja", "Algodao"],
+    ("Target Spot", "quimico", 9): ["Algodao"],
+    ("Powdery Mildew", "quimico", 5): ["Soja"],
+    ("Powdery Mildew", "quimico", 6): ["Soja"],
+    ("Septoria", "quimico", 1): ["Algodao"],
+    ("Septoria", "quimico", 3): ["Milho", "Algodao"],
+    ("Septoria", "quimico", 4): ["Algodao"],
+    ("Septoria", "quimico", 7): ["Milho", "Algodao"],
+    ("General Alternaria", "quimico", 0): ["Soja", "Algodao"],
+    ("General Alternaria", "quimico", 1): ["Soja", "Algodao"],
+    ("General Alternaria", "quimico", 2): ["Soja", "Algodao"],
+    ("General Alternaria", "quimico", 3): ["Soja", "Algodao"],
+    ("General Alternaria", "quimico", 4): ["Soja", "Algodao"],
+    ("Anthracnose", "quimico", 1): ["Algodao", "Milho", "Feijao"],
+    ("Anthracnose", "quimico", 2): ["Soja", "Algodao", "Milho", "Feijao"],  # carbendazim -- banido pela Anvisa
+    ("Anthracnose", "quimico", 3): ["Algodao", "Milho"],
+    ("Anthracnose", "quimico", 4): ["Algodao", "Milho"],
+    ("Anthracnose", "quimico", 5): ["Algodao", "Milho", "Feijao"],
+    ("Anthracnose", "quimico", 6): ["Algodao", "Milho", "Feijao"],
+    ("Anthracnose", "quimico", 7): ["Algodao", "Milho"],
+    ("Anthracnose", "quimico", 8): ["Algodao", "Milho"],
+    ("Anthracnose", "quimico", 9): ["Soja", "Algodao", "Milho", "Feijao"],  # produto nao encontrado
+    ("Dry rot", "quimico", 1): ["Algodao"],
+    ("Dry rot", "quimico", 4): ["Algodao", "Milho"],
+    ("Dry rot", "quimico", 5): ["Milho"],
+    ("Dry rot", "quimico", 6): ["Soja", "Algodao", "Milho"],
+    ("Dry rot", "quimico", 7): ["Algodao", "Milho"],
+    ("Dry rot", "quimico", 9): ["Algodao", "Milho"],
+}
+
+
+@app.route("/admin/fungicidas/aplicar-pesquisa-registro", methods=["POST"])
+@admin_required
+def aplicar_pesquisa_registro():
+    for (doenca, tipo, idx), culturas in _PESQUISA_REGISTRO_2026_08_26.items():
+        models.set_fungicida_registro_bloqueado(doenca, tipo, idx, culturas)
+    return _save_response(
+        f"Pesquisa de registro aplicada -- {len(_PESQUISA_REGISTRO_2026_08_26)} itens revisados.",
+        "admin_fungicidas",
+    )
+
+
 @app.route("/admin/fungicidas/mover", methods=["POST"])
 @admin_required
 def mover_fungicida_item():
