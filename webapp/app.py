@@ -178,6 +178,14 @@ app = Flask(__name__)
 app.secret_key = _load_or_create_secret_key()
 app.jinja_env.filters["data_br"] = models.fmt_data_br
 
+# A aba Fungicidas (autosave) manda o form inteiro (todas as doencas) a
+# cada edicao -- com os checkboxes de "Registrado para" (uma por
+# cultura x item quimico) e o minimo de 4 linhas em Biologicos, passa
+# facil de 1000 campos, o limite padrao do Werkzeug 3.1+ (RequestEntityTooLarge/413).
+# Flask 3.0 nao expoe isso via app.config ainda, entao ajusta direto na
+# classe de request.
+app.request_class.max_form_parts = 20_000
+
 
 @app.after_request
 def _no_cache(response):
@@ -342,12 +350,18 @@ def _apply_fungicida_overrides(doenca, tipo, itens, overrides, cultura=None, blo
     aquela cultura (models.get_all_fungicida_registro_bloqueado) e' tratado
     como removido nessa fazenda -- sem marcacao nenhuma, continua
     aparecendo normalmente (nunca esconde por omissao, so' quando alguem
-    desmarca explicitamente)."""
-    if not itens:
-        return itens
+    desmarca explicitamente). Biologicos consideram tambem as linhas extras
+    em branco da aba Fungicidas (minimo de 4 -- ver `admin_fungicidas`),
+    entao um produto cadastrado numa dessas linhas extras aparece aqui
+    normalmente; linhas deixadas vazias sao ignoradas."""
     bloqueios = bloqueios or {}
+    n_real = len(itens)
+    n = max(n_real, 4) if tipo == "biologico" else n_real
+    if n == 0:
+        return []
     content = []
-    for idx, item in enumerate(itens):
+    for idx in range(n):
+        item = itens[idx] if idx < n_real else {"ingrediente": "", "classe": None}
         override = overrides.get((doenca, tipo, idx))
         culturas_bloqueadas = bloqueios.get((doenca, tipo, idx))
         if override and override["removido"]:
@@ -356,9 +370,11 @@ def _apply_fungicida_overrides(doenca, tipo, itens, overrides, cultura=None, blo
             content.append(None)  # sem registro pra essa cultura -- nao recomenda
         elif override:
             content.append({"ingrediente": override["ingrediente"], "classe": override["classe"]})
+        elif not item["ingrediente"]:
+            content.append(None)  # linha extra ainda vazia -- nao aparece na recomendacao
         else:
             content.append(item)
-    order = models.get_fungicida_ordem(doenca, tipo, len(itens))
+    order = models.get_fungicida_ordem(doenca, tipo, n)
     return [content[i] for i in order if content[i] is not None]
 
 
@@ -1474,14 +1490,16 @@ def admin_fungicidas():
             ingrediente = request.form.get(f"ingrediente__{row_id}", "").strip()
             classe = request.form.get(f"classe__{row_id}", "")
             rec = fungicida_data.get_recomendacao(doenca)
-            default_item = rec[tipo + "s"]["itens"][idx] if rec else None
+            itens_padrao = rec[tipo + "s"]["itens"] if rec else []
+            default_item = itens_padrao[idx] if idx < len(itens_padrao) else None
             is_default = (
                 default_item is not None
                 and ingrediente == default_item["ingrediente"] and classe == (default_item["classe"] or "")
             )
-            if is_default:
-                # Sem edicao real -- nao grava override, assim a linha continua
-                # acompanhando fungicida_data.py se ele for atualizado depois.
+            if is_default or not ingrediente:
+                # Sem edicao real (ou linha extra de biologico deixada em
+                # branco) -- nao grava override/lixo vazio, assim a linha
+                # continua acompanhando fungicida_data.py se ele mudar depois.
                 models.delete_fungicida_override(doenca, tipo, idx)
             else:
                 models.save_fungicida_override(doenca, tipo, idx, ingrediente, classe, False)
@@ -1506,11 +1524,15 @@ def admin_fungicidas():
             continue
         grupos = []
         for tipo, grupo in (("quimico", rec["quimicos"]), ("biologico", rec["biologicos"])):
-            n = len(grupo["itens"])
+            n_real = len(grupo["itens"])
+            # Biologicos sempre mostra pelo menos 4 linhas (mesmo vazias) --
+            # incentiva a cadastrar um produto biologico assim que for
+            # encontrado, em vez de exigir pesquisa previa pra "abrir espaco".
+            n = max(n_real, 4) if tipo == "biologico" else n_real
             ordem = models.get_fungicida_ordem(doenca_en, tipo, n)
             linhas = []
             for posicao, idx in enumerate(ordem):
-                item = grupo["itens"][idx]
+                item = grupo["itens"][idx] if idx < n_real else {"ingrediente": "", "classe": ""}
                 override = overrides.get((doenca_en, tipo, idx))
                 culturas_bloqueadas = registro_bloqueado.get((doenca_en, tipo, idx), set())
                 linhas.append({
@@ -1547,7 +1569,8 @@ def mover_fungicida_item():
     idx = request.form.get("idx")
     rec = fungicida_data.get_recomendacao(doenca) if doenca else None
     if rec and tipo in models.TIPOS_PRODUTO and direction in ("up", "down") and idx is not None:
-        n = len(rec[tipo + "s"]["itens"])
+        n_real = len(rec[tipo + "s"]["itens"])
+        n = max(n_real, 4) if tipo == "biologico" else n_real
         models.move_fungicida_item(doenca, tipo, int(idx), direction, n)
     return redirect(url_for("admin_fungicidas"))
 
