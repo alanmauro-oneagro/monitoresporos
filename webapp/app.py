@@ -470,53 +470,70 @@ def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=N
     return diseases
 
 
+_MOLHAMENTO_PADRAO_HORAS = 6  # usado quando a doenca nao tem um numero de horas proprio cadastrado
+
+
 def _calc_risco_germinacao(disease, weather):
     """Luz de risco de germinacao do esporo (verde/amarelo/vermelho) pra
-    aba Manejo -- compara o clima ATUAL da fazenda (Open-Meteo) com a
-    temperatura/UR cadastradas na aba Doencas pra doenca. E' um indicador
-    rapido, NAO um modelo epidemiologico validado (a rede so' tem
-    temperatura/umidade/chuva do momento, sem sensor de molhamento
-    foliar de verdade) -- nao substitui avaliacao agronomica. Retorna
-    None quando falta clima ou limite cadastrado (esconde a luz).
+    aba Manejo, WhatsApp e PDF -- calibrado com o horario OBSERVADO das
+    ultimas 24h (Open-Meteo `past_days=1`, ver `weather_forecast.py`), nao
+    so' a leitura do instante: conta quantas dessas 24h tiveram
+    temperatura E umidade/chuva favoraveis AO MESMO TEMPO pra germinacao
+    dessa doenca, e compara com o numero de horas de molhamento foliar
+    minimo cadastrado na aba Doencas (ou 6h, se a doenca nao tiver um
+    numero proprio). E' um indicador rapido baseado no clima de superficie
+    (a rede nao tem sensor de molhamento foliar de verdade) -- nao
+    substitui avaliacao agronomica. Retorna None quando falta clima ou
+    limite cadastrado (esconde a luz).
 
-    Regra: cada um dos dois sinais (temperatura dentro da faixa, umidade
-    favoravel) vale 1 ponto se bate em cheio, 0.5 se esta perto/parcial.
-    2 pontos = vermelho, 1-1.5 = amarelo, <1 = verde. Pra fungos onde
-    agua livre atrapalha (oidio), chuva reduz o sinal de umidade em vez
-    de aumentar."""
+    Regra: horas favoraveis >= limiar de molhamento -> vermelho (alto,
+    ja' acumulou o tempo minimo pro fungo germinar); >= metade do limiar
+    -> amarelo (medio, caminho pra' completar); menos que isso -> verde
+    (baixo). Pra fungos onde agua livre atrapalha em vez de ajudar (ex.
+    oidio), uma hora com chuva CONTA CONTRA a hora favoravel, nao a favor."""
     temp_min, temp_max, ur_min = disease.get("germ_temp_min"), disease.get("germ_temp_max"), disease.get("germ_ur_min")
     if temp_min is None or temp_max is None or not weather:
         return None
+    agua_livre_inibe = disease.get("germ_agua_livre_inibe")
+
+    horas = weather.get("ultimas_24h")
+    if horas:
+        favoraveis = 0
+        for h in horas:
+            temp, umidade, chuva = h.get("temp"), h.get("umidade"), h.get("chuva") or 0
+            if temp is None:
+                continue
+            temp_ok = temp_min <= temp <= temp_max
+            umidade_ok = False
+            if ur_min is not None and umidade is not None:
+                if agua_livre_inibe:
+                    umidade_ok = umidade >= ur_min and chuva <= 0.2
+                else:
+                    umidade_ok = umidade >= ur_min or chuva > 0.2
+            if temp_ok and umidade_ok:
+                favoraveis += 1
+        limiar = disease.get("germ_molhamento_horas") or _MOLHAMENTO_PADRAO_HORAS
+        if favoraveis >= limiar:
+            return "vermelho"
+        if favoraveis >= limiar / 2:
+            return "amarelo"
+        return "verde"
+
+    # sem horario (weather antigo em cache, ou falha parcial da API) --
+    # cai pra' comparacao simples com a leitura do instante.
     temp = weather.get("temperatura_atual")
     if temp is None:
         return None
     umidade = weather.get("umidade_atual")
     chuva = weather.get("chuva_atual_mm") or 0
-
-    if temp_min <= temp <= temp_max:
-        pontos_temp = 1
-    elif (temp_min - 3) <= temp <= (temp_max + 3):
-        pontos_temp = 0.5
-    else:
-        pontos_temp = 0
-
-    pontos_umidade = 0
+    temp_ok = temp_min <= temp <= temp_max
+    umidade_ok = False
     if ur_min is not None and umidade is not None:
-        if disease.get("germ_agua_livre_inibe"):
-            if umidade >= ur_min and chuva <= 0.2:
-                pontos_umidade = 1
-            elif umidade >= ur_min - 10:
-                pontos_umidade = 0.5
+        if agua_livre_inibe:
+            umidade_ok = umidade >= ur_min and chuva <= 0.2
         else:
-            if umidade >= ur_min or chuva > 0.2:
-                pontos_umidade = 1
-            elif umidade >= ur_min - 10:
-                pontos_umidade = 0.5
-
-    total = pontos_temp + pontos_umidade
-    if total >= 2:
-        return "vermelho"
-    if total >= 1:
+            umidade_ok = umidade >= ur_min or chuva > 0.2
+    if temp_ok and umidade_ok:
         return "amarelo"
     return "verde"
 
