@@ -188,7 +188,8 @@ def build_recommendation_pdf(
     story = []
 
     story.append(Paragraph(f"{nome_fazenda} - OneAgro", _ESTILO_TITULO))
-    story.append(Paragraph(f"Manejo {safra_label}", _ESTILO_SUBTITULO))
+    subtitulo = f"Manejo {safra_label} - {cultura.upper()}" if cultura else f"Manejo {safra_label}"
+    story.append(Paragraph(subtitulo, _ESTILO_SUBTITULO))
 
     if weather:
         partes = []
@@ -207,9 +208,6 @@ def build_recommendation_pdf(
             )
             story.append(Paragraph(f"<b>Previsao:</b> {prev}", _ESTILO_NORMAL))
         story.append(Spacer(1, 4))
-
-    if cultura:
-        story.append(Paragraph(f"<b>Cultura:</b> {cultura.upper()}", _ESTILO_NORMAL))
 
     if diseases:
         n_perigo = sum(1 for d in diseases if d["status"] == "Perigo")
