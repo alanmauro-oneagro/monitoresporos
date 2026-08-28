@@ -76,22 +76,21 @@
     <div class="card-body p-4">
         <h5 class="mb-3">Novo usuario</h5>
         <form method="post" action="{{ url_for('admin_create_user') }}">
-            <div class="mb-3">
-                <label class="form-label">Usuario</label>
-                <input type="text" name="username" class="form-control" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" name="email" class="form-control" required>
-            </div>
             <div class="mb-3 row g-2">
-                <div class="col-3 col-sm-2">
-                    <label class="form-label text-nowrap">DDI</label>
-                    <input type="text" name="codigo_pais" class="form-control bg-light" value="55" readonly>
+                <div class="col-md-4">
+                    <label class="form-label">Usuario</label>
+                    <input type="text" name="username" class="form-control" required>
                 </div>
-                <div class="col-9 col-sm-10">
+                <div class="col-md-4">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="email" class="form-control" required>
+                </div>
+                <div class="col-md-4">
                     <label class="form-label">Telefone (DDD + numero, sem espacos)</label>
-                    <input type="text" name="numero_telefone" class="form-control" placeholder="11999999999" required>
+                    <div class="d-flex gap-2">
+                        <input type="text" name="codigo_pais" class="form-control bg-light" style="max-width: 4.5rem;" value="55" readonly>
+                        <input type="text" name="numero_telefone" class="form-control" placeholder="11999999999" required>
+                    </div>
                 </div>
             </div>
             <div class="form-check mb-3">
