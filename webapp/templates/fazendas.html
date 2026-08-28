@@ -135,12 +135,24 @@ html { font-size: 14px; }
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_whatsapp_days') }}" data-autosave>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                    <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp nestes dias (as {{ '%02d'|format(7) }}h):</label>
+                    <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- Texto -- nestes dias (as {{ '%02d'|format(7) }}h):</label>
                     {% for idx, label in weekday_labels %}
                     <div class="form-check form-check-inline">
                         <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
                             id="wd_{{ farm_idx }}_{{ idx }}" {% if idx in site_group.selected_days %}checked{% endif %}>
                         <label class="form-check-label small" for="wd_{{ farm_idx }}_{{ idx }}">{{ label }}</label>
+                    </div>
+                    {% endfor %}
+                    <span class="autosave-status small ms-2"></span>
+                </form>
+                <form method="post" action="{{ url_for('save_whatsapp_days_pdf') }}" data-autosave class="mt-2">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- PDF -- nestes dias (as {{ '%02d'|format(7) }}h):</label>
+                    {% for idx, label in weekday_labels %}
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
+                            id="wdpdf_{{ farm_idx }}_{{ idx }}" {% if idx in site_group.selected_days_pdf %}checked{% endif %}>
+                        <label class="form-check-label small" for="wdpdf_{{ farm_idx }}_{{ idx }}">{{ label }}</label>
                     </div>
                     {% endfor %}
                     <span class="autosave-status small ms-2"></span>

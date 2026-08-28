@@ -120,6 +120,12 @@ def init_db():
             PRIMARY KEY (site_name, weekday)
         );
 
+        CREATE TABLE IF NOT EXISTS whatsapp_schedule_pdf (
+            site_name TEXT NOT NULL,
+            weekday INTEGER NOT NULL,
+            PRIMARY KEY (site_name, weekday)
+        );
+
         CREATE TABLE IF NOT EXISTS whatsapp_envio_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             site_name TEXT NOT NULL,
@@ -376,13 +382,45 @@ def get_all_whatsapp_days():
 
 
 def set_whatsapp_days(site_name, weekdays):
-    """Substitui os dias agendados para a fazenda pelo conjunto informado
-    (0=Segunda ... 6=Domingo)."""
+    """Substitui os dias agendados (envio do TEXTO) para a fazenda pelo
+    conjunto informado (0=Segunda ... 6=Domingo)."""
     conn = get_db()
     conn.execute("DELETE FROM whatsapp_schedule WHERE site_name = ?", (site_name,))
     for wd in weekdays:
         conn.execute(
             "INSERT INTO whatsapp_schedule (site_name, weekday) VALUES (?, ?)", (site_name, wd)
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_whatsapp_days_pdf(site_name):
+    conn = get_db()
+    rows = conn.execute("SELECT weekday FROM whatsapp_schedule_pdf WHERE site_name = ?", (site_name,)).fetchall()
+    conn.close()
+    return {r["weekday"] for r in rows}
+
+
+def get_all_whatsapp_days_pdf():
+    conn = get_db()
+    rows = conn.execute("SELECT site_name, weekday FROM whatsapp_schedule_pdf").fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        result.setdefault(r["site_name"], set()).add(r["weekday"])
+    return result
+
+
+def set_whatsapp_days_pdf(site_name, weekdays):
+    """Substitui os dias agendados (envio do PDF) para a fazenda pelo
+    conjunto informado (0=Segunda ... 6=Domingo) -- independente dos dias
+    do texto (`set_whatsapp_days`), pra poder mandar cada formato em dias
+    diferentes da semana."""
+    conn = get_db()
+    conn.execute("DELETE FROM whatsapp_schedule_pdf WHERE site_name = ?", (site_name,))
+    for wd in weekdays:
+        conn.execute(
+            "INSERT INTO whatsapp_schedule_pdf (site_name, weekday) VALUES (?, ?)", (site_name, wd)
         )
     conn.commit()
     conn.close()
@@ -1061,7 +1099,7 @@ def update_virtual_farm(site_name, nome, lat, lon, raio_km):
     )
     if novo_site_name != site_name:
         for tabela in (
-            "sites", "recommendation_notes", "whatsapp_schedule",
+            "sites", "recommendation_notes", "whatsapp_schedule", "whatsapp_schedule_pdf",
             "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
             "farm_culturas", "weather_station_overrides",
         ):
@@ -1082,6 +1120,7 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM sites WHERE site_name = ?", (site_name,))  # cascade cuida das permissoes
     conn.execute("DELETE FROM recommendation_notes WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM whatsapp_schedule WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM whatsapp_schedule_pdf WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_produtos WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_plantio WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_aplicacoes WHERE site_name = ?", (site_name,))

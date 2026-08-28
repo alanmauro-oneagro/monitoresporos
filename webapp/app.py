@@ -763,28 +763,34 @@ def _build_site_pdf(site, diseases, weather, produtos, cultura, safra):
     return nome_fazenda, filename, buffer.getvalue()
 
 
-def _send_site_whatsapp(site, safra=None):
-    """Monta o relatorio de uma fazenda numa mensagem de texto so (Dados
-    de Clima, Fungos em alta quantidade, Recomendacoes das Instituicoes
-    de Pesquisa, Produtos Fazenda e Anotacoes -- ver
-    `_format_whatsapp_message`), manda pra TODOS os numeros cadastrados
-    que devem recebe-la (uma fazenda pode ter varios --
-    `_site_whatsapp_destinations`), pelo WhatsApp do administrador
-    (whatsapp-bridge), e manda tambem o PDF (mesmo conteudo + grafico de
-    concentracao) como documento anexado logo em seguida -- essa e' a
-    UNICA rotina de envio de WhatsApp do sistema, entao tanto o botao
-    manual "Enviar por WhatsApp" quanto o envio agendado semanal ja
-    passam a incluir o PDF automaticamente, sem precisar de nenhum toggle
-    separado. Manda mesmo quando a fazenda nao tem nenhuma doenca
-    em Atencao/Perigo no momento -- nesse caso a mensagem e' so o aviso de
-    que esta tudo tranquilo (ver `_format_whatsapp_message`). Retorna (ok,
-    mensagem-resumo); ok=True se pelo menos 1 numero recebeu a mensagem.
+def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
+    """Monta o relatorio de uma fazenda (Dados de Clima, Fungos em alta
+    quantidade, Recomendacoes das Instituicoes de Pesquisa, Produtos
+    Fazenda e Anotacoes -- ver `_format_whatsapp_message`) e manda pra
+    TODOS os numeros cadastrados que devem recebe-la (uma fazenda pode
+    ter varios -- `_site_whatsapp_destinations`), pelo WhatsApp do
+    administrador (whatsapp-bridge). `enviar_texto`/`enviar_pdf`
+    controlam quais dos dois formatos mandar -- essa e' a UNICA rotina de
+    envio de WhatsApp do sistema: o botao manual "Enviar por WhatsApp"
+    chama com os dois True (manda ambos na hora); o envio agendado
+    semanal (`_run_scheduled_whatsapp_sends`) decide cada flag
+    separadamente, com base em qual agenda (texto/PDF, cada uma com seus
+    proprios dias da semana -- `models.get_all_whatsapp_days`/
+    `get_all_whatsapp_days_pdf`) bate com o dia de hoje pra essa fazenda.
+    Manda mesmo quando a fazenda nao tem nenhuma doenca em Atencao/Perigo
+    no momento -- nesse caso a mensagem e' so o aviso de que esta tudo
+    tranquilo (ver `_format_whatsapp_message`). Retorna (ok,
+    mensagem-resumo); ok=True se pelo menos 1 numero recebeu TODOS os
+    formatos pedidos (uma falha so' no PDF, com o texto ok, ja conta como
+    falha parcial pra esse numero no resumo, mesmo sem travar o texto).
     `safra` filtra pela cultura daquela safra (quando chamado a partir de
     uma das telas de Recomendacoes) e define de qual safra vem os
     "Produtos Fazenda"; sem `safra` (envio agendado), usa a uniao das
     culturas e dos produtos das duas safras. Bloqueia o envio (sem mandar
     nada) se a estacao dessa fazenda estiver sem leitura nova ha mais de
     `DADOS_BLOQUEIO_DIAS` -- dado velho demais pra virar recomendacao."""
+    if not enviar_texto and not enviar_pdf:
+        return False, "Nada a enviar (nem texto nem PDF agendado pra hoje)."
     translations = _load_translations()
     raw_cards = _resolve_site_cards(site, translations)
     dias_sem_leitura = _dias_sem_leitura(raw_cards)
@@ -809,10 +815,6 @@ def _send_site_whatsapp(site, safra=None):
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
     produtos = _farm_produtos_estoque(site, safra)
-    is_virtual = models.get_virtual_farm(site) is not None
-    text = _format_whatsapp_message(
-        site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura
-    )
 
     destinos = _site_whatsapp_destinations(site)
     if not destinos:
@@ -820,28 +822,43 @@ def _send_site_whatsapp(site, safra=None):
         models.log_whatsapp_envio(site, None, None, False, motivo)
         return False, motivo
 
+    text = None
+    if enviar_texto:
+        is_virtual = models.get_virtual_farm(site) is not None
+        text = _format_whatsapp_message(
+            site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura
+        )
+
     # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
-    # gerado uma vez so' e mandado como documento logo depois do texto,
-    # pra cada destinatario -- uma falha ao gerar o PDF NAO impede o envio
-    # do texto (so' fica registrada no log, o resumo/sucesso do envio
-    # continua baseado no texto, que e' o formato principal).
+    # gerado uma vez so' e mandado como documento pra cada destinatario --
+    # uma falha ao gerar o PDF NAO impede o envio do texto (so' fica
+    # registrada no log).
     pdf_nome_fazenda = pdf_filename = pdf_bytes = None
-    try:
-        pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(site, diseases, weather, produtos, cultura, safra)
-    except Exception as exc:
-        models.log_whatsapp_envio(site, None, None, False, f"Falha ao gerar PDF pra WhatsApp: {exc}")
+    if enviar_pdf:
+        try:
+            pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(site, diseases, weather, produtos, cultura, safra)
+        except Exception as exc:
+            models.log_whatsapp_envio(site, None, None, False, f"Falha ao gerar PDF pra WhatsApp: {exc}")
 
     sucesso, falha = [], []
     for phone, rotulo in destinos:
-        ok, message = whatsapp.send_whatsapp(phone, text)
-        models.log_whatsapp_envio(site, rotulo, phone, ok, message)
-        (sucesso if ok else falha).append(rotulo if ok else f"{rotulo} ({message})")
+        erros = []
+        ok_texto = True
+        if text is not None:
+            ok_texto, message = whatsapp.send_whatsapp(phone, text)
+            models.log_whatsapp_envio(site, rotulo, phone, ok_texto, message)
+            if not ok_texto:
+                erros.append(message)
+        ok_pdf = True
         if pdf_bytes:
             ok_pdf, message_pdf = whatsapp.send_whatsapp_document(
                 phone, pdf_bytes, pdf_filename,
                 caption=f"📄 Relatório em PDF - {pdf_nome_fazenda} (mesmo conteudo, com grafico de concentracao)",
             )
             models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"PDF: {message_pdf}")
+            if not ok_pdf:
+                erros.append(f"PDF: {message_pdf}")
+        (sucesso if ok_texto and ok_pdf else falha).append(rotulo if (ok_texto and ok_pdf) else f"{rotulo} ({'; '.join(erros)})")
     resumo = f"{len(sucesso)}/{len(destinos)} numero(s)"
     if falha:
         resumo += f" -- falha em: {', '.join(falha)}"
@@ -852,13 +869,22 @@ _scheduler_last_run_date = None
 
 
 def _run_scheduled_whatsapp_sends():
+    """Roda uma vez por dia (`_whatsapp_scheduler_loop`, as
+    `WHATSAPP_SEND_HOUR`h) -- texto e PDF tem cada um sua propria agenda
+    de dias da semana (aba Fazendas), entao uma fazenda pode, por
+    exemplo, so mandar o PDF as segundas e so o texto as sextas. So chama
+    `_send_site_whatsapp` (que de fato manda) quando pelo menos um dos
+    dois bate com o dia de hoje pra essa fazenda."""
     global _scheduler_last_run_date
     today = datetime.now().date()
-    schedule = models.get_all_whatsapp_days()
     weekday = today.weekday()
-    for site, days in schedule.items():
-        if weekday in days:
-            _send_site_whatsapp(site)
+    schedule_texto = models.get_all_whatsapp_days()
+    schedule_pdf = models.get_all_whatsapp_days_pdf()
+    for site in set(schedule_texto) | set(schedule_pdf):
+        enviar_texto = weekday in schedule_texto.get(site, set())
+        enviar_pdf = weekday in schedule_pdf.get(site, set())
+        if enviar_texto or enviar_pdf:
+            _send_site_whatsapp(site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
     _scheduler_last_run_date = today
 
 
@@ -1397,7 +1423,23 @@ def save_whatsapp_days():
         abort(403)
     days = {int(v) for v in request.form.getlist("weekday")}
     models.set_whatsapp_days(site_name, days)
-    return _save_response(f"Agenda de WhatsApp de '{site_name}' salva.", "fazendas")
+    return _save_response(f"Agenda de WhatsApp (texto) de '{site_name}' salva.", "fazendas")
+
+
+@app.route("/recommendations/whatsapp-days-pdf/save", methods=["POST"])
+@login_required
+def save_whatsapp_days_pdf():
+    if current_user.is_admin:
+        allowed_sites = None
+    else:
+        allowed_sites = set(models.get_user_permitted_site_names(int(current_user.id)))
+
+    site_name = request.form.get("site_name")
+    if allowed_sites is not None and site_name not in allowed_sites:
+        abort(403)
+    days = {int(v) for v in request.form.getlist("weekday")}
+    models.set_whatsapp_days_pdf(site_name, days)
+    return _save_response(f"Agenda de WhatsApp (PDF) de '{site_name}' salva.", "fazendas")
 
 
 @app.route("/fazendas")
@@ -1416,6 +1458,7 @@ def fazendas():
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
     espacamento_by_site = models.get_all_farm_espacamento_plantio()
     all_days = models.get_all_whatsapp_days()
+    all_days_pdf = models.get_all_whatsapp_days_pdf()
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
     grades = [
@@ -1462,6 +1505,7 @@ def fazendas():
         estacoes_proximas = inmet_stations.estacoes_mais_proximas(*latlon, n=2) if latlon else []
         sites_data.append({
             "site": site, "safras": safras_data, "selected_days": all_days.get(site, set()),
+            "selected_days_pdf": all_days_pdf.get(site, set()),
             "virtual": site in virtual_names,
             "estacoes_proximas": estacoes_proximas,
             "estacao_selecionada": overrides.get(site, ""),
