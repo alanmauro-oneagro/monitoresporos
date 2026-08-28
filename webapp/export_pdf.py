@@ -32,6 +32,12 @@ _ESTILO_NORMAL = ParagraphStyle("NormalPdf", parent=_styles["Normal"], fontSize=
 _ESTILO_DOENCA = ParagraphStyle(
     "Doenca", parent=_styles["Normal"], fontSize=10.5, leading=14, spaceBefore=6, spaceAfter=2,
 )
+_ESTILO_GERMINACAO = ParagraphStyle(
+    "Germinacao", parent=_styles["Normal"], fontSize=8.5, textColor=colors.grey, spaceAfter=2,
+)
+
+_RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
+_RISCO_CORES = {"vermelho": "#c0392b", "amarelo": "#b7860b", "verde": "#2e7d32"}
 
 
 def _fmt_ingrediente(item, classe_label):
@@ -157,6 +163,16 @@ def build_recommendation_pdf(
                 f'{d["rotulo"].upper()}</b> — Contagem: {d["concentracao"]} esporos/m³',
                 _ESTILO_DOENCA,
             ))
+            risco_label = _RISCO_LABELS.get(d.get("risco"))
+            if risco_label:
+                extra = f' — {d["cientifico"]} — germinação: {d["germinacao"]}' if d.get("germinacao") else ""
+                cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
+                story.append(Paragraph(
+                    f'<font color="{cor_risco}">●</font> Risco climático: <b>{risco_label}</b>{extra}',
+                    _ESTILO_GERMINACAO,
+                ))
+            elif d.get("cientifico"):
+                story.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
             biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
             quimicos_itens = d["quimicos"]["itens"][:3] if d.get("quimicos") else None
             if biologicos_itens or quimicos_itens:

@@ -520,6 +520,15 @@ def _calc_risco_germinacao(disease, weather):
     return "verde"
 
 
+_RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
+
+
+def _risco_label(risco):
+    """'vermelho'/'amarelo'/'verde' -> 'Alto'/'Médio'/'Baixo' (Manejo,
+    WhatsApp e PDF usam o mesmo rotulo pro Risco climático)."""
+    return _RISCO_LABELS.get(risco)
+
+
 def _fmt_ingrediente(item, classe_label):
     if item.get("classe"):
         return f"{item['ingrediente']} ({classe_label.get(item['classe'], item['classe'])})"
@@ -630,6 +639,12 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
             f"{emoji_status} {d['status'].upper()} — *{d['rotulo'].upper()}* - "
             f"Contagem: {d['concentracao']} esporos/m³"
         )
+        risco_label = _risco_label(d.get("risco"))
+        if risco_label:
+            germinacao_extra = f" ({d['cientifico']} — germinação: {d['germinacao']})" if d.get("germinacao") else ""
+            lines.append(f"🌡️ Risco climático: {risco_label}{germinacao_extra}")
+        elif d.get("cientifico"):
+            lines.append(f"🌡️ {d['cientifico']}")
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
         quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None
         if biologicos_itens:
@@ -729,6 +744,8 @@ def _send_site_whatsapp(site, safra=None):
 
     coords = _weather_coords_all()
     weather = _get_weather_for_site(site, coords)
+    for d in diseases:
+        d["risco"] = _calc_risco_germinacao(d, weather)
     produtos = _farm_produtos_estoque(site, safra)
     is_virtual = models.get_virtual_farm(site) is not None
     text = _format_whatsapp_message(
@@ -1281,6 +1298,8 @@ def recommendation_pdf(site_name):
     diseases = _build_site_diseases(site_name, cards_by_site.get(site_name, []), notes, cultura=cultura)
     coords = _weather_coords_all()
     weather = _get_weather_for_site(site_name, coords)
+    for d in diseases:
+        d["risco"] = _calc_risco_germinacao(d, weather)
     produtos = _farm_produtos_estoque(site_name, safra)
     plantio_linhas = models.get_all_farm_plantio().get(site_name, {}).get(safra, [])
     aplicacoes_linhas = models.get_all_farm_aplicacoes().get(site_name, {}).get(safra, [])
