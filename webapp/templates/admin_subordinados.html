@@ -22,6 +22,12 @@
 {% if not subordinados %}
 <div class="alert alert-info">Nenhum subordinado cadastrado ainda pra "{{ user.username }}".</div>
 {% else %}
+{% for sub in subordinados %}
+<form method="post" action="{{ url_for('admin_user_subordinados', user_id=user.id) }}" id="delete_form_{{ sub.id }}" class="d-none">
+    <input type="hidden" name="form_id" value="delete">
+    <input type="hidden" name="subordinado_id" value="{{ sub.id }}">
+</form>
+{% endfor %}
 <form method="post" data-autosave>
 {% for sub in subordinados %}
 <div class="card shadow-sm mb-3">
@@ -37,12 +43,10 @@
                 <input type="text" name="telefone" class="form-control form-control-sm" value="{{ sub.telefone }}" required>
             </div>
             <div class="col-md-2 d-flex align-items-end">
-                <form method="post" action="{{ url_for('admin_user_subordinados', user_id=user.id) }}" class="mb-0"
-                      onsubmit="return confirm('Excluir o subordinado {{ sub.nome }}?');">
-                    <input type="hidden" name="form_id" value="delete">
-                    <input type="hidden" name="subordinado_id" value="{{ sub.id }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
-                </form>
+                <button type="submit" form="delete_form_{{ sub.id }}" class="btn btn-sm btn-outline-danger"
+                        onclick="return confirm('Excluir o subordinado {{ sub.nome }}?');">
+                    Excluir
+                </button>
             </div>
         </div>
         <label class="form-label small text-muted mb-1 d-block">Recebe relatorio das fazendas:</label>
