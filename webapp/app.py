@@ -597,13 +597,13 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     de que o valor e' estimado, pro relatorio ficar igual ao de uma
     fazenda real. `cultura` (nome da cultura atual definida na aba Manejo,
     ou None/"" se ainda estiver "(vazio)") aparece em destaque (negrito,
-    maiuscula), entre o clima e o Resumo. A data/hora de atualizacao (e a
-    cidade da estacao de referencia, se houver) fica no rodape do
-    relatorio, nao mais logo abaixo do titulo. Ordem do cabecalho: titulo
-    -> Clima agora (uma linha em branco abaixo do nome da fazenda) ->
-    Cultura -> Resumo (sempre antes da primeira doenca). "Powered by
-    BioScout" e' sempre a ultima linha (assinatura do rodape, em todo
-    relatorio -- com ou sem doenca)."""
+    maiuscula), logo abaixo do titulo, antes do clima. A data/hora de
+    atualizacao (e a cidade da estacao de referencia, se houver) fica no
+    rodape do relatorio, nao mais logo abaixo do titulo. Ordem do
+    cabecalho: titulo -> Cultura -> Clima agora -> separador -> um bloco
+    por doenca (nome, concentracao/risco, germinacao, recomendacao,
+    sugestao). "Powered by BioScout" e' sempre a ultima linha (assinatura
+    do rodape, em todo relatorio -- com ou sem doenca)."""
     rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
     if weather and weather.get("cidade"):
         rodape_data += f" · {weather['cidade']}/{weather['uf']}"
@@ -619,15 +619,11 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
         partes.append("Powered by BioScout")
         return "\n".join(partes)
 
-    n_perigo = sum(1 for d in diseases if d["status"] == "Perigo")
-    n_atencao = sum(1 for d in diseases if d["status"] == "Atencao")
-    partes_resumo = []
-    if n_perigo:
-        partes_resumo.append(f"{n_perigo} em {_status_label('Perigo').lower()}")
-    if n_atencao:
-        partes_resumo.append(f"{n_atencao} em {_status_label('Atencao').lower()}")
-
     lines = [_whatsapp_titulo(site, is_virtual), ""]
+
+    if cultura:
+        lines.append(f"Cultura: *{cultura.upper()}*")
+        lines.append("")
 
     if weather:
         partes = []
@@ -649,42 +645,36 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
                 for d in weather["previsao_5_dias"]
             )
             lines.append(f"Previsao: {prev}")
-        lines.append("")
-
-    if cultura:
-        lines.append(f"Cultura: *{cultura.upper()}*")
-        lines.append("")
-    lines.append(f"📋 *Resumo:* {', '.join(partes_resumo)}")
-    lines.append("")
 
     lines.append(_WHATSAPP_SEPARADOR)
-    lines.append("")
 
     for d in diseases:
-        emoji_status = "🔴" if d["status"] == "Perigo" else "🟡"
-        lines.append(
-            f"{emoji_status} *{d['rotulo'].upper()}* — {_status_label(d['status'])} - "
-            f"Contagem: {d['concentracao']} esporos/m³"
-        )
+        lines.append("")
+        cabecalho = f"*{d['rotulo'].upper()}* - {_status_label(d['status'])}"
         risco_label = _risco_label(d.get("risco"))
         if risco_label:
-            germinacao_extra = f" ({d['cientifico']} — germinação: {d['germinacao']})" if d.get("germinacao") else ""
-            lines.append(f"🌡️ Risco climático: {risco_label}{germinacao_extra}")
+            cabecalho += f" // Risco climático: {risco_label}"
+        lines.append(cabecalho)
+        if d.get("germinacao"):
+            lines.append(f"({d['cientifico']} — germinação: {d['germinacao']})")
         elif d.get("cientifico"):
-            lines.append(f"🌡️ {d['cientifico']}")
+            lines.append(f"({d['cientifico']})")
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
         quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None
-        if biologicos_itens:
-            ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens)
-            lines.append(f"🧪 *Biologicos:* {ativos}")
-        if quimicos_itens:
-            ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens)
-            lines.append(f"⚗️ *Quimicos:* {ativos}")
+        if biologicos_itens or quimicos_itens:
+            lines.append("")
+            lines.append("Recomendações das Instituições de Pesquisa")
+            if biologicos_itens:
+                ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens)
+                lines.append(f"🧪 *Biologicos:* {ativos}")
+            if quimicos_itens:
+                ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens)
+                lines.append(f"⚗️ *Quimicos:* {ativos}")
+        lines.append(_WHATSAPP_SEPARADOR)
         lines.append(f"📝 Sugestão: {d.get('nota') or '*'}")
-        lines.append("")
 
-    lines.append(_WHATSAPP_SEPARADOR)
     lines.append("")
+    lines.append(_WHATSAPP_SEPARADOR)
     lines.append("📦 *Produtos ja disponiveis na fazenda*")
     produtos = produtos or {}
     for tipo, titulo, emoji in (("biologico", "Biologicos", "🧪"), ("quimico", "Quimicos", "⚗️")):
