@@ -410,6 +410,7 @@ def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=N
     if fungicida_overrides is None:
         fungicida_overrides = models.get_all_fungicida_overrides()
     bloqueios = models.get_all_fungicida_registro_bloqueado()
+    disease_info = models.get_all_disease_info()
     diseases = []
     for card in cards:
         if card["status"] not in ("Perigo", "Atencao"):
@@ -420,12 +421,15 @@ def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=N
             doenca_en, "quimico", rec["quimicos"], fungicida_overrides, cultura=cultura, bloqueios=bloqueios,
         ) if rec else None
         biologicos = _build_recomendacao_grupo(doenca_en, "biologico", rec["biologicos"], fungicida_overrides) if rec else None
+        info = disease_info.get(doenca_en, {})
         diseases.append({
             "doenca": card["doenca"],
             "status": card["status"],
             "concentracao": card["concentracao"],
             "data": card["data"],
             "rotulo": card["doenca"],
+            "cientifico": info.get("nome_cientifico", ""),
+            "germinacao": info.get("condicoes_germinacao", ""),
             "quimicos": quimicos,
             "biologicos": biologicos,
             "classe_label": fungicida_data.CLASSE_LABEL,

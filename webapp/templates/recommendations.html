@@ -138,6 +138,11 @@ html { font-size: 14px; }
                     {{ row.status }}
                 </span>
                 <strong class="ms-2">{{ row.rotulo }}</strong>
+                {% if row.germinacao %}
+                <span class="small text-muted ms-2">({{ row.cientifico }} — germinação: {{ row.germinacao }})</span>
+                {% elif row.cientifico %}
+                <span class="small text-muted fst-italic ms-2">({{ row.cientifico }})</span>
+                {% endif %}
             </div>
 
             {% if (row.quimicos and row.quimicos.itens) or (row.biologicos and row.biologicos.itens) %}
