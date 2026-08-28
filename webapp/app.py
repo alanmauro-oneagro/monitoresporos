@@ -18,7 +18,7 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
     current_user,
@@ -951,6 +951,15 @@ def _ensure_sites_synced():
             models.seed_default_whatsapp_schedule(site_name)
     except FileNotFoundError:
         pass
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Serve o service worker na RAIZ do site (nao em /static/sw.js) de
+    proposito -- o escopo padrao de um service worker e' a pasta de onde
+    ele foi servido, e a pagina de login (que ele precisa poder
+    interceptar) vive na raiz."""
+    return send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
 
 
 @app.route("/")

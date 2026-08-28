@@ -255,6 +255,17 @@
     });
 })();
 </script>
+<script>
+// Registra o service worker (uma vez por navegador/celular) que guarda
+// a pagina de login em cache -- assim ela continua aparecendo mesmo sem
+// internet, em vez da tela de erro do proprio navegador. So' funciona
+// depois da primeira visita com conexao (precisa baixar o que vai ficar
+// em cache uma vez); nao faz login de verdade offline, so evita a pagina
+// ficar em branco/com erro enquanto nao ha sinal.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+}
+</script>
 <div class="container mt-3">
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
