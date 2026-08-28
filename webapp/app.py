@@ -940,9 +940,14 @@ def alan_mauro_required(view):
 @app.before_request
 def _ensure_sites_synced():
     # Mantem a tabela "sites" alinhada com o CSV mais recente (novas fazendas
-    # aparecem automaticamente na tela de permissoes).
+    # aparecem automaticamente na tela de permissoes) -- fazenda nova (site
+    # que ainda nao existia na tabela) ja entra com a agenda padrao de
+    # WhatsApp (Texto Seg/Qua/Sex, PDF Sex -- ver
+    # `models.seed_default_whatsapp_schedule`).
     try:
-        models.sync_sites(read_sites())
+        novos = models.sync_sites(read_sites())
+        for site_name in novos:
+            models.seed_default_whatsapp_schedule(site_name)
     except FileNotFoundError:
         pass
 

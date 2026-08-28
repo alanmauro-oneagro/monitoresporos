@@ -74,7 +74,7 @@ html { font-size: 14px; }
             <div class="ms-auto d-flex align-items-center gap-2">
                 {% set whatsapp_form_id = "whatsapp_form_" ~ safra ~ "_" ~ outer_loop.index0 %}
                 <div class="form-check mb-0" title="Incluir o PDF no envio por WhatsApp">
-                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" checked form="{{ whatsapp_form_id }}">
+                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}">
                 </div>
                 {% if site_group.whatsapp_text %}
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"

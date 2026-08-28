@@ -1003,14 +1003,36 @@ def save_recommendation_note(site_name, doenca, nota):
 
 
 def sync_sites(site_names):
-    """Garante que a tabela sites tenha uma linha para cada fazenda do CSV."""
+    """Garante que a tabela sites tenha uma linha para cada fazenda do CSV.
+    Retorna os nomes que eram novos (ainda nao estavam na tabela) -- usado
+    pra aplicar o agendamento padrao de WhatsApp so' nessas, sem
+    sobrescrever fazenda ja conhecida (ver `seed_default_whatsapp_schedule`,
+    chamado pelo `@app.before_request` em app.py com o retorno daqui)."""
     conn = get_db()
+    existentes = {r["site_name"] for r in conn.execute("SELECT site_name FROM sites")}
+    novos = [name for name in site_names if name not in existentes]
     for name in site_names:
         conn.execute(
             "INSERT OR IGNORE INTO sites (site_name) VALUES (?)", (name,)
         )
     conn.commit()
     conn.close()
+    return novos
+
+
+# Agenda padrao de envio automatico de WhatsApp pra fazenda nova (real,
+# importada do BioScout, ou virtual/estimada) -- Texto Seg/Qua/Sex, PDF so'
+# Sex, definido pelo usuario como o padrao adotado a partir de 28/08/2026.
+WHATSAPP_DIAS_PADRAO_TEXTO = {0, 2, 4}
+WHATSAPP_DIAS_PADRAO_PDF = {4}
+
+
+def seed_default_whatsapp_schedule(site_name):
+    """Aplica a agenda padrao acima pra uma fazenda -- so' deve ser chamada
+    na primeira vez que ela aparece (fazenda nova), nunca pra sobrescrever
+    uma que a pessoa ja configurou diferente."""
+    set_whatsapp_days(site_name, WHATSAPP_DIAS_PADRAO_TEXTO)
+    set_whatsapp_days_pdf(site_name, WHATSAPP_DIAS_PADRAO_PDF)
 
 
 def get_all_sites():
@@ -1070,6 +1092,7 @@ def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None):
     conn.execute("INSERT OR IGNORE INTO sites (site_name) VALUES (?)", (site_name,))
     conn.commit()
     conn.close()
+    seed_default_whatsapp_schedule(site_name)
     return site_name
 
 
