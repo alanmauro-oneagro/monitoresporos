@@ -6,7 +6,7 @@
 <div class="table-responsive">
 <table class="table bg-white shadow-sm">
     <thead>
-        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Admin</th><th>Permissoes</th><th>Receber relatorios</th><th></th></tr>
+        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Admin</th><th>Permissoes</th><th>Receber relatorios</th><th>Subordinados</th><th></th></tr>
     </thead>
     <tbody>
     {% for u in users %}
@@ -27,6 +27,11 @@
             <td>
                 <a href="{{ url_for('admin_user_reports', user_id=u.id) }}">
                     Escolher fazendas{% if report_counts.get(u.id) %} ({{ report_counts[u.id] }}){% endif %}
+                </a>
+            </td>
+            <td>
+                <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}">
+                    Subordinados{% if subordinado_counts.get(u.id) %} ({{ subordinado_counts[u.id] }}){% endif %}
                 </a>
             </td>
             <td class="d-flex gap-2">

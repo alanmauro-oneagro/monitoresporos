@@ -83,6 +83,19 @@ def init_db():
             PRIMARY KEY (user_id, site_id)
         );
 
+        CREATE TABLE IF NOT EXISTS subordinados (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            nome TEXT NOT NULL,
+            telefone TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS subordinado_report_permissions (
+            subordinado_id INTEGER NOT NULL REFERENCES subordinados(id) ON DELETE CASCADE,
+            site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+            PRIMARY KEY (subordinado_id, site_id)
+        );
+
         CREATE TABLE IF NOT EXISTS user_report_permissions (
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
@@ -1204,26 +1217,37 @@ def set_user_whatsapp(user_id, telefone):
 
 
 def get_site_whatsapp_recipients(site_name):
-    """Todo usuario que deve receber os relatorios de WhatsApp daquela
-    fazenda -- uma fazenda pode ter varios numeros, a lista e' gerada
-    inteiramente a partir do cadastro de usuario: so entra quem tiver
-    aquela fazenda marcada na coluna "Receber relatorios" (aba Usuarios,
-    admin -- `user_report_permissions`, uma escolha independente do
-    acesso normal a fazenda) E que ja tenha telefone cadastrado. Nao
-    depende de ser admin nem de ter acesso pra VER a fazenda -- sao
-    coisas separadas de proposito."""
+    """Todo usuario (e subordinado) que deve receber os relatorios de
+    WhatsApp daquela fazenda -- uma fazenda pode ter varios numeros, a
+    lista e' gerada a partir de dois cadastros: usuario (so entra quem
+    tiver aquela fazenda marcada na coluna "Receber relatorios", aba
+    Usuarios -- `user_report_permissions`, uma escolha independente do
+    acesso normal a fazenda) e subordinado (contato leve ligado a um
+    usuario "dono", aba Usuarios > Subordinados --
+    `subordinado_report_permissions`). Em ambos os casos so entra quem ja
+    tenha telefone cadastrado. Nao depende de ser admin nem de ter acesso
+    pra VER a fazenda -- sao coisas separadas de proposito."""
     conn = get_db()
     rows = conn.execute(
         """
-        SELECT DISTINCT u.id, u.username, u.telefone
-        FROM users u
-        JOIN user_report_permissions r ON r.user_id = u.id
-        JOIN sites s ON s.id = r.site_id
-        WHERE s.site_name = ?
-          AND u.telefone IS NOT NULL AND u.telefone != ''
-        ORDER BY u.username
+        SELECT username, telefone FROM (
+            SELECT DISTINCT u.username AS username, u.telefone AS telefone
+            FROM users u
+            JOIN user_report_permissions r ON r.user_id = u.id
+            JOIN sites s ON s.id = r.site_id
+            WHERE s.site_name = ?
+              AND u.telefone IS NOT NULL AND u.telefone != ''
+            UNION
+            SELECT DISTINCT sub.nome AS username, sub.telefone AS telefone
+            FROM subordinados sub
+            JOIN subordinado_report_permissions sr ON sr.subordinado_id = sub.id
+            JOIN sites s ON s.id = sr.site_id
+            WHERE s.site_name = ?
+              AND sub.telefone IS NOT NULL AND sub.telefone != ''
+        )
+        ORDER BY username
         """,
-        (site_name,),
+        (site_name, site_name),
     ).fetchall()
     conn.close()
     return rows
@@ -1323,6 +1347,81 @@ def set_user_report_permissions(user_id, site_ids):
         conn.execute(
             "INSERT INTO user_report_permissions (user_id, site_id) VALUES (?, ?)",
             (user_id, site_id),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_owner_subordinados(owner_user_id):
+    """Lista de subordinados de um usuario (aba Usuarios > Subordinados) --
+    cada um e' so um contato leve (nome + telefone), sem login/senha, que
+    recebe relatorio de WhatsApp de um subconjunto das fazendas que o
+    proprio "dono" (owner_user_id) ja recebe -- pensado pra dividir uma
+    equipe de campo entre varias fazendas do mesmo proprietario. Cada
+    dict tem {id, nome, telefone, site_ids}."""
+    conn = get_db()
+    subs = conn.execute(
+        "SELECT id, nome, telefone FROM subordinados WHERE owner_user_id = ? ORDER BY nome", (owner_user_id,)
+    ).fetchall()
+    resultado = []
+    for s in subs:
+        site_ids = {
+            r["site_id"] for r in conn.execute(
+                "SELECT site_id FROM subordinado_report_permissions WHERE subordinado_id = ?", (s["id"],)
+            )
+        }
+        resultado.append({"id": s["id"], "nome": s["nome"], "telefone": s["telefone"], "site_ids": site_ids})
+    conn.close()
+    return resultado
+
+
+def get_all_subordinado_counts():
+    """owner_user_id -> quantidade de subordinados -- usado pra mostrar o
+    "(N)" na aba Usuarios, igual "Escolher fazendas (N)" ja faz."""
+    conn = get_db()
+    rows = conn.execute("SELECT owner_user_id, COUNT(*) AS n FROM subordinados GROUP BY owner_user_id").fetchall()
+    conn.close()
+    return {r["owner_user_id"]: r["n"] for r in rows}
+
+
+def create_subordinado(owner_user_id, nome, telefone):
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO subordinados (owner_user_id, nome, telefone) VALUES (?, ?, ?)",
+        (owner_user_id, nome, telefone),
+    )
+    conn.commit()
+    novo_id = cur.lastrowid
+    conn.close()
+    return novo_id
+
+
+def update_subordinado(subordinado_id, nome, telefone):
+    conn = get_db()
+    conn.execute(
+        "UPDATE subordinados SET nome = ?, telefone = ? WHERE id = ?", (nome, telefone, subordinado_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_subordinado(subordinado_id):
+    conn = get_db()
+    conn.execute("DELETE FROM subordinados WHERE id = ?", (subordinado_id,))
+    conn.commit()
+    conn.close()
+
+
+def set_subordinado_report_sites(subordinado_id, site_ids):
+    """Substitui as fazendas marcadas pra esse subordinado receber
+    relatorio -- mesmo padrao de `set_user_report_permissions`, so' que
+    pra tabela de subordinados."""
+    conn = get_db()
+    conn.execute("DELETE FROM subordinado_report_permissions WHERE subordinado_id = ?", (subordinado_id,))
+    for site_id in site_ids:
+        conn.execute(
+            "INSERT INTO subordinado_report_permissions (subordinado_id, site_id) VALUES (?, ?)",
+            (subordinado_id, site_id),
         )
     conn.commit()
     conn.close()

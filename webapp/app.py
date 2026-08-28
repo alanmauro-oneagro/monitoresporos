@@ -1981,9 +1981,11 @@ def admin_users():
     users = models.get_all_users()
     report_counts = {u["id"]: len(models.get_user_report_site_ids(u["id"])) for u in users}
     permission_counts = {u["id"]: len(models.get_user_permitted_site_ids(u["id"])) for u in users}
+    subordinado_counts = models.get_all_subordinado_counts()
     return render_template(
         "admin_users.html", users=users, default_password=models.DEFAULT_PASSWORD,
         report_counts=report_counts, permission_counts=permission_counts,
+        subordinado_counts=subordinado_counts,
     )
 
 
@@ -2346,6 +2348,59 @@ def admin_user_reports(user_id):
     report_ids = models.get_user_report_site_ids(user_id)
     return render_template(
         "admin_report_permissions.html", user=user_row, sites=all_sites, report_ids=report_ids
+    )
+
+
+@app.route("/admin/users/<int:user_id>/subordinados", methods=["GET", "POST"])
+@admin_required
+def admin_user_subordinados(user_id):
+    """Subordinados (aba Usuarios) -- contatos leves (nome + telefone, sem
+    login) ligados a um usuario "dono", cada um recebendo relatorio de
+    WhatsApp de um subconjunto das fazendas que o proprio dono ja recebe
+    (`user_report_permissions`) -- pensado pra dividir uma equipe de
+    campo do mesmo proprietario entre fazendas diferentes."""
+    user_row = models.get_user_by_id(user_id)
+    if not user_row:
+        abort(404)
+
+    if request.method == "POST":
+        form_id = request.form.get("form_id")
+        if form_id == "add":
+            nome = request.form.get("nome", "").strip()
+            telefone = request.form.get("telefone", "").strip()
+            if not nome or not telefone:
+                flash("Nome e telefone sao obrigatorios pra adicionar um subordinado.", "error")
+            else:
+                models.create_subordinado(user_id, nome, telefone)
+                flash(f"Subordinado '{nome}' adicionado.", "success")
+            return redirect(url_for("admin_user_subordinados", user_id=user_id))
+
+        if form_id == "delete":
+            sub_id = int(request.form.get("subordinado_id"))
+            models.delete_subordinado(sub_id)
+            return _save_response("Subordinado excluido.", "admin_user_subordinados", user_id=user_id)
+
+        # form_id == "save" (padrao) -- salva nome/telefone/fazendas de
+        # todos os subordinados listados na tela de uma vez (autosave).
+        ids = [int(v) for v in request.form.getlist("subordinado_id")]
+        nomes = request.form.getlist("nome")
+        telefones = request.form.getlist("telefone")
+        for idx, sub_id in enumerate(ids):
+            nome = nomes[idx].strip() if idx < len(nomes) else ""
+            telefone = telefones[idx].strip() if idx < len(telefones) else ""
+            if not nome or not telefone:
+                continue
+            models.update_subordinado(sub_id, nome, telefone)
+            site_ids = {int(v) for v in request.form.getlist(f"site_ids__{sub_id}")}
+            models.set_subordinado_report_sites(sub_id, site_ids)
+        return _save_response("Subordinados atualizados.", "admin_user_subordinados", user_id=user_id)
+
+    owner_report_ids = models.get_user_report_site_ids(user_id)
+    all_sites = models.get_all_sites()
+    owner_sites = [s for s in all_sites if s["id"] in owner_report_ids]
+    subordinados = models.get_owner_subordinados(user_id)
+    return render_template(
+        "admin_subordinados.html", user=user_row, owner_sites=owner_sites, subordinados=subordinados,
     )
 
 

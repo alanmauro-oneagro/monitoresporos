@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Subordinados - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Subordinados de "{{ user.username }}"</h4>
+<p class="text-muted small mb-3">
+    Contatos leves (nome + telefone, sem login no site) que recebem
+    relatorio de WhatsApp de um subconjunto das fazendas que
+    "{{ user.username }}" ja recebe -- pra dividir uma equipe de campo
+    entre fazendas diferentes (parte da equipe recebe o relatorio de uma
+    fazenda, parte recebe o de outra).
+</p>
+
+{% if not owner_sites %}
+<div class="alert alert-info">
+    "{{ user.username }}" ainda nao tem nenhuma fazenda marcada em
+    <a href="{{ url_for('admin_user_reports', user_id=user.id) }}">Escolher fazendas</a> --
+    configure isso primeiro, so' entao da pra escolher quais dessas
+    fazendas cada subordinado recebe.
+</div>
+{% else %}
+
+{% if not subordinados %}
+<div class="alert alert-info">Nenhum subordinado cadastrado ainda pra "{{ user.username }}".</div>
+{% else %}
+<form method="post" data-autosave>
+{% for sub in subordinados %}
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <input type="hidden" name="subordinado_id" value="{{ sub.id }}">
+        <div class="row gx-2 mb-2">
+            <div class="col-md-5">
+                <label class="form-label small text-muted mb-1">Nome</label>
+                <input type="text" name="nome" class="form-control form-control-sm" value="{{ sub.nome }}" required>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label small text-muted mb-1">Telefone (DDI+DDD+numero)</label>
+                <input type="text" name="telefone" class="form-control form-control-sm" value="{{ sub.telefone }}" required>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <form method="post" action="{{ url_for('admin_user_subordinados', user_id=user.id) }}" class="mb-0"
+                      onsubmit="return confirm('Excluir o subordinado {{ sub.nome }}?');">
+                    <input type="hidden" name="form_id" value="delete">
+                    <input type="hidden" name="subordinado_id" value="{{ sub.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                </form>
+            </div>
+        </div>
+        <label class="form-label small text-muted mb-1 d-block">Recebe relatorio das fazendas:</label>
+        <div class="d-flex flex-wrap gap-3">
+            {% for site in owner_sites %}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="site_ids__{{ sub.id }}" value="{{ site.id }}"
+                    id="sub{{ sub.id }}_site{{ site.id }}" {% if site.id in sub.site_ids %}checked{% endif %}>
+                <label class="form-check-label small" for="sub{{ sub.id }}_site{{ site.id }}">{{ site.site_name }}</label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+    <span class="autosave-status small ms-2"></span>
+</form>
+{% endif %}
+
+<div class="card shadow-sm mt-4" style="max-width: 420px;">
+    <div class="card-body p-4">
+        <h5 class="mb-3">Novo subordinado</h5>
+        <form method="post" action="{{ url_for('admin_user_subordinados', user_id=user.id) }}">
+            <input type="hidden" name="form_id" value="add">
+            <div class="mb-3">
+                <label class="form-label">Nome</label>
+                <input type="text" name="nome" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Telefone (DDI+DDD+numero, ex.: 5511999999999)</label>
+                <input type="text" name="telefone" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-success">Adicionar</button>
+            <p class="text-muted small mt-3 pt-3 border-top mb-0">
+                Depois de adicionar, marque embaixo quais fazendas esse
+                subordinado deve receber (so' aparecem as fazendas que
+                "{{ user.username }}" ja recebe).
+            </p>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary mt-3">Voltar</a>
+{% endblock %}
