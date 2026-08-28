@@ -190,6 +190,7 @@ def _load_or_create_secret_key():
 app = Flask(__name__)
 app.secret_key = _load_or_create_secret_key()
 app.jinja_env.filters["data_br"] = models.fmt_data_br
+app.jinja_env.filters["telefone_br"] = models.fmt_telefone_br
 
 # A aba Fungicidas (autosave) manda o form inteiro (todas as doencas) a
 # cada edicao -- com os checkboxes de "Registrado para" (uma por
@@ -2368,11 +2369,11 @@ def admin_user_subordinados(user_id):
         form_id = request.form.get("form_id")
         if form_id == "add":
             nome = request.form.get("nome", "").strip()
-            telefone = request.form.get("telefone", "").strip()
-            if not nome or not telefone:
+            numero = re.sub(r"\D", "", request.form.get("numero_telefone", ""))
+            if not nome or not numero:
                 flash("Nome e telefone sao obrigatorios pra adicionar um subordinado.", "error")
             else:
-                models.create_subordinado(user_id, nome, telefone)
+                models.create_subordinado(user_id, nome, "55" + numero)
                 flash(f"Subordinado '{nome}' adicionado.", "success")
             return redirect(url_for("admin_user_subordinados", user_id=user_id))
 
@@ -2383,15 +2384,16 @@ def admin_user_subordinados(user_id):
 
         # form_id == "save" (padrao) -- salva nome/telefone/fazendas de
         # todos os subordinados listados na tela de uma vez (autosave).
+        # DDI vem sempre fixo em "55" (caixa readonly na tela) -- so' o
+        # numero (DDD + numero) e' de fato lido do formulario, por linha.
         ids = [int(v) for v in request.form.getlist("subordinado_id")]
         nomes = request.form.getlist("nome")
-        telefones = request.form.getlist("telefone")
         for idx, sub_id in enumerate(ids):
             nome = nomes[idx].strip() if idx < len(nomes) else ""
-            telefone = telefones[idx].strip() if idx < len(telefones) else ""
-            if not nome or not telefone:
+            numero = re.sub(r"\D", "", request.form.get(f"numero_telefone__{sub_id}", ""))
+            if not nome or not numero:
                 continue
-            models.update_subordinado(sub_id, nome, telefone)
+            models.update_subordinado(sub_id, nome, "55" + numero)
             site_ids = {int(v) for v in request.form.getlist(f"site_ids__{sub_id}")}
             models.set_subordinado_report_sites(sub_id, site_ids)
         return _save_response("Subordinados atualizados.", "admin_user_subordinados", user_id=user_id)
@@ -2400,6 +2402,8 @@ def admin_user_subordinados(user_id):
     all_sites = models.get_all_sites()
     owner_sites = [s for s in all_sites if s["id"] in owner_report_ids]
     subordinados = models.get_owner_subordinados(user_id)
+    for sub in subordinados:
+        _, sub["numero_telefone"] = _split_phone(sub["telefone"])
     return render_template(
         "admin_subordinados.html", user=user_row, owner_sites=owner_sites, subordinados=subordinados,
     )

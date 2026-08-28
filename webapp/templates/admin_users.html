@@ -4,7 +4,7 @@
 <h4 class="mb-3">Usuarios</h4>
 
 <div class="table-responsive">
-<table class="table bg-white shadow-sm">
+<table class="table table-sm bg-white shadow-sm" style="font-size: 0.85rem;">
     <thead>
         <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Admin</th><th>Permissoes</th><th>Receber relatorios</th><th>Subordinados</th><th></th></tr>
     </thead>
@@ -13,7 +13,7 @@
         <tr>
             <td>{{ u.username }}</td>
             <td>{{ u.email or '-' }}</td>
-            <td>{{ u.telefone or '-' }}</td>
+            <td>{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
             <td>{{ 'Sim' if u.is_admin else 'Nao' }}</td>
             <td>
                 {% if u.is_admin %}
@@ -50,7 +50,7 @@
         <tr class="table-light">
             <td class="text-muted small ps-4">↳ {{ sub.nome }}</td>
             <td class="text-muted small">-</td>
-            <td class="text-muted small">{{ sub.telefone }}</td>
+            <td class="text-muted small">{{ sub.telefone | telefone_br }}</td>
             <td class="text-muted small">-</td>
             <td class="text-muted small">-</td>
             <td class="text-muted small">
@@ -82,7 +82,7 @@
             <div class="mb-3 row g-2">
                 <div class="col-3 col-sm-2">
                     <label class="form-label text-nowrap">DDI</label>
-                    <input type="text" name="codigo_pais" class="form-control" value="55" required>
+                    <input type="text" name="codigo_pais" class="form-control bg-light" value="55" readonly>
                 </div>
                 <div class="col-9 col-sm-10">
                     <label class="form-label">Telefone (DDD + numero, sem espacos)</label>

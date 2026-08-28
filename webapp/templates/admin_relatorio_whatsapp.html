@@ -44,7 +44,7 @@
                         <td class="text-nowrap">{{ l.criado_em | data_br }}</td>
                         <td>{{ l.site_name }}</td>
                         <td>{{ l.destinatario or '-' }}</td>
-                        <td>{{ l.telefone or '-' }}</td>
+                        <td>{{ l.telefone | telefone_br if l.telefone else '-' }}</td>
                         <td>
                             {% if l.ok %}
                             <span class="badge bg-success">Enviado</span>
@@ -79,7 +79,7 @@
                     <tr>
                         <td>{{ c.site }}</td>
                         <td>{{ c.destinatario }}</td>
-                        <td>{{ c.telefone }}</td>
+                        <td>{{ c.telefone | telefone_br }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

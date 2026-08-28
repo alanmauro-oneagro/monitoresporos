@@ -39,7 +39,7 @@ def _usuarios_rows():
         report_ids = models.get_user_report_site_ids(u["id"])
         relatorios = ", ".join(sorted(site_names_by_id[sid] for sid in report_ids if sid in site_names_by_id)) or "-"
         rows.append([
-            u["username"], u["email"] or "", u["telefone"] or "",
+            u["username"], u["email"] or "", models.fmt_telefone_br(u["telefone"]) or "",
             "Sim" if u["is_admin"] else "Nao", fazendas, relatorios,
         ])
     rows.sort(key=lambda r: r[0].lower())
@@ -130,7 +130,7 @@ def _add_whatsapp_sheet(wb):
     for log in models.get_whatsapp_envio_log(limit=1_000_000):
         ws.append([
             models.fmt_data_br(log["criado_em"]) or "",
-            log["site_name"], log["destinatario"] or "", log["telefone"] or "",
+            log["site_name"], log["destinatario"] or "", models.fmt_telefone_br(log["telefone"]) or "",
             "Enviado" if log["ok"] else "Falha", log["mensagem"] or "",
         ])
 
@@ -143,7 +143,7 @@ def _add_whatsapp_sheet(wb):
     site_names = sorted(s["site_name"] for s in models.get_all_sites())
     for site_name in site_names:
         for r in models.get_site_whatsapp_recipients(site_name):
-            ws.append([site_name, r["username"], r["telefone"]])
+            ws.append([site_name, r["username"], models.fmt_telefone_br(r["telefone"])])
 
     for col in ws.columns:
         length = max((len(str(c.value)) for c in col if c.value is not None), default=8)

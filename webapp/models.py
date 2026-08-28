@@ -45,6 +45,25 @@ def fmt_data_br(value):
             continue
     return value
 
+
+def fmt_telefone_br(value):
+    """Formata um telefone salvo como so' digitos (DDI+DDD+numero, ex.:
+    '5566996319500') no padrao "(55)66-99631-9500" -- usado em toda
+    tela/relatorio que mostra telefone de usuario ou subordinado
+    (registrado como filtro Jinja "telefone_br" em app.py, e chamado
+    direto aqui pelo export_excel.py). So' formata os dois tamanhos
+    normais de numero brasileiro (13 digitos = DDI+DDD+9 digitos movel;
+    12 digitos = DDI+DDD+8 digitos fixo/antigo) -- fora isso, devolve o
+    valor original em vez de arriscar formatar errado."""
+    if not value:
+        return value
+    digitos = "".join(ch for ch in str(value) if ch.isdigit())
+    if len(digitos) not in (12, 13):
+        return value
+    ddi, ddd, numero = digitos[:2], digitos[2:4], digitos[4:]
+    meio = 5 if len(numero) == 9 else 4
+    return f"({ddi}){ddd}-{numero[:meio]}-{numero[meio:]}"
+
 # Local (padrao): banco fica do lado do codigo, em webapp/bioscout_web.db --
 # nada muda pra quem ja usa assim. Hospedado (Railway/Render), o disco do
 # container e' apagado a cada deploy -- BIOSCOUT_DB_PATH deve apontar pra

@@ -34,13 +34,17 @@
     <div class="card-body">
         <input type="hidden" name="subordinado_id" value="{{ sub.id }}">
         <div class="row gx-2 mb-2">
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <label class="form-label small text-muted mb-1">Nome</label>
                 <input type="text" name="nome" class="form-control form-control-sm" value="{{ sub.nome }}" required>
             </div>
-            <div class="col-md-5">
-                <label class="form-label small text-muted mb-1">Telefone (DDI+DDD+numero)</label>
-                <input type="text" name="telefone" class="form-control form-control-sm" value="{{ sub.telefone }}" required>
+            <div class="col-3 col-md-2">
+                <label class="form-label small text-muted mb-1">DDI</label>
+                <input type="text" class="form-control form-control-sm bg-light" value="55" readonly>
+            </div>
+            <div class="col-9 col-md-4">
+                <label class="form-label small text-muted mb-1">Telefone (DDD + numero)</label>
+                <input type="text" name="numero_telefone__{{ sub.id }}" class="form-control form-control-sm" value="{{ sub.numero_telefone }}" placeholder="11999999999" required>
             </div>
             <div class="col-md-2 d-flex align-items-end">
                 <button type="submit" form="delete_form_{{ sub.id }}" class="btn btn-sm btn-outline-danger"
@@ -76,9 +80,15 @@
                 <label class="form-label">Nome</label>
                 <input type="text" name="nome" class="form-control" required>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Telefone (DDI+DDD+numero, ex.: 5511999999999)</label>
-                <input type="text" name="telefone" class="form-control" required>
+            <div class="mb-3 row g-2">
+                <div class="col-3 col-sm-2">
+                    <label class="form-label text-nowrap">DDI</label>
+                    <input type="text" name="codigo_pais" class="form-control bg-light" value="55" readonly>
+                </div>
+                <div class="col-9 col-sm-10">
+                    <label class="form-label">Telefone (DDD + numero, sem espacos)</label>
+                    <input type="text" name="numero_telefone" class="form-control" placeholder="11999999999" required>
+                </div>
             </div>
             <button type="submit" class="btn btn-success">Adicionar</button>
             <p class="text-muted small mt-3 pt-3 border-top mb-0">
