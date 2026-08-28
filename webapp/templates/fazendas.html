@@ -2,10 +2,13 @@
 {% block title %}Fazendas - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
-/* Pagina com muita tabela/formulario -- reduz a base (rem) pra tudo
-   ficar mais compacto numa visualizacao a 100%, sem precisar dar zoom
-   out no navegador. 9.8px = 14px - 30%, a pedido do usuario. */
-html { font-size: 9.8px; }
+/* Fonte da pagina volta ao padrao do site -- so' o nome/cabecalho de
+   cada fazenda (recolhido) fica menor e com menos espaco em volta, pra
+   caber mais fazendas na tela sem precisar rolar tanto. O conteudo de
+   dentro (quando expandida) nao e' afetado. */
+.farm-toggle { font-size: 1rem; }
+[data-site].card { margin-bottom: 0.5rem !important; }
+[data-site] > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
 </style>
 {% endblock %}
 {% block content %}
@@ -20,7 +23,7 @@ html { font-size: 9.8px; }
 {% set farm_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
-        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="farm-body-{{ farm_idx }}">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="farm-body-{{ farm_idx }}">
             <span class="toggle-icon">▶</span> {{ site_group.site }}
         </button>
         <div class="d-none mt-3" id="farm-body-{{ farm_idx }}">
