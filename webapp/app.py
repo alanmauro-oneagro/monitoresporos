@@ -1560,6 +1560,7 @@ def admin_doencas():
         temp_maxs = request.form.getlist("germ_temp_max")
         ur_mins = request.form.getlist("germ_ur_min")
         molhamentos = request.form.getlist("germ_molhamento_horas")
+        info_atual = models.get_all_disease_info()
         for idx, (display_name_en, nome_pt, nome_cientifico) in enumerate(
             zip(display_names, nomes_pt, nomes_cientificos)
         ):
@@ -1567,13 +1568,18 @@ def admin_doencas():
             if not nome_pt:
                 continue
             models.save_disease_translation(display_name_en, nome_pt, nome_cientifico.strip())
+            # germ_agua_livre_inibe (chuva atrapalha, caso do oidio) nao tem
+            # mais campo no formulario -- e' propriedade fixa do fungo, nao
+            # algo pra editar aqui; preserva o valor ja salvo (aplicado pelo
+            # botao de pesquisa) em vez de zerar a cada autosave.
+            agua_livre_inibe = info_atual.get(display_name_en, {}).get("germ_agua_livre_inibe", False)
             models.save_disease_germ_limits(
                 display_name_en,
                 _parse_float_or_none(temp_mins[idx]) if idx < len(temp_mins) else None,
                 _parse_float_or_none(temp_maxs[idx]) if idx < len(temp_maxs) else None,
                 _parse_float_or_none(ur_mins[idx]) if idx < len(ur_mins) else None,
                 _parse_float_or_none(molhamentos[idx]) if idx < len(molhamentos) else None,
-                bool(request.form.get(f"germ_agua_livre_inibe__{idx}")),
+                agua_livre_inibe,
             )
         return _save_response("Nomes de doencas atualizados.", "admin_doencas")
 

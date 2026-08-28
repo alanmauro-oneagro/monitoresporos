@@ -39,7 +39,7 @@
 
         <hr class="my-3">
         <div class="small fw-bold text-muted mb-2">Condicoes p/ germinacao (base da luz de risco na aba Manejo)</div>
-        <div class="row gx-2 row-cols-2 row-cols-md-5">
+        <div class="row gx-2 row-cols-2 row-cols-md-4">
             <div class="col">
                 <label class="form-label small text-muted mb-1">Temp min (°C)</label>
                 <input type="number" step="0.1" name="germ_temp_min" class="form-control form-control-sm" value="{{ d.temp_min if d.temp_min is not none else '' }}">
@@ -55,12 +55,6 @@
             <div class="col">
                 <label class="form-label small text-muted mb-1">Molhamento (h)</label>
                 <input type="number" step="1" name="germ_molhamento_horas" class="form-control form-control-sm" value="{{ d.molhamento_horas if d.molhamento_horas is not none else '' }}">
-            </div>
-            <div class="col d-flex align-items-end">
-                <div class="form-check mb-1">
-                    <input type="checkbox" class="form-check-input" name="germ_agua_livre_inibe__{{ loop.index0 }}" id="agua_livre_inibe_{{ loop.index0 }}" {% if d.agua_livre_inibe %}checked{% endif %}>
-                    <label class="form-check-label small text-muted" for="agua_livre_inibe_{{ loop.index0 }}">Chuva atrapalha</label>
-                </div>
             </div>
         </div>
         {% if d.germinacao %}
@@ -86,8 +80,7 @@
     (Open-Meteo) da fazenda (o texto em itálico embaixo dos campos e'
     gerado sozinho a partir desses numeros, so' pra conferencia -- nao e'
     editavel separado, assim nunca fica descolado do que o risco
-    realmente calcula). Marque "Chuva atrapalha" pros fungos tipo oidio,
-    onde molhar a folha atrapalha em vez de ajudar a germinar.
+    realmente calcula).
 </p>
 
 <h4 class="mb-2 mt-4">Doencas x Culturas</h4>
