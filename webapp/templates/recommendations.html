@@ -135,7 +135,7 @@ html { font-size: 14px; }
         <div class="{% if not loop.last %}border-bottom pb-3 mb-3{% endif %}">
             <div>
                 <span class="badge {{ 'bg-danger' if row.status == 'Perigo' else 'bg-warning text-dark' }}">
-                    {{ row.status }}
+                    {{ 'Alta concentração de esporos' if row.status == 'Perigo' else 'Moderada concentração de esporos' }}
                 </span>
                 <strong class="ms-2">{{ row.rotulo }}</strong>
                 {% if row.risco %}
