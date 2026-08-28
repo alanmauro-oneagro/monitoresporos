@@ -158,6 +158,39 @@ def build_weather_lookup(weather_rows):
     return lookup
 
 
+def get_site_disease_history(site, doenca_en, dias=15):
+    """Serie historica de concentracao (uma leitura por dia, a mais recente
+    do dia quando ha mais de uma) de uma doenca numa fazenda, pros ultimos
+    `dias` dias com leitura -- usado pra montar o graficozinho de
+    concentracao no PDF de recomendacao (mesmo eixo colorido do dashboard
+    do BioScout: verde/amarelo/vermelho conforme warningConcentrationThreshold/
+    dangerConcentrationThreshold/maximumConcentrationThreshold, que sao fixos
+    por doenca -- pega os do ultimo dia com leitura)."""
+    por_dia = {}
+    for row in read_spore_counts():
+        if row.get("siteName") != site or row.get("displayName") != doenca_en:
+            continue
+        try:
+            dt = _parse_dt(row["samplingStartTime"])
+        except (KeyError, ValueError):
+            continue
+        conc = _to_float(row.get("concentration"))
+        if conc is None:
+            continue
+        data_iso = dt.date().isoformat()
+        if data_iso not in por_dia or dt > por_dia[data_iso]["_dt"]:
+            por_dia[data_iso] = {
+                "_dt": dt,
+                "data": data_iso,
+                "concentracao": conc,
+                "warn": _to_float(row.get("warningConcentrationThreshold")),
+                "danger": _to_float(row.get("dangerConcentrationThreshold")),
+                "maximo": _to_float(row.get("maximumConcentrationThreshold")),
+            }
+    dias_ordenados = sorted(por_dia.values(), key=lambda r: r["_dt"])
+    return [{k: v for k, v in r.items() if k != "_dt"} for r in dias_ordenados[-dias:]]
+
+
 def compute_status(concentration, warning_threshold, danger_threshold):
     if danger_threshold and danger_threshold > 0 and concentration >= danger_threshold:
         return "Perigo"

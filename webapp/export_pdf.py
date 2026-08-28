@@ -11,12 +11,17 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.graphics.shapes import Drawing, PolyLine, Rect, String
 from reportlab.platypus import (
-    Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+    KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
 AZUL_MARCA = colors.HexColor("#0a1f44")
 CINZA_CLARO = colors.HexColor("#f4f6f4")
+
+VERDE_FAIXA = colors.HexColor("#d7ecd2")
+AMARELO_FAIXA = colors.HexColor("#fdf0c4")
+VERMELHO_FAIXA = colors.HexColor("#f6d4d0")
 
 _styles = getSampleStyleSheet()
 _ESTILO_TITULO = ParagraphStyle(
@@ -38,6 +43,55 @@ _ESTILO_GERMINACAO = ParagraphStyle(
 
 _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
 _RISCO_CORES = {"vermelho": "#c0392b", "amarelo": "#b7860b", "verde": "#2e7d32"}
+
+
+def _build_spore_chart(historico, largura=17.4 * cm, altura=4.5 * cm):
+    """Graficozinho de concentracao de esporos ao longo do tempo, com as
+    mesmas faixas verde/amarelo/vermelho do dashboard do BioScout (fixas
+    por doenca -- warningConcentrationThreshold/dangerConcentrationThreshold/
+    maximumConcentrationThreshold, ver `data_reader.get_site_disease_history`).
+    Desenhado na mao com formas do reportlab (sem lib de grafico externa,
+    ja que reportlab ja e' dependencia do projeto) -- so' uma linha (a
+    fazenda deste relatorio), nao comparando com outras fazendas."""
+    if len(historico) < 2:
+        return None
+    warn = historico[-1]["warn"] or 0
+    danger = historico[-1]["danger"] or (warn * 2 or 1)
+    maximo = historico[-1]["maximo"] or (danger * 1.5)
+    topo = max(maximo, max(h["concentracao"] for h in historico) * 1.05)
+
+    margem_esq, margem_dir, margem_topo, margem_baixo = 1.4 * cm, 0.2 * cm, 0.3 * cm, 0.9 * cm
+    plot_w = largura - margem_esq - margem_dir
+    plot_h = altura - margem_topo - margem_baixo
+    escala_y = plot_h / topo if topo else 0
+
+    d = Drawing(largura, altura)
+
+    def y(valor):
+        return margem_baixo + min(valor, topo) * escala_y
+
+    d.add(Rect(margem_esq, y(0), plot_w, y(warn) - y(0), fillColor=VERDE_FAIXA, strokeColor=None))
+    d.add(Rect(margem_esq, y(warn), plot_w, y(danger) - y(warn), fillColor=AMARELO_FAIXA, strokeColor=None))
+    d.add(Rect(margem_esq, y(danger), plot_w, y(topo) - y(danger), fillColor=VERMELHO_FAIXA, strokeColor=None))
+
+    n = len(historico)
+    escala_x = plot_w / (n - 1) if n > 1 else 0
+    pontos = []
+    for i, h in enumerate(historico):
+        pontos.append(margem_esq + i * escala_x)
+        pontos.append(y(h["concentracao"]))
+    d.add(PolyLine(pontos, strokeColor=AZUL_MARCA, strokeWidth=1.6))
+
+    for valor in sorted({0, warn, danger, topo}):
+        d.add(String(margem_esq - 4, y(valor) - 2.5, f"{valor:g}", fontSize=6.5, fillColor=colors.grey, textAnchor="end"))
+
+    passo_label = max(1, n // 6)
+    for i, h in enumerate(historico):
+        if i % passo_label == 0 or i == n - 1:
+            x = margem_esq + i * escala_x
+            d.add(String(x, 2, f"{h['data'][8:10]}/{h['data'][5:7]}", fontSize=6.5, fillColor=colors.grey, textAnchor="middle"))
+
+    return d
 
 
 def _fmt_ingrediente(item, classe_label):
@@ -157,8 +211,9 @@ def build_recommendation_pdf(
         story.append(Paragraph("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.", _ESTILO_NORMAL))
     else:
         for d in diseases:
+            cabecalho = []
             cor_hex = "#ff6b6b" if d["status"] == "Perigo" else "#e6ac00"
-            story.append(Paragraph(
+            cabecalho.append(Paragraph(
                 f'<font color="{cor_hex}">●</font> <b>{d["status"].upper()} — '
                 f'{d["rotulo"].upper()}</b> — Contagem: {d["concentracao"]} esporos/m³',
                 _ESTILO_DOENCA,
@@ -167,12 +222,17 @@ def build_recommendation_pdf(
             if risco_label:
                 extra = f' — {d["cientifico"]} — germinação: {d["germinacao"]}' if d.get("germinacao") else ""
                 cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
-                story.append(Paragraph(
+                cabecalho.append(Paragraph(
                     f'<font color="{cor_risco}">●</font> Risco climático: <b>{risco_label}</b>{extra}',
                     _ESTILO_GERMINACAO,
                 ))
             elif d.get("cientifico"):
-                story.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
+                cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
+            grafico = _build_spore_chart(d.get("historico") or [])
+            if grafico:
+                cabecalho.append(Spacer(1, 2))
+                cabecalho.append(grafico)
+            story.append(KeepTogether(cabecalho))
             biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
             quimicos_itens = d["quimicos"]["itens"][:3] if d.get("quimicos") else None
             if biologicos_itens or quimicos_itens:
