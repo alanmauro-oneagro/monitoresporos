@@ -46,6 +46,22 @@
                 </form>
             </td>
         </tr>
+        {% for sub in subordinados_by_owner.get(u.id, []) %}
+        <tr class="table-light">
+            <td class="text-muted small ps-4">↳ {{ sub.nome }}</td>
+            <td class="text-muted small">-</td>
+            <td class="text-muted small">{{ sub.telefone }}</td>
+            <td class="text-muted small">-</td>
+            <td class="text-muted small">-</td>
+            <td class="text-muted small">
+                {{ sub.site_ids|length }} fazenda(s)
+            </td>
+            <td class="text-muted small">-</td>
+            <td>
+                <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+            </td>
+        </tr>
+        {% endfor %}
     {% endfor %}
     </tbody>
 </table>

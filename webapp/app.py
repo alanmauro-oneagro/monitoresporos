@@ -1981,11 +1981,12 @@ def admin_users():
     users = models.get_all_users()
     report_counts = {u["id"]: len(models.get_user_report_site_ids(u["id"])) for u in users}
     permission_counts = {u["id"]: len(models.get_user_permitted_site_ids(u["id"])) for u in users}
-    subordinado_counts = models.get_all_subordinado_counts()
+    subordinados_by_owner = {u["id"]: models.get_owner_subordinados(u["id"]) for u in users}
+    subordinado_counts = {uid: len(subs) for uid, subs in subordinados_by_owner.items() if subs}
     return render_template(
         "admin_users.html", users=users, default_password=models.DEFAULT_PASSWORD,
         report_counts=report_counts, permission_counts=permission_counts,
-        subordinado_counts=subordinado_counts,
+        subordinado_counts=subordinado_counts, subordinados_by_owner=subordinados_by_owner,
     )
 
 

@@ -1375,15 +1375,6 @@ def get_owner_subordinados(owner_user_id):
     return resultado
 
 
-def get_all_subordinado_counts():
-    """owner_user_id -> quantidade de subordinados -- usado pra mostrar o
-    "(N)" na aba Usuarios, igual "Escolher fazendas (N)" ja faz."""
-    conn = get_db()
-    rows = conn.execute("SELECT owner_user_id, COUNT(*) AS n FROM subordinados GROUP BY owner_user_id").fetchall()
-    conn.close()
-    return {r["owner_user_id"]: r["n"] for r in rows}
-
-
 def create_subordinado(owner_user_id, nome, telefone):
     conn = get_db()
     cur = conn.execute(
