@@ -1,11 +1,25 @@
 """Esquema do banco (SQLite) e funcoes de acesso a usuarios/permissoes/fazendas."""
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 import data_reader
+
+
+def _agora_cuiaba():
+    """'YYYY-MM-DD HH:MM:SS' no horario de Cuiaba-MT (UTC-4, sem horario
+    de verao -- por isso um deslocamento fixo, sem precisar de zoneinfo).
+    Calculado em Python a partir do UTC real (`datetime.now(timezone.utc)`),
+    NUNCA via um default `datetime('now', ...)` na definicao da tabela --
+    esses defaults ficam "congelados" no valor de quando aquela tabela foi
+    criada em cada banco (`CREATE TABLE IF NOT EXISTS` nao re-aplica o
+    default numa tabela que ja existe), entao mudar o texto do default no
+    codigo nunca corrigia um banco que ja tivesse a tabela -- foi
+    exatamente isso que deixou o historico de envios de WhatsApp em UTC
+    por muito tempo mesmo depois de duas tentativas de correcao via SQL."""
+    return (datetime.now(timezone.utc) - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def fmt_data_br(value):
@@ -146,7 +160,12 @@ def init_db():
             telefone TEXT,
             ok INTEGER NOT NULL,
             mensagem TEXT,
-            criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            -- so' uma rede de seguranca -- `log_whatsapp_envio` sempre manda
+            -- o valor certo explicito (`_agora_cuiaba()`), sem depender
+            -- deste default (que, alias, so vale pra tabela NOVA -- um banco
+            -- que ja tivesse essa tabela fica com o default antigo pra
+            -- sempre, ver `_agora_cuiaba`).
+            criado_em TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
         CREATE TABLE IF NOT EXISTS fungicida_overrides (
@@ -446,8 +465,8 @@ def log_whatsapp_envio(site_name, destinatario, telefone, ok, mensagem):
     cadastrado pra receber) -- usado pela tela de Relatorios."""
     conn = get_db()
     conn.execute(
-        "INSERT INTO whatsapp_envio_log (site_name, destinatario, telefone, ok, mensagem) VALUES (?, ?, ?, ?, ?)",
-        (site_name, destinatario, telefone, 1 if ok else 0, mensagem),
+        "INSERT INTO whatsapp_envio_log (site_name, destinatario, telefone, ok, mensagem, criado_em) VALUES (?, ?, ?, ?, ?, ?)",
+        (site_name, destinatario, telefone, 1 if ok else 0, mensagem, _agora_cuiaba()),
     )
     conn.commit()
     conn.close()
@@ -900,10 +919,10 @@ def set_farm_cultura(site_name, safra, cultura):
     if cultura:
         conn.execute(
             """
-            INSERT INTO farm_culturas (site_name, safra, cultura, updated_at) VALUES (?, ?, ?, datetime('now', 'localtime'))
+            INSERT INTO farm_culturas (site_name, safra, cultura, updated_at) VALUES (?, ?, ?, ?)
             ON CONFLICT(site_name, safra) DO UPDATE SET cultura = excluded.cultura, updated_at = excluded.updated_at
             """,
-            (site_name, safra, cultura),
+            (site_name, safra, cultura, _agora_cuiaba()),
         )
     else:
         conn.execute("DELETE FROM farm_culturas WHERE site_name = ? AND safra = ?", (site_name, safra))
@@ -1006,10 +1025,10 @@ def save_recommendation_note(site_name, doenca, nota):
     conn.execute(
         """
         INSERT INTO recommendation_notes (site_name, doenca, nota, updated_at)
-        VALUES (?, ?, ?, datetime('now', 'localtime'))
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(site_name, doenca) DO UPDATE SET nota = excluded.nota, updated_at = excluded.updated_at
         """,
-        (site_name, doenca, nota),
+        (site_name, doenca, nota, _agora_cuiaba()),
     )
     conn.commit()
     conn.close()
@@ -1098,9 +1117,9 @@ def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None):
     conn.execute(
         """
         INSERT INTO virtual_farms (site_name, nome, lat, lon, raio_km, criado_em, criado_por)
-        VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (site_name, nome, lat, lon, raio_km, criado_por),
+        (site_name, nome, lat, lon, raio_km, _agora_cuiaba(), criado_por),
     )
     conn.execute("INSERT OR IGNORE INTO sites (site_name) VALUES (?)", (site_name,))
     conn.commit()
