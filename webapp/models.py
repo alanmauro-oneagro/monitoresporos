@@ -100,7 +100,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS disease_translations (
             display_name_en TEXT PRIMARY KEY,
             nome_pt TEXT NOT NULL,
-            nome_cientifico TEXT
+            nome_cientifico TEXT,
+            condicoes_germinacao TEXT
         );
 
         CREATE TABLE IF NOT EXISTS app_settings (
@@ -220,6 +221,10 @@ def init_db():
     conn.execute("DROP TABLE IF EXISTS farm_sulco_plantio")
     try:
         conn.execute("ALTER TABLE disease_translations ADD COLUMN nome_cientifico TEXT")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        conn.execute("ALTER TABLE disease_translations ADD COLUMN condicoes_germinacao TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
@@ -401,24 +406,38 @@ def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, limit=300):
 
 
 def get_all_disease_translations():
-    """chave: display_name_en -> {nome_pt, nome_cientifico} -- os dois
-    campos editaveis na aba Doencas, pra quem monta os cartoes de alerta
+    """chave: display_name_en -> {nome_pt, nome_cientifico, condicoes_germinacao}
+    -- os campos editaveis na aba Doencas, pra quem monta os cartoes de alerta
     (Painel/Mapa/Manejo) usar o que foi editado ali em vez do valor cru
     que vem da leitura do BioScout (ver `data_reader.get_dashboard_data`,
     que so cai pro valor cru quando nao ha nome cientifico salvo)."""
     conn = get_db()
-    rows = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico FROM disease_translations").fetchall()
+    rows = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico, condicoes_germinacao FROM disease_translations").fetchall()
     conn.close()
-    return {r["display_name_en"]: {"nome_pt": r["nome_pt"], "nome_cientifico": r["nome_cientifico"] or ""} for r in rows}
+    return {
+        r["display_name_en"]: {
+            "nome_pt": r["nome_pt"],
+            "nome_cientifico": r["nome_cientifico"] or "",
+            "condicoes_germinacao": r["condicoes_germinacao"] or "",
+        }
+        for r in rows
+    }
 
 
 def get_all_disease_info():
-    """chave: display_name_en -> {nome_pt, nome_cientifico} -- usado pela
-    tela de admin Doencas (mostra e deixa editar as duas colunas)."""
+    """chave: display_name_en -> {nome_pt, nome_cientifico, condicoes_germinacao}
+    -- usado pela tela de admin Doencas (mostra e deixa editar as tres colunas)."""
     conn = get_db()
-    rows = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico FROM disease_translations").fetchall()
+    rows = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico, condicoes_germinacao FROM disease_translations").fetchall()
     conn.close()
-    return {r["display_name_en"]: {"nome_pt": r["nome_pt"], "nome_cientifico": r["nome_cientifico"] or ""} for r in rows}
+    return {
+        r["display_name_en"]: {
+            "nome_pt": r["nome_pt"],
+            "nome_cientifico": r["nome_cientifico"] or "",
+            "condicoes_germinacao": r["condicoes_germinacao"] or "",
+        }
+        for r in rows
+    }
 
 
 def ensure_disease_translations(display_names, default_map, scientific_map=None):
@@ -451,15 +470,26 @@ def ensure_disease_translations(display_names, default_map, scientific_map=None)
     conn.close()
 
 
-def save_disease_translation(display_name_en, nome_pt, nome_cientifico=""):
+def save_disease_translation(display_name_en, nome_pt, nome_cientifico="", condicoes_germinacao=None):
     conn = get_db()
-    conn.execute(
-        """
-        INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, ?)
-        ON CONFLICT(display_name_en) DO UPDATE SET nome_pt = excluded.nome_pt, nome_cientifico = excluded.nome_cientifico
-        """,
-        (display_name_en, nome_pt, nome_cientifico),
-    )
+    if condicoes_germinacao is None:
+        # so' atualiza nome_pt/nome_cientifico, preserva condicoes_germinacao ja salva
+        # (usado pelo formulario de nomes, que nao tem esse campo).
+        conn.execute(
+            """
+            INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, ?)
+            ON CONFLICT(display_name_en) DO UPDATE SET nome_pt = excluded.nome_pt, nome_cientifico = excluded.nome_cientifico
+            """,
+            (display_name_en, nome_pt, nome_cientifico),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico, condicoes_germinacao) VALUES (?, ?, ?, ?)
+            ON CONFLICT(display_name_en) DO UPDATE SET nome_pt = excluded.nome_pt, nome_cientifico = excluded.nome_cientifico, condicoes_germinacao = excluded.condicoes_germinacao
+            """,
+            (display_name_en, nome_pt, nome_cientifico, condicoes_germinacao),
+        )
     conn.commit()
     conn.close()
 

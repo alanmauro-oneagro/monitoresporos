@@ -1459,16 +1459,17 @@ def admin_doencas():
         display_names = request.form.getlist("display_name_en")
         nomes_pt = request.form.getlist("nome_pt")
         nomes_cientificos = request.form.getlist("nome_cientifico")
-        for display_name_en, nome_pt, nome_cientifico in zip(display_names, nomes_pt, nomes_cientificos):
+        condicoes_germinacao = request.form.getlist("condicoes_germinacao")
+        for display_name_en, nome_pt, nome_cientifico, condicoes in zip(display_names, nomes_pt, nomes_cientificos, condicoes_germinacao):
             nome_pt = nome_pt.strip()
             if nome_pt:
-                models.save_disease_translation(display_name_en, nome_pt, nome_cientifico.strip())
+                models.save_disease_translation(display_name_en, nome_pt, nome_cientifico.strip(), condicoes.strip())
         return _save_response("Nomes de doencas atualizados.", "admin_doencas")
 
     _load_translations()  # garante linhas novas + nome cientifico pre-preenchido
     info = models.get_all_disease_info()
     doencas = [
-        {"en": en, "pt": data["nome_pt"], "cientifico": data["nome_cientifico"]}
+        {"en": en, "pt": data["nome_pt"], "cientifico": data["nome_cientifico"], "germinacao": data["condicoes_germinacao"]}
         for en, data in sorted(info.items(), key=lambda kv: kv[1]["nome_pt"])
     ]
     culturas_ativas = models.get_culturas_ativas()
@@ -1653,6 +1654,38 @@ def aplicar_pesquisa_registro():
         f"Pesquisa de registro aplicada -- {len(_PESQUISA_REGISTRO_2026_08_26)} itens revisados.",
         "admin_fungicidas",
     )
+
+
+# Pesquisa de condicoes de germinacao (temperatura, UR, molhamento foliar)
+# feita em literatura de fitopatologia (EMBRAPA, APS, Crop Protection
+# Network, revisoes peer-reviewed) por doenca -- ver nome cientifico de
+# cada uma na aba Doencas. So' preenche o campo se ainda estiver vazio
+# (nao sobrescreve edicao manual ja feita), igual o nome cientifico faz.
+_PESQUISA_GERMINACAO_2026_08_27 = {
+    "Anthracnose": "20-28°C, UR>95% ou agua livre, molhamento foliar 6-24h",
+    "Septoria": "15-30°C (otimo 25°C), UR>80%, molhamento foliar 6h+",
+    "Soybean Rust": "15-28°C (otimo 20-25°C), UR>=95%, molhamento foliar 6h+",
+    "General Rust": "16-23°C, UR alta (>90%)/agua livre, molhamento foliar 6h+",
+    "Dry rot": "25-30°C, UR>85%, molhamento foliar 8h+",
+    "Target Spot": "25-30°C, UR>90% (ideal ~95%), molhamento foliar 12h+",
+    "General Alternaria": "20-30°C, UR>90% (agua livre), molhamento foliar 8-12h",
+    "Moniliophthora spp. BETA": "25-30°C, UR>90%, molhamento foliar/vagem 18-24h (chuva na maturacao)",
+    "Powdery Mildew": "20-25°C, UR alta 80-95% (agua livre inibe), sem molhamento foliar necessario",
+}
+
+
+@app.route("/admin/doencas/aplicar-pesquisa-germinacao", methods=["POST"])
+@admin_required
+def aplicar_pesquisa_germinacao():
+    info = models.get_all_disease_info()
+    aplicados = 0
+    for doenca_en, condicoes in _PESQUISA_GERMINACAO_2026_08_27.items():
+        atual = info.get(doenca_en)
+        if atual is None or atual["condicoes_germinacao"]:
+            continue  # doenca nao existe ainda, ou ja tem valor editado -- nao sobrescreve
+        models.save_disease_translation(doenca_en, atual["nome_pt"], atual["nome_cientifico"], condicoes)
+        aplicados += 1
+    return _save_response(f"Pesquisa de germinacao aplicada -- {aplicados} doenca(s) preenchida(s).", "admin_doencas")
 
 
 @app.route("/admin/fungicidas/mover", methods=["POST"])
