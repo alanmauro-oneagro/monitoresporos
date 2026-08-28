@@ -134,10 +134,10 @@ html { font-size: 14px; }
         {% for row in site_group.diseases %}
         <div class="{% if not loop.last %}border-bottom pb-3 mb-3{% endif %}">
             <div>
-                <span class="badge {{ 'bg-danger' if row.status == 'Perigo' else 'bg-warning text-dark' }}">
+                <strong class="text-uppercase">{{ row.rotulo }}</strong>
+                <span class="badge ms-2 {{ 'bg-danger' if row.status == 'Perigo' else 'bg-warning text-dark' }}">
                     {{ 'Alta concentração de esporos' if row.status == 'Perigo' else 'Moderada concentração de esporos' }}
                 </span>
-                <strong class="ms-2">{{ row.rotulo }}</strong>
                 {% if row.risco %}
                 <span class="badge ms-2 {{ 'bg-danger' if row.risco == 'vermelho' else ('bg-warning text-dark' if row.risco == 'amarelo' else 'bg-success') }}"
                       title="Risco de germinacao do fungo agora, pelo clima atual da fazenda (Open-Meteo)">
