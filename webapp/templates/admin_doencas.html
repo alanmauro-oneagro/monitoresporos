@@ -24,7 +24,7 @@
         <thead>
             <tr>
                 <th>Nome original (BioScout, em ingles)</th><th>Nome no nosso site</th><th>Nome cientifico do fungo</th>
-                <th>Condicoes p/ germinacao do esporo</th><th>Limites p/ luz de risco</th>
+                <th>Condicoes p/ germinacao (base da luz 🟢🟡🔴)</th>
             </tr>
         </thead>
         <tbody>
@@ -38,24 +38,26 @@
                 <td>
                     <input type="text" name="nome_cientifico" class="form-control fst-italic" value="{{ d.cientifico }}" placeholder="Ex.: Phakopsora pachyrhizi">
                 </td>
-                <td>
-                    <input type="text" name="condicoes_germinacao" class="form-control" value="{{ d.germinacao }}" placeholder="Ex.: 20-25 C, UR>90%, molhamento foliar 6h+">
-                </td>
-                <td style="min-width: 220px;">
+                <td style="min-width: 260px;">
                     <div class="d-flex gap-1 align-items-center mb-1">
                         <input type="number" step="0.1" name="germ_temp_min" class="form-control form-control-sm" value="{{ d.temp_min if d.temp_min is not none else '' }}" placeholder="Temp min">
                         <span class="text-muted small">a</span>
                         <input type="number" step="0.1" name="germ_temp_max" class="form-control form-control-sm" value="{{ d.temp_max if d.temp_max is not none else '' }}" placeholder="Temp max">
                         <span class="text-muted small">°C</span>
                     </div>
-                    <div class="d-flex gap-1 align-items-center">
+                    <div class="d-flex gap-1 align-items-center mb-1">
                         <input type="number" step="1" name="germ_ur_min" class="form-control form-control-sm" style="max-width: 90px;" value="{{ d.ur_min if d.ur_min is not none else '' }}" placeholder="UR min">
                         <span class="text-muted small">% UR min</span>
+                        <input type="number" step="1" name="germ_molhamento_horas" class="form-control form-control-sm ms-2" style="max-width: 90px;" value="{{ d.molhamento_horas if d.molhamento_horas is not none else '' }}" placeholder="Molhamento">
+                        <span class="text-muted small">h molhamento (opcional, so' informativo)</span>
                     </div>
-                    <div class="form-check mt-1">
+                    <div class="form-check mb-1">
                         <input type="checkbox" class="form-check-input" name="germ_agua_livre_inibe__{{ loop.index0 }}" id="agua_livre_inibe_{{ loop.index0 }}" {% if d.agua_livre_inibe %}checked{% endif %}>
                         <label class="form-check-label small text-muted" for="agua_livre_inibe_{{ loop.index0 }}">Chuva/agua livre atrapalha (ex.: oidio)</label>
                     </div>
+                    {% if d.germinacao %}
+                    <div class="small text-muted fst-italic">{{ d.germinacao }}</div>
+                    {% endif %}
                 </td>
             </tr>
         {% endfor %}
@@ -72,17 +74,16 @@
     que forem detectadas nos dados -- e' so vir aqui e traduzir. O nome
     cientifico do fungo vem preenchido sozinho quando o BioScout ja manda
     essa informacao nas leituras; edite se estiver faltando ou errado. A
-    coluna <strong>Condicoes p/ germinacao do esporo</strong> traz a
-    temperatura, umidade relativa e o tempo de molhamento foliar que a
-    literatura cientifica aponta como necessarios pro fungo germinar --
-    e' so' uma referencia informativa em texto livre (nao filtra nem
-    altera nenhum alerta), edite livremente se encontrar um dado mais
-    preciso. A coluna <strong>Limites p/ luz de risco</strong> tem os
-    mesmos numeros de forma estruturada -- e' o que a 🟢🟡🔴 na aba
-    Manejo usa pra comparar com o clima atual (Open-Meteo) da fazenda e
-    estimar o risco de germinacao agora; marque "chuva/agua livre
-    atrapalha" pros fungos tipo oidio, onde molhar a folha atrapalha em
-    vez de ajudar a germinar.
+    coluna <strong>Condicoes p/ germinacao</strong> tem a temperatura,
+    umidade relativa e (opcional, so' informativo) o tempo de molhamento
+    foliar que a literatura cientifica aponta como necessarios pro fungo
+    germinar -- os mesmos numeros que a luz 🟢🟡🔴 na aba Manejo usa pra
+    comparar com o clima atual (Open-Meteo) da fazenda e estimar o risco
+    de germinacao agora (o texto embaixo dos campos e' gerado sozinho a
+    partir desses numeros, so' pra conferencia -- nao e' editavel
+    separado, assim nunca fica descolado do que a luz realmente calcula).
+    Marque "chuva/agua livre atrapalha" pros fungos tipo oidio, onde
+    molhar a folha atrapalha em vez de ajudar a germinar.
 </p>
 
 <h4 class="mb-2 mt-4">Doencas x Culturas</h4>

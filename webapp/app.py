@@ -400,6 +400,32 @@ def _build_recomendacao_grupo(doenca, tipo, grupo, overrides, cultura=None, bloq
     return {"fonte": grupo["fonte"], "fonte_url": grupo["fonte_url"], "itens": itens}
 
 
+def _fmt_num(n):
+    return f"{n:g}"
+
+
+def _formatar_condicoes_germinacao(info):
+    """Monta o texto exibido na aba Manejo (e na propria aba Doencas) a
+    partir dos limites numericos cadastrados (germ_temp_min/max, germ_ur_min,
+    germ_molhamento_horas, germ_agua_livre_inibe) -- coluna unica que serve
+    tanto de texto legivel quanto de base de calculo da luz de risco (ver
+    `_calc_risco_germinacao`), pra nunca ficar um dessincronizado do outro."""
+    temp_min, temp_max = info.get("germ_temp_min"), info.get("germ_temp_max")
+    if temp_min is None or temp_max is None:
+        return ""
+    partes = [f"{_fmt_num(temp_min)}-{_fmt_num(temp_max)}°C"]
+    ur_min = info.get("germ_ur_min")
+    if ur_min is not None:
+        partes.append(f"UR≥{_fmt_num(ur_min)}%")
+    if info.get("germ_agua_livre_inibe"):
+        partes.append("chuva/agua livre atrapalha a germinacao")
+    else:
+        molhamento = info.get("germ_molhamento_horas")
+        if molhamento:
+            partes.append(f"molhamento foliar {_fmt_num(molhamento)}h+")
+    return ", ".join(partes)
+
+
 def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=None):
     """A partir dos cartoes (todas as doencas) de uma fazenda, monta a lista
     das que estao em Atencao/Perigo com a recomendacao de fungicida (quando
@@ -429,7 +455,7 @@ def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=N
             "data": card["data"],
             "rotulo": card["doenca"],
             "cientifico": info.get("nome_cientifico", ""),
-            "germinacao": info.get("condicoes_germinacao", ""),
+            "germinacao": _formatar_condicoes_germinacao(info),
             "germ_temp_min": info.get("germ_temp_min"),
             "germ_temp_max": info.get("germ_temp_max"),
             "germ_ur_min": info.get("germ_ur_min"),
@@ -1530,22 +1556,23 @@ def admin_doencas():
         display_names = request.form.getlist("display_name_en")
         nomes_pt = request.form.getlist("nome_pt")
         nomes_cientificos = request.form.getlist("nome_cientifico")
-        condicoes_germinacao = request.form.getlist("condicoes_germinacao")
         temp_mins = request.form.getlist("germ_temp_min")
         temp_maxs = request.form.getlist("germ_temp_max")
         ur_mins = request.form.getlist("germ_ur_min")
-        for idx, (display_name_en, nome_pt, nome_cientifico, condicoes) in enumerate(
-            zip(display_names, nomes_pt, nomes_cientificos, condicoes_germinacao)
+        molhamentos = request.form.getlist("germ_molhamento_horas")
+        for idx, (display_name_en, nome_pt, nome_cientifico) in enumerate(
+            zip(display_names, nomes_pt, nomes_cientificos)
         ):
             nome_pt = nome_pt.strip()
             if not nome_pt:
                 continue
-            models.save_disease_translation(display_name_en, nome_pt, nome_cientifico.strip(), condicoes.strip())
+            models.save_disease_translation(display_name_en, nome_pt, nome_cientifico.strip())
             models.save_disease_germ_limits(
                 display_name_en,
                 _parse_float_or_none(temp_mins[idx]) if idx < len(temp_mins) else None,
                 _parse_float_or_none(temp_maxs[idx]) if idx < len(temp_maxs) else None,
                 _parse_float_or_none(ur_mins[idx]) if idx < len(ur_mins) else None,
+                _parse_float_or_none(molhamentos[idx]) if idx < len(molhamentos) else None,
                 bool(request.form.get(f"germ_agua_livre_inibe__{idx}")),
             )
         return _save_response("Nomes de doencas atualizados.", "admin_doencas")
@@ -1555,9 +1582,10 @@ def admin_doencas():
     doencas = [
         {
             "en": en, "pt": data["nome_pt"], "cientifico": data["nome_cientifico"],
-            "germinacao": data["condicoes_germinacao"],
+            "germinacao": _formatar_condicoes_germinacao(data),
             "temp_min": data["germ_temp_min"], "temp_max": data["germ_temp_max"],
-            "ur_min": data["germ_ur_min"], "agua_livre_inibe": data["germ_agua_livre_inibe"],
+            "ur_min": data["germ_ur_min"], "molhamento_horas": data["germ_molhamento_horas"],
+            "agua_livre_inibe": data["germ_agua_livre_inibe"],
         }
         for en, data in sorted(info.items(), key=lambda kv: kv[1]["nome_pt"])
     ]
@@ -1748,48 +1776,24 @@ def aplicar_pesquisa_registro():
 # Pesquisa de condicoes de germinacao (temperatura, UR, molhamento foliar)
 # feita em literatura de fitopatologia (EMBRAPA, APS, Crop Protection
 # Network, revisoes peer-reviewed) por doenca -- ver nome cientifico de
-# cada uma na aba Doencas. So' preenche a doenca se ainda nao tiver texto
-# salvo (nao sobrescreve edicao manual ja feita), igual o nome cientifico
-# faz. temp_min/temp_max/ur_min alimentam a luz de risco (verde/amarelo/
-# vermelho) -- ver `_calc_risco_germinacao`. agua_livre_inibe=True e' o
-# caso do oidio, onde chuva/agua livre atrapalha em vez de ajudar.
+# cada uma na aba Doencas. So' preenche a doenca se ainda nao tiver limite
+# salvo (nao sobrescreve edicao manual ja feita). temp_min/temp_max/ur_min
+# alimentam a luz de risco (verde/amarelo/vermelho) E o texto exibido na
+# aba Manejo, gerado a partir deles -- ver `_formatar_condicoes_germinacao`
+# e `_calc_risco_germinacao`. molhamento_horas e' so' informativo (a rede
+# nao tem sensor de molhamento foliar de verdade, nao entra no calculo).
+# agua_livre_inibe=True e' o caso do oidio, onde chuva/agua livre atrapalha
+# em vez de ajudar a germinar.
 _PESQUISA_GERMINACAO_2026_08_27 = {
-    "Anthracnose": {
-        "texto": "20-28°C, UR>95% ou agua livre, molhamento foliar 6-24h",
-        "temp_min": 20, "temp_max": 28, "ur_min": 95, "agua_livre_inibe": False,
-    },
-    "Septoria": {
-        "texto": "15-30°C (otimo 25°C), UR>80%, molhamento foliar 6h+",
-        "temp_min": 15, "temp_max": 30, "ur_min": 80, "agua_livre_inibe": False,
-    },
-    "Soybean Rust": {
-        "texto": "15-28°C (otimo 20-25°C), UR>=95%, molhamento foliar 6h+",
-        "temp_min": 15, "temp_max": 28, "ur_min": 95, "agua_livre_inibe": False,
-    },
-    "General Rust": {
-        "texto": "16-23°C, UR alta (>90%)/agua livre, molhamento foliar 6h+",
-        "temp_min": 16, "temp_max": 23, "ur_min": 90, "agua_livre_inibe": False,
-    },
-    "Dry rot": {
-        "texto": "25-30°C, UR>85%, molhamento foliar 8h+",
-        "temp_min": 25, "temp_max": 30, "ur_min": 85, "agua_livre_inibe": False,
-    },
-    "Target Spot": {
-        "texto": "25-30°C, UR>90% (ideal ~95%), molhamento foliar 12h+",
-        "temp_min": 25, "temp_max": 30, "ur_min": 90, "agua_livre_inibe": False,
-    },
-    "General Alternaria": {
-        "texto": "20-30°C, UR>90% (agua livre), molhamento foliar 8-12h",
-        "temp_min": 20, "temp_max": 30, "ur_min": 90, "agua_livre_inibe": False,
-    },
-    "Moniliophthora spp. BETA": {
-        "texto": "25-30°C, UR>90%, molhamento foliar/vagem 18-24h (chuva na maturacao)",
-        "temp_min": 25, "temp_max": 30, "ur_min": 90, "agua_livre_inibe": False,
-    },
-    "Powdery Mildew": {
-        "texto": "20-25°C, UR alta 80-95% (agua livre inibe), sem molhamento foliar necessario",
-        "temp_min": 20, "temp_max": 25, "ur_min": 80, "agua_livre_inibe": True,
-    },
+    "Anthracnose": {"temp_min": 20, "temp_max": 28, "ur_min": 95, "molhamento_horas": 6, "agua_livre_inibe": False},
+    "Septoria": {"temp_min": 15, "temp_max": 30, "ur_min": 80, "molhamento_horas": 6, "agua_livre_inibe": False},
+    "Soybean Rust": {"temp_min": 15, "temp_max": 28, "ur_min": 95, "molhamento_horas": 6, "agua_livre_inibe": False},
+    "General Rust": {"temp_min": 16, "temp_max": 23, "ur_min": 90, "molhamento_horas": 6, "agua_livre_inibe": False},
+    "Dry rot": {"temp_min": 25, "temp_max": 30, "ur_min": 85, "molhamento_horas": 8, "agua_livre_inibe": False},
+    "Target Spot": {"temp_min": 25, "temp_max": 30, "ur_min": 90, "molhamento_horas": 12, "agua_livre_inibe": False},
+    "General Alternaria": {"temp_min": 20, "temp_max": 30, "ur_min": 90, "molhamento_horas": 8, "agua_livre_inibe": False},
+    "Moniliophthora spp. BETA": {"temp_min": 25, "temp_max": 30, "ur_min": 90, "molhamento_horas": 18, "agua_livre_inibe": False},
+    "Powdery Mildew": {"temp_min": 20, "temp_max": 25, "ur_min": 80, "molhamento_horas": None, "agua_livre_inibe": True},
 }
 
 
@@ -1800,21 +1804,13 @@ def aplicar_pesquisa_germinacao():
     aplicados = 0
     for doenca_en, dados in _PESQUISA_GERMINACAO_2026_08_27.items():
         atual = info.get(doenca_en)
-        if atual is None:
-            continue  # doenca nao existe ainda
-        # texto e limites numericos sao preenchidos de forma independente --
-        # um ambiente que ja tinha o texto (de uma pesquisa anterior) mas
-        # ainda nao tem os limites numericos (luz de risco, adicionada
-        # depois) precisa poder ganhar so' os limites, sem duplicar/mexer
-        # no texto (que pode ja ter sido editado a mao).
-        if not atual["condicoes_germinacao"]:
-            models.save_disease_translation(doenca_en, atual["nome_pt"], atual["nome_cientifico"], dados["texto"])
-        if atual["germ_temp_min"] is None:
-            models.save_disease_germ_limits(
-                doenca_en, dados["temp_min"], dados["temp_max"], dados["ur_min"], dados["agua_livre_inibe"],
-            )
-        if not atual["condicoes_germinacao"] or atual["germ_temp_min"] is None:
-            aplicados += 1
+        if atual is None or atual["germ_temp_min"] is not None:
+            continue  # doenca nao existe ainda, ou ja tem limite editado -- nao sobrescreve
+        models.save_disease_germ_limits(
+            doenca_en, dados["temp_min"], dados["temp_max"], dados["ur_min"],
+            dados["molhamento_horas"], dados["agua_livre_inibe"],
+        )
+        aplicados += 1
     return _save_response(f"Pesquisa de germinacao aplicada -- {aplicados} doenca(s) preenchida(s).", "admin_doencas")
 
 

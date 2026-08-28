@@ -105,6 +105,7 @@ def init_db():
             germ_temp_min REAL,
             germ_temp_max REAL,
             germ_ur_min REAL,
+            germ_molhamento_horas REAL,
             germ_agua_livre_inibe INTEGER NOT NULL DEFAULT 0
         );
 
@@ -228,12 +229,18 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
+        # condicoes_germinacao (texto livre): legado -- desde que os
+        # limites numericos abaixo foram adicionados, o texto exibido na
+        # aba Doencas/Manejo e' gerado a partir deles (uma coluna so' pra
+        # nao arriscar o texto ficar dessincronizado do que a luz de risco
+        # realmente usa). A coluna continua existindo no banco (dado
+        # antigo, inofensivo) mas o app nao le nem escreve mais nela.
         conn.execute("ALTER TABLE disease_translations ADD COLUMN condicoes_germinacao TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     for coluna, tipo in [
         ("germ_temp_min", "REAL"), ("germ_temp_max", "REAL"), ("germ_ur_min", "REAL"),
-        ("germ_agua_livre_inibe", "INTEGER NOT NULL DEFAULT 0"),
+        ("germ_molhamento_horas", "REAL"), ("germ_agua_livre_inibe", "INTEGER NOT NULL DEFAULT 0"),
     ]:
         try:
             conn.execute(f"ALTER TABLE disease_translations ADD COLUMN {coluna} {tipo}")
@@ -418,8 +425,8 @@ def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, limit=300):
 
 
 _DISEASE_INFO_COLUMNS = (
-    "display_name_en, nome_pt, nome_cientifico, condicoes_germinacao, "
-    "germ_temp_min, germ_temp_max, germ_ur_min, germ_agua_livre_inibe"
+    "display_name_en, nome_pt, nome_cientifico, "
+    "germ_temp_min, germ_temp_max, germ_ur_min, germ_molhamento_horas, germ_agua_livre_inibe"
 )
 
 
@@ -427,23 +434,26 @@ def _disease_info_row_to_dict(r):
     return {
         "nome_pt": r["nome_pt"],
         "nome_cientifico": r["nome_cientifico"] or "",
-        "condicoes_germinacao": r["condicoes_germinacao"] or "",
         "germ_temp_min": r["germ_temp_min"],
         "germ_temp_max": r["germ_temp_max"],
         "germ_ur_min": r["germ_ur_min"],
+        "germ_molhamento_horas": r["germ_molhamento_horas"],
         "germ_agua_livre_inibe": bool(r["germ_agua_livre_inibe"]),
     }
 
 
 def get_all_disease_translations():
-    """chave: display_name_en -> {nome_pt, nome_cientifico, condicoes_germinacao,
-    germ_temp_min, germ_temp_max, germ_ur_min, germ_agua_livre_inibe} -- os
-    campos editaveis na aba Doencas, pra quem monta os cartoes de alerta
-    (Painel/Mapa/Manejo) usar o que foi editado ali em vez do valor cru
-    que vem da leitura do BioScout (ver `data_reader.get_dashboard_data`,
-    que so cai pro valor cru quando nao ha nome cientifico salvo). Os 4
-    campos germ_* alimentam a luz de risco de germinacao (verde/amarelo/
-    vermelho) na aba Manejo -- ver `_calc_risco_germinacao` em app.py."""
+    """chave: display_name_en -> {nome_pt, nome_cientifico, germ_temp_min,
+    germ_temp_max, germ_ur_min, germ_molhamento_horas, germ_agua_livre_inibe}
+    -- os campos editaveis na aba Doencas, pra quem monta os cartoes de
+    alerta (Painel/Mapa/Manejo) usar o que foi editado ali em vez do valor
+    cru que vem da leitura do BioScout (ver `data_reader.get_dashboard_data`,
+    que so cai pro valor cru quando nao ha nome cientifico salvo). Os
+    campos germ_* sao a UNICA fonte dos dados de germinacao -- alimentam a
+    luz de risco (verde/amarelo/vermelho) E o texto exibido na aba Manejo,
+    gerado a partir deles (ver `_formatar_condicoes_germinacao` e
+    `_calc_risco_germinacao` em app.py) -- assim o texto nunca fica
+    dessincronizado do que a luz realmente calcula."""
     conn = get_db()
     rows = conn.execute(f"SELECT {_DISEASE_INFO_COLUMNS} FROM disease_translations").fetchall()
     conn.close()
@@ -489,44 +499,33 @@ def ensure_disease_translations(display_names, default_map, scientific_map=None)
     conn.close()
 
 
-def save_disease_translation(display_name_en, nome_pt, nome_cientifico="", condicoes_germinacao=None):
+def save_disease_translation(display_name_en, nome_pt, nome_cientifico=""):
     conn = get_db()
-    if condicoes_germinacao is None:
-        # so' atualiza nome_pt/nome_cientifico, preserva condicoes_germinacao ja salva
-        # (usado pelo formulario de nomes, que nao tem esse campo).
-        conn.execute(
-            """
-            INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, ?)
-            ON CONFLICT(display_name_en) DO UPDATE SET nome_pt = excluded.nome_pt, nome_cientifico = excluded.nome_cientifico
-            """,
-            (display_name_en, nome_pt, nome_cientifico),
-        )
-    else:
-        conn.execute(
-            """
-            INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico, condicoes_germinacao) VALUES (?, ?, ?, ?)
-            ON CONFLICT(display_name_en) DO UPDATE SET nome_pt = excluded.nome_pt, nome_cientifico = excluded.nome_cientifico, condicoes_germinacao = excluded.condicoes_germinacao
-            """,
-            (display_name_en, nome_pt, nome_cientifico, condicoes_germinacao),
-        )
+    conn.execute(
+        """
+        INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, ?)
+        ON CONFLICT(display_name_en) DO UPDATE SET nome_pt = excluded.nome_pt, nome_cientifico = excluded.nome_cientifico
+        """,
+        (display_name_en, nome_pt, nome_cientifico),
+    )
     conn.commit()
     conn.close()
 
 
-def save_disease_germ_limits(display_name_en, temp_min, temp_max, ur_min, agua_livre_inibe):
-    """Limites numericos usados pela luz de risco de germinacao (verde/
-    amarelo/vermelho) na aba Manejo -- ver `_calc_risco_germinacao` em
-    app.py. Independente do texto livre de `condicoes_germinacao` (que e'
-    so' pra leitura humana); a linha ja precisa existir (toda doenca
-    conhecida tem uma, via `ensure_disease_translations`)."""
+def save_disease_germ_limits(display_name_en, temp_min, temp_max, ur_min, molhamento_horas, agua_livre_inibe):
+    """Limites numericos de germinacao -- UNICA fonte tanto da luz de risco
+    (verde/amarelo/vermelho, ver `_calc_risco_germinacao` em app.py) quanto
+    do texto exibido na aba Manejo (gerado a partir destes numeros, ver
+    `_formatar_condicoes_germinacao`). A linha ja precisa existir (toda
+    doenca conhecida tem uma, via `ensure_disease_translations`)."""
     conn = get_db()
     conn.execute(
         """
         UPDATE disease_translations
-        SET germ_temp_min = ?, germ_temp_max = ?, germ_ur_min = ?, germ_agua_livre_inibe = ?
+        SET germ_temp_min = ?, germ_temp_max = ?, germ_ur_min = ?, germ_molhamento_horas = ?, germ_agua_livre_inibe = ?
         WHERE display_name_en = ?
         """,
-        (temp_min, temp_max, ur_min, 1 if agua_livre_inibe else 0, display_name_en),
+        (temp_min, temp_max, ur_min, molhamento_horas, 1 if agua_livre_inibe else 0, display_name_en),
     )
     conn.commit()
     conn.close()
