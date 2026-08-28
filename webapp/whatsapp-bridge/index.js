@@ -159,9 +159,9 @@ app.post("/check-number", async (req, res) => {
 });
 
 app.post("/send", (req, res) => {
-    const { phone, message } = req.body || {};
-    if (!phone || !message) {
-        return res.status(400).json({ ok: false, error: "phone e message sao obrigatorios" });
+    const { phone, message, documentBase64, fileName, caption } = req.body || {};
+    if (!phone || (!message && !documentBase64)) {
+        return res.status(400).json({ ok: false, error: "phone e (message ou documentBase64) sao obrigatorios" });
     }
     if (!connected || !sock) {
         return res.status(503).json({ ok: false, error: "WhatsApp nao conectado -- escaneie o QR code em /qr" });
@@ -179,6 +179,18 @@ app.post("/send", (req, res) => {
             const digits = String(phone).replace(/\D/g, "");
             const [info] = await sock.onWhatsApp(digits).catch(() => []);
             const jid = (info && info.exists) ? info.jid : normalizePhone(digits);
+            if (documentBase64) {
+                // Relatorio em PDF (mesmo conteudo do texto, mais o grafico
+                // de concentracao) mandado como documento anexado -- ver
+                // `_send_site_whatsapp` em app.py, que manda o texto e
+                // depois o PDF pro mesmo numero.
+                return sock.sendMessage(jid, {
+                    document: Buffer.from(documentBase64, "base64"),
+                    mimetype: "application/pdf",
+                    fileName: fileName || "relatorio.pdf",
+                    caption: caption || undefined,
+                });
+            }
             return sock.sendMessage(jid, { text: message });
         })
         .then(() => res.json({ ok: true }))

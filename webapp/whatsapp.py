@@ -8,6 +8,7 @@ Precisa do servico rodando (`npm start` dentro de whatsapp-bridge/, ou o
 atalho que inicia junto com o app) e pareado uma vez (escaneando o QR
 code em Configuracoes > WhatsApp com o celular que vai ser o remetente).
 """
+import base64
 import json
 import os
 import urllib.request
@@ -96,6 +97,40 @@ def send_whatsapp(phone, text):
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=25) as resp:
+            body = json.load(resp)
+            return (True, "enviado") if body.get("ok") else (False, body.get("error", "falha desconhecida"))
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.load(exc)
+            return False, body.get("error", str(exc))
+        except Exception:
+            return False, str(exc)
+    except Exception as exc:
+        return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
+
+
+def send_whatsapp_document(phone, pdf_bytes, filename, caption=None):
+    """Manda um PDF como documento anexado (nao so' texto) -- o mesmo
+    /send do bridge, so' que com `documentBase64`/`fileName` em vez de
+    `message`. Retorna (ok: bool, mensagem: str). Timeout maior que
+    `send_whatsapp` porque o upload do arquivo pro WhatsApp demora mais
+    que so' mandar texto."""
+    if not phone:
+        return False, "Numero de WhatsApp nao informado."
+    try:
+        payload = json.dumps({
+            "phone": phone,
+            "documentBase64": base64.b64encode(pdf_bytes).decode("ascii"),
+            "fileName": filename,
+            "caption": caption or "",
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{BRIDGE_URL}/send",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=45) as resp:
             body = json.load(resp)
             return (True, "enviado") if body.get("ok") else (False, body.get("error", "falha desconhecida"))
     except urllib.error.HTTPError as exc:

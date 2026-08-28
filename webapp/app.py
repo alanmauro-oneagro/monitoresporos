@@ -9,6 +9,7 @@ antes nesse projeto); a pagina volta na hora avisando que a busca comecou,
 e os dados novos aparecem quando a pessoa atualizar a pagina de novo.
 """
 import functools
+import io
 import os
 import re
 import sqlite3
@@ -723,14 +724,58 @@ def _farm_produtos_estoque(site, safra):
     return produtos
 
 
+def _farm_plantio_aplicacoes_estoque(site, safra):
+    """(plantio_linhas, aplicacoes_linhas) pro PDF -- mesma logica de uniao
+    entre safras que `_farm_produtos_estoque` ja faz quando `safra` e' None
+    (envio agendado, sem uma safra especifica escolhida)."""
+    plantio_por_safra = models.get_all_farm_plantio().get(site, {})
+    aplicacoes_por_safra = models.get_all_farm_aplicacoes().get(site, {})
+    safras_a_considerar = [safra] if safra else [s for s, _ in models.SAFRAS]
+    plantio, aplicacoes = [], []
+    for s in safras_a_considerar:
+        plantio.extend(plantio_por_safra.get(s, []))
+        aplicacoes.extend(aplicacoes_por_safra.get(s, []))
+    return plantio, aplicacoes
+
+
+def _build_site_pdf(site, diseases, weather, produtos, cultura, safra):
+    """Gera o mesmo PDF do botao "Recomendacao (PDF)" -- usado tanto pelo
+    download manual (`recommendation_pdf`) quanto pelo envio automatico
+    junto do WhatsApp (`_send_site_whatsapp`). `safra=None` (envio
+    agendado, sem uma safra especifica) usa a uniao das duas safras pros
+    dados de plantio/aplicacao, e um rotulo generico no lugar do nome da
+    safra."""
+    for d in diseases:
+        d["historico"] = data_reader.get_site_disease_history(site, d["doenca_en"], dias=30)
+    plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
+    is_virtual = models.get_virtual_farm(site) is not None
+    nome_fazenda = site.split('"')[1] if is_virtual and site.count('"') >= 2 else (
+        site.split(" - ", 1)[1] if " - " in site else site
+    )
+    safra_label = SAFRA_LABELS[safra] if safra else "todas as safras"
+    rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
+    buffer = export_pdf.build_recommendation_pdf(
+        nome_fazenda, safra_label, diseases, weather=weather, produtos=produtos,
+        cultura=cultura, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
+        rodape_data=rodape_data,
+    )
+    filename = f"Recomendacao_{nome_fazenda}_{datetime.now().strftime('%Y%m%d')}.pdf".replace(" ", "_")
+    return nome_fazenda, filename, buffer.getvalue()
+
+
 def _send_site_whatsapp(site, safra=None):
     """Monta o relatorio de uma fazenda numa mensagem de texto so (Dados
     de Clima, Fungos em alta quantidade, Recomendacoes das Instituicoes
     de Pesquisa, Produtos Fazenda e Anotacoes -- ver
-    `_format_whatsapp_message`) e manda pra TODOS os numeros cadastrados
+    `_format_whatsapp_message`), manda pra TODOS os numeros cadastrados
     que devem recebe-la (uma fazenda pode ter varios --
     `_site_whatsapp_destinations`), pelo WhatsApp do administrador
-    (whatsapp-bridge). Manda mesmo quando a fazenda nao tem nenhuma doenca
+    (whatsapp-bridge), e manda tambem o PDF (mesmo conteudo + grafico de
+    concentracao) como documento anexado logo em seguida -- essa e' a
+    UNICA rotina de envio de WhatsApp do sistema, entao tanto o botao
+    manual "Enviar por WhatsApp" quanto o envio agendado semanal ja
+    passam a incluir o PDF automaticamente, sem precisar de nenhum toggle
+    separado. Manda mesmo quando a fazenda nao tem nenhuma doenca
     em Atencao/Perigo no momento -- nesse caso a mensagem e' so o aviso de
     que esta tudo tranquilo (ver `_format_whatsapp_message`). Retorna (ok,
     mensagem-resumo); ok=True se pelo menos 1 numero recebeu a mensagem.
@@ -775,11 +820,28 @@ def _send_site_whatsapp(site, safra=None):
         models.log_whatsapp_envio(site, None, None, False, motivo)
         return False, motivo
 
+    # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
+    # gerado uma vez so' e mandado como documento logo depois do texto,
+    # pra cada destinatario -- uma falha ao gerar o PDF NAO impede o envio
+    # do texto (so' fica registrada no log, o resumo/sucesso do envio
+    # continua baseado no texto, que e' o formato principal).
+    pdf_nome_fazenda = pdf_filename = pdf_bytes = None
+    try:
+        pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(site, diseases, weather, produtos, cultura, safra)
+    except Exception as exc:
+        models.log_whatsapp_envio(site, None, None, False, f"Falha ao gerar PDF pra WhatsApp: {exc}")
+
     sucesso, falha = [], []
     for phone, rotulo in destinos:
         ok, message = whatsapp.send_whatsapp(phone, text)
         models.log_whatsapp_envio(site, rotulo, phone, ok, message)
         (sucesso if ok else falha).append(rotulo if ok else f"{rotulo} ({message})")
+        if pdf_bytes:
+            ok_pdf, message_pdf = whatsapp.send_whatsapp_document(
+                phone, pdf_bytes, pdf_filename,
+                caption=f"📄 Relatório em PDF - {pdf_nome_fazenda} (mesmo conteudo, com grafico de concentracao)",
+            )
+            models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"PDF: {message_pdf}")
     resumo = f"{len(sucesso)}/{len(destinos)} numero(s)"
     if falha:
         resumo += f" -- falha em: {', '.join(falha)}"
@@ -1317,23 +1379,9 @@ def recommendation_pdf(site_name):
     weather = _get_weather_for_site(site_name, coords)
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
-        d["historico"] = data_reader.get_site_disease_history(site_name, d["doenca_en"], dias=30)
     produtos = _farm_produtos_estoque(site_name, safra)
-    plantio_linhas = models.get_all_farm_plantio().get(site_name, {}).get(safra, [])
-    aplicacoes_linhas = models.get_all_farm_aplicacoes().get(site_name, {}).get(safra, [])
-    is_virtual = models.get_virtual_farm(site_name) is not None
-    nome_fazenda = site_name.split('"')[1] if is_virtual and site_name.count('"') >= 2 else (
-        site_name.split(" - ", 1)[1] if " - " in site_name else site_name
-    )
-    rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
-
-    buffer = export_pdf.build_recommendation_pdf(
-        nome_fazenda, SAFRA_LABELS[safra], diseases, weather=weather, produtos=produtos,
-        cultura=cultura, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
-        rodape_data=rodape_data,
-    )
-    filename = f"Recomendacao_{nome_fazenda}_{datetime.now().strftime('%Y%m%d')}.pdf".replace(" ", "_")
-    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
+    _, filename, pdf_bytes = _build_site_pdf(site_name, diseases, weather, produtos, cultura, safra)
+    return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
 @app.route("/recommendations/whatsapp-days/save", methods=["POST"])

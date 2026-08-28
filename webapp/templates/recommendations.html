@@ -91,7 +91,7 @@ html { font-size: 14px; }
                 <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" class="mb-0">
                     <input type="hidden" name="safra" value="{{ safra }}">
                     <button type="submit" class="btn btn-sm btn-outline-success" {% if not site_group.whatsapp_destinos or site_group.nivel_dados == 'bloqueado' %}disabled{% endif %}
-                            title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% elif site_group.whatsapp_destinos %}Enviar para {{ site_group.whatsapp_destinos }} numero(s){% else %}Nenhum numero cadastrado pra essa fazenda ainda{% endif %}">
+                            title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% elif site_group.whatsapp_destinos %}Enviar o relatorio (texto + PDF anexado) para {{ site_group.whatsapp_destinos }} numero(s){% else %}Nenhum numero cadastrado pra essa fazenda ainda{% endif %}">
                         📲 Enviar por WhatsApp{% if site_group.whatsapp_destinos %} ({{ site_group.whatsapp_destinos }}){% endif %}
                     </button>
                 </form>
