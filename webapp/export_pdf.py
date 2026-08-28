@@ -11,7 +11,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.graphics.shapes import Drawing, PolyLine, Rect, String
+from reportlab.graphics.shapes import Drawing, Path, Rect, String
 from reportlab.platypus import (
     KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
@@ -45,6 +45,24 @@ _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
 _RISCO_CORES = {"vermelho": "#c0392b", "amarelo": "#b7860b", "verde": "#2e7d32"}
 
 
+def _linha_suave(pontos):
+    """Path com curvas suaves (Catmull-Rom convertido pra Bezier cubica)
+    passando exatamente pelos pontos [(x0,y0), (x1,y1), ...] -- em vez de
+    uma polilinha com angulos retos em cada ponto."""
+    p = Path(strokeColor=AZUL_MARCA, strokeWidth=1.0, fillColor=None)
+    n = len(pontos)
+    p.moveTo(*pontos[0])
+    for i in range(n - 1):
+        p0 = pontos[i - 1] if i > 0 else pontos[i]
+        p1 = pontos[i]
+        p2 = pontos[i + 1]
+        p3 = pontos[i + 2] if i + 2 < n else pontos[i + 1]
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
+        p.curveTo(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
+    return p
+
+
 def _build_spore_chart(historico, largura=17.4 * cm, altura=4.5 * cm):
     """Graficozinho de concentracao de esporos ao longo do tempo, com as
     mesmas faixas verde/amarelo/vermelho do dashboard do BioScout (fixas
@@ -76,11 +94,8 @@ def _build_spore_chart(historico, largura=17.4 * cm, altura=4.5 * cm):
 
     n = len(historico)
     escala_x = plot_w / (n - 1) if n > 1 else 0
-    pontos = []
-    for i, h in enumerate(historico):
-        pontos.append(margem_esq + i * escala_x)
-        pontos.append(y(h["concentracao"]))
-    d.add(PolyLine(pontos, strokeColor=AZUL_MARCA, strokeWidth=1.6))
+    pontos = [(margem_esq + i * escala_x, y(h["concentracao"])) for i, h in enumerate(historico)]
+    d.add(_linha_suave(pontos))
 
     for valor in sorted({0, warn, danger, topo}):
         d.add(String(margem_esq - 4, y(valor) - 2.5, f"{valor:g}", fontSize=6.5, fillColor=colors.grey, textAnchor="end"))

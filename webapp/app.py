@@ -1318,7 +1318,7 @@ def recommendation_pdf(site_name):
     weather = _get_weather_for_site(site_name, coords)
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
-        d["historico"] = data_reader.get_site_disease_history(site_name, d["doenca_en"])
+        d["historico"] = data_reader.get_site_disease_history(site_name, d["doenca_en"], dias=30)
     produtos = _farm_produtos_estoque(site_name, safra)
     plantio_linhas = models.get_all_farm_plantio().get(site_name, {}).get(safra, [])
     aplicacoes_linhas = models.get_all_farm_aplicacoes().get(site_name, {}).get(safra, [])
