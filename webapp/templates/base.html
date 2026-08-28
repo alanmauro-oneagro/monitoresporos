@@ -14,8 +14,19 @@
     <style>
         body { background: #f4f6f4; padding-bottom: 2rem; }
         .navbar-brand img { height: 34px; }
-        .navbar .nav-link { color: #0a1f44 !important; font-weight: 500; }
+        /* font-size fixo em px (nao rem) de proposito -- assim o menu
+           fica do mesmo tamanho em toda pagina, mesmo que alguma pagina
+           especifica (ex.: Manejo) redefina o font-size base (rem) do
+           <html> pra deixar o PROPRIO conteudo mais compacto. */
+        .navbar .nav-link { color: #0a1f44 !important; font-weight: 500; font-size: 13px; }
         .navbar .nav-link:hover { color: #63b445 !important; }
+        /* Veu verde (tom da logo, #63b445) marcando a aba/menu em uso --
+           35% de opacidade = 65% de transparencia. */
+        .navbar .nav-link.tab-ativa,
+        .dropdown-item-custom.tab-ativa {
+            background-color: rgba(99, 180, 69, 0.35);
+            border-radius: 0.35rem;
+        }
         .card-perigo { background: #ff6b6b; color: #282828; }
         .card-atencao { background: #ffd43b; color: #282828; }
         .card-normal { background: #51cf66; color: #282828; }
@@ -51,6 +62,16 @@
         .manual-note-box { background: #f8f9fa; border: 1px solid #e2e5e8; border-radius: 0.4rem; padding: 0.6rem 0.7rem; }
         .auto-grow-textarea { overflow-y: hidden; resize: none; }
         .dropdown-item-custom:hover { background: #f4f6f4; }
+        /* Bootstrap define font-size proprio (rem) em .form-control,
+           .form-select e .btn -- eles NAO herdam o font-size de um
+           ancestral, entao um simples font-size no container nao afeta
+           esses elementos. Precisa mirar cada um explicitamente. */
+        .form-compact { font-size: 0.85rem; }
+        .form-compact .form-control,
+        .form-compact .form-select,
+        .form-compact .btn,
+        .form-compact .form-check-label,
+        .form-compact .form-label { font-size: 0.85rem; }
         .navbar-toggler { border: 1px solid #63b445; padding: 0.25rem 0.5rem; }
         @media (min-width: 992px) {
             /* Compacta o menu pra caber tudo numa linha so, alinhado a
@@ -58,7 +79,7 @@
                os itens. */
             .navbar-brand img { height: 26px; }
             #mainNavMenu { gap: 0.05rem !important; flex-wrap: nowrap; }
-            #mainNavMenu .nav-link { padding: 0.5rem 0.35rem; font-size: 0.8rem; white-space: nowrap; }
+            #mainNavMenu .nav-link { padding: 0.5rem 0.35rem; white-space: nowrap; }
         }
         @media (max-width: 991.98px) {
             /* Sobrepoe o conteudo da pagina (nao empurra pra baixo) --
@@ -95,31 +116,32 @@
         <button type="button" class="navbar-toggler" id="navToggleBtn" aria-label="Abrir menu">
             <span class="navbar-toggler-icon"></span>
         </button>
+        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'admin_culturas', 'mapa_interpolado', 'admin_whatsapp', 'admin_relatorio_whatsapp', 'admin_relatorio_fungicidas', 'admin_exportar'] %}
         <div class="d-none d-lg-flex flex-column flex-lg-row gap-2 gap-lg-3 align-items-lg-center justify-content-lg-end w-100" id="mainNavMenu">
-            <a class="nav-link text-white" href="{{ url_for('mapa') }}">Mapa</a>
-            <a class="nav-link text-white" href="{{ url_for('fazendas') }}">Fazendas</a>
-            <a class="nav-link text-white" href="{{ url_for('dashboard') }}">Alertas</a>
+            <a class="nav-link text-white{% if request.endpoint == 'mapa' %} tab-ativa{% endif %}" href="{{ url_for('mapa') }}">Mapa</a>
+            <a class="nav-link text-white{% if request.endpoint == 'fazendas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas') }}">Fazendas</a>
+            <a class="nav-link text-white{% if request.endpoint == 'dashboard' %} tab-ativa{% endif %}" href="{{ url_for('dashboard') }}">Alertas</a>
             {% for safra_key, safra_label in nav_safras %}
-            <a class="nav-link text-white" href="{{ url_for('recommendations', safra=safra_key) }}">Manejo {{ safra_label }}</a>
+            <a class="nav-link text-white{% if request.endpoint == 'recommendations' and request.view_args and request.view_args.get('safra') == safra_key %} tab-ativa{% endif %}" href="{{ url_for('recommendations', safra=safra_key) }}">Manejo {{ safra_label }}</a>
             {% endfor %}
             <a class="nav-link text-white" href="https://new.bioscout.com.au/" target="_blank" rel="noopener">BioScout</a>
-            <a class="nav-link text-white" href="{{ url_for('change_password') }}" title="Trocar senha">Trocar senha</a>
-            <a class="nav-link text-white" href="{{ url_for('meu_whatsapp') }}" title="Meu WhatsApp">Meu WhatsApp</a>
+            <a class="nav-link text-white{% if request.endpoint == 'change_password' %} tab-ativa{% endif %}" href="{{ url_for('change_password') }}" title="Trocar senha">Trocar senha</a>
+            <a class="nav-link text-white{% if request.endpoint == 'meu_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('meu_whatsapp') }}" title="Meu WhatsApp">Meu WhatsApp</a>
             <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>
             {% if current_user.is_admin %}
             <div class="position-relative">
-                <button type="button" class="btn btn-link nav-link text-white p-0" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮</button>
+                <button type="button" class="btn btn-link nav-link text-white p-0{% if request.endpoint in _admin_dropdown_endpoints %} tab-ativa{% endif %}" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮</button>
                 <div id="settingsMenu" class="d-none position-absolute end-0 bg-white shadow rounded mt-2 py-1" style="min-width: 160px; z-index: 1050;">
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_users') }}">Usuários</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_doencas') }}">Doenças</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_fungicidas') }}">Fungicidas</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_culturas') }}">Culturas</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('mapa_interpolado') }}">Mapa Interpolado</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_users' %} tab-ativa{% endif %}" href="{{ url_for('admin_users') }}">Usuários</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_doencas' %} tab-ativa{% endif %}" href="{{ url_for('admin_doencas') }}">Doenças</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_fungicidas' %} tab-ativa{% endif %}" href="{{ url_for('admin_fungicidas') }}">Fungicidas</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_culturas' %} tab-ativa{% endif %}" href="{{ url_for('admin_culturas') }}">Culturas</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'mapa_interpolado' %} tab-ativa{% endif %}" href="{{ url_for('mapa_interpolado') }}">Mapa Interpolado</a>
                     {% if current_user.username == 'Alan Mauro' %}
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_whatsapp') }}">WhatsApp</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_relatorio_whatsapp') }}">Rel. WhatsApp</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_relatorio_fungicidas') }}">Rel. Fungicidas</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark" href="{{ url_for('admin_exportar') }}">Exportar</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('admin_whatsapp') }}">WhatsApp</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_relatorio_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('admin_relatorio_whatsapp') }}">Rel. WhatsApp</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_relatorio_fungicidas' %} tab-ativa{% endif %}" href="{{ url_for('admin_relatorio_fungicidas') }}">Rel. Fungicidas</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_exportar' %} tab-ativa{% endif %}" href="{{ url_for('admin_exportar') }}">Exportar</a>
                     {% endif %}
                 </div>
             </div>
