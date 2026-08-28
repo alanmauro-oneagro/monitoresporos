@@ -547,6 +547,15 @@ def _risco_label(risco):
     return _RISCO_LABELS.get(risco)
 
 
+_STATUS_LABELS = {"Perigo": "Alta concentração de esporos", "Atencao": "Moderada concentração de esporos"}
+
+
+def _status_label(status):
+    """'Perigo'/'Atencao' -> 'Alta/Moderada concentração de esporos'
+    (Manejo, WhatsApp e PDF usam o mesmo rotulo)."""
+    return _STATUS_LABELS.get(status, status)
+
+
 def _fmt_ingrediente(item, classe_label):
     if item.get("classe"):
         return f"{item['ingrediente']} ({classe_label.get(item['classe'], item['classe'])})"
@@ -614,9 +623,9 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     n_atencao = sum(1 for d in diseases if d["status"] == "Atencao")
     partes_resumo = []
     if n_perigo:
-        partes_resumo.append(f"{n_perigo} em PERIGO")
+        partes_resumo.append(f"{n_perigo} em {_status_label('Perigo').lower()}")
     if n_atencao:
-        partes_resumo.append(f"{n_atencao} em ATENCAO")
+        partes_resumo.append(f"{n_atencao} em {_status_label('Atencao').lower()}")
 
     lines = [_whatsapp_titulo(site, is_virtual), ""]
 
@@ -654,7 +663,7 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     for d in diseases:
         emoji_status = "🔴" if d["status"] == "Perigo" else "🟡"
         lines.append(
-            f"{emoji_status} {d['status'].upper()} — *{d['rotulo'].upper()}* - "
+            f"{emoji_status} *{d['rotulo'].upper()}* — {_status_label(d['status'])} - "
             f"Contagem: {d['concentracao']} esporos/m³"
         )
         risco_label = _risco_label(d.get("risco"))

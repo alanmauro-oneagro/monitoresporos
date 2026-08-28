@@ -43,6 +43,7 @@ _ESTILO_GERMINACAO = ParagraphStyle(
 
 _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
 _RISCO_CORES = {"vermelho": "#c0392b", "amarelo": "#b7860b", "verde": "#2e7d32"}
+_STATUS_LABELS = {"Perigo": "Alta concentração de esporos", "Atencao": "Moderada concentração de esporos"}
 
 
 def _linha_suave(pontos):
@@ -215,9 +216,9 @@ def build_recommendation_pdf(
         n_atencao = sum(1 for d in diseases if d["status"] == "Atencao")
         partes_resumo = []
         if n_perigo:
-            partes_resumo.append(f"{n_perigo} em PERIGO")
+            partes_resumo.append(f"{n_perigo} em {_STATUS_LABELS['Perigo'].lower()}")
         if n_atencao:
-            partes_resumo.append(f"{n_atencao} em ATENCAO")
+            partes_resumo.append(f"{n_atencao} em {_STATUS_LABELS['Atencao'].lower()}")
         story.append(Paragraph(f"<b>Resumo:</b> {', '.join(partes_resumo)}", _ESTILO_NORMAL))
 
     story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
@@ -229,8 +230,8 @@ def build_recommendation_pdf(
             cabecalho = []
             cor_hex = "#ff6b6b" if d["status"] == "Perigo" else "#e6ac00"
             cabecalho.append(Paragraph(
-                f'<font color="{cor_hex}">●</font> <b>{d["status"].upper()} — '
-                f'{d["rotulo"].upper()}</b> — Contagem: {d["concentracao"]} esporos/m³',
+                f'<font color="{cor_hex}">●</font> <b>{d["rotulo"].upper()}</b> — '
+                f'{_STATUS_LABELS.get(d["status"], d["status"])} — Contagem: {d["concentracao"]} esporos/m³',
                 _ESTILO_DOENCA,
             ))
             risco_label = _RISCO_LABELS.get(d.get("risco"))
