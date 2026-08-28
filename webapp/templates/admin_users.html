@@ -30,6 +30,11 @@
                 </a>
             </td>
             <td>
+                {% if subordinado_counts.get(u.id) %}
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none sub-toggle" data-owner="{{ u.id }}" title="Mostrar/ocultar subordinados">
+                    <span class="toggle-icon">▶</span>
+                </button>
+                {% endif %}
                 <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}">
                     Subordinados{% if subordinado_counts.get(u.id) %} ({{ subordinado_counts[u.id] }}){% endif %}
                 </a>
@@ -47,14 +52,14 @@
             </td>
         </tr>
         {% for sub in subordinados_by_owner.get(u.id, []) %}
-        <tr class="table-light">
+        <tr class="table-light sub-row d-none" data-owner-rows="{{ u.id }}">
             <td class="text-muted small ps-4">↳ {{ sub.nome }}</td>
             <td class="text-muted small">-</td>
             <td class="text-muted small">{{ sub.telefone | telefone_br }}</td>
             <td class="text-muted small">-</td>
             <td class="text-muted small">-</td>
             <td class="text-muted small">
-                {{ sub.site_ids|length }} fazenda(s)
+                {{ sub.fazendas or '-' }}
             </td>
             <td class="text-muted small">-</td>
             <td>
@@ -107,4 +112,16 @@
         </form>
     </div>
 </div>
+
+<script>
+document.querySelectorAll('.sub-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var rows = document.querySelectorAll('tr[data-owner-rows="' + btn.dataset.owner + '"]');
+        var icon = btn.querySelector('.toggle-icon');
+        var expanded = rows.length > 0 && !rows[0].classList.contains('d-none');
+        rows.forEach(function (r) { r.classList.toggle('d-none'); });
+        icon.textContent = expanded ? '▶' : '▼';
+    });
+});
+</script>
 {% endblock %}

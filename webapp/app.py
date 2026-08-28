@@ -1982,7 +1982,13 @@ def admin_users():
     users = models.get_all_users()
     report_counts = {u["id"]: len(models.get_user_report_site_ids(u["id"])) for u in users}
     permission_counts = {u["id"]: len(models.get_user_permitted_site_ids(u["id"])) for u in users}
-    subordinados_by_owner = {u["id"]: models.get_owner_subordinados(u["id"]) for u in users}
+    site_name_by_id = {s["id"]: s["site_name"] for s in models.get_all_sites()}
+    subordinados_by_owner = {}
+    for u in users:
+        subs = models.get_owner_subordinados(u["id"])
+        for sub in subs:
+            sub["fazendas"] = "; ".join(sorted(site_name_by_id[sid] for sid in sub["site_ids"] if sid in site_name_by_id))
+        subordinados_by_owner[u["id"]] = subs
     subordinado_counts = {uid: len(subs) for uid, subs in subordinados_by_owner.items() if subs}
     return render_template(
         "admin_users.html", users=users, default_password=models.DEFAULT_PASSWORD,
