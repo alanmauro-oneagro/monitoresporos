@@ -1349,7 +1349,13 @@ def send_site_whatsapp(site_name):
         if site_name not in allowed:
             abort(403)
     safra = _safra_or_default(request.form)
-    ok, message = _send_site_whatsapp(site_name, safra=safra)
+    # checkboxes "enviar_texto"/"enviar_pdf" na frente dos botoes de PDF/
+    # Copiar (recommendations.html) -- deixam a pessoa escolher, nesse
+    # envio manual especifico, so' texto, so' PDF ou os dois (padrao,
+    # quando os dois vem marcados).
+    enviar_texto = bool(request.form.get("enviar_texto"))
+    enviar_pdf = bool(request.form.get("enviar_pdf"))
+    ok, message = _send_site_whatsapp(site_name, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
     if ok:
         flash(f"WhatsApp de '{site_name}' enviado para {message}.", "success")
     else:

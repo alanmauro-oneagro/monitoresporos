@@ -71,7 +71,11 @@ html { font-size: 14px; }
                 ⚠ ha {{ site_group.dias_desde_atualizacao }}d
             </span>
             {% endif %}
-            <div class="ms-auto d-flex gap-2">
+            <div class="ms-auto d-flex align-items-center gap-2">
+                {% set whatsapp_form_id = "whatsapp_form_" ~ safra ~ "_" ~ outer_loop.index0 %}
+                <div class="form-check mb-0" title="Incluir o PDF no envio por WhatsApp">
+                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" checked form="{{ whatsapp_form_id }}">
+                </div>
                 {% if site_group.whatsapp_text %}
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
                    title="Gerar PDF com clima, recomendacoes, produtos, datas de plantio e de pulverizacao -- pra encaminhar pra alguem">
@@ -83,15 +87,18 @@ html { font-size: 14px; }
                     📄 Recomendacao (PDF)
                 </button>
                 {% endif %}
+                <div class="form-check mb-0" title="Incluir o texto no envio por WhatsApp">
+                    <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}">
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn" {% if not site_group.whatsapp_text %}disabled{% endif %}
                         data-text="{{ site_group.whatsapp_text }}"
                         title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
                     📋 Copiar recomendacao
                 </button>
-                <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" class="mb-0">
+                <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" id="{{ whatsapp_form_id }}" class="mb-0">
                     <input type="hidden" name="safra" value="{{ safra }}">
                     <button type="submit" class="btn btn-sm btn-outline-success" {% if not site_group.whatsapp_destinos or site_group.nivel_dados == 'bloqueado' %}disabled{% endif %}
-                            title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% elif site_group.whatsapp_destinos %}Enviar o relatorio (texto + PDF anexado) para {{ site_group.whatsapp_destinos }} numero(s){% else %}Nenhum numero cadastrado pra essa fazenda ainda{% endif %}">
+                            title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% elif site_group.whatsapp_destinos %}Enviar para {{ site_group.whatsapp_destinos }} numero(s) os formatos marcados acima (texto/PDF){% else %}Nenhum numero cadastrado pra essa fazenda ainda{% endif %}">
                         📲 Enviar por WhatsApp{% if site_group.whatsapp_destinos %} ({{ site_group.whatsapp_destinos }}){% endif %}
                     </button>
                 </form>
