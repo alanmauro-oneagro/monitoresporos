@@ -101,7 +101,11 @@ def init_db():
             display_name_en TEXT PRIMARY KEY,
             nome_pt TEXT NOT NULL,
             nome_cientifico TEXT,
-            condicoes_germinacao TEXT
+            condicoes_germinacao TEXT,
+            germ_temp_min REAL,
+            germ_temp_max REAL,
+            germ_ur_min REAL,
+            germ_agua_livre_inibe INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS app_settings (
@@ -227,6 +231,14 @@ def init_db():
         conn.execute("ALTER TABLE disease_translations ADD COLUMN condicoes_germinacao TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
+    for coluna, tipo in [
+        ("germ_temp_min", "REAL"), ("germ_temp_max", "REAL"), ("germ_ur_min", "REAL"),
+        ("germ_agua_livre_inibe", "INTEGER NOT NULL DEFAULT 0"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE disease_translations ADD COLUMN {coluna} {tipo}")
+        except sqlite3.OperationalError:
+            pass  # coluna ja existe (banco criado antes dessa versao)
     try:
         conn.execute("ALTER TABLE farm_produtos ADD COLUMN data_anotacao TEXT")
     except sqlite3.OperationalError:
@@ -405,39 +417,46 @@ def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, limit=300):
     return [dict(r) for r in rows]
 
 
+_DISEASE_INFO_COLUMNS = (
+    "display_name_en, nome_pt, nome_cientifico, condicoes_germinacao, "
+    "germ_temp_min, germ_temp_max, germ_ur_min, germ_agua_livre_inibe"
+)
+
+
+def _disease_info_row_to_dict(r):
+    return {
+        "nome_pt": r["nome_pt"],
+        "nome_cientifico": r["nome_cientifico"] or "",
+        "condicoes_germinacao": r["condicoes_germinacao"] or "",
+        "germ_temp_min": r["germ_temp_min"],
+        "germ_temp_max": r["germ_temp_max"],
+        "germ_ur_min": r["germ_ur_min"],
+        "germ_agua_livre_inibe": bool(r["germ_agua_livre_inibe"]),
+    }
+
+
 def get_all_disease_translations():
-    """chave: display_name_en -> {nome_pt, nome_cientifico, condicoes_germinacao}
-    -- os campos editaveis na aba Doencas, pra quem monta os cartoes de alerta
+    """chave: display_name_en -> {nome_pt, nome_cientifico, condicoes_germinacao,
+    germ_temp_min, germ_temp_max, germ_ur_min, germ_agua_livre_inibe} -- os
+    campos editaveis na aba Doencas, pra quem monta os cartoes de alerta
     (Painel/Mapa/Manejo) usar o que foi editado ali em vez do valor cru
     que vem da leitura do BioScout (ver `data_reader.get_dashboard_data`,
-    que so cai pro valor cru quando nao ha nome cientifico salvo)."""
+    que so cai pro valor cru quando nao ha nome cientifico salvo). Os 4
+    campos germ_* alimentam a luz de risco de germinacao (verde/amarelo/
+    vermelho) na aba Manejo -- ver `_calc_risco_germinacao` em app.py."""
     conn = get_db()
-    rows = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico, condicoes_germinacao FROM disease_translations").fetchall()
+    rows = conn.execute(f"SELECT {_DISEASE_INFO_COLUMNS} FROM disease_translations").fetchall()
     conn.close()
-    return {
-        r["display_name_en"]: {
-            "nome_pt": r["nome_pt"],
-            "nome_cientifico": r["nome_cientifico"] or "",
-            "condicoes_germinacao": r["condicoes_germinacao"] or "",
-        }
-        for r in rows
-    }
+    return {r["display_name_en"]: _disease_info_row_to_dict(r) for r in rows}
 
 
 def get_all_disease_info():
-    """chave: display_name_en -> {nome_pt, nome_cientifico, condicoes_germinacao}
-    -- usado pela tela de admin Doencas (mostra e deixa editar as tres colunas)."""
+    """Mesmo dado de `get_all_disease_translations` -- usado pela tela de
+    admin Doencas (mostra e deixa editar todas as colunas)."""
     conn = get_db()
-    rows = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico, condicoes_germinacao FROM disease_translations").fetchall()
+    rows = conn.execute(f"SELECT {_DISEASE_INFO_COLUMNS} FROM disease_translations").fetchall()
     conn.close()
-    return {
-        r["display_name_en"]: {
-            "nome_pt": r["nome_pt"],
-            "nome_cientifico": r["nome_cientifico"] or "",
-            "condicoes_germinacao": r["condicoes_germinacao"] or "",
-        }
-        for r in rows
-    }
+    return {r["display_name_en"]: _disease_info_row_to_dict(r) for r in rows}
 
 
 def ensure_disease_translations(display_names, default_map, scientific_map=None):
@@ -490,6 +509,25 @@ def save_disease_translation(display_name_en, nome_pt, nome_cientifico="", condi
             """,
             (display_name_en, nome_pt, nome_cientifico, condicoes_germinacao),
         )
+    conn.commit()
+    conn.close()
+
+
+def save_disease_germ_limits(display_name_en, temp_min, temp_max, ur_min, agua_livre_inibe):
+    """Limites numericos usados pela luz de risco de germinacao (verde/
+    amarelo/vermelho) na aba Manejo -- ver `_calc_risco_germinacao` em
+    app.py. Independente do texto livre de `condicoes_germinacao` (que e'
+    so' pra leitura humana); a linha ja precisa existir (toda doenca
+    conhecida tem uma, via `ensure_disease_translations`)."""
+    conn = get_db()
+    conn.execute(
+        """
+        UPDATE disease_translations
+        SET germ_temp_min = ?, germ_temp_max = ?, germ_ur_min = ?, germ_agua_livre_inibe = ?
+        WHERE display_name_en = ?
+        """,
+        (temp_min, temp_max, ur_min, 1 if agua_livre_inibe else 0, display_name_en),
+    )
     conn.commit()
     conn.close()
 

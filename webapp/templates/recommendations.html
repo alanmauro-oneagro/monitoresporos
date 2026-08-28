@@ -139,7 +139,15 @@ html { font-size: 14px; }
                 </span>
                 <strong class="ms-2">{{ row.rotulo }}</strong>
                 {% if row.germinacao %}
-                <span class="small text-muted ms-2">({{ row.cientifico }} — germinação: {{ row.germinacao }})</span>
+                <span class="small text-muted ms-2">(
+                    {%- if row.risco == 'vermelho' -%}
+                    <span title="Risco alto de germinacao agora, pelo clima atual da fazenda">🔴</span>
+                    {%- elif row.risco == 'amarelo' -%}
+                    <span title="Risco moderado de germinacao agora, pelo clima atual da fazenda">🟡</span>
+                    {%- elif row.risco == 'verde' -%}
+                    <span title="Risco baixo de germinacao agora, pelo clima atual da fazenda">🟢</span>
+                    {%- endif -%}
+                    {{ row.cientifico }} — germinação: {{ row.germinacao }})</span>
                 {% elif row.cientifico %}
                 <span class="small text-muted fst-italic ms-2">({{ row.cientifico }})</span>
                 {% endif %}
