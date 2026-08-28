@@ -8,7 +8,7 @@
         🔎 Aplicar pesquisa de condicoes de germinacao (27/08/2026)
     </button>
     <span class="text-muted small ms-2">
-        Preenche a coluna de germinacao com dados pesquisados em literatura de fitopatologia
+        Preenche os campos de germinacao com dados pesquisados em literatura de fitopatologia
         (EMBRAPA, APS, Crop Protection Network). So preenche quem estiver vazio -- nao
         sobrescreve edicao manual. Pode clicar mais de uma vez sem problema -- so precisa
         fazer isso uma vez em cada ambiente (local e o site publicado usam bancos separados).
@@ -19,51 +19,56 @@
 <div class="alert alert-info">Nenhuma doenca encontrada nos dados ainda.</div>
 {% else %}
 <form method="post" data-autosave>
-    <div class="table-responsive">
-    <table class="table bg-white shadow-sm align-middle">
-        <thead>
-            <tr>
-                <th>Nome original (BioScout, em ingles)</th><th>Nome no nosso site</th><th>Nome cientifico do fungo</th>
-                <th>Condicoes p/ germinacao (base da luz 🟢🟡🔴)</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for d in doencas %}
-            <tr>
-                <td>{{ d.en }}</td>
-                <td>
-                    <input type="hidden" name="display_name_en" value="{{ d.en }}">
-                    <input type="text" name="nome_pt" class="form-control" value="{{ d.pt }}" required>
-                </td>
-                <td>
-                    <input type="text" name="nome_cientifico" class="form-control fst-italic" value="{{ d.cientifico }}" placeholder="Ex.: Phakopsora pachyrhizi">
-                </td>
-                <td style="min-width: 260px;">
-                    <div class="d-flex gap-1 align-items-center mb-1">
-                        <input type="number" step="0.1" name="germ_temp_min" class="form-control form-control-sm" value="{{ d.temp_min if d.temp_min is not none else '' }}" placeholder="Temp min">
-                        <span class="text-muted small">a</span>
-                        <input type="number" step="0.1" name="germ_temp_max" class="form-control form-control-sm" value="{{ d.temp_max if d.temp_max is not none else '' }}" placeholder="Temp max">
-                        <span class="text-muted small">°C</span>
-                    </div>
-                    <div class="d-flex gap-1 align-items-center mb-1">
-                        <input type="number" step="1" name="germ_ur_min" class="form-control form-control-sm" style="max-width: 90px;" value="{{ d.ur_min if d.ur_min is not none else '' }}" placeholder="UR min">
-                        <span class="text-muted small">% UR min</span>
-                        <input type="number" step="1" name="germ_molhamento_horas" class="form-control form-control-sm ms-2" style="max-width: 90px;" value="{{ d.molhamento_horas if d.molhamento_horas is not none else '' }}" placeholder="Molhamento">
-                        <span class="text-muted small">h molhamento (opcional, so' informativo)</span>
-                    </div>
-                    <div class="form-check mb-1">
-                        <input type="checkbox" class="form-check-input" name="germ_agua_livre_inibe__{{ loop.index0 }}" id="agua_livre_inibe_{{ loop.index0 }}" {% if d.agua_livre_inibe %}checked{% endif %}>
-                        <label class="form-check-label small text-muted" for="agua_livre_inibe_{{ loop.index0 }}">Chuva/agua livre atrapalha (ex.: oidio)</label>
-                    </div>
-                    {% if d.germinacao %}
-                    <div class="small text-muted fst-italic">{{ d.germinacao }}</div>
-                    {% endif %}
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+{% for d in doencas %}
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="text-muted small">{{ d.en }}</span>
+            <input type="hidden" name="display_name_en" value="{{ d.en }}">
+        </div>
+        <div class="row gx-2">
+            <div class="col-md-5">
+                <label class="form-label small text-muted mb-1">Nome no nosso site</label>
+                <input type="text" name="nome_pt" class="form-control form-control-sm" value="{{ d.pt }}" required>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label small text-muted mb-1">Nome cientifico do fungo</label>
+                <input type="text" name="nome_cientifico" class="form-control form-control-sm fst-italic" value="{{ d.cientifico }}" placeholder="Ex.: Phakopsora pachyrhizi">
+            </div>
+        </div>
+
+        <hr class="my-3">
+        <div class="small fw-bold text-muted mb-2">Condicoes p/ germinacao (base da luz de risco na aba Manejo)</div>
+        <div class="row gx-2 row-cols-2 row-cols-md-5">
+            <div class="col">
+                <label class="form-label small text-muted mb-1">Temp min (°C)</label>
+                <input type="number" step="0.1" name="germ_temp_min" class="form-control form-control-sm" value="{{ d.temp_min if d.temp_min is not none else '' }}">
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-1">Temp max (°C)</label>
+                <input type="number" step="0.1" name="germ_temp_max" class="form-control form-control-sm" value="{{ d.temp_max if d.temp_max is not none else '' }}">
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-1">UR min (%)</label>
+                <input type="number" step="1" name="germ_ur_min" class="form-control form-control-sm" value="{{ d.ur_min if d.ur_min is not none else '' }}">
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-1">Molhamento (h)</label>
+                <input type="number" step="1" name="germ_molhamento_horas" class="form-control form-control-sm" value="{{ d.molhamento_horas if d.molhamento_horas is not none else '' }}">
+            </div>
+            <div class="col d-flex align-items-end">
+                <div class="form-check mb-1">
+                    <input type="checkbox" class="form-check-input" name="germ_agua_livre_inibe__{{ loop.index0 }}" id="agua_livre_inibe_{{ loop.index0 }}" {% if d.agua_livre_inibe %}checked{% endif %}>
+                    <label class="form-check-label small text-muted" for="agua_livre_inibe_{{ loop.index0 }}">Chuva atrapalha</label>
+                </div>
+            </div>
+        </div>
+        {% if d.germinacao %}
+        <div class="small text-muted fst-italic mt-2">→ {{ d.germinacao }}</div>
+        {% endif %}
     </div>
+</div>
+{% endfor %}
     <span class="autosave-status small ms-2"></span>
 </form>
 
@@ -73,17 +78,16 @@
     aparecem aqui automaticamente (com o nome em ingles como padrao) assim
     que forem detectadas nos dados -- e' so vir aqui e traduzir. O nome
     cientifico do fungo vem preenchido sozinho quando o BioScout ja manda
-    essa informacao nas leituras; edite se estiver faltando ou errado. A
-    coluna <strong>Condicoes p/ germinacao</strong> tem a temperatura,
+    essa informacao nas leituras; edite se estiver faltando ou errado. Os
+    campos de <strong>Condicoes p/ germinacao</strong> -- temperatura,
     umidade relativa e (opcional, so' informativo) o tempo de molhamento
-    foliar que a literatura cientifica aponta como necessarios pro fungo
-    germinar -- os mesmos numeros que a luz 🟢🟡🔴 na aba Manejo usa pra
-    comparar com o clima atual (Open-Meteo) da fazenda e estimar o risco
-    de germinacao agora (o texto embaixo dos campos e' gerado sozinho a
-    partir desses numeros, so' pra conferencia -- nao e' editavel
-    separado, assim nunca fica descolado do que a luz realmente calcula).
-    Marque "chuva/agua livre atrapalha" pros fungos tipo oidio, onde
-    molhar a folha atrapalha em vez de ajudar a germinar.
+    foliar -- vem da literatura cientifica e sao os mesmos numeros que o
+    "Risco climatico" na aba Manejo usa pra comparar com o clima atual
+    (Open-Meteo) da fazenda (o texto em itálico embaixo dos campos e'
+    gerado sozinho a partir desses numeros, so' pra conferencia -- nao e'
+    editavel separado, assim nunca fica descolado do que o risco
+    realmente calcula). Marque "Chuva atrapalha" pros fungos tipo oidio,
+    onde molhar a folha atrapalha em vez de ajudar a germinar.
 </p>
 
 <h4 class="mb-2 mt-4">Doencas x Culturas</h4>
