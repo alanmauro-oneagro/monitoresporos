@@ -79,8 +79,9 @@
 <div id="graficosContainer"></div>
 
 <p class="text-muted small border-top pt-3 mt-2">
-    Rosa dos ventos (primeiro grafico): frequencia (%) de cada direcao de
-    vento no periodo e nas estacoes do filtro atual.
+    Direcao predominante do vento (primeiro grafico): frequencia de cada
+    direcao de vento no periodo e nas estacoes do filtro atual (passe o
+    mouse numa fatia pra ver o percentual exato).
     <br>
     Um grafico por doenca: concentracao de esporos (uma cor por fazenda,
     nunca passa do maximo cadastrado -- quando o valor real excede, uma
@@ -256,7 +257,7 @@
 
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4';
-        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">Rosa dos Ventos</h6><canvas style="max-height:380px;"></canvas></div>';
+        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">Direcao predominante do vento</h6><canvas style="max-height:380px;"></canvas></div>';
         rosaContainer.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
 
@@ -269,7 +270,7 @@
             options: {
                 responsive: true,
                 layout: { padding: 28 },
-                scales: { r: { ticks: { callback: function (v) { return v + '%'; } } } },
+                scales: { r: { ticks: { display: false } } },
                 plugins: {
                     legend: { display: false },
                     tooltip: { callbacks: { label: function (ctx) { return ctx.label + ': ' + ctx.raw + '%'; } } },
