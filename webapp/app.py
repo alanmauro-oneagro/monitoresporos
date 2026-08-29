@@ -18,14 +18,14 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
     current_user,
 )
 from werkzeug.security import check_password_hash
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import models
 import fungicida_data
@@ -538,6 +538,37 @@ def _calc_risco_germinacao(disease, weather):
     if temp_ok and umidade_ok:
         return "amarelo"
     return "verde"
+
+
+def calc_risco_diario_pct(disease, horas_do_dia):
+    """Mesma regra de `_calc_risco_germinacao` (temp E umidade/chuva
+    favoraveis ao mesmo tempo, ver comentario la' pra detalhe de
+    `agua_livre_inibe`), mas aplicada num dia HISTORICO do weather.csv
+    (ver `data_reader.build_hourly_weather_lookup`) em vez do forecast ao
+    vivo, e devolvendo um percentual 0-100 (horas favoraveis / horas de
+    molhamento minimo da doenca, capado em 100%) em vez da luz
+    verde/amarelo/vermelho -- usado no grafico de risco de infeccao da
+    aba Graficos. Retorna None quando falta clima ou limite cadastrado."""
+    temp_min, temp_max, ur_min = disease.get("germ_temp_min"), disease.get("germ_temp_max"), disease.get("germ_ur_min")
+    if temp_min is None or temp_max is None or not horas_do_dia:
+        return None
+    agua_livre_inibe = disease.get("germ_agua_livre_inibe")
+    favoraveis = 0
+    for h in horas_do_dia:
+        temp, umidade, chuva = h.get("temp"), h.get("umidade"), h.get("chuva") or 0
+        if temp is None:
+            continue
+        temp_ok = temp_min <= temp <= temp_max
+        umidade_ok = False
+        if ur_min is not None and umidade is not None:
+            if agua_livre_inibe:
+                umidade_ok = umidade >= ur_min and chuva <= 0.2
+            else:
+                umidade_ok = umidade >= ur_min or chuva > 0.2
+        if temp_ok and umidade_ok:
+            favoraveis += 1
+    limiar = disease.get("germ_molhamento_horas") or _MOLHAMENTO_PADRAO_HORAS
+    return round(min(100, favoraveis / limiar * 100))
 
 
 _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
@@ -1073,10 +1104,145 @@ def dashboard():
     )
 
 
+_uf_cache = {"timestamp": 0, "por_site": {}}
+_UF_CACHE_TTL_SECONDS = 24 * 60 * 60
+
+
+def _uf_por_site():
+    """site_name -> UF (sigla do estado), pela estacao INMET mais proxima
+    da coordenada da fazenda (mesmo catalogo usado em
+    `_get_weather_for_site`) -- cache em memoria por 24h (o catalogo de
+    estacoes quase nunca muda, e a coordenada de cada fazenda tambem
+    nao). Usado pro filtro de estado na aba Graficos. Fazenda sem
+    coordenada, ou sem estacao INMET proxima resolvida (catalogo do
+    INMET fora do ar), fica com UF None -- nunca quebra a pagina por
+    causa disso, so' nao aparece nos filtros de estado."""
+    now = time.time()
+    if _uf_cache["por_site"] and now - _uf_cache["timestamp"] < _UF_CACHE_TTL_SECONDS:
+        return _uf_cache["por_site"]
+    coords = data_reader.read_site_coordinates()
+    por_site = {}
+    for site, latlon in coords.items():
+        estacao = inmet_stations.estacao_mais_proxima(*latlon)
+        por_site[site] = estacao["uf"] if estacao else None
+    _uf_cache["por_site"] = por_site
+    _uf_cache["timestamp"] = now
+    return por_site
+
+
+def _hoje_cuiaba():
+    return (datetime.now(timezone.utc) - timedelta(hours=4)).date()
+
+
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 @app.route("/graficos")
 @login_required
 def graficos():
-    return render_template("graficos.html")
+    fim = _hoje_cuiaba()
+    inicio = fim - timedelta(days=14)
+    uf_por_site = _uf_por_site()
+    estacoes_disponiveis = sorted(uf_por_site.keys(), key=str.lower)
+    estados_disponiveis = sorted({uf for uf in uf_por_site.values() if uf})
+    return render_template(
+        "graficos.html", inicio=inicio.isoformat(), fim=fim.isoformat(),
+        estacoes_disponiveis=[{"nome": s, "uf": uf_por_site.get(s)} for s in estacoes_disponiveis],
+        estados_disponiveis=estados_disponiveis,
+    )
+
+
+@app.route("/graficos/dados")
+@login_required
+def graficos_dados():
+    """JSON consumido pelo JS da aba Graficos -- um grafico por doenca
+    (lista dinamica, vem do que ja apareceu no BioScout, ver
+    `data_reader.read_unique_display_names`), cada um com uma serie de
+    esporos (preta) e uma de risco de germinacao 0-100% (azul) por
+    estacao visivel. A curva de esporos e' capada no `maximo` cadastrado
+    da doenca -- quando o valor real passa disso, o ponto fica marcado
+    em `excedido` (seta vermelha no grafico) em vez de deixar a linha
+    disparar acima do teto."""
+    fim = _parse_iso_date(request.args.get("fim")) or _hoje_cuiaba()
+    inicio = _parse_iso_date(request.args.get("inicio")) or (fim - timedelta(days=14))
+    if inicio > fim:
+        inicio, fim = fim, inicio
+
+    uf_por_site = _uf_por_site()
+    todos_sites = sorted(uf_por_site.keys(), key=str.lower)
+
+    estacoes_sel = [s for s in request.args.getlist("estacao") if s]
+    estados_sel = [e for e in request.args.getlist("estado") if e]
+    if estacoes_sel:
+        sites = [s for s in todos_sites if s in estacoes_sel]
+    elif estados_sel:
+        sites = [s for s in todos_sites if uf_por_site.get(s) in estados_sel]
+    else:
+        sites = [s for s in todos_sites if uf_por_site.get(s) == "MT"]
+    if not sites:
+        # Filtro nao bateu com nenhuma fazenda (ex.: catalogo do INMET
+        # fora do ar na primeira chamada, ou filtro de estado sem
+        # fazenda cadastrada) -- mostra tudo em vez de pagina vazia.
+        sites = todos_sites
+
+    dias = []
+    d = inicio
+    while d <= fim:
+        dias.append(d.isoformat())
+        d += timedelta(days=1)
+
+    translations = models.get_all_disease_translations()
+    doencas_en = data_reader.read_unique_display_names()
+    spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
+    hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
+    device_by_site = data_reader.read_site_device_ids()
+
+    doencas_payload = []
+    for doenca_en in doencas_en:
+        info = translations.get(doenca_en, {})
+        series = []
+        for site in sites:
+            historico = {h["data"]: h for h in spore_lookup.get((site, doenca_en), [])}
+            esporos, excedido = [], []
+            for dia_iso in dias:
+                ponto = historico.get(dia_iso)
+                if ponto is None or ponto["concentracao"] is None:
+                    esporos.append(None)
+                    excedido.append(False)
+                    continue
+                maximo, conc = ponto.get("maximo"), ponto["concentracao"]
+                if maximo and conc > maximo:
+                    esporos.append(round(maximo, 1))
+                    excedido.append(True)
+                else:
+                    esporos.append(round(conc, 1))
+                    excedido.append(False)
+
+            device = device_by_site.get(site)
+            risco_pct = [
+                calc_risco_diario_pct(info, hourly_lookup.get((device, dia_iso)))
+                for dia_iso in dias
+            ]
+
+            if all(v is None for v in esporos) and all(v is None for v in risco_pct):
+                continue  # sem NENHUM dado (esporo nem clima) nesse periodo pra essa fazenda -- nao gera linha vazia
+            series.append({"estacao": site, "esporos": esporos, "esporos_excedido": excedido, "risco_pct": risco_pct})
+
+        if series:
+            doencas_payload.append({
+                "doenca_en": doenca_en,
+                "doenca_pt": data_reader.get_doenca(doenca_en, translations),
+                "series": series,
+            })
+    doencas_payload.sort(key=lambda d: d["doenca_pt"])
+
+    return jsonify({"inicio": inicio.isoformat(), "fim": fim.isoformat(), "dias": dias, "doencas": doencas_payload})
 
 
 @app.route("/mapa")

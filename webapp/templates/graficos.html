@@ -1,6 +1,174 @@
 {% extends "base.html" %}
 {% block title %}Graficos - OneAgro{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+<style>
+    .graf-filtros .form-check { margin-bottom: 0.15rem; }
+    .graf-card canvas { max-height: 380px; }
+</style>
+{% endblock %}
 {% block content %}
 <h4 class="mb-3">Graficos</h4>
-<p class="text-muted">Em construcao.</p>
+<p class="text-muted small">
+    Um grafico por doenca: concentracao de esporos (linha preta, nunca
+    passa do maximo cadastrado -- quando o valor real excede, uma seta
+    vermelha marca o ponto) combinada com o risco de germinacao calculado
+    a partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
+    (linha azul, escala 0-100%).
+</p>
+
+<div class="card shadow-sm mb-4 graf-filtros">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Data inicial</label>
+                <input type="date" id="filtroInicio" class="form-control form-control-sm" value="{{ inicio }}">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Data final</label>
+                <input type="date" id="filtroFim" class="form-control form-control-sm" value="{{ fim }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1 d-block">Estado</label>
+                <div class="d-flex flex-wrap gap-3">
+                    {% for uf in estados_disponiveis %}
+                    <div class="form-check">
+                        <input class="form-check-input filtro-estado" type="checkbox" value="{{ uf }}" id="estado_{{ uf }}" {% if uf == 'MT' %}checked{% endif %}>
+                        <label class="form-check-label small" for="estado_{{ uf }}">{{ uf }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small text-muted mb-1 d-block">
+                    Estacao <span class="text-muted">(se marcar alguma, ignora o filtro de Estado acima)</span>
+                </label>
+                <div class="d-flex flex-wrap gap-3" style="max-height: 5rem; overflow-y: auto;">
+                    {% for e in estacoes_disponiveis %}
+                    <div class="form-check">
+                        <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" id="est_{{ loop.index }}">
+                        <label class="form-check-label small" for="est_{{ loop.index }}">{{ e.nome }}{% if e.uf %} ({{ e.uf }}){% endif %}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-md-1">
+                <button type="button" id="btnAplicarFiltro" class="btn btn-success btn-sm w-100">Aplicar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="graficosStatus" class="text-muted small mb-3">Carregando...</div>
+<div id="graficosContainer"></div>
+
+<script>
+(function () {
+    var container = document.getElementById('graficosContainer');
+    var status = document.getElementById('graficosStatus');
+    var charts = {};
+
+    var DASHES = [[], [6, 3], [2, 2], [10, 3, 2, 3]];
+
+    function qs() {
+        var params = new URLSearchParams();
+        params.set('inicio', document.getElementById('filtroInicio').value);
+        params.set('fim', document.getElementById('filtroFim').value);
+        document.querySelectorAll('.filtro-estacao:checked').forEach(function (el) { params.append('estacao', el.value); });
+        document.querySelectorAll('.filtro-estado:checked').forEach(function (el) { params.append('estado', el.value); });
+        return params.toString();
+    }
+
+    function fmtDia(iso) {
+        var p = iso.split('-');
+        return p[2] + '/' + p[1];
+    }
+
+    function pointRadii(excedido) {
+        return excedido.map(function (ex) { return ex ? 6 : 0; });
+    }
+    function pointStyles(excedido) {
+        return excedido.map(function (ex) { return ex ? 'triangle' : 'circle'; });
+    }
+
+    function montarGrafico(doenca, labels) {
+        var wrap = document.createElement('div');
+        wrap.className = 'card shadow-sm mb-4 graf-card';
+        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + '</h6><canvas></canvas></div>';
+        container.appendChild(wrap);
+        var ctx = wrap.querySelector('canvas').getContext('2d');
+
+        var datasets = [];
+        doenca.series.forEach(function (s, idx) {
+            var dash = DASHES[idx % DASHES.length];
+            datasets.push({
+                label: 'Esporos - ' + s.estacao,
+                data: s.esporos,
+                borderColor: '#000000',
+                backgroundColor: '#000000',
+                borderDash: dash,
+                spanGaps: false,
+                tension: 0.25,
+                pointRadius: pointRadii(s.esporos_excedido),
+                pointStyle: pointStyles(s.esporos_excedido),
+                pointBackgroundColor: '#dc3545',
+                pointBorderColor: '#dc3545',
+                yAxisID: 'yEsporos',
+            });
+            datasets.push({
+                label: 'Risco (%) - ' + s.estacao,
+                data: s.risco_pct,
+                borderColor: '#0d6efd',
+                backgroundColor: '#0d6efd',
+                borderDash: dash,
+                spanGaps: false,
+                tension: 0.25,
+                pointRadius: 0,
+                yAxisID: 'yRisco',
+            });
+        });
+
+        return new Chart(ctx, {
+            type: 'line',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    yEsporos: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Esporos' } },
+                    yRisco: { type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: 'Risco de infeccao (%)' } },
+                },
+                plugins: { legend: { labels: { boxWidth: 14, font: { size: 10 } } } },
+            },
+        });
+    }
+
+    function carregar() {
+        status.textContent = 'Carregando...';
+        container.innerHTML = '';
+        Object.keys(charts).forEach(function (k) { charts[k].destroy(); });
+        charts = {};
+
+        fetch('/graficos/dados?' + qs())
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var labels = data.dias.map(fmtDia);
+                if (!data.doencas.length) {
+                    status.textContent = 'Nenhum dado disponivel para o periodo/filtro selecionado.';
+                    return;
+                }
+                status.textContent = '';
+                data.doencas.forEach(function (doenca) {
+                    charts[doenca.doenca_en] = montarGrafico(doenca, labels);
+                });
+            })
+            .catch(function () {
+                status.textContent = 'Erro ao carregar os graficos.';
+            });
+    }
+
+    document.getElementById('btnAplicarFiltro').addEventListener('click', carregar);
+    carregar();
+})();
+</script>
 {% endblock %}

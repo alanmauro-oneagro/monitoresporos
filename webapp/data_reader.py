@@ -113,6 +113,22 @@ def read_site_coordinates():
     return coords
 
 
+def read_site_device_ids():
+    """siteName -> deviceUserFriendlyId -- spore_counts.csv tem os dois
+    campos por linha (o nome de exibicao da fazenda e o identificador cru
+    do dispositivo), mas weather.csv SO' tem deviceUserFriendlyId (sem
+    siteName) -- essa e' a ponte pra cruzar leitura de esporo (por
+    siteName) com clima historico (por deviceUserFriendlyId), usada no
+    grafico de risco de germinacao da aba Graficos."""
+    ids = {}
+    for row in read_spore_counts():
+        site = row.get("siteName")
+        device = row.get("deviceUserFriendlyId")
+        if site and device and site not in ids:
+            ids[site] = device
+    return ids
+
+
 def read_sites():
     path = DATA_DIR / "sites.csv"
     with open(path, encoding="utf-8-sig", newline="") as f:
@@ -159,6 +175,41 @@ def build_weather_lookup(weather_rows):
     return lookup
 
 
+def build_disease_concentration_lookup(spore_rows):
+    """(siteName, displayName) -> lista de pontos diarios (uma leitura por
+    dia, a mais recente do dia quando ha mais de uma) ordenados por data,
+    cada um com concentracao + os 3 limites (warning/danger/maximum) da
+    leitura -- mesma logica de `get_site_disease_history`, mas numa unica
+    passada sobre o CSV inteiro (usado pelo grafico da aba Graficos, que
+    precisa disso pra TODAS as fazendas x doencas de uma vez, nao so uma
+    fazenda por vez como o PDF)."""
+    grouped = {}
+    for row in spore_rows:
+        site, doenca = row.get("siteName"), row.get("displayName")
+        try:
+            dt = _parse_dt(row["samplingStartTime"])
+        except (KeyError, ValueError):
+            continue
+        conc = _to_float(row.get("concentration"))
+        if conc is None:
+            continue
+        key = (site, doenca)
+        por_dia = grouped.setdefault(key, {})
+        data_iso = dt.date().isoformat()
+        if data_iso not in por_dia or dt > por_dia[data_iso]["_dt"]:
+            por_dia[data_iso] = {
+                "_dt": dt, "data": data_iso, "concentracao": conc,
+                "warn": _to_float(row.get("warningConcentrationThreshold")),
+                "danger": _to_float(row.get("dangerConcentrationThreshold")),
+                "maximo": _to_float(row.get("maximumConcentrationThreshold")),
+            }
+    lookup = {}
+    for key, por_dia in grouped.items():
+        dias_ordenados = sorted(por_dia.values(), key=lambda r: r["_dt"])
+        lookup[key] = [{k: v for k, v in r.items() if k != "_dt"} for r in dias_ordenados]
+    return lookup
+
+
 # Brasil aboliu horario de verao em 2019 -- offset fixo (mesmo truque
 # de `models._agora_cuiaba`), sem precisar de zoneinfo/tzdata (nao
 # instalado no ambiente de dev local nesta maquina).
@@ -175,6 +226,32 @@ def _bucket_direcao_vento(graus):
         return None
     idx = round((graus % 360) / 45) % 8
     return _DIRECOES_VENTO[idx]
+
+
+def build_hourly_weather_lookup(weather_rows):
+    """(deviceUserFriendlyId, dia local da estacao) -> lista de leituras
+    horarias [{"temp", "umidade", "chuva"}] daquele dia -- usado pelo
+    grafico de risco de germinacao por doenca da aba Graficos
+    (`app.calc_risco_diario_pct`), que precisa da hora a hora (temp E
+    UR/chuva favoraveis AO MESMO TEMPO, mesma regra de
+    `app._calc_risco_germinacao`) e nao so' de agregados diarios como
+    `build_daily_weather_report`."""
+    grouped = {}
+    for row in weather_rows:
+        try:
+            dt_utc = _parse_dt(row["dateMeasured"])
+        except (KeyError, ValueError):
+            continue
+        offset = _TZ_OFFSET_HOURS.get(row.get("deviceTimeZoneId"), -4)
+        dt_local = dt_utc + timedelta(hours=offset)
+        device = row.get("deviceUserFriendlyId")
+        key = (device, dt_local.date().isoformat())
+        grouped.setdefault(key, []).append({
+            "temp": _to_float(row.get("temperature")),
+            "umidade": _to_float(row.get("humidity")),
+            "chuva": _to_float(row.get("rainFall")) or 0,
+        })
+    return grouped
 
 
 def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_molhamento=90):
