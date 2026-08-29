@@ -1073,6 +1073,10 @@ def dashboard():
     )
 
 
+@app.route("/graficos")
+@login_required
+def graficos():
+    return render_template("graficos.html")
 
 
 @app.route("/mapa")

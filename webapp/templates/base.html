@@ -121,6 +121,7 @@
             <a class="nav-link text-white{% if request.endpoint == 'mapa' %} tab-ativa{% endif %}" href="{{ url_for('mapa') }}">Mapa</a>
             <a class="nav-link text-white{% if request.endpoint == 'fazendas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas') }}">Fazendas</a>
             <a class="nav-link text-white{% if request.endpoint == 'dashboard' %} tab-ativa{% endif %}" href="{{ url_for('dashboard') }}">Alertas</a>
+            <a class="nav-link text-white{% if request.endpoint == 'graficos' %} tab-ativa{% endif %}" href="{{ url_for('graficos') }}">Graficos</a>
             {% for safra_key, safra_label in nav_safras %}
             <a class="nav-link text-white{% if request.endpoint == 'recommendations' and request.view_args and request.view_args.get('safra') == safra_key %} tab-ativa{% endif %}" href="{{ url_for('recommendations', safra=safra_key) }}">Manejo {{ safra_label }}</a>
             {% endfor %}
