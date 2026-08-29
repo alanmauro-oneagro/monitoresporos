@@ -112,6 +112,48 @@
     };
     Chart.register(colorBandsPlugin);
 
+    // Teste: risco de infeccao vira PONTO (nao linha), rotulado com o
+    // percentual + direcao predominante do vento daquele dia (dataset
+    // marca os pontos com `riscoLabels`, uma lista paralela a `data`).
+    // Desenha o ponto E o rotulo "na mao" (bolinha + texto via canvas),
+    // calculando a posicao direto pela escala (`getPixelForValue`) em vez
+    // de usar o elemento de ponto que o proprio Chart.js criaria --
+    // `showLine:false` com DUAS escalas Y no mesmo grafico (esporos +
+    // risco) faz o Chart.js posicionar todos os pontos dessa serie no
+    // mesmo lugar (bug/quirk confirmado isolado, chart.js@4.4.4),
+    // entao o dataset do risco fica com pointRadius:0 (so' carrega o
+    // dado) e esse plugin cuida 100% do desenho.
+    var riscoLabelsPlugin = {
+        id: 'riscoLabels',
+        afterDatasetsDraw: function (chart) {
+            var ctx = chart.ctx;
+            chart.data.datasets.forEach(function (ds, i) {
+                if (!ds.riscoLabels) return;
+                var meta = chart.getDatasetMeta(i);
+                if (!meta.visible) return;
+                var xScale = chart.scales.x;
+                var yScale = chart.scales[ds.yAxisID];
+                if (!xScale || !yScale) return;
+                ctx.save();
+                ds.data.forEach(function (v, idx) {
+                    if (v === null || v === undefined) return;
+                    var x = xScale.getPixelForValue(idx);
+                    var y = yScale.getPixelForValue(v);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#0d6efd';
+                    ctx.fill();
+                    var dir = ds.riscoLabels[idx];
+                    ctx.font = '10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(v + '%' + (dir ? ' ' + dir : ''), x, y - 10);
+                });
+                ctx.restore();
+            });
+        },
+    };
+    Chart.register(riscoLabelsPlugin);
+
     var container = document.getElementById('graficosContainer');
     var status = document.getElementById('graficosStatus');
     var charts = {};
@@ -213,13 +255,13 @@
             datasets.push({
                 label: 'Risco (%) - ' + s.estacao,
                 data: s.risco_pct,
+                showLine: false,
                 borderColor: '#0d6efd',
                 backgroundColor: '#0d6efd',
-                borderDash: dash,
-                spanGaps: false,
-                tension: 0.25,
                 pointRadius: 0,
+                spanGaps: false,
                 yAxisID: 'yRisco',
+                riscoLabels: s.vento_predominante,
             });
         });
 

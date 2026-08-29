@@ -230,12 +230,14 @@ def _bucket_direcao_vento(graus):
 
 def build_hourly_weather_lookup(weather_rows):
     """(deviceUserFriendlyId, dia local da estacao) -> lista de leituras
-    horarias [{"temp", "umidade", "chuva"}] daquele dia -- usado pelo
-    grafico de risco de germinacao por doenca da aba Graficos
+    horarias [{"temp", "umidade", "chuva", "vento"}] daquele dia -- usado
+    pelo grafico de risco de germinacao por doenca da aba Graficos
     (`app.calc_risco_diario_pct`), que precisa da hora a hora (temp E
     UR/chuva favoraveis AO MESMO TEMPO, mesma regra de
     `app._calc_risco_germinacao`) e nao so' de agregados diarios como
-    `build_daily_weather_report`."""
+    `build_daily_weather_report`. `vento` (graus, 0-360) alimenta
+    `vento_predominante_do_dia`, pro rotulo de direcao do vento no ponto
+    de risco do grafico."""
     grouped = {}
     for row in weather_rows:
         try:
@@ -250,8 +252,21 @@ def build_hourly_weather_lookup(weather_rows):
             "temp": _to_float(row.get("temperature")),
             "umidade": _to_float(row.get("humidity")),
             "chuva": _to_float(row.get("rainFall")) or 0,
+            "vento": _to_float(row.get("windDirection")),
         })
     return grouped
+
+
+def vento_predominante_do_dia(horas_do_dia):
+    """Direcao de vento mais frequente (moda, 8 pontos) entre as leituras
+    horarias de um dia (`build_hourly_weather_lookup`) -- None se nao
+    houver nenhuma leitura de vento nesse dia."""
+    if not horas_do_dia:
+        return None
+    direcoes = [d for d in (_bucket_direcao_vento(h.get("vento")) for h in horas_do_dia) if d]
+    if not direcoes:
+        return None
+    return Counter(direcoes).most_common(1)[0][0]
 
 
 def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_molhamento=90):

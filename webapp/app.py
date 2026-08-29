@@ -1227,15 +1227,17 @@ def graficos_dados():
                     excedido.append(False)
 
             device = device_by_site.get(site)
-            risco_pct = [
-                calc_risco_diario_pct(info, hourly_lookup.get((device, dia_iso)))
-                for dia_iso in dias
-            ]
+            risco_pct, vento_predominante = [], []
+            for dia_iso in dias:
+                horas = hourly_lookup.get((device, dia_iso))
+                risco_pct.append(calc_risco_diario_pct(info, horas))
+                vento_predominante.append(data_reader.vento_predominante_do_dia(horas))
 
             if all(v is None for v in esporos) and all(v is None for v in risco_pct):
                 continue  # sem NENHUM dado (esporo nem clima) nesse periodo pra essa fazenda -- nao gera linha vazia
             series.append({
-                "estacao": site, "esporos": esporos, "esporos_excedido": excedido, "risco_pct": risco_pct,
+                "estacao": site, "esporos": esporos, "esporos_excedido": excedido,
+                "risco_pct": risco_pct, "vento_predominante": vento_predominante,
                 "limite_warn": ultimo.get("warn"), "limite_danger": ultimo.get("danger"), "limite_maximo": ultimo.get("maximo"),
             })
 
