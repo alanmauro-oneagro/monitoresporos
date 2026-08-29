@@ -163,6 +163,7 @@
         id: 'riscoPlugin',
         afterDatasetsDraw: function (chart) {
             var ctx = chart.ctx;
+            var area = chart.chartArea;
             chart.data.datasets.forEach(function (ds, i) {
                 if (!ds.riscoLabels) return;
                 var xScale = chart.scales.x;
@@ -170,10 +171,19 @@
                 if (!xScale || !yScale) return;
                 var meta = chart.getDatasetMeta(i);
 
+                // Desenho manual (ver nota acima) nao ganha o recorte que
+                // o Chart.js aplica sozinho nos datasets nativos -- sem
+                // isso, a curva suavizada podia passar um pouco do
+                // maximo/minimo do eixo entre dois pontos (overshoot de
+                // spline) e vazar pra fora da area do grafico.
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(area.left, area.top, area.width, area.height);
+                ctx.clip();
+
                 if (meta.visible) {
-                    ctx.save();
                     ctx.strokeStyle = ds.corLinha;
-                    ctx.lineWidth = 1.5;
+                    ctx.lineWidth = 2.5;
                     if (ds.dashLinha) ctx.setLineDash(ds.dashLinha);
                     ctx.beginPath();
                     var trecho = [];
@@ -187,19 +197,17 @@
                     });
                     desenharTrecho();
                     ctx.stroke();
-                    ctx.restore();
                 }
 
                 if (mostrarVento) {
-                    ctx.save();
                     ds.data.forEach(function (v, idx) {
                         if (v === null || v === undefined) return;
                         var x = xScale.getPixelForValue(idx);
                         var y = yScale.getPixelForValue(v);
                         desenharSetaVento(ctx, x, y, ds.riscoLabels[idx]);
                     });
-                    ctx.restore();
                 }
+                ctx.restore();
             });
         },
     };
@@ -482,9 +490,12 @@
                     yEsporos: {
                         type: 'linear', position: 'left', beginAtZero: true,
                         suggestedMax: limites ? limites.maximo : undefined,
-                        title: { display: true, text: 'Esporos' },
+                        title: { display: true, text: 'Esporos por M³', font: { weight: 'bold' } },
                     },
-                    yRisco: { type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: 'Risco de infeccao (%)' } },
+                    yRisco: {
+                        type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Risco de Infecção (%)', font: { weight: 'bold' }, color: '#198754' },
+                    },
                 },
                 plugins: {
                     legend: {
