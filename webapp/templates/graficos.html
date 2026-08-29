@@ -14,17 +14,6 @@
 {% endblock %}
 {% block content %}
 <h4 class="mb-3">Graficos</h4>
-<p class="text-muted small">
-    Um grafico por doenca: concentracao de esporos (uma cor por fazenda,
-    nunca passa do maximo cadastrado -- quando o valor real excede, uma
-    seta vermelha marca o ponto) combinada com o risco de germinacao calculado
-    a partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
-    (linha verde, escala 0-100%), com uma setinha azul em cada dia ja'
-    apontando pra direcao predominante do vento (passe o mouse pra ver o
-    percentual exato). As faixas
-    verde/amarelo/vermelho seguem os mesmos limites (Normal/Atencao/Perigo)
-    do relatorio em PDF. Os filtros abaixo aplicam sozinhos ao mudar.
-</p>
 
 <div class="card shadow-sm mb-4">
     <div class="card-body">
@@ -64,7 +53,7 @@
                     <div id="boxEstacao" class="filtro-box-menu d-none bg-white shadow rounded p-2">
                         {% for e in estacoes_disponiveis %}
                         <div class="form-check">
-                            <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" id="est_{{ loop.index }}">
+                            <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" data-uf="{{ e.uf or '' }}" id="est_{{ loop.index }}">
                             <label class="form-check-label small" for="est_{{ loop.index }}">{{ e.nome }}{% if e.uf %} ({{ e.uf }}){% endif %}</label>
                         </div>
                         {% endfor %}
@@ -87,6 +76,18 @@
 
 <div id="graficosStatus" class="text-muted small mb-3">Carregando...</div>
 <div id="graficosContainer"></div>
+
+<p class="text-muted small border-top pt-3 mt-2">
+    Um grafico por doenca: concentracao de esporos (uma cor por fazenda,
+    nunca passa do maximo cadastrado -- quando o valor real excede, uma
+    seta vermelha marca o ponto) combinada com o risco de germinacao calculado
+    a partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
+    (linha verde, escala 0-100%), com uma setinha azul em cada dia ja'
+    apontando pra direcao predominante do vento (passe o mouse pra ver o
+    percentual exato). As faixas
+    verde/amarelo/vermelho seguem os mesmos limites (Normal/Atencao/Perigo)
+    do relatorio em PDF. Os filtros acima aplicam sozinhos ao mudar.
+</p>
 
 <script>
 (function () {
@@ -270,6 +271,25 @@
     document.querySelectorAll('.filtro-estado, .filtro-estacao').forEach(function (el) {
         el.addEventListener('change', atualizarResumos);
     });
+
+    // Marcar um Estado esconde do box de Estacao as que nao sao daquele
+    // estado (e desmarca as que ja estavam marcadas e ficaram escondidas,
+    // pra' nao filtrar por uma estacao invisivel sem o usuario perceber).
+    // Sem nenhum Estado marcado, mostra todas.
+    function filtrarEstacoesPorEstado() {
+        var ufs = Array.from(document.querySelectorAll('.filtro-estado:checked')).map(function (el) { return el.value; });
+        document.querySelectorAll('.filtro-estacao').forEach(function (chk) {
+            var linha = chk.closest('.form-check');
+            var mostra = !ufs.length || ufs.indexOf(chk.dataset.uf) !== -1;
+            linha.classList.toggle('d-none', !mostra);
+            if (!mostra && chk.checked) chk.checked = false;
+        });
+        atualizarResumos();
+    }
+    document.querySelectorAll('.filtro-estado').forEach(function (el) {
+        el.addEventListener('change', filtrarEstacoesPorEstado);
+    });
+    filtrarEstacoesPorEstado();
     atualizarResumos();
 
     // Salvamento automatico dos filtros -- qualquer mudanca (data,
