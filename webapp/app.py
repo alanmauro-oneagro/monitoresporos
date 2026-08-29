@@ -1208,7 +1208,9 @@ def graficos_dados():
         info = translations.get(doenca_en, {})
         series = []
         for site in sites:
-            historico = {h["data"]: h for h in spore_lookup.get((site, doenca_en), [])}
+            historico_lista = spore_lookup.get((site, doenca_en), [])
+            historico = {h["data"]: h for h in historico_lista}
+            ultimo = historico_lista[-1] if historico_lista else {}
             esporos, excedido = [], []
             for dia_iso in dias:
                 ponto = historico.get(dia_iso)
@@ -1232,7 +1234,10 @@ def graficos_dados():
 
             if all(v is None for v in esporos) and all(v is None for v in risco_pct):
                 continue  # sem NENHUM dado (esporo nem clima) nesse periodo pra essa fazenda -- nao gera linha vazia
-            series.append({"estacao": site, "esporos": esporos, "esporos_excedido": excedido, "risco_pct": risco_pct})
+            series.append({
+                "estacao": site, "esporos": esporos, "esporos_excedido": excedido, "risco_pct": risco_pct,
+                "limite_warn": ultimo.get("warn"), "limite_danger": ultimo.get("danger"), "limite_maximo": ultimo.get("maximo"),
+            })
 
         if series:
             doencas_payload.append({

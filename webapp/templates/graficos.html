@@ -3,8 +3,13 @@
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
 <style>
-    .graf-filtros .form-check { margin-bottom: 0.15rem; }
     .graf-card canvas { max-height: 380px; }
+    .filtro-box { position: relative; }
+    .filtro-box-menu {
+        position: absolute; top: 100%; left: 0; margin-top: 0.2rem;
+        min-width: 100%; max-height: 12rem; overflow-y: auto; z-index: 1055;
+    }
+    .filtro-box-menu .form-check { margin-bottom: 0.15rem; white-space: nowrap; }
 </style>
 {% endblock %}
 {% block content %}
@@ -14,10 +19,11 @@
     passa do maximo cadastrado -- quando o valor real excede, uma seta
     vermelha marca o ponto) combinada com o risco de germinacao calculado
     a partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
-    (linha azul, escala 0-100%).
+    (linha azul, escala 0-100%). As faixas verde/amarelo/vermelho seguem
+    os mesmos limites (Normal/Atencao/Perigo) do relatorio em PDF.
 </p>
 
-<div class="card shadow-sm mb-4 graf-filtros">
+<div class="card shadow-sm mb-4">
     <div class="card-body">
         <div class="row g-3 align-items-end">
             <div class="col-6 col-md-2">
@@ -30,26 +36,36 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label small text-muted mb-1 d-block">Estado</label>
-                <div class="d-flex flex-wrap gap-3">
-                    {% for uf in estados_disponiveis %}
-                    <div class="form-check">
-                        <input class="form-check-input filtro-estado" type="checkbox" value="{{ uf }}" id="estado_{{ uf }}" {% if uf == 'MT' %}checked{% endif %}>
-                        <label class="form-check-label small" for="estado_{{ uf }}">{{ uf }}</label>
+                <div class="filtro-box">
+                    <button type="button" class="form-control form-control-sm text-start d-flex justify-content-between align-items-center" data-box-toggle="boxEstado">
+                        <span id="resumoEstado"></span><span>&#9662;</span>
+                    </button>
+                    <div id="boxEstado" class="filtro-box-menu d-none bg-white shadow rounded p-2">
+                        {% for uf in estados_disponiveis %}
+                        <div class="form-check">
+                            <input class="form-check-input filtro-estado" type="checkbox" value="{{ uf }}" id="estado_{{ uf }}" {% if uf == 'MT' %}checked{% endif %}>
+                            <label class="form-check-label small" for="estado_{{ uf }}">{{ uf }}</label>
+                        </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
             <div class="col-md-4">
                 <label class="form-label small text-muted mb-1 d-block">
-                    Estacao <span class="text-muted">(se marcar alguma, ignora o filtro de Estado acima)</span>
+                    Estacao <span class="text-muted">(se marcar alguma, ignora o Estado)</span>
                 </label>
-                <div class="d-flex flex-wrap gap-3" style="max-height: 5rem; overflow-y: auto;">
-                    {% for e in estacoes_disponiveis %}
-                    <div class="form-check">
-                        <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" id="est_{{ loop.index }}">
-                        <label class="form-check-label small" for="est_{{ loop.index }}">{{ e.nome }}{% if e.uf %} ({{ e.uf }}){% endif %}</label>
+                <div class="filtro-box">
+                    <button type="button" class="form-control form-control-sm text-start d-flex justify-content-between align-items-center" data-box-toggle="boxEstacao">
+                        <span id="resumoEstacao"></span><span>&#9662;</span>
+                    </button>
+                    <div id="boxEstacao" class="filtro-box-menu d-none bg-white shadow rounded p-2">
+                        {% for e in estacoes_disponiveis %}
+                        <div class="form-check">
+                            <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" id="est_{{ loop.index }}">
+                            <label class="form-check-label small" for="est_{{ loop.index }}">{{ e.nome }}{% if e.uf %} ({{ e.uf }}){% endif %}</label>
+                        </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
             <div class="col-md-1">
@@ -64,11 +80,83 @@
 
 <script>
 (function () {
+    // Faixas de fundo verde/amarelo/vermelho no grafico de esporos,
+    // usando os mesmos 3 limites (warning/danger/maximum) do relatorio em
+    // PDF -- registrado uma unica vez, cada grafico passa os seus
+    // proprios limites via options.plugins.colorBands.
+    var colorBandsPlugin = {
+        id: 'colorBands',
+        beforeDatasetsDraw: function (chart) {
+            var opts = chart.config.options.plugins && chart.config.options.plugins.colorBands;
+            if (!opts || !opts.maximo) return;
+            var scale = chart.scales.yEsporos;
+            if (!scale) return;
+            var area = chart.chartArea;
+            var ctx = chart.ctx;
+            var warn = opts.warn || 0;
+            var danger = opts.danger || warn;
+            var topo = Math.max(scale.max, opts.maximo);
+
+            function faixa(v0, v1, cor) {
+                var yBaixo = scale.getPixelForValue(v0);
+                var yAlto = scale.getPixelForValue(v1);
+                ctx.save();
+                ctx.fillStyle = cor;
+                ctx.fillRect(area.left, yAlto, area.right - area.left, yBaixo - yAlto);
+                ctx.restore();
+            }
+            faixa(0, warn, 'rgba(81, 207, 102, 0.18)');
+            faixa(warn, danger, 'rgba(255, 212, 59, 0.18)');
+            faixa(danger, topo, 'rgba(255, 107, 107, 0.18)');
+        },
+    };
+    Chart.register(colorBandsPlugin);
+
     var container = document.getElementById('graficosContainer');
     var status = document.getElementById('graficosStatus');
     var charts = {};
 
     var DASHES = [[], [6, 3], [2, 2], [10, 3, 2, 3]];
+
+    // Boxes de filtro (Estado/Estacao) que abrem/fecham ao clicar --
+    // mesmo padrao do menu "Configuracoes" do menu principal, mas
+    // proprio desta pagina (aquele so' liga o clique nos elementos que
+    // ja existem no HTML quando o script do base.html roda, antes do
+    // conteudo desta pagina existir).
+    var boxToggles = document.querySelectorAll('[data-box-toggle]');
+    var boxMenus = [];
+    boxToggles.forEach(function (btn) {
+        var menu = document.getElementById(btn.dataset.boxToggle);
+        if (!menu) return;
+        boxMenus.push(menu);
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var wasOpen = !menu.classList.contains('d-none');
+            boxMenus.forEach(function (m) { m.classList.add('d-none'); });
+            if (!wasOpen) menu.classList.remove('d-none');
+        });
+    });
+    document.addEventListener('click', function (e) {
+        boxMenus.forEach(function (menu) { if (!menu.contains(e.target)) menu.classList.add('d-none'); });
+    });
+
+    function atualizarResumos() {
+        var estados = document.querySelectorAll('.filtro-estado:checked');
+        var resumoEstado = document.getElementById('resumoEstado');
+        if (!estados.length) resumoEstado.textContent = 'Nenhum (mostra tudo)';
+        else if (estados.length === 1) resumoEstado.textContent = estados[0].value;
+        else resumoEstado.textContent = estados.length + ' estados';
+
+        var estacoes = document.querySelectorAll('.filtro-estacao:checked');
+        var resumoEstacao = document.getElementById('resumoEstacao');
+        if (!estacoes.length) resumoEstacao.textContent = 'Todas (usa Estado)';
+        else if (estacoes.length === 1) resumoEstacao.textContent = estacoes[0].nextElementSibling.textContent;
+        else resumoEstacao.textContent = estacoes.length + ' estacoes';
+    }
+    document.querySelectorAll('.filtro-estado, .filtro-estacao').forEach(function (el) {
+        el.addEventListener('change', atualizarResumos);
+    });
+    atualizarResumos();
 
     function qs() {
         var params = new URLSearchParams();
@@ -97,6 +185,13 @@
         wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + '</h6><canvas></canvas></div>';
         container.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
+
+        var limites = null;
+        doenca.series.forEach(function (s) {
+            if (!limites && s.limite_maximo) {
+                limites = { warn: s.limite_warn, danger: s.limite_danger, maximo: s.limite_maximo };
+            }
+        });
 
         var datasets = [];
         doenca.series.forEach(function (s, idx) {
@@ -135,10 +230,17 @@
                 responsive: true,
                 interaction: { mode: 'index', intersect: false },
                 scales: {
-                    yEsporos: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Esporos' } },
+                    yEsporos: {
+                        type: 'linear', position: 'left', beginAtZero: true,
+                        suggestedMax: limites ? limites.maximo : undefined,
+                        title: { display: true, text: 'Esporos' },
+                    },
                     yRisco: { type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: 'Risco de infeccao (%)' } },
                 },
-                plugins: { legend: { labels: { boxWidth: 14, font: { size: 10 } } } },
+                plugins: {
+                    legend: { labels: { boxWidth: 14, font: { size: 10 } } },
+                    colorBands: limites,
+                },
             },
         });
     }
