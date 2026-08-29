@@ -430,6 +430,16 @@
                             // marcador de excedido por acaso).
                             generateLabels: function (chart) {
                                 var itens = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                                // Com o checkbox "Risco (linha)" desmarcado,
+                                // tira a entrada de risco da legenda de vez
+                                // (em vez do risco de Chart.js so' riscar o
+                                // texto -- essa legenda nem carrega dado
+                                // clicavel, ja que a visibilidade e' o
+                                // checkbox, nao o clique na legenda).
+                                itens = itens.filter(function (item) {
+                                    var ds = chart.data.datasets[item.datasetIndex];
+                                    return !(ds && ds.riscoLabels && !chkMostrarRisco.checked);
+                                });
                                 itens.forEach(function (item) {
                                     var ds = chart.data.datasets[item.datasetIndex];
                                     var cor = ds ? (ds.corLinha || ds.borderColor) : item.fillStyle;
