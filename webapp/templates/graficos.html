@@ -19,8 +19,9 @@
     passa do maximo cadastrado -- quando o valor real excede, uma seta
     vermelha marca o ponto) combinada com o risco de germinacao calculado
     a partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
-    (pontos azuis, escala 0-100% -- passe o mouse num ponto pra ver o
-    percentual e a direcao predominante do vento daquele dia). As faixas
+    (setinha azul, escala 0-100% -- ja' aponta pra direcao predominante do
+    vento daquele dia, mais escura quanto maior o risco; passe o mouse
+    pra ver o percentual exato). As faixas
     verde/amarelo/vermelho seguem os mesmos limites (Normal/Atencao/Perigo)
     do relatorio em PDF. Os filtros abaixo aplicam sozinhos ao mudar.
 </p>
@@ -118,11 +119,12 @@
     Chart.register(colorBandsPlugin);
 
     // Risco de infeccao vira PONTO (nao linha) -- tamanho fixo
-    // (intermediario), so' a opacidade varia com o valor (mais claro
-    // perto de 0%, mais forte perto de 100%), pra dar uma leitura visual
-    // rapida sem poluir o grafico com texto fixo; o percentual + direcao
-    // do vento aparecem so' no hover (tooltip), ver callback abaixo.
-    // Desenha o ponto "na mao", calculando a posicao direto pela escala
+    // (intermediario), a opacidade varia com o valor (mais claro perto de
+    // 0%, mais forte perto de 100%). Em vez de bolinha, desenha uma
+    // setinha ja' apontando pra direcao predominante do vento daquele dia
+    // (sempre visivel, sem precisar de hover -- so' o percentual exato
+    // fica no tooltip, ver callback abaixo, pra nao poluir com texto
+    // fixo). Desenha "na mao", calculando a posicao direto pela escala
     // (`getPixelForValue`) em vez de usar o elemento de ponto que o
     // proprio Chart.js criaria -- `showLine:false` com DUAS escalas Y no
     // mesmo grafico (esporos + risco) faz o Chart.js posicionar todos os
@@ -130,6 +132,31 @@
     // chart.js@4.4.4), entao o dataset do risco fica com pointRadius:0
     // (so' carrega o dado, incluindo pro tooltip) e esse plugin cuida
     // 100% do desenho visual.
+    var GRAUS_DIRECAO = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 };
+
+    function desenharSetaVento(ctx, x, y, direcao, alpha) {
+        var graus = GRAUS_DIRECAO[direcao];
+        if (graus === undefined) {
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, 2 * Math.PI);
+            ctx.fillStyle = 'rgba(13, 110, 253, ' + alpha.toFixed(2) + ')';
+            ctx.fill();
+            return;
+        }
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(graus * Math.PI / 180);
+        ctx.beginPath();
+        ctx.moveTo(0, -6);
+        ctx.lineTo(-3, 3.5);
+        ctx.lineTo(0, 1.5);
+        ctx.lineTo(3, 3.5);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(13, 110, 253, ' + alpha.toFixed(2) + ')';
+        ctx.fill();
+        ctx.restore();
+    }
+
     var riscoPointsPlugin = {
         id: 'riscoPoints',
         afterDatasetsDraw: function (chart) {
@@ -146,11 +173,8 @@
                     if (v === null || v === undefined) return;
                     var x = xScale.getPixelForValue(idx);
                     var y = yScale.getPixelForValue(v);
-                    var alpha = 0.2 + (v / 100) * 0.8;
-                    ctx.beginPath();
-                    ctx.arc(x, y, 4.5, 0, 2 * Math.PI);
-                    ctx.fillStyle = 'rgba(13, 110, 253, ' + alpha.toFixed(2) + ')';
-                    ctx.fill();
+                    var alpha = 0.35 + (v / 100) * 0.65;
+                    desenharSetaVento(ctx, x, y, ds.riscoLabels[idx], alpha);
                 });
                 ctx.restore();
             });
