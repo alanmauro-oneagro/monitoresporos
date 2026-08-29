@@ -19,9 +19,9 @@
     passa do maximo cadastrado -- quando o valor real excede, uma seta
     vermelha marca o ponto) combinada com o risco de germinacao calculado
     a partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
-    (setinha azul, escala 0-100% -- ja' aponta pra direcao predominante do
-    vento daquele dia, mais escura quanto maior o risco; passe o mouse
-    pra ver o percentual exato). As faixas
+    (linha verde, escala 0-100%), com uma setinha azul em cada dia ja'
+    apontando pra direcao predominante do vento (passe o mouse pra ver o
+    percentual exato). As faixas
     verde/amarelo/vermelho seguem os mesmos limites (Normal/Atencao/Perigo)
     do relatorio em PDF. Os filtros abaixo aplicam sozinhos ao mudar.
 </p>
@@ -74,7 +74,11 @@
             <div class="col-md-2">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="filtroMostrarRisco" checked>
-                    <label class="form-check-label small" for="filtroMostrarRisco">Risco (%, vento)</label>
+                    <label class="form-check-label small" for="filtroMostrarRisco">Risco (linha)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filtroMostrarVento" checked>
+                    <label class="form-check-label small" for="filtroMostrarVento">Vento (seta)</label>
                 </div>
             </div>
         </div>
@@ -118,31 +122,23 @@
     };
     Chart.register(colorBandsPlugin);
 
-    // Risco de infeccao vira PONTO (nao linha) -- tamanho fixo
-    // (intermediario), a opacidade varia com o valor (mais claro perto de
-    // 0%, mais forte perto de 100%). Em vez de bolinha, desenha uma
-    // setinha ja' apontando pra direcao predominante do vento daquele dia
-    // (sempre visivel, sem precisar de hover -- so' o percentual exato
-    // fica no tooltip, ver callback abaixo, pra nao poluir com texto
-    // fixo). Desenha "na mao", calculando a posicao direto pela escala
-    // (`getPixelForValue`) em vez de usar o elemento de ponto que o
-    // proprio Chart.js criaria -- `showLine:false` com DUAS escalas Y no
-    // mesmo grafico (esporos + risco) faz o Chart.js posicionar todos os
-    // pontos dessa serie no mesmo lugar (bug/quirk confirmado isolado,
-    // chart.js@4.4.4), entao o dataset do risco fica com pointRadius:0
-    // (so' carrega o dado, incluindo pro tooltip) e esse plugin cuida
-    // 100% do desenho visual.
+    // Risco de infeccao (linha verde) e a setinha de vento em cada dia
+    // sao DESENHADOS NA MAO (getPixelForValue), nao pelo Chart.js nativo
+    // -- confirmado isolado que QUALQUER dataset numa segunda escala Y
+    // (yRisco) fica com a posicao de todos os pontos colapsada no mesmo
+    // lugar nesse Chart.js@4.4.4, seja linha ou so' ponto. O dataset do
+    // risco entao fica com cor transparente/borderWidth 0 (so' carrega o
+    // dado pro tooltip/legenda) e esse plugin cuida 100% do desenho
+    // visual -- a cor real fica em `ds.corLinha`/`ds.dashLinha`.
+    // A linha respeita o checkbox "Risco (linha)" (via `meta.visible`,
+    // mesmo mecanismo de sempre); a setinha de vento tem um flag PROPRIO
+    // (`mostrarVento`), independente, pro checkbox "Vento (seta)".
+    var mostrarVento = true;
     var GRAUS_DIRECAO = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 };
 
-    function desenharSetaVento(ctx, x, y, direcao, alpha) {
+    function desenharSetaVento(ctx, x, y, direcao) {
         var graus = GRAUS_DIRECAO[direcao];
-        if (graus === undefined) {
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, 2 * Math.PI);
-            ctx.fillStyle = 'rgba(13, 110, 253, ' + alpha.toFixed(2) + ')';
-            ctx.fill();
-            return;
-        }
+        if (graus === undefined) return;
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(graus * Math.PI / 180);
@@ -152,35 +148,54 @@
         ctx.lineTo(0, 1.5);
         ctx.lineTo(3, 3.5);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(13, 110, 253, ' + alpha.toFixed(2) + ')';
+        ctx.fillStyle = '#0d6efd';
         ctx.fill();
         ctx.restore();
     }
 
-    var riscoPointsPlugin = {
-        id: 'riscoPoints',
+    var riscoPlugin = {
+        id: 'riscoPlugin',
         afterDatasetsDraw: function (chart) {
             var ctx = chart.ctx;
             chart.data.datasets.forEach(function (ds, i) {
                 if (!ds.riscoLabels) return;
-                var meta = chart.getDatasetMeta(i);
-                if (!meta.visible) return;
                 var xScale = chart.scales.x;
                 var yScale = chart.scales[ds.yAxisID];
                 if (!xScale || !yScale) return;
-                ctx.save();
-                ds.data.forEach(function (v, idx) {
-                    if (v === null || v === undefined) return;
-                    var x = xScale.getPixelForValue(idx);
-                    var y = yScale.getPixelForValue(v);
-                    var alpha = 0.35 + (v / 100) * 0.65;
-                    desenharSetaVento(ctx, x, y, ds.riscoLabels[idx], alpha);
-                });
-                ctx.restore();
+                var meta = chart.getDatasetMeta(i);
+
+                if (meta.visible) {
+                    ctx.save();
+                    ctx.strokeStyle = ds.corLinha;
+                    ctx.lineWidth = 1.5;
+                    if (ds.dashLinha) ctx.setLineDash(ds.dashLinha);
+                    ctx.beginPath();
+                    var emCurso = false;
+                    ds.data.forEach(function (v, idx) {
+                        if (v === null || v === undefined) { emCurso = false; return; }
+                        var x = xScale.getPixelForValue(idx);
+                        var y = yScale.getPixelForValue(v);
+                        if (emCurso) ctx.lineTo(x, y);
+                        else { ctx.moveTo(x, y); emCurso = true; }
+                    });
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                if (mostrarVento) {
+                    ctx.save();
+                    ds.data.forEach(function (v, idx) {
+                        if (v === null || v === undefined) return;
+                        var x = xScale.getPixelForValue(idx);
+                        var y = yScale.getPixelForValue(v);
+                        desenharSetaVento(ctx, x, y, ds.riscoLabels[idx]);
+                    });
+                    ctx.restore();
+                }
             });
         },
     };
-    Chart.register(riscoPointsPlugin);
+    Chart.register(riscoPlugin);
 
     var container = document.getElementById('graficosContainer');
     var status = document.getElementById('graficosStatus');
@@ -244,9 +259,13 @@
         el.addEventListener('change', agendarRecarga);
     });
 
-    // Checkbox "Risco (%, vento)" -- so' liga/desliga a visibilidade dos
-    // datasets de risco ja carregados (nao precisa buscar dado de novo).
+    // Checkboxes "Risco (linha)" e "Vento (seta)" -- independentes uma
+    // da outra: a de risco liga/desliga a visibilidade da linha (dataset
+    // do Chart.js), a de vento so' troca o flag `mostrarVento` que o
+    // `ventoPlugin` consulta a cada desenho -- nenhuma das duas precisa
+    // buscar dado de novo.
     var chkMostrarRisco = document.getElementById('filtroMostrarRisco');
+    var chkMostrarVento = document.getElementById('filtroMostrarVento');
     function aplicarVisibilidadeRisco() {
         var mostrar = chkMostrarRisco.checked;
         Object.keys(charts).forEach(function (k) {
@@ -258,6 +277,10 @@
         });
     }
     chkMostrarRisco.addEventListener('change', aplicarVisibilidadeRisco);
+    chkMostrarVento.addEventListener('change', function () {
+        mostrarVento = chkMostrarVento.checked;
+        Object.keys(charts).forEach(function (k) { charts[k].update(); });
+    });
 
     function qs() {
         var params = new URLSearchParams();
@@ -314,13 +337,14 @@
             datasets.push({
                 label: 'Risco (%) - ' + s.estacao,
                 data: s.risco_pct,
-                showLine: false,
-                borderColor: '#0d6efd',
-                backgroundColor: '#0d6efd',
+                borderColor: 'transparent',
+                backgroundColor: 'transparent',
+                borderWidth: 0,
                 pointRadius: 0,
-                spanGaps: false,
                 yAxisID: 'yRisco',
                 riscoLabels: s.vento_predominante,
+                corLinha: '#198754',
+                dashLinha: dash,
             });
         });
 
@@ -339,7 +363,26 @@
                     yRisco: { type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: 'Risco de infeccao (%)' } },
                 },
                 plugins: {
-                    legend: { labels: { boxWidth: 14, font: { size: 10 } } },
+                    legend: {
+                        labels: {
+                            boxWidth: 14, font: { size: 10 },
+                            // dataset do risco fica com cor transparente
+                            // de proposito (ver nota no riscoPlugin) --
+                            // usa `corLinha` pro quadradinho da legenda
+                            // mostrar a cor real.
+                            generateLabels: function (chart) {
+                                var itens = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                                itens.forEach(function (item) {
+                                    var ds = chart.data.datasets[item.datasetIndex];
+                                    if (ds && ds.corLinha) {
+                                        item.strokeStyle = ds.corLinha;
+                                        item.fillStyle = ds.corLinha;
+                                    }
+                                });
+                                return itens;
+                            },
+                        },
+                    },
                     colorBands: limites,
                     tooltip: {
                         callbacks: {
@@ -352,6 +395,11 @@
                                     return ds.label + ': ' + v + '%' + (dir ? ' (' + dir + ')' : '');
                                 }
                                 return ds.label + ': ' + v;
+                            },
+                            labelColor: function (ctx) {
+                                var ds = ctx.dataset;
+                                var cor = ds.corLinha || ds.borderColor;
+                                return { borderColor: cor, backgroundColor: cor };
                             },
                         },
                     },
