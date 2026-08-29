@@ -210,6 +210,37 @@
     var charts = {};
     var rosaChart = null;
 
+    // Marcacoes N/S/L/O ao redor da rosa dos ventos -- Chart.js nao
+    // desenha rotulo nenhum em volta de um grafico polar (so' na legenda/
+    // tooltip, que aqui ficam com o rotulo tecnico N/NE/E...); usa o
+    // proprio raio da escala radial (`scale.drawingArea`) pra' saber onde
+    // termina o ultimo circulo e escrever logo depois, dentro do
+    // `layout.padding` reservado nas options do grafico.
+    var rosaLabelsPlugin = {
+        id: 'rosaLabels',
+        afterDraw: function (chart) {
+            if (chart.config.type !== 'polarArea') return;
+            var scale = chart.scales.r;
+            if (!scale) return;
+            var ctx = chart.ctx;
+            var cx = scale.xCenter, cy = scale.yCenter;
+            var raio = scale.drawingArea + 14;
+            ctx.save();
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillStyle = '#495057';
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            ctx.fillText('NORTE', cx, cy - raio);
+            ctx.fillText('SUL', cx, cy + raio);
+            ctx.textAlign = 'left';
+            ctx.fillText('LESTE', cx + raio - 12, cy);
+            ctx.textAlign = 'right';
+            ctx.fillText('OESTE', cx - raio + 12, cy);
+            ctx.restore();
+        },
+    };
+    Chart.register(rosaLabelsPlugin);
+
     // Rosa dos ventos -- primeiro grafico da pagina, agregando TODAS as
     // estacoes/dias visiveis no filtro atual (uma unica rosa, nao uma
     // por doenca). Fatias cheias (Chart.js 'polarArea' -- cada gomo e'
@@ -237,6 +268,7 @@
             },
             options: {
                 responsive: true,
+                layout: { padding: 28 },
                 scales: { r: { ticks: { callback: function (v) { return v + '%'; } } } },
                 plugins: {
                     legend: { display: false },
