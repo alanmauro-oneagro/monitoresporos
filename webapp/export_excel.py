@@ -7,8 +7,11 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
+import data_reader
 import fungicida_data
 import models
+
+UR_LIMIARES = (80, 85, 90, 95)
 
 MOMENTO_LABELS = {"ts": "TS", "sulco": "Sulco", "folha": "Folha"}
 TIPO_LABELS = {"quimico": "Quimico", "biologico": "Biologico"}
@@ -116,6 +119,19 @@ def _manejo_anotacoes_rows():
     return rows
 
 
+def _relatorio_diario_rows():
+    report = data_reader.build_daily_weather_report(data_reader.read_weather(), UR_LIMIARES)
+    rows = []
+    for r in report:
+        rows.append([
+            r["estacao"], models.fmt_data_br(r["data"]) or r["data"],
+            r["temp_min"], r["temp_max"],
+        ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [
+            r["horas_molhamento"], r["vento_predominante"] or "-",
+        ])
+    return rows
+
+
 def _add_whatsapp_sheet(wb):
     """Uma aba so' com os dois blocos da tela "Relatorio WhatsApp":
     historico de envios (data/hora, fazenda, destinatario, status) e,
@@ -191,6 +207,13 @@ def build_workbook():
     _write_sheet(wb, "Manejo - Anotacoes", ["Fazenda", "Doenca", "Nota"], _manejo_anotacoes_rows())
     _add_whatsapp_sheet(wb)
     _add_fungicidas_sheet(wb, models.get_culturas_ativas())
+    _write_sheet(
+        wb, "Relatorio Diario",
+        ["Estacao", "Data", "Temp min (C)", "Temp max (C)"]
+        + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
+        + ["Horas molhamento foliar", "Vento predominante"],
+        _relatorio_diario_rows(),
+    )
 
     buffer = io.BytesIO()
     wb.save(buffer)

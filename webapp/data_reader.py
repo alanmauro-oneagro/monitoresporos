@@ -3,8 +3,9 @@ os dados do dashboard web -- mesma logica de status/cores do BioScoutDashboard.x
 (aba Alertas do Dia), para nao duplicar regras de negocio em dois lugares."""
 import csv
 import os
+from collections import Counter
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DATA_DIR = Path(os.environ.get("BIOSCOUT_DATA_DIR", str(Path(__file__).parent.parent / "data")))
 
@@ -156,6 +157,78 @@ def build_weather_lookup(weather_rows):
         chuva = round(sum(vals["rain"]), 1) if vals["rain"] else 0
         lookup[key] = {"umidade": umidade, "chuva": chuva}
     return lookup
+
+
+# Brasil aboliu horario de verao em 2019 -- offset fixo (mesmo truque
+# de `models._agora_cuiaba`), sem precisar de zoneinfo/tzdata (nao
+# instalado no ambiente de dev local nesta maquina).
+_TZ_OFFSET_HOURS = {
+    "America/Campo_Grande": -4,
+    "America/Sao_Paulo": -3,
+}
+
+_DIRECOES_VENTO = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+
+
+def _bucket_direcao_vento(graus):
+    if graus is None:
+        return None
+    idx = round((graus % 360) / 45) % 8
+    return _DIRECOES_VENTO[idx]
+
+
+def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_molhamento=90):
+    """Agrupa as leituras horarias do weather.csv por (estacao, dia
+    local da estacao) e calcula, por dia: temp min/max, quantas horas
+    tiveram UR >= cada limiar de `ur_limiares` (a rede manda 1 leitura
+    por hora, entao contar leituras == contar horas), horas de
+    "molhamento foliar" (proxy: UR >= `ur_molhamento` -- a rede nao tem
+    sensor de molhamento real, ver nota em app.py junto de
+    `_PESQUISA_GERMINACAO_2026_08_27`) e a direcao de vento predominante
+    (moda das leituras do dia, em 8 direcoes)."""
+    grouped = {}
+    for row in weather_rows:
+        try:
+            dt_utc = _parse_dt(row["dateMeasured"])
+        except (KeyError, ValueError):
+            continue
+        offset = _TZ_OFFSET_HOURS.get(row.get("deviceTimeZoneId"), -4)
+        dt_local = dt_utc + timedelta(hours=offset)
+        device = row.get("deviceUserFriendlyId")
+        key = (device, dt_local.date().isoformat())
+        bucket = grouped.setdefault(key, {
+            "temps": [], "ur_counts": {l: 0 for l in ur_limiares}, "molhamento": 0, "ventos": [],
+        })
+        temp = _to_float(row.get("temperature"))
+        if temp is not None:
+            bucket["temps"].append(temp)
+        ur = _to_float(row.get("humidity"))
+        if ur is not None:
+            for limiar in ur_limiares:
+                if ur >= limiar:
+                    bucket["ur_counts"][limiar] += 1
+            if ur >= ur_molhamento:
+                bucket["molhamento"] += 1
+        vento = _to_float(row.get("windDirection"))
+        if vento is not None:
+            bucket["ventos"].append(vento)
+
+    rows = []
+    for (device, data_iso), vals in grouped.items():
+        temps = vals["temps"]
+        direcoes = [d for d in (_bucket_direcao_vento(v) for v in vals["ventos"]) if d]
+        predominante = Counter(direcoes).most_common(1)[0][0] if direcoes else None
+        rows.append({
+            "estacao": device,
+            "data": data_iso,
+            "temp_min": min(temps) if temps else None,
+            "temp_max": max(temps) if temps else None,
+            "ur_counts": vals["ur_counts"],
+            "horas_molhamento": vals["molhamento"],
+            "vento_predominante": predominante,
+        })
+    rows.sort(key=lambda r: ((r["estacao"] or "").lower(), r["data"]))
+    return rows
 
 
 def get_site_disease_history(site, doenca_en, dias=15):
