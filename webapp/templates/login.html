@@ -26,6 +26,17 @@
     .login-card {
         background-color: rgba(255, 255, 255, 0.5);
     }
+    @media (max-width: 767.98px) {
+        /* A foto de fundo do mobile (login-bg-mobile.jpg) e' bem mais
+           escura que a do desktop -- com a mesma transparencia de cima,
+           a caixa parecia mais "solida"/menos transparente no celular.
+           Sobe um pouco a opacidade aqui pra compensar e a caixa ficar
+           com a mesma aparencia (mesmo brilho por tras do texto) nos
+           dois casos. */
+        .login-card {
+            background-color: rgba(255, 255, 255, 0.65);
+        }
+    }
 </style>
 {% endblock %}
 {% block content %}
