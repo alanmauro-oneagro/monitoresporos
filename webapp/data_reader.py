@@ -269,6 +269,24 @@ def vento_predominante_do_dia(horas_do_dia):
     return Counter(direcoes).most_common(1)[0][0]
 
 
+def contar_direcoes_vento(hourly_lookup, devices, dias):
+    """Conta quantas leituras horarias (das estacoes/dias dados) vieram
+    de cada uma das 8 direcoes -- usado pela rosa dos ventos da aba
+    Graficos, que agrega TODAS as estacoes/dias visiveis no filtro atual
+    num unico grafico (ao contrario da setinha por dia, que e' por
+    estacao). Retorna um dict na mesma ordem de `_DIRECOES_VENTO`
+    (N, NE, E, SE, S, SW, W, NW) -- inclusive as com contagem zero, pra'
+    o grafico sempre desenhar os 8 gomos."""
+    contagem = {d: 0 for d in _DIRECOES_VENTO}
+    for device in devices:
+        for dia_iso in dias:
+            for h in hourly_lookup.get((device, dia_iso), []):
+                direcao = _bucket_direcao_vento(h.get("vento"))
+                if direcao:
+                    contagem[direcao] += 1
+    return contagem
+
+
 def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_molhamento=90):
     """Agrupa as leituras horarias do weather.csv por (estacao, dia
     local da estacao) e calcula, por dia: temp min/max, quantas horas

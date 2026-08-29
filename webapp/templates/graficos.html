@@ -75,9 +75,13 @@
 </div>
 
 <div id="graficosStatus" class="text-muted small mb-3">Carregando...</div>
+<div id="rosaVentosContainer"></div>
 <div id="graficosContainer"></div>
 
 <p class="text-muted small border-top pt-3 mt-2">
+    Rosa dos ventos (primeiro grafico): frequencia (%) de cada direcao de
+    vento no periodo e nas estacoes do filtro atual.
+    <br>
     Um grafico por doenca: concentracao de esporos (uma cor por fazenda,
     nunca passa do maximo cadastrado -- quando o valor real excede, uma
     seta vermelha marca o ponto) combinada com o risco de germinacao calculado
@@ -201,8 +205,46 @@
     Chart.register(riscoPlugin);
 
     var container = document.getElementById('graficosContainer');
+    var rosaContainer = document.getElementById('rosaVentosContainer');
     var status = document.getElementById('graficosStatus');
     var charts = {};
+    var rosaChart = null;
+
+    // Rosa dos ventos -- primeiro grafico da pagina, agregando TODAS as
+    // estacoes/dias visiveis no filtro atual (uma unica rosa, nao uma
+    // por doenca). Fatias cheias (Chart.js 'polarArea' -- cada gomo e'
+    // uma das 8 direcoes, do tamanho da frequencia % daquele periodo).
+    // N no topo, sentido horario (NE, E, SE...) e' o padrao do proprio
+    // Chart.js pra esse tipo de grafico, ja bate com uma bussola normal.
+    function montarRosaDosVentos(rosaVentos) {
+        rosaContainer.innerHTML = '';
+        if (rosaChart) { rosaChart.destroy(); rosaChart = null; }
+        var direcoes = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        var valores = direcoes.map(function (d) { return rosaVentos[d] || 0; });
+        if (!valores.some(function (v) { return v > 0; })) return;
+
+        var wrap = document.createElement('div');
+        wrap.className = 'card shadow-sm mb-4';
+        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">Rosa dos Ventos</h6><canvas style="max-height:380px;"></canvas></div>';
+        rosaContainer.appendChild(wrap);
+        var ctx = wrap.querySelector('canvas').getContext('2d');
+
+        rosaChart = new Chart(ctx, {
+            type: 'polarArea',
+            data: {
+                labels: direcoes,
+                datasets: [{ data: valores, backgroundColor: '#0d6efd55', borderColor: '#0d6efd' }],
+            },
+            options: {
+                responsive: true,
+                scales: { r: { ticks: { callback: function (v) { return v + '%'; } } } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: function (ctx) { return ctx.label + ': ' + ctx.raw + '%'; } } },
+                },
+            },
+        });
+    }
 
     var DASHES = [[], [6, 3], [2, 2], [10, 3, 2, 3]];
     // Uma cor por fazenda no grafico de esporos (risco continua sempre
@@ -486,6 +528,7 @@
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 var labels = data.dias.map(fmtDia);
+                montarRosaDosVentos(data.rosa_ventos || {});
                 if (!data.doencas.length) {
                     status.textContent = 'Nenhum dado disponivel para o periodo/filtro selecionado.';
                     return;

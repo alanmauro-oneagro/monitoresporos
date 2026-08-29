@@ -1265,7 +1265,18 @@ def graficos_dados():
             })
     doencas_payload.sort(key=lambda d: d["doenca_pt"])
 
-    return jsonify({"inicio": inicio.isoformat(), "fim": fim.isoformat(), "dias": dias, "doencas": doencas_payload})
+    devices = [device_by_site.get(s) for s in sites if device_by_site.get(s)]
+    vento_contagem = data_reader.contar_direcoes_vento(hourly_lookup, devices, dias)
+    total_vento = sum(vento_contagem.values())
+    rosa_ventos = {
+        d: (round(c / total_vento * 100, 1) if total_vento else 0)
+        for d, c in vento_contagem.items()
+    }
+
+    return jsonify({
+        "inicio": inicio.isoformat(), "fim": fim.isoformat(), "dias": dias,
+        "doencas": doencas_payload, "rosa_ventos": rosa_ventos,
+    })
 
 
 @app.route("/mapa")
