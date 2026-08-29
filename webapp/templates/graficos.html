@@ -19,8 +19,10 @@
     passa do maximo cadastrado -- quando o valor real excede, uma seta
     vermelha marca o ponto) combinada com o risco de germinacao calculado
     a partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
-    (linha azul, escala 0-100%). As faixas verde/amarelo/vermelho seguem
-    os mesmos limites (Normal/Atencao/Perigo) do relatorio em PDF.
+    (pontos azuis, escala 0-100% -- passe o mouse num ponto pra ver o
+    percentual e a direcao predominante do vento daquele dia). As faixas
+    verde/amarelo/vermelho seguem os mesmos limites (Normal/Atencao/Perigo)
+    do relatorio em PDF. Os filtros abaixo aplicam sozinhos ao mudar.
 </p>
 
 <div class="card shadow-sm mb-4">
@@ -50,7 +52,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label small text-muted mb-1 d-block">
                     Estacao <span class="text-muted">(se marcar alguma, ignora o Estado)</span>
                 </label>
@@ -68,8 +70,11 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-1">
-                <button type="button" id="btnAplicarFiltro" class="btn btn-success btn-sm w-100">Aplicar</button>
+            <div class="col-md-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filtroMostrarRisco" checked>
+                    <label class="form-check-label small" for="filtroMostrarRisco">Risco (%, vento)</label>
+                </div>
             </div>
         </div>
     </div>
@@ -112,11 +117,11 @@
     };
     Chart.register(colorBandsPlugin);
 
-    // Risco de infeccao vira PONTO (nao linha) -- intensidade/tamanho
-    // variam com o valor (mais claro/pequeno perto de 0%, mais
-    // escuro/grande perto de 100%), pra dar uma leitura visual rapida
-    // sem poluir o grafico com texto fixo; o percentual + direcao do
-    // vento aparecem so' no hover (tooltip), ver callback abaixo.
+    // Risco de infeccao vira PONTO (nao linha) -- tamanho fixo
+    // (intermediario), so' a opacidade varia com o valor (mais claro
+    // perto de 0%, mais forte perto de 100%), pra dar uma leitura visual
+    // rapida sem poluir o grafico com texto fixo; o percentual + direcao
+    // do vento aparecem so' no hover (tooltip), ver callback abaixo.
     // Desenha o ponto "na mao", calculando a posicao direto pela escala
     // (`getPixelForValue`) em vez de usar o elemento de ponto que o
     // proprio Chart.js criaria -- `showLine:false` com DUAS escalas Y no
@@ -141,11 +146,9 @@
                     if (v === null || v === undefined) return;
                     var x = xScale.getPixelForValue(idx);
                     var y = yScale.getPixelForValue(v);
-                    var frac = v / 100;
-                    var alpha = 0.2 + frac * 0.8;
-                    var raio = 2.5 + frac * 4.5;
+                    var alpha = 0.2 + (v / 100) * 0.8;
                     ctx.beginPath();
-                    ctx.arc(x, y, raio, 0, 2 * Math.PI);
+                    ctx.arc(x, y, 4.5, 0, 2 * Math.PI);
                     ctx.fillStyle = 'rgba(13, 110, 253, ' + alpha.toFixed(2) + ')';
                     ctx.fill();
                 });
@@ -200,6 +203,37 @@
         el.addEventListener('change', atualizarResumos);
     });
     atualizarResumos();
+
+    // Salvamento automatico dos filtros -- qualquer mudanca (data,
+    // estado, estacao) recarrega os graficos sozinha, sem botao
+    // "Aplicar"; debounce de 600ms (mesmo espirito do autosave de
+    // formulario ja usado no resto do site) pra nao disparar um recarga
+    // por cada caixa marcada quando a pessoa marca varias em sequencia.
+    var debounceTimer = null;
+    function agendarRecarga() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(carregar, 600);
+    }
+    document.getElementById('filtroInicio').addEventListener('change', agendarRecarga);
+    document.getElementById('filtroFim').addEventListener('change', agendarRecarga);
+    document.querySelectorAll('.filtro-estado, .filtro-estacao').forEach(function (el) {
+        el.addEventListener('change', agendarRecarga);
+    });
+
+    // Checkbox "Risco (%, vento)" -- so' liga/desliga a visibilidade dos
+    // datasets de risco ja carregados (nao precisa buscar dado de novo).
+    var chkMostrarRisco = document.getElementById('filtroMostrarRisco');
+    function aplicarVisibilidadeRisco() {
+        var mostrar = chkMostrarRisco.checked;
+        Object.keys(charts).forEach(function (k) {
+            var chart = charts[k];
+            chart.data.datasets.forEach(function (ds, i) {
+                if (ds.riscoLabels) chart.setDatasetVisibility(i, mostrar);
+            });
+            chart.update();
+        });
+    }
+    chkMostrarRisco.addEventListener('change', aplicarVisibilidadeRisco);
 
     function qs() {
         var params = new URLSearchParams();
@@ -320,13 +354,13 @@
                 data.doencas.forEach(function (doenca) {
                     charts[doenca.doenca_en] = montarGrafico(doenca, labels);
                 });
+                aplicarVisibilidadeRisco();
             })
             .catch(function () {
                 status.textContent = 'Erro ao carregar os graficos.';
             });
     }
 
-    document.getElementById('btnAplicarFiltro').addEventListener('click', carregar);
     carregar();
 })();
 </script>
