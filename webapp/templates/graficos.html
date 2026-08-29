@@ -15,9 +15,9 @@
 {% block content %}
 <h4 class="mb-3">Graficos</h4>
 <p class="text-muted small">
-    Um grafico por doenca: concentracao de esporos (linha preta, nunca
-    passa do maximo cadastrado -- quando o valor real excede, uma seta
-    vermelha marca o ponto) combinada com o risco de germinacao calculado
+    Um grafico por doenca: concentracao de esporos (uma cor por fazenda,
+    nunca passa do maximo cadastrado -- quando o valor real excede, uma
+    seta vermelha marca o ponto) combinada com o risco de germinacao calculado
     a partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
     (linha verde, escala 0-100%), com uma setinha azul em cada dia ja'
     apontando pra direcao predominante do vento (passe o mouse pra ver o
@@ -170,14 +170,16 @@
                     ctx.lineWidth = 1.5;
                     if (ds.dashLinha) ctx.setLineDash(ds.dashLinha);
                     ctx.beginPath();
-                    var emCurso = false;
+                    var trecho = [];
+                    var desenharTrecho = function () {
+                        if (trecho.length) tracarLinhaSuave(ctx, trecho);
+                        trecho = [];
+                    };
                     ds.data.forEach(function (v, idx) {
-                        if (v === null || v === undefined) { emCurso = false; return; }
-                        var x = xScale.getPixelForValue(idx);
-                        var y = yScale.getPixelForValue(v);
-                        if (emCurso) ctx.lineTo(x, y);
-                        else { ctx.moveTo(x, y); emCurso = true; }
+                        if (v === null || v === undefined) { desenharTrecho(); return; }
+                        trecho.push({ x: xScale.getPixelForValue(idx), y: yScale.getPixelForValue(v) });
                     });
+                    desenharTrecho();
                     ctx.stroke();
                     ctx.restore();
                 }
@@ -202,6 +204,33 @@
     var charts = {};
 
     var DASHES = [[], [6, 3], [2, 2], [10, 3, 2, 3]];
+    // Uma cor por fazenda no grafico de esporos (risco continua sempre
+    // verde, ver dataset) -- evita vermelho (seta de excedido) e azul
+    // (seta de vento).
+    var CORES_FAZENDA = ['#212529', '#fd7e14', '#6f42c1', '#e83e8c', '#795548', '#997404', '#0dcaf0', '#5c636a'];
+
+    // Catmull-Rom convertido pra Bezier cubica (mesma tecnica de
+    // `export_pdf._linha_suave`), passando exatamente pelos pontos em
+    // vez de uma polilinha com angulos retos -- so' suaviza dentro de
+    // cada trecho continuo (quebra a curva onde ha' `null`, mesmo
+    // espirito de spanGaps:false).
+    function tracarLinhaSuave(ctx, pontos) {
+        var n = pontos.length;
+        if (n < 2) {
+            if (n === 1) { ctx.moveTo(pontos[0].x, pontos[0].y); ctx.lineTo(pontos[0].x, pontos[0].y); }
+            return;
+        }
+        ctx.moveTo(pontos[0].x, pontos[0].y);
+        for (var i = 0; i < n - 1; i++) {
+            var p0 = i > 0 ? pontos[i - 1] : pontos[i];
+            var p1 = pontos[i];
+            var p2 = pontos[i + 1];
+            var p3 = i + 2 < n ? pontos[i + 2] : pontos[i + 1];
+            var c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+            var c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+            ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
+        }
+    }
 
     // Boxes de filtro (Estado/Estacao) que abrem/fecham ao clicar --
     // mesmo padrao do menu "Configuracoes" do menu principal, mas
@@ -320,12 +349,12 @@
         var datasets = [];
         doenca.series.forEach(function (s, idx) {
             var dash = DASHES[idx % DASHES.length];
+            var corFazenda = CORES_FAZENDA[idx % CORES_FAZENDA.length];
             datasets.push({
                 label: 'Esporos - ' + s.estacao,
                 data: s.esporos,
-                borderColor: '#000000',
-                backgroundColor: '#000000',
-                borderDash: dash,
+                borderColor: corFazenda,
+                backgroundColor: corFazenda,
                 spanGaps: false,
                 tension: 0.25,
                 pointRadius: pointRadii(s.esporos_excedido),
@@ -364,20 +393,29 @@
                 },
                 plugins: {
                     legend: {
+                        position: 'bottom',
                         labels: {
-                            boxWidth: 14, font: { size: 10 },
-                            // dataset do risco fica com cor transparente
-                            // de proposito (ver nota no riscoPlugin) --
-                            // usa `corLinha` pro quadradinho da legenda
-                            // mostrar a cor real.
+                            usePointStyle: true, pointStyle: 'circle',
+                            boxWidth: 8, font: { size: 10 },
+                            // Com usePointStyle, o Chart.js pega a cor
+                            // do pontinho de `pointBackgroundColor` --
+                            // no esporos isso e' o vermelho do marcador
+                            // de excedido, entao a legenda mostrava
+                            // vermelho pra toda fazenda (bug). Forca a
+                            // cor real (`corLinha` no risco -- fica
+                            // transparente de proposito, ver nota no
+                            // riscoPlugin -- ou `borderColor` no
+                            // esporos) e o formato 'circle' sempre
+                            // (senao pegava 'triangle' do array do
+                            // marcador de excedido por acaso).
                             generateLabels: function (chart) {
                                 var itens = Chart.defaults.plugins.legend.labels.generateLabels(chart);
                                 itens.forEach(function (item) {
                                     var ds = chart.data.datasets[item.datasetIndex];
-                                    if (ds && ds.corLinha) {
-                                        item.strokeStyle = ds.corLinha;
-                                        item.fillStyle = ds.corLinha;
-                                    }
+                                    var cor = ds ? (ds.corLinha || ds.borderColor) : item.fillStyle;
+                                    item.pointStyle = 'circle';
+                                    item.strokeStyle = cor;
+                                    item.fillStyle = cor;
                                 });
                                 return itens;
                             },

@@ -1134,6 +1134,16 @@ def _hoje_cuiaba():
     return (datetime.now(timezone.utc) - timedelta(hours=4)).date()
 
 
+def _sites_permitidos_usuario():
+    """None (sem filtro, ve tudo) se admin; senao o conjunto de fazendas
+    liberadas pra esse usuario (mesmo `get_user_permitted_site_names` ja
+    usado no Painel/Mapa/Manejo) -- usado pra aba Graficos nunca mostrar
+    dado de fazenda que o usuario nao tem permissao de ver."""
+    if current_user.is_admin:
+        return None
+    return set(models.get_user_permitted_site_names(int(current_user.id)))
+
+
 def _parse_iso_date(value):
     if not value:
         return None
@@ -1148,7 +1158,10 @@ def _parse_iso_date(value):
 def graficos():
     fim = _hoje_cuiaba()
     inicio = fim - timedelta(days=14)
+    permitidos = _sites_permitidos_usuario()
     uf_por_site = _uf_por_site()
+    if permitidos is not None:
+        uf_por_site = {s: uf for s, uf in uf_por_site.items() if s in permitidos}
     estacoes_disponiveis = sorted(uf_por_site.keys(), key=str.lower)
     estados_disponiveis = sorted({uf for uf in uf_por_site.values() if uf})
     return render_template(
@@ -1174,7 +1187,10 @@ def graficos_dados():
     if inicio > fim:
         inicio, fim = fim, inicio
 
+    permitidos = _sites_permitidos_usuario()
     uf_por_site = _uf_por_site()
+    if permitidos is not None:
+        uf_por_site = {s: uf for s, uf in uf_por_site.items() if s in permitidos}
     todos_sites = sorted(uf_por_site.keys(), key=str.lower)
 
     estacoes_sel = [s for s in request.args.getlist("estacao") if s]
