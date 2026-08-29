@@ -3,7 +3,18 @@
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
 <style>
-    .graf-card canvas { max-height: 380px; }
+    /* Altura fixa (nao aspect-ratio) pro grafico -- com 2 eixos Y +
+       legenda embaixo, a altura padrao do Chart.js (proporcional a
+       largura) ficava minuscula no mobile (largura estreita = altura
+       bem menor ainda). */
+    .graf-canvas-wrap { position: relative; height: 320px; }
+    .graf-canvas-wrap canvas { width: 100% !important; height: 100% !important; }
+    @media (max-width: 575.98px) {
+        /* Legenda com varios pontos (uma fazenda x esporos/risco) quebra
+           em mais linhas numa tela estreita, mesmo encurtada -- da mais
+           altura pra sobrar espaco de verdade pro grafico em si. */
+        .graf-canvas-wrap { height: 400px; }
+    }
     .filtro-box { position: relative; }
     .filtro-box-menu {
         position: absolute; top: 100%; left: 0; margin-top: 0.2rem;
@@ -428,6 +439,13 @@
         return p[2] + '/' + p[1];
     }
 
+    // "OneAgro" aparece como prefixo ("OneAgro - X") ou as vezes como
+    // sufixo ("X - OneAgro") no nome de site -- tira dos dois jeitos, so'
+    // pra' legenda ficar mais curta (nunca mexe no dado/tooltip).
+    function nomeCurtoLegenda(texto) {
+        return texto.replace(/\bOneAgro\s*-\s*/i, '').replace(/\s*-\s*OneAgro\b/i, '');
+    }
+
     function pointRadii(excedido) {
         return excedido.map(function (ex) { return ex ? 6 : 0; });
     }
@@ -438,7 +456,7 @@
     function montarGrafico(doenca, labels) {
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4 graf-card';
-        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + '</h6><canvas></canvas></div>';
+        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + '</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
         container.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
 
@@ -485,6 +503,7 @@
             data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 scales: {
                     yEsporos: {
@@ -532,6 +551,11 @@
                                     item.pointStyle = 'circle';
                                     item.strokeStyle = cor;
                                     item.fillStyle = cor;
+                                    // "OneAgro - " se repete em toda fazenda --
+                                    // encurta so' na legenda (o tooltip
+                                    // continua com o nome completo) pra' nao
+                                    // quebrar em varias linhas no mobile.
+                                    item.text = nomeCurtoLegenda(item.text);
                                 });
                                 return itens;
                             },
