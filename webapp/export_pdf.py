@@ -30,6 +30,9 @@ _ESTILO_TITULO = ParagraphStyle(
 _ESTILO_SUBTITULO = ParagraphStyle(
     "Subtitulo", parent=_styles["Normal"], textColor=colors.grey, fontSize=9, spaceAfter=10,
 )
+_ESTILO_RODAPE = ParagraphStyle(
+    "Rodape", parent=_styles["Normal"], textColor=colors.grey, fontSize=8, spaceAfter=3,
+)
 _ESTILO_SECAO = ParagraphStyle(
     "Secao", parent=_styles["Heading2"], textColor=AZUL_MARCA, fontSize=12, spaceBefore=12, spaceAfter=4,
 )
@@ -298,25 +301,25 @@ def build_recommendation_pdf(
             [3.2 * cm, 3.2 * cm, 5.2 * cm, 5.3 * cm],
         ))
 
-    story.append(Spacer(1, 14))
+    story.append(Spacer(1, 10))
     rodape = rodape_data
     if weather and weather.get("fonte"):
         rodape = f"Fonte do clima: {weather['fonte']}" + (f" · {rodape_data}" if rodape_data else "")
     if rodape:
-        story.append(Paragraph(rodape, _ESTILO_SUBTITULO))
+        story.append(Paragraph(rodape, _ESTILO_RODAPE))
     if fontes_pesquisadas:
         fontes_unicas = sorted(set(fontes_pesquisadas))
         story.append(Paragraph(
             f"Instituicoes de pesquisa consultadas para as recomendacoes acima: {' · '.join(fontes_unicas)}.",
-            ParagraphStyle("Fontes", parent=_ESTILO_SUBTITULO, fontSize=8),
+            _ESTILO_RODAPE,
         ))
     story.append(Paragraph(
         "Isso nao substitui a avaliacao de um agronomo responsavel.",
-        ParagraphStyle("Aviso", parent=_ESTILO_SUBTITULO, fontSize=8),
+        _ESTILO_RODAPE,
     ))
     story.append(Paragraph(
         "Powered by BioScout",
-        ParagraphStyle("Assinatura", parent=_ESTILO_SUBTITULO, fontSize=8),
+        _ESTILO_RODAPE,
     ))
 
     doc.build(story)
