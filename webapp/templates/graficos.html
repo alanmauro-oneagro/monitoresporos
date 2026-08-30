@@ -74,11 +74,7 @@
             <div class="col-md-2">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="filtroMostrarRisco" checked>
-                    <label class="form-check-label small" for="filtroMostrarRisco">Risco (linha)</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="filtroMostrarVento" checked>
-                    <label class="form-check-label small" for="filtroMostrarVento">Vento (seta)</label>
+                    <label class="form-check-label small" for="filtroMostrarRisco">Risco de Infecção (linha)</label>
                 </div>
             </div>
         </div>
@@ -86,13 +82,17 @@
 </div>
 
 <div id="graficosStatus" class="text-muted small mb-3">Carregando...</div>
-<div id="rosaVentosContainer"></div>
+<button type="button" class="btn btn-outline-secondary btn-sm mb-3" id="btnToggleRosa">
+    <span id="rosaToggleIcon">&#9654;</span> Direção predominante do vento
+</button>
+<div id="rosaVentosContainer" class="d-none"></div>
 <div id="graficosContainer"></div>
 
 <p class="text-muted small border-top pt-3 mt-2">
-    Direcao predominante do vento (primeiro grafico): frequencia de cada
-    direcao de vento no periodo e nas estacoes do filtro atual (passe o
-    mouse numa fatia pra ver o percentual exato).
+    Direcao predominante do vento (botao acima dos graficos, oculto ate
+    clicar): frequencia de cada direcao de vento no periodo e nas
+    estacoes do filtro atual (passe o mouse numa fatia pra ver o
+    percentual exato).
     <br>
     Um grafico por doenca: concentracao de esporos (uma cor por fazenda,
     nunca passa do maximo cadastrado -- quando o valor real excede, uma
@@ -383,6 +383,40 @@
     document.querySelectorAll('.filtro-estado').forEach(function (el) {
         el.addEventListener('change', filtrarEstacoesPorEstado);
     });
+
+    // Congela os filtros entre visitas (localStorage, por navegador) --
+    // assim a pessoa nao precisa reconfigurar periodo/estado/estacao
+    // toda vez que reabre a aba. So' guarda no navegador de quem
+    // acessou, nunca no servidor.
+    var FILTROS_STORAGE_KEY = 'oneagro_graficos_filtros';
+    function salvarFiltros() {
+        try {
+            localStorage.setItem(FILTROS_STORAGE_KEY, JSON.stringify({
+                inicio: document.getElementById('filtroInicio').value,
+                fim: document.getElementById('filtroFim').value,
+                estado: Array.from(document.querySelectorAll('.filtro-estado:checked')).map(function (el) { return el.value; }),
+                estacao: Array.from(document.querySelectorAll('.filtro-estacao:checked')).map(function (el) { return el.value; }),
+                mostrarRisco: document.getElementById('filtroMostrarRisco').checked,
+            }));
+        } catch (e) { /* localStorage indisponivel (modo privado etc.) -- ignora */ }
+    }
+    function restaurarFiltros() {
+        var bruto;
+        try { bruto = localStorage.getItem(FILTROS_STORAGE_KEY); } catch (e) { return; }
+        if (!bruto) return;
+        var f;
+        try { f = JSON.parse(bruto); } catch (e) { return; }
+        if (f.inicio) document.getElementById('filtroInicio').value = f.inicio;
+        if (f.fim) document.getElementById('filtroFim').value = f.fim;
+        if (Array.isArray(f.estado)) {
+            document.querySelectorAll('.filtro-estado').forEach(function (el) { el.checked = f.estado.indexOf(el.value) !== -1; });
+        }
+        if (Array.isArray(f.estacao)) {
+            document.querySelectorAll('.filtro-estacao').forEach(function (el) { el.checked = f.estacao.indexOf(el.value) !== -1; });
+        }
+        if (typeof f.mostrarRisco === 'boolean') document.getElementById('filtroMostrarRisco').checked = f.mostrarRisco;
+    }
+    restaurarFiltros();
     filtrarEstacoesPorEstado();
     atualizarResumos();
 
@@ -401,14 +435,17 @@
     document.querySelectorAll('.filtro-estado, .filtro-estacao').forEach(function (el) {
         el.addEventListener('change', agendarRecarga);
     });
+    document.getElementById('filtroInicio').addEventListener('change', salvarFiltros);
+    document.getElementById('filtroFim').addEventListener('change', salvarFiltros);
+    document.querySelectorAll('.filtro-estado, .filtro-estacao').forEach(function (el) {
+        el.addEventListener('change', salvarFiltros);
+    });
 
-    // Checkboxes "Risco (linha)" e "Vento (seta)" -- independentes uma
-    // da outra: a de risco liga/desliga a visibilidade da linha (dataset
-    // do Chart.js), a de vento so' troca o flag `mostrarVento` que o
-    // `ventoPlugin` consulta a cada desenho -- nenhuma das duas precisa
-    // buscar dado de novo.
+    // Checkbox "Risco de Infecção (linha)" -- so' liga/desliga a
+    // visibilidade da linha (dataset do Chart.js), sem precisar buscar
+    // dado de novo. A setinha de vento em cada ponto fica sempre ligada
+    // (`mostrarVento` continua true, sem checkbox proprio).
     var chkMostrarRisco = document.getElementById('filtroMostrarRisco');
-    var chkMostrarVento = document.getElementById('filtroMostrarVento');
     function aplicarVisibilidadeRisco() {
         var mostrar = chkMostrarRisco.checked;
         Object.keys(charts).forEach(function (k) {
@@ -420,9 +457,15 @@
         });
     }
     chkMostrarRisco.addEventListener('change', aplicarVisibilidadeRisco);
-    chkMostrarVento.addEventListener('change', function () {
-        mostrarVento = chkMostrarVento.checked;
-        Object.keys(charts).forEach(function (k) { charts[k].update(); });
+    chkMostrarRisco.addEventListener('change', salvarFiltros);
+
+    // Rosa dos ventos fica oculta ate' clicar no botao -- so' troca a
+    // classe d-none do container, o grafico continua sendo recriado
+    // normalmente por baixo (carregar() nao sabe/nao precisa saber se
+    // esta visivel).
+    document.getElementById('btnToggleRosa').addEventListener('click', function () {
+        var oculto = rosaContainer.classList.toggle('d-none');
+        document.getElementById('rosaToggleIcon').innerHTML = oculto ? '&#9654;' : '&#9660;';
     });
 
     function qs() {
@@ -485,7 +528,7 @@
                 yAxisID: 'yEsporos',
             });
             datasets.push({
-                label: 'Risco (%) - ' + s.estacao,
+                label: 'Risco de Infecção (%) - ' + s.estacao,
                 data: s.risco_pct,
                 borderColor: 'transparent',
                 backgroundColor: 'transparent',
