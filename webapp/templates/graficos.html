@@ -211,11 +211,16 @@
                 }
 
                 if (mostrarVento) {
+                    // Fileira fixa na altura de 80% do eixo de Risco (nao
+                    // acompanha mais o valor do dia) -- fica sempre visivel
+                    // e legivel, sem depender de onde a linha de risco
+                    // esta naquele dia.
+                    var yVento = yScale.getPixelForValue(80);
                     ds.data.forEach(function (v, idx) {
-                        if (v === null || v === undefined) return;
+                        var dir = ds.riscoLabels[idx];
+                        if (!dir) return;
                         var x = xScale.getPixelForValue(idx);
-                        var y = yScale.getPixelForValue(v);
-                        desenharSetaVento(ctx, x, y, ds.riscoLabels[idx]);
+                        desenharSetaVento(ctx, x, yVento, dir);
                     });
                 }
                 ctx.restore();
