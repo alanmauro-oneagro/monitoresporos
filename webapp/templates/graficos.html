@@ -194,6 +194,40 @@
     };
     Chart.register(riscoPlugin);
 
+    // Esporos virou grafico de barra (uma cor por fazenda) -- pontos com
+    // pointStyle nao existem em barra, entao o marcador de "valor
+    // excedeu o maximo" vira uma setinha vermelha desenhada por cima da
+    // barra (mesmo lugar/ideia da seta que já existia na linha antes).
+    // yEsporos e' a escala PRIMARIA do grafico (nao a secundaria com o
+    // bug de posicionamento ja visto no risco) -- entao da' pra' confiar
+    // na posicao que o proprio Chart.js calculou pro elemento da barra
+    // (`getProps`), sem precisar recalcular na mao feito o riscoPlugin.
+    var esporosExcedidoPlugin = {
+        id: 'esporosExcedido',
+        afterDatasetsDraw: function (chart) {
+            var ctx = chart.ctx;
+            chart.data.datasets.forEach(function (ds, i) {
+                if (!ds.excedidoFlags) return;
+                var meta = chart.getDatasetMeta(i);
+                if (!meta.visible) return;
+                meta.data.forEach(function (barEl, idx) {
+                    if (!ds.excedidoFlags[idx]) return;
+                    var pos = barEl.getProps(['x', 'y'], true);
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(pos.x, pos.y - 10);
+                    ctx.lineTo(pos.x - 4, pos.y - 3);
+                    ctx.lineTo(pos.x + 4, pos.y - 3);
+                    ctx.closePath();
+                    ctx.fillStyle = '#dc3545';
+                    ctx.fill();
+                    ctx.restore();
+                });
+            });
+        },
+    };
+    Chart.register(esporosExcedidoPlugin);
+
     var container = document.getElementById('graficosContainer');
     var rosaContainer = document.getElementById('rosaVentosContainer');
     var status = document.getElementById('graficosStatus');
@@ -458,13 +492,6 @@
         return texto.replace(/\bOneAgro\s*-\s*/i, '').replace(/\s*-\s*OneAgro\b/i, '');
     }
 
-    function pointRadii(excedido) {
-        return excedido.map(function (ex) { return ex ? 6 : 0; });
-    }
-    function pointStyles(excedido) {
-        return excedido.map(function (ex) { return ex ? 'triangle' : 'circle'; });
-    }
-
     function montarGrafico(doenca, labels) {
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4 graf-card';
@@ -483,16 +510,13 @@
         doenca.series.forEach(function (s, idx) {
             var corFazenda = CORES_FAZENDA[idx % CORES_FAZENDA.length];
             datasets.push({
+                type: 'bar',
                 label: 'Esporos - ' + s.estacao,
                 data: s.esporos,
-                borderColor: corFazenda,
                 backgroundColor: corFazenda,
-                spanGaps: false,
-                tension: 0.25,
-                pointRadius: pointRadii(s.esporos_excedido),
-                pointStyle: pointStyles(s.esporos_excedido),
-                pointBackgroundColor: '#dc3545',
-                pointBorderColor: '#dc3545',
+                borderColor: corFazenda,
+                borderWidth: 1,
+                excedidoFlags: s.esporos_excedido,
                 yAxisID: 'yEsporos',
             });
         });
