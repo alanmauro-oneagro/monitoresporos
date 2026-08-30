@@ -517,7 +517,6 @@
 
         var datasets = [];
         doenca.series.forEach(function (s, idx) {
-            var dash = DASHES[idx % DASHES.length];
             var corFazenda = CORES_FAZENDA[idx % CORES_FAZENDA.length];
             datasets.push({
                 label: 'Esporos - ' + s.estacao,
@@ -532,18 +531,20 @@
                 pointBorderColor: '#dc3545',
                 yAxisID: 'yEsporos',
             });
-            datasets.push({
-                label: 'Risco de Infecção (%) - ' + s.estacao,
-                data: s.risco_pct,
-                borderColor: 'transparent',
-                backgroundColor: 'transparent',
-                borderWidth: 0,
-                pointRadius: 0,
-                yAxisID: 'yRisco',
-                riscoLabels: s.vento_predominante,
-                corLinha: '#198754',
-                dashLinha: dash,
-            });
+        });
+        // Risco/vento: UMA linha so' (media entre as fazendas do filtro
+        // atual, ver `/graficos/dados` -- com 1 fazenda selecionada e' a
+        // media de 1 valor, ou seja, ela mesma), nunca uma por fazenda.
+        datasets.push({
+            label: 'Risco de Infecção (%)',
+            data: doenca.risco_pct,
+            borderColor: 'transparent',
+            backgroundColor: 'transparent',
+            borderWidth: 0,
+            pointRadius: 0,
+            yAxisID: 'yRisco',
+            riscoLabels: doenca.vento_predominante,
+            corLinha: '#198754',
         });
 
         return new Chart(ctx, {

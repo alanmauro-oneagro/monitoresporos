@@ -2,6 +2,7 @@
 os dados do dashboard web -- mesma logica de status/cores do BioScoutDashboard.xlsx
 (aba Alertas do Dia), para nao duplicar regras de negocio em dois lugares."""
 import csv
+import math
 import os
 from collections import Counter
 from pathlib import Path
@@ -267,6 +268,32 @@ def vento_predominante_do_dia(horas_do_dia):
     if not direcoes:
         return None
     return Counter(direcoes).most_common(1)[0][0]
+
+
+def media_circular_direcoes(direcoes):
+    """Media circular de uma lista de direcoes ja' bucketadas (N/NE/E...)
+    -- usada pra combinar a direcao predominante de varias estacoes num
+    unico dia (grafico de risco/vento da aba Graficos, quando mais de
+    uma fazenda esta selecionada no filtro). Nao da' pra' so' somar os
+    graus e dividir (media de 350 e 10 graus tem que dar 0, nao 180) --
+    converte cada direcao pro angulo central do seu bucket, tira a media
+    vetorial (seno/cosseno) e rebucketiza o resultado pras mesmas 8
+    direcoes. None se a lista vier vazia ou sem nenhuma direcao valida."""
+    graus_por_direcao = {d: i * 45 for i, d in enumerate(_DIRECOES_VENTO)}
+    soma_sin = soma_cos = 0.0
+    n = 0
+    for d in direcoes:
+        graus = graus_por_direcao.get(d)
+        if graus is None:
+            continue
+        rad = math.radians(graus)
+        soma_sin += math.sin(rad)
+        soma_cos += math.cos(rad)
+        n += 1
+    if n == 0 or (soma_sin == 0 and soma_cos == 0):
+        return None
+    media_graus = math.degrees(math.atan2(soma_sin, soma_cos))
+    return _bucket_direcao_vento(media_graus)
 
 
 def contar_direcoes_vento(hourly_lookup, devices, dias):

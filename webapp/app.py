@@ -1223,6 +1223,7 @@ def graficos_dados():
     for doenca_en in doencas_en:
         info = translations.get(doenca_en, {})
         series = []
+        risco_por_site, vento_por_site = {}, {}
         for site in sites:
             historico_lista = spore_lookup.get((site, doenca_en), [])
             historico = {h["data"]: h for h in historico_lista}
@@ -1242,26 +1243,40 @@ def graficos_dados():
                     esporos.append(round(conc, 1))
                     excedido.append(False)
 
+            if not all(v is None for v in esporos):
+                series.append({
+                    "estacao": site, "esporos": esporos, "esporos_excedido": excedido,
+                    "limite_warn": ultimo.get("warn"), "limite_danger": ultimo.get("danger"), "limite_maximo": ultimo.get("maximo"),
+                })
+
+            # Risco/vento calculados por TODAS as estacoes do filtro
+            # (mesmo as sem leitura de esporo) -- viram uma unica serie
+            # media logo abaixo, nunca uma por fazenda.
             device = device_by_site.get(site)
-            risco_pct, vento_predominante = [], []
-            for dia_iso in dias:
-                horas = hourly_lookup.get((device, dia_iso))
-                risco_pct.append(calc_risco_diario_pct(info, horas))
-                vento_predominante.append(data_reader.vento_predominante_do_dia(horas))
+            risco_por_site[site] = [
+                calc_risco_diario_pct(info, hourly_lookup.get((device, dia_iso))) for dia_iso in dias
+            ]
+            vento_por_site[site] = [
+                data_reader.vento_predominante_do_dia(hourly_lookup.get((device, dia_iso))) for dia_iso in dias
+            ]
 
-            if all(v is None for v in esporos) and all(v is None for v in risco_pct):
-                continue  # sem NENHUM dado (esporo nem clima) nesse periodo pra essa fazenda -- nao gera linha vazia
-            series.append({
-                "estacao": site, "esporos": esporos, "esporos_excedido": excedido,
-                "risco_pct": risco_pct, "vento_predominante": vento_predominante,
-                "limite_warn": ultimo.get("warn"), "limite_danger": ultimo.get("danger"), "limite_maximo": ultimo.get("maximo"),
-            })
+        # Media entre as fazendas selecionadas -- com 1 so' fazenda, e' a
+        # media de 1 valor (ela mesma), entao o comportamento nao muda
+        # nesse caso.
+        risco_medio, vento_medio = [], []
+        for idx in range(len(dias)):
+            valores = [risco_por_site[s][idx] for s in sites if risco_por_site[s][idx] is not None]
+            risco_medio.append(round(sum(valores) / len(valores)) if valores else None)
+            direcoes = [vento_por_site[s][idx] for s in sites if vento_por_site[s][idx]]
+            vento_medio.append(data_reader.media_circular_direcoes(direcoes))
 
-        if series:
+        if series or any(v is not None for v in risco_medio):
             doencas_payload.append({
                 "doenca_en": doenca_en,
                 "doenca_pt": data_reader.get_doenca(doenca_en, translations),
                 "series": series,
+                "risco_pct": risco_medio,
+                "vento_predominante": vento_medio,
             })
     doencas_payload.sort(key=lambda d: d["doenca_pt"])
 
