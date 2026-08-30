@@ -73,8 +73,8 @@
             </div>
             <div class="col-md-2">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="filtroMostrarRisco" checked>
-                    <label class="form-check-label small" for="filtroMostrarRisco">Risco de Infecção (linha)</label>
+                    <input class="form-check-input" type="checkbox" id="filtroOcultarRisco">
+                    <label class="form-check-label small" for="filtroOcultarRisco">Ocultar Risco de Infecção</label>
                 </div>
             </div>
         </div>
@@ -94,18 +94,20 @@
     estacoes do filtro atual (passe o mouse numa fatia pra ver o
     percentual exato).
     <br>
-    Um grafico por doenca: concentracao de esporos (uma cor por fazenda,
-    nunca passa do maximo cadastrado -- quando o valor real excede, uma
-    seta vermelha marca o ponto) combinada com o risco de infeccao
-    calculado a partir dos parametros de "Condicoes p/ germinacao" da
-    aba Doencas (linha laranja, escala 0-100% -- media entre as fazendas
-    do filtro atual; passe o mouse num ponto pra ver o percentual e a
-    direcao predominante do vento daquele dia). A parte da linha
-    tracejada (ultimos 5 dias) e' previsao -- risco calculado com a
-    previsao do tempo (Open-Meteo) em vez do clima ja observado, so'
-    aparece quando o periodo do filtro vai ate perto de hoje. As faixas
-    verde/amarelo/vermelho seguem os mesmos limites (Normal/Atencao/Perigo)
-    do relatorio em PDF. Os filtros acima aplicam sozinhos ao mudar.
+    Dois graficos por doenca, em sequencia: concentracao de esporos (uma
+    cor por fazenda, nunca passa do maximo cadastrado -- quando o valor
+    real excede, uma seta vermelha marca o ponto; as faixas
+    verde/amarelo/vermelho seguem os mesmos limites Normal/Atencao/Perigo
+    do relatorio em PDF) e, logo abaixo, o risco de infeccao calculado a
+    partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
+    (linha laranja, escala 0-100% -- media entre as fazendas do filtro
+    atual; passe o mouse num ponto pra ver o percentual e a direcao
+    predominante do vento daquele dia). A parte da linha tracejada
+    (ultimos 5 dias) e' previsao -- risco calculado com a previsao do
+    tempo (Open-Meteo) em vez do clima ja observado, so' aparece quando o
+    periodo do filtro vai ate perto de hoje. O checkbox "Ocultar Risco de
+    Infeccao" acima esconde so' os graficos de risco (o de esporos
+    continua aparecendo). Os filtros acima aplicam sozinhos ao mudar.
 </p>
 
 <script>
@@ -500,7 +502,7 @@
                 fim: document.getElementById('filtroFim').value,
                 estado: Array.from(document.querySelectorAll('.filtro-estado:checked')).map(function (el) { return el.value; }),
                 estacao: Array.from(document.querySelectorAll('.filtro-estacao:checked')).map(function (el) { return el.value; }),
-                mostrarRisco: document.getElementById('filtroMostrarRisco').checked,
+                ocultarRisco: document.getElementById('filtroOcultarRisco').checked,
             }));
         } catch (e) { /* localStorage indisponivel (modo privado etc.) -- ignora */ }
     }
@@ -518,7 +520,7 @@
         if (Array.isArray(f.estacao)) {
             document.querySelectorAll('.filtro-estacao').forEach(function (el) { el.checked = f.estacao.indexOf(el.value) !== -1; });
         }
-        if (typeof f.mostrarRisco === 'boolean') document.getElementById('filtroMostrarRisco').checked = f.mostrarRisco;
+        if (typeof f.ocultarRisco === 'boolean') document.getElementById('filtroOcultarRisco').checked = f.ocultarRisco;
     }
     restaurarFiltros();
     filtrarEstacoesPorEstado();
@@ -545,22 +547,19 @@
         el.addEventListener('change', salvarFiltros);
     });
 
-    // Checkbox "Risco de Infecção (linha)" -- so' liga/desliga a
-    // visibilidade da linha (dataset do Chart.js), sem precisar buscar
-    // dado de novo.
-    var chkMostrarRisco = document.getElementById('filtroMostrarRisco');
+    // Checkbox "Ocultar Risco de Infecção" -- esporos e risco agora sao
+    // DOIS graficos separados (um card cada, ver `montarGraficoEsporos`/
+    // `montarGraficoRisco`); marcado esconde so' os cards de risco (o
+    // card do proprio grafico, nao um dataset dentro de um grafico
+    // combinado), sem precisar buscar dado de novo.
+    var chkOcultarRisco = document.getElementById('filtroOcultarRisco');
+    var riscoWraps = [];
     function aplicarVisibilidadeRisco() {
-        var mostrar = chkMostrarRisco.checked;
-        Object.keys(charts).forEach(function (k) {
-            var chart = charts[k];
-            chart.data.datasets.forEach(function (ds, i) {
-                if (ds.riscoLabels) chart.setDatasetVisibility(i, mostrar);
-            });
-            chart.update();
-        });
+        var ocultar = chkOcultarRisco.checked;
+        riscoWraps.forEach(function (wrap) { wrap.classList.toggle('d-none', ocultar); });
     }
-    chkMostrarRisco.addEventListener('change', aplicarVisibilidadeRisco);
-    chkMostrarRisco.addEventListener('change', salvarFiltros);
+    chkOcultarRisco.addEventListener('change', aplicarVisibilidadeRisco);
+    chkOcultarRisco.addEventListener('change', salvarFiltros);
 
     // Rosa dos ventos fica oculta ate' clicar no botao -- so' troca a
     // classe d-none do container. Se o grafico ainda nao foi criado (ver
@@ -593,10 +592,32 @@
         return texto.replace(/\bOneAgro\s*-\s*/i, '').replace(/\s*-\s*OneAgro\b/i, '');
     }
 
-    function montarGrafico(doenca, labels, numPrevisao) {
+    // Legenda com usePointStyle: forca a cor real do dataset no pontinho
+    // (`corLinha` no risco -- fica transparente de proposito, ver nota
+    // no riscoPlugin -- ou `borderColor` no esporos) e o formato
+    // 'circle' sempre, senao o Chart.js pega `pointBackgroundColor` (no
+    // esporos isso e' o vermelho do marcador de excedido, entao a
+    // legenda mostrava vermelho pra toda fazenda -- bug ja visto antes
+    // da separacao dos dois graficos). Tambem encurta "OneAgro - " do
+    // nome da fazenda so' na legenda (tooltip continua com o nome
+    // completo), pra' nao quebrar em varias linhas no mobile.
+    function forcarCorNaLegenda(chart) {
+        var itens = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+        itens.forEach(function (item) {
+            var ds = chart.data.datasets[item.datasetIndex];
+            var cor = ds ? (ds.corLinha || ds.borderColor) : item.fillStyle;
+            item.pointStyle = 'circle';
+            item.strokeStyle = cor;
+            item.fillStyle = cor;
+            item.text = nomeCurtoLegenda(item.text);
+        });
+        return itens;
+    }
+
+    function montarGraficoEsporos(doenca, labels) {
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4 graf-card';
-        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + '</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
+        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + ' &mdash; Esporos por M³</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
         container.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
 
@@ -614,11 +635,9 @@
             }
         });
 
-        var datasets = [];
-        doenca.series.forEach(function (s, idx) {
+        var datasets = doenca.series.map(function (s, idx) {
             var corFazenda = CORES_FAZENDA[idx % CORES_FAZENDA.length];
-            datasets.push({
-                type: 'bar',
+            return {
                 label: 'Esporos - ' + s.estacao,
                 data: s.esporos,
                 backgroundColor: corFazenda,
@@ -626,26 +645,11 @@
                 borderWidth: 1,
                 excedidoFlags: s.esporos_excedido,
                 yAxisID: 'yEsporos',
-            });
-        });
-        // Risco/vento: UMA linha so' (media entre as fazendas do filtro
-        // atual, ver `/graficos/dados` -- com 1 fazenda selecionada e' a
-        // media de 1 valor, ou seja, ela mesma), nunca uma por fazenda.
-        datasets.push({
-            label: 'Risco de Infecção (%)',
-            data: doenca.risco_pct,
-            borderColor: 'transparent',
-            backgroundColor: 'transparent',
-            borderWidth: 0,
-            pointRadius: 0,
-            yAxisID: 'yRisco',
-            riscoLabels: doenca.vento_predominante,
-            corLinha: '#e8590c',
-            numPrevisao: numPrevisao || 0,
+            };
         });
 
         return new Chart(ctx, {
-            type: 'line',
+            type: 'bar',
             data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true,
@@ -658,8 +662,72 @@
                         title: { display: true, text: 'Esporos por M³', font: { weight: 'bold', size: fonteEixo } },
                         ticks: { font: { size: fonteLegenda } },
                     },
+                    x: {
+                        ticks: { font: { size: fonteLegenda } },
+                    },
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true, pointStyle: 'circle',
+                            boxWidth: telaEstreita ? 6 : 8, font: { size: fonteLegenda },
+                            generateLabels: forcarCorNaLegenda,
+                        },
+                    },
+                    colorBands: limites,
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                var v = ctx.parsed.y;
+                                if (v === null || v === undefined) return null;
+                                return ctx.dataset.label + ': ' + v;
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    function montarGraficoRisco(doenca, labels, numPrevisao) {
+        var wrap = document.createElement('div');
+        wrap.className = 'card shadow-sm mb-4 graf-card';
+        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + ' &mdash; Risco de Infecção</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
+        container.appendChild(wrap);
+        riscoWraps.push(wrap);
+        var ctx = wrap.querySelector('canvas').getContext('2d');
+
+        var telaEstreita = window.innerWidth < 576;
+        var fonteLegenda = telaEstreita ? 8 : 10;
+        var fonteEixo = telaEstreita ? 10 : 13;
+
+        // Risco/vento: UMA linha so' (media entre as fazendas do filtro
+        // atual, ver `/graficos/dados` -- com 1 fazenda selecionada e' a
+        // media de 1 valor, ou seja, ela mesma), nunca uma por fazenda.
+        var datasets = [{
+            label: 'Risco de Infecção (%)',
+            data: doenca.risco_pct,
+            borderColor: 'transparent',
+            backgroundColor: 'transparent',
+            borderWidth: 0,
+            pointRadius: 0,
+            yAxisID: 'yRisco',
+            riscoLabels: doenca.vento_predominante,
+            corLinha: '#e8590c',
+            numPrevisao: numPrevisao || 0,
+        }];
+
+        return new Chart(ctx, {
+            type: 'line',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
                     yRisco: {
-                        type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false },
+                        type: 'linear', position: 'left', min: 0, max: 100,
                         title: { display: true, text: 'Risco de Infecção (%)', font: { weight: 'bold', size: fonteEixo }, color: '#e8590c' },
                         ticks: { font: { size: fonteLegenda } },
                     },
@@ -673,61 +741,20 @@
                         labels: {
                             usePointStyle: true, pointStyle: 'circle',
                             boxWidth: telaEstreita ? 6 : 8, font: { size: fonteLegenda },
-                            // Com usePointStyle, o Chart.js pega a cor
-                            // do pontinho de `pointBackgroundColor` --
-                            // no esporos isso e' o vermelho do marcador
-                            // de excedido, entao a legenda mostrava
-                            // vermelho pra toda fazenda (bug). Forca a
-                            // cor real (`corLinha` no risco -- fica
-                            // transparente de proposito, ver nota no
-                            // riscoPlugin -- ou `borderColor` no
-                            // esporos) e o formato 'circle' sempre
-                            // (senao pegava 'triangle' do array do
-                            // marcador de excedido por acaso).
-                            generateLabels: function (chart) {
-                                var itens = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                                // Com o checkbox "Risco (linha)" desmarcado,
-                                // tira a entrada de risco da legenda de vez
-                                // (em vez do risco de Chart.js so' riscar o
-                                // texto -- essa legenda nem carrega dado
-                                // clicavel, ja que a visibilidade e' o
-                                // checkbox, nao o clique na legenda).
-                                itens = itens.filter(function (item) {
-                                    var ds = chart.data.datasets[item.datasetIndex];
-                                    return !(ds && ds.riscoLabels && !chkMostrarRisco.checked);
-                                });
-                                itens.forEach(function (item) {
-                                    var ds = chart.data.datasets[item.datasetIndex];
-                                    var cor = ds ? (ds.corLinha || ds.borderColor) : item.fillStyle;
-                                    item.pointStyle = 'circle';
-                                    item.strokeStyle = cor;
-                                    item.fillStyle = cor;
-                                    // "OneAgro - " se repete em toda fazenda --
-                                    // encurta so' na legenda (o tooltip
-                                    // continua com o nome completo) pra' nao
-                                    // quebrar em varias linhas no mobile.
-                                    item.text = nomeCurtoLegenda(item.text);
-                                });
-                                return itens;
-                            },
+                            generateLabels: forcarCorNaLegenda,
                         },
                     },
-                    colorBands: limites,
                     tooltip: {
                         callbacks: {
                             label: function (ctx) {
                                 var ds = ctx.dataset;
                                 var v = ctx.parsed.y;
                                 if (v === null || v === undefined) return null;
-                                if (ds.riscoLabels) {
-                                    var dir = ds.riscoLabels[ctx.dataIndex];
-                                    return ds.label + ': ' + v + '%' + (dir ? ' (' + dir + ')' : '');
-                                }
-                                return ds.label + ': ' + v;
+                                var dir = ds.riscoLabels[ctx.dataIndex];
+                                return ds.label + ': ' + v + '%' + (dir ? ' (' + dir + ')' : '');
                             },
                             labelColor: function (ctx) {
-                                var ds = ctx.dataset;
-                                var cor = ds.corLinha || ds.borderColor;
+                                var cor = ctx.dataset.corLinha;
                                 return { borderColor: cor, backgroundColor: cor };
                             },
                         },
@@ -740,8 +767,12 @@
     function carregar() {
         status.textContent = 'Carregando...';
         container.innerHTML = '';
-        Object.keys(charts).forEach(function (k) { charts[k].destroy(); });
+        Object.keys(charts).forEach(function (k) {
+            charts[k].esporos.destroy();
+            charts[k].risco.destroy();
+        });
         charts = {};
+        riscoWraps = [];
 
         fetch('/graficos/dados?' + qs())
             .then(function (r) { return r.json(); })
@@ -754,7 +785,10 @@
                 }
                 status.textContent = '';
                 data.doencas.forEach(function (doenca) {
-                    charts[doenca.doenca_en] = montarGrafico(doenca, labels, data.num_dias_previsao);
+                    charts[doenca.doenca_en] = {
+                        esporos: montarGraficoEsporos(doenca, labels),
+                        risco: montarGraficoRisco(doenca, labels, data.num_dias_previsao),
+                    };
                 });
                 aplicarVisibilidadeRisco();
             })
