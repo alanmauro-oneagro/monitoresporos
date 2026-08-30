@@ -46,6 +46,9 @@ _ESTILO_GERMINACAO = ParagraphStyle(
 _ESTILO_RISCO_CLIMATICO = ParagraphStyle(
     "RiscoClimatico", parent=_styles["Normal"], fontSize=10.5, leading=14, spaceAfter=2,
 )
+_ESTILO_PREVISAO_RISCO = ParagraphStyle(
+    "PrevisaoRisco", parent=_styles["Normal"], fontSize=8.5, textColor=colors.grey, spaceAfter=2,
+)
 
 _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
 _RISCO_CORES = {"vermelho": "#c0392b", "amarelo": "#b7860b", "verde": "#2e7d32"}
@@ -235,6 +238,14 @@ def build_recommendation_pdf(
                     f'<font color="{cor_risco}">●</font> Risco climático: <b>{risco_label}</b>',
                     _ESTILO_RISCO_CLIMATICO,
                 ))
+                previsao_risco = d.get("previsao_risco")
+                if previsao_risco:
+                    dias_txt = " &nbsp;·&nbsp; ".join(
+                        f'<font color="{_RISCO_CORES.get(p["risco"], "#666666")}">●</font> '
+                        f'{p["rotulo_dia"]} {_RISCO_LABELS.get(p["risco"], "")}'
+                        for p in previsao_risco
+                    )
+                    cabecalho.append(Paragraph(f"Previsão: {dias_txt}", _ESTILO_PREVISAO_RISCO))
             elif d.get("cientifico"):
                 cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
             grafico = _build_spore_chart(d.get("historico") or [])

@@ -572,12 +572,64 @@ def calc_risco_diario_pct(disease, horas_do_dia):
 
 
 _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
+_RISCO_EMOJI = {"vermelho": "🔴", "amarelo": "🟡", "verde": "🟢"}
 
 
 def _risco_label(risco):
     """'vermelho'/'amarelo'/'verde' -> 'Alto'/'Médio'/'Baixo' (Manejo,
     WhatsApp e PDF usam o mesmo rotulo pro Risco climático)."""
     return _RISCO_LABELS.get(risco)
+
+
+_DIAS_SEMANA_ABREV = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+
+def _rotulo_dia_previsao(dia, hoje):
+    """'Amanhã' pro primeiro dia da previsao, senao abreviacao do dia da
+    semana (Seg/Ter/...) -- mais facil de "sentir" o quao longe e' o dia
+    do que ler a data (usado so' no WhatsApp/PDF, didatico pro produtor;
+    a aba Graficos usa a data mesmo, ver `graficos.html`)."""
+    if dia == hoje + timedelta(days=1):
+        return "Amanhã"
+    return _DIAS_SEMANA_ABREV[dia.weekday()]
+
+
+def _calc_previsao_risco_germinacao(disease, weather):
+    """Extensao do 'Risco climático' (`_calc_risco_germinacao`) pros
+    proximos 5 dias, pro WhatsApp e o PDF -- mesma conta do grafico de
+    Risco de Infeccao da aba Graficos (`calc_risco_diario_pct`, que usa a
+    previsao horaria da Open-Meteo em `previsao_horaria_por_dia`, ja
+    incluida em `weather` por `_get_weather_for_site`), so' que o
+    percentual e' convertido pro rotulo Baixo/Médio/Alto (mesmas faixas:
+    100%+ = Alto, 50%+ = Medio, resto = Baixo) em vez do numero bruto --
+    fica no mesmo formato bolinha+palavra do Risco climático de agora,
+    sem percentual nenhum aparecendo pro produtor. Comeca amanha (nao
+    hoje, que ja tem o Risco climático "de agora" acima) e para no
+    primeiro dia sem previsao (ou sem limite cadastrado pra doenca).
+    Retorna [] quando falta previsao ou limite -- esconde a linha."""
+    if not weather:
+        return []
+    previsao = weather.get("previsao_horaria_por_dia") or {}
+    if not previsao:
+        return []
+    hoje = _hoje_cuiaba()
+    resultado = []
+    for i in range(1, 6):
+        dia = hoje + timedelta(days=i)
+        horas = previsao.get(dia.isoformat())
+        if not horas:
+            continue
+        pct = calc_risco_diario_pct(disease, horas)
+        if pct is None:
+            continue
+        if pct >= 100:
+            risco = "vermelho"
+        elif pct >= 50:
+            risco = "amarelo"
+        else:
+            risco = "verde"
+        resultado.append({"rotulo_dia": _rotulo_dia_previsao(dia, hoje), "risco": risco})
+    return resultado
 
 
 _STATUS_LABELS = {"Perigo": "Alta concentração de esporos", "Atencao": "Moderada concentração de esporos"}
@@ -688,6 +740,13 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
         if risco_label:
             cabecalho += f" // Risco climático: {risco_label}"
         lines.append(cabecalho)
+        previsao_risco = d.get("previsao_risco")
+        if previsao_risco:
+            dias_txt = " · ".join(
+                f"{_RISCO_EMOJI.get(p['risco'], '')} {p['rotulo_dia']} {_risco_label(p['risco'])}"
+                for p in previsao_risco
+            )
+            lines.append(f"Previsão: {dias_txt}")
         if d.get("germinacao"):
             lines.append(f"({d['cientifico']} — germinação: {d['germinacao']})")
         elif d.get("cientifico"):
@@ -846,6 +905,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     weather = _get_weather_for_site(site, coords)
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
+        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
     produtos = _farm_produtos_estoque(site, safra)
 
     destinos = _site_whatsapp_destinations(site)
@@ -1672,6 +1732,7 @@ def recommendation_pdf(site_name):
     weather = _get_weather_for_site(site_name, coords)
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
+        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
     produtos = _farm_produtos_estoque(site_name, safra)
     _, filename, pdf_bytes = _build_site_pdf(site_name, diseases, weather, produtos, cultura, safra)
     return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=filename)
