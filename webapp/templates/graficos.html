@@ -271,16 +271,33 @@
     // uma das 8 direcoes, do tamanho da frequencia % daquele periodo).
     // N no topo, sentido horario (NE, E, SE...) e' o padrao do proprio
     // Chart.js pra esse tipo de grafico, ja bate com uma bussola normal.
+    // Chart.js mede o container do canvas na hora de criar o grafico --
+    // como a rosa comeca ESCONDIDA (d-none, sem caixa nenhuma pra medir,
+    // "display:none" nao tem tamanho algum), criar o grafico direto ali
+    // sempre dava um canvas 0x0 quebrado (mesmo chamando .resize() depois
+    // de revelar -- confirmado que nao resolve, o buffer de desenho
+    // interno do canvas fica travado em 0). Solucao: guarda o ultimo
+    // dado recebido e so' CRIA o grafico de verdade quando o container
+    // ja' estiver visivel (ver `renderizarRosaSeVisivel` e o clique do
+    // botao de toggle).
+    var ultimoRosaVentos = null;
+
     function montarRosaDosVentos(rosaVentos) {
-        rosaContainer.innerHTML = '';
+        ultimoRosaVentos = rosaVentos;
         if (rosaChart) { rosaChart.destroy(); rosaChart = null; }
+        rosaContainer.innerHTML = '';
+        if (!rosaContainer.classList.contains('d-none')) renderizarRosaSeVisivel();
+    }
+
+    function renderizarRosaSeVisivel() {
+        var rosaVentos = ultimoRosaVentos || {};
         var direcoes = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
         var valores = direcoes.map(function (d) { return rosaVentos[d] || 0; });
         if (!valores.some(function (v) { return v > 0; })) return;
 
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4';
-        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">Direcao predominante do vento</h6><canvas style="max-height:380px;"></canvas></div>';
+        wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">Direcao predominante do vento</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
         rosaContainer.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
 
@@ -292,6 +309,7 @@
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 layout: { padding: 28 },
                 scales: { r: { ticks: { display: false } } },
                 plugins: {
@@ -463,12 +481,13 @@
     chkMostrarRisco.addEventListener('change', salvarFiltros);
 
     // Rosa dos ventos fica oculta ate' clicar no botao -- so' troca a
-    // classe d-none do container, o grafico continua sendo recriado
-    // normalmente por baixo (carregar() nao sabe/nao precisa saber se
-    // esta visivel).
+    // classe d-none do container. Se o grafico ainda nao foi criado (ver
+    // `renderizarRosaSeVisivel`), cria agora que da' pra' medir o
+    // container de verdade.
     document.getElementById('btnToggleRosa').addEventListener('click', function () {
         var oculto = rosaContainer.classList.toggle('d-none');
         document.getElementById('rosaToggleIcon').innerHTML = oculto ? '&#9654;' : '&#9660;';
+        if (!oculto && !rosaChart) renderizarRosaSeVisivel();
     });
 
     function qs() {
