@@ -40,6 +40,9 @@ _ESTILO_DOENCA = ParagraphStyle(
 _ESTILO_GERMINACAO = ParagraphStyle(
     "Germinacao", parent=_styles["Normal"], fontSize=8.5, textColor=colors.grey, spaceAfter=2,
 )
+_ESTILO_RISCO_CLIMATICO = ParagraphStyle(
+    "RiscoClimatico", parent=_styles["Normal"], fontSize=10.5, leading=14, spaceAfter=2,
+)
 
 _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
 _RISCO_CORES = {"vermelho": "#c0392b", "amarelo": "#b7860b", "verde": "#2e7d32"}
@@ -209,16 +212,6 @@ def build_recommendation_pdf(
             story.append(Paragraph(f"<b>Previsao:</b> {prev}", _ESTILO_NORMAL))
         story.append(Spacer(1, 4))
 
-    if diseases:
-        n_perigo = sum(1 for d in diseases if d["status"] == "Perigo")
-        n_atencao = sum(1 for d in diseases if d["status"] == "Atencao")
-        partes_resumo = []
-        if n_perigo:
-            partes_resumo.append(f"{n_perigo} em {_STATUS_LABELS['Perigo'].lower()}")
-        if n_atencao:
-            partes_resumo.append(f"{n_atencao} em {_STATUS_LABELS['Atencao'].lower()}")
-        story.append(Paragraph(f"<b>Resumo:</b> {', '.join(partes_resumo)}", _ESTILO_NORMAL))
-
     story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
     fontes_pesquisadas = []
     if not diseases:
@@ -234,11 +227,10 @@ def build_recommendation_pdf(
             ))
             risco_label = _RISCO_LABELS.get(d.get("risco"))
             if risco_label:
-                extra = f' — {d["cientifico"]} — germinação: {d["germinacao"]}' if d.get("germinacao") else ""
                 cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
                 cabecalho.append(Paragraph(
-                    f'<font color="{cor_risco}">●</font> Risco climático: <b>{risco_label}</b>{extra}',
-                    _ESTILO_GERMINACAO,
+                    f'<font color="{cor_risco}">●</font> Risco climático: <b>{risco_label}</b>',
+                    _ESTILO_RISCO_CLIMATICO,
                 ))
             elif d.get("cientifico"):
                 cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
