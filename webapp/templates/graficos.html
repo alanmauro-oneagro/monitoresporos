@@ -98,7 +98,7 @@
     nunca passa do maximo cadastrado -- quando o valor real excede, uma
     seta vermelha marca o ponto) combinada com o risco de infeccao
     calculado a partir dos parametros de "Condicoes p/ germinacao" da
-    aba Doencas (linha verde, escala 0-100% -- media entre as fazendas
+    aba Doencas (linha laranja, escala 0-100% -- media entre as fazendas
     do filtro atual; passe o mouse num ponto pra ver o percentual e a
     direcao predominante do vento daquele dia). As faixas
     verde/amarelo/vermelho seguem os mesmos limites (Normal/Atencao/Perigo)
@@ -139,7 +139,7 @@
     };
     Chart.register(colorBandsPlugin);
 
-    // Risco de infeccao (linha verde) e' DESENHADO NA MAO
+    // Risco de infeccao (linha laranja) e' DESENHADO NA MAO
     // (getPixelForValue), nao pelo Chart.js nativo -- confirmado isolado
     // que QUALQUER dataset numa segunda escala Y (yRisco) fica com a
     // posicao de todos os pontos colapsada no mesmo lugar nesse
@@ -532,7 +532,7 @@
             pointRadius: 0,
             yAxisID: 'yRisco',
             riscoLabels: doenca.vento_predominante,
-            corLinha: '#198754',
+            corLinha: '#e8590c',
         });
 
         return new Chart(ctx, {
@@ -550,7 +550,7 @@
                     },
                     yRisco: {
                         type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false },
-                        title: { display: true, text: 'Risco de Infecção (%)', font: { weight: 'bold' }, color: '#198754' },
+                        title: { display: true, text: 'Risco de Infecção (%)', font: { weight: 'bold' }, color: '#e8590c' },
                     },
                 },
                 plugins: {
