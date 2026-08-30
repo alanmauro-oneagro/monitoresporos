@@ -234,6 +234,60 @@
     var charts = {};
     var rosaChart = null;
 
+    // Marca d'agua de rosa-dos-ventos no fundo do grafico -- desenhada
+    // em vetor (linhas/estrela), nao a foto que o usuario mandou no chat
+    // (nao ha' acesso a arquivo pra' essa imagem aqui), num cinza bem
+    // claro pra nao competir com os dados. Fica em `beforeDraw` (antes
+    // dos gomos de verdade), diferente do `rosaLabelsPlugin` abaixo (que
+    // e' texto por cima, em `afterDraw`).
+    function desenharPontaBussola(ctx, cx, cy, anguloGraus, comprimento, largura) {
+        var ang = anguloGraus * Math.PI / 180;
+        var dirx = Math.sin(ang), diry = -Math.cos(ang);
+        var perpx = -diry, perpy = dirx;
+        ctx.beginPath();
+        ctx.moveTo(cx + dirx * comprimento, cy + diry * comprimento);
+        ctx.lineTo(cx + perpx * largura, cy + perpy * largura);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx - perpx * largura, cy - perpy * largura);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    var rosaMarcaDaguaPlugin = {
+        id: 'rosaMarcaDagua',
+        beforeDraw: function (chart) {
+            if (chart.config.type !== 'polarArea') return;
+            var scale = chart.scales.r;
+            if (!scale) return;
+            var ctx = chart.ctx;
+            var cx = scale.xCenter, cy = scale.yCenter;
+            var raio = scale.drawingArea;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.07)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(cx, cy, raio, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(cx, cy, raio * 0.68, 0, 2 * Math.PI);
+            ctx.stroke();
+            for (var i = 0; i < 8; i++) {
+                var ang = i * Math.PI / 4;
+                var x1 = cx + Math.sin(ang) * raio * 0.12, y1 = cy - Math.cos(ang) * raio * 0.12;
+                var x2 = cx + Math.sin(ang) * raio * 1.1, y2 = cy - Math.cos(ang) * raio * 1.1;
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+            [0, 90, 180, 270].forEach(function (a) { desenharPontaBussola(ctx, cx, cy, a, raio * 1.05, raio * 0.11); });
+            [45, 135, 225, 315].forEach(function (a) { desenharPontaBussola(ctx, cx, cy, a, raio * 0.75, raio * 0.055); });
+            ctx.restore();
+        },
+    };
+    Chart.register(rosaMarcaDaguaPlugin);
+
     // Marcacoes N/S/L/O ao redor da rosa dos ventos -- Chart.js nao
     // desenha rotulo nenhum em volta de um grafico polar (so' na legenda/
     // tooltip, que aqui ficam com o rotulo tecnico N/NE/E...); usa o
@@ -305,7 +359,7 @@
             type: 'polarArea',
             data: {
                 labels: direcoes,
-                datasets: [{ data: valores, backgroundColor: '#0d6efd55', borderColor: '#0d6efd' }],
+                datasets: [{ data: valores, backgroundColor: '#63b44555', borderColor: '#63b445' }],
             },
             options: {
                 responsive: true,
