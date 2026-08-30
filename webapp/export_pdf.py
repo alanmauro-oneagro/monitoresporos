@@ -85,7 +85,7 @@ def _build_spore_chart(historico, largura=17.4 * cm, altura=4.5 * cm):
     maximo = historico[-1]["maximo"] or (danger * 1.5)
     topo = max(maximo, max(h["concentracao"] for h in historico) * 1.05)
 
-    margem_esq, margem_dir, margem_topo, margem_baixo = 1.4 * cm, 0.2 * cm, 0.3 * cm, 0.9 * cm
+    margem_esq, margem_dir, margem_topo, margem_baixo = 0.7 * cm, 0.2 * cm, 0.3 * cm, 0.9 * cm
     plot_w = largura - margem_esq - margem_dir
     plot_h = altura - margem_topo - margem_baixo
     escala_y = plot_h / topo if topo else 0
