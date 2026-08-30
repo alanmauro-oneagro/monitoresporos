@@ -100,7 +100,10 @@
     calculado a partir dos parametros de "Condicoes p/ germinacao" da
     aba Doencas (linha laranja, escala 0-100% -- media entre as fazendas
     do filtro atual; passe o mouse num ponto pra ver o percentual e a
-    direcao predominante do vento daquele dia). As faixas
+    direcao predominante do vento daquele dia). A parte da linha
+    tracejada (ultimos 5 dias) e' previsao -- risco calculado com a
+    previsao do tempo (Open-Meteo) em vez do clima ja observado, so'
+    aparece quando o periodo do filtro vai ate perto de hoje. As faixas
     verde/amarelo/vermelho seguem os mesmos limites (Normal/Atencao/Perigo)
     do relatorio em PDF. Os filtros acima aplicam sozinhos ao mudar.
 </p>
@@ -174,19 +177,43 @@
                 if (meta.visible) {
                     ctx.strokeStyle = ds.corLinha;
                     ctx.lineWidth = 2.5;
-                    if (ds.dashLinha) ctx.setLineDash(ds.dashLinha);
-                    ctx.beginPath();
-                    var trecho = [];
-                    var desenharTrecho = function () {
-                        if (trecho.length) tracarLinhaSuave(ctx, trecho);
-                        trecho = [];
+
+                    // Trecho de previsao (ultimos `numPrevisao` dias, ver
+                    // /graficos/dados) fica tracejado, pra' deixar claro
+                    // que dali pra frente e' estimativa (Open-Meteo), nao
+                    // o que realmente aconteceu -- o ponto de conexao
+                    // (ultimo dia com dado historico) entra nos dois
+                    // trechos, pra' linha nao ficar com buraco na virada.
+                    var tracarSegmento = function (pontos, tracejado) {
+                        ctx.beginPath();
+                        ctx.setLineDash(tracejado ? [5, 4] : (ds.dashLinha || []));
+                        var trecho = [];
+                        var desenharTrecho = function () {
+                            if (trecho.length) tracarLinhaSuave(ctx, trecho);
+                            trecho = [];
+                        };
+                        pontos.forEach(function (p) {
+                            if (p === null) { desenharTrecho(); return; }
+                            trecho.push(p);
+                        });
+                        desenharTrecho();
+                        ctx.stroke();
                     };
+
+                    var numPrev = ds.numPrevisao || 0;
+                    var corteIdx = ds.data.length - numPrev;
+                    var pontosHist = [], pontosPrev = [];
                     ds.data.forEach(function (v, idx) {
-                        if (v === null || v === undefined) { desenharTrecho(); return; }
-                        trecho.push({ x: xScale.getPixelForValue(idx), y: yScale.getPixelForValue(v) });
+                        var ponto = (v === null || v === undefined) ? null : { x: xScale.getPixelForValue(idx), y: yScale.getPixelForValue(v) };
+                        if (idx < corteIdx) {
+                            pontosHist.push(ponto);
+                            if (idx === corteIdx - 1 && ponto) pontosPrev.push(ponto);
+                        } else {
+                            pontosPrev.push(ponto);
+                        }
                     });
-                    desenharTrecho();
-                    ctx.stroke();
+                    tracarSegmento(pontosHist, false);
+                    if (numPrev) tracarSegmento(pontosPrev, true);
                 }
                 ctx.restore();
             });
@@ -236,11 +263,11 @@
 
     // Marca d'agua de rosa-dos-ventos no fundo do grafico -- desenhada
     // em vetor (linhas/estrela), nao a foto que o usuario mandou no chat
-    // (nao ha' acesso a arquivo pra' essa imagem aqui) -- na cor sepia/
-    // marrom da foto de referencia, mais realçada (fundo continua
-    // branco, so' o desenho da bussola que usa essa cor). Fica em
-    // `beforeDraw` (antes dos gomos de verdade), diferente do
-    // `rosaLabelsPlugin` abaixo (que e' texto por cima, em `afterDraw`).
+    // (nao ha' acesso a arquivo pra' essa imagem aqui) -- na cor azul da
+    // marca OneAgro (#0a1f44, mesma do PDF/menu), fundo continua branco,
+    // so' o desenho da bussola usa essa cor. Fica em `beforeDraw` (antes
+    // dos gomos de verdade), diferente do `rosaLabelsPlugin` abaixo (que
+    // e' texto por cima, em `afterDraw`).
     function desenharPontaBussola(ctx, cx, cy, anguloGraus, comprimento, largura) {
         var ang = anguloGraus * Math.PI / 180;
         var dirx = Math.sin(ang), diry = -Math.cos(ang);
@@ -264,8 +291,8 @@
             var cx = scale.xCenter, cy = scale.yCenter;
             var raio = scale.drawingArea;
             ctx.save();
-            ctx.strokeStyle = 'rgba(139, 94, 60, 0.4)';
-            ctx.fillStyle = 'rgba(139, 94, 60, 0.35)';
+            ctx.strokeStyle = 'rgba(10, 31, 68, 0.4)';
+            ctx.fillStyle = 'rgba(10, 31, 68, 0.35)';
             ctx.lineWidth = 1.2;
             ctx.beginPath();
             ctx.arc(cx, cy, raio, 0, 2 * Math.PI);
@@ -566,7 +593,7 @@
         return texto.replace(/\bOneAgro\s*-\s*/i, '').replace(/\s*-\s*OneAgro\b/i, '');
     }
 
-    function montarGrafico(doenca, labels) {
+    function montarGrafico(doenca, labels, numPrevisao) {
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4 graf-card';
         wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + '</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
@@ -614,6 +641,7 @@
             yAxisID: 'yRisco',
             riscoLabels: doenca.vento_predominante,
             corLinha: '#e8590c',
+            numPrevisao: numPrevisao || 0,
         });
 
         return new Chart(ctx, {
@@ -726,7 +754,7 @@
                 }
                 status.textContent = '';
                 data.doencas.forEach(function (doenca) {
-                    charts[doenca.doenca_en] = montarGrafico(doenca, labels);
+                    charts[doenca.doenca_en] = montarGrafico(doenca, labels, data.num_dias_previsao);
                 });
                 aplicarVisibilidadeRisco();
             })

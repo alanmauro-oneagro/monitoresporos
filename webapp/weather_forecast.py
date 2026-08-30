@@ -56,16 +56,25 @@ def get_weather_forecast(lat, lon):
     horas_umidade = hourly.get("relative_humidity_2m", [])
     horas_chuva = hourly.get("precipitation", [])
     agora = datetime.fromisoformat(current["time"]) if current.get("time") else datetime.now()
-    passadas = [
-        {
+    passadas = []
+    futuras_por_dia = {}
+    for i in range(len(horas)):
+        dt = datetime.fromisoformat(horas[i])
+        ponto = {
             "hora": horas[i],
             "temp": horas_temp[i] if i < len(horas_temp) else None,
             "umidade": horas_umidade[i] if i < len(horas_umidade) else None,
             "chuva": horas_chuva[i] if i < len(horas_chuva) else None,
         }
-        for i in range(len(horas))
-        if datetime.fromisoformat(horas[i]) <= agora
-    ]
+        if dt <= agora:
+            passadas.append(ponto)
+        else:
+            # Ja vem da mesma chamada (forecast_days=6), sem custo/chave
+            # extra -- so' nao era guardado antes. Usado pro risco de
+            # germinacao previsto dos proximos dias (mesma regra do
+            # historico, ver `app.calc_risco_diario_pct` / `data_reader`),
+            # em vez de so' descartar essa parte da resposta.
+            futuras_por_dia.setdefault(dt.date().isoformat(), []).append(ponto)
 
     return {
         "temperatura_atual": current.get("temperature_2m"),
@@ -73,4 +82,5 @@ def get_weather_forecast(lat, lon):
         "chuva_atual_mm": current.get("precipitation"),
         "previsao_5_dias": previsao[:5],
         "ultimas_24h": passadas[-24:],
+        "previsao_horaria_por_dia": futuras_por_dia,
     }

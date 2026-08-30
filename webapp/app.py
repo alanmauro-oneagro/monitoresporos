@@ -1213,11 +1213,40 @@ def graficos_dados():
         dias.append(d.isoformat())
         d += timedelta(days=1)
 
+    # Risco de infeccao previsto pros proximos 5 dias -- so' quando o
+    # filtro esta olhando "ate' agora" (senao nao faz sentido colar
+    # previsao do tempo real numa janela historica antiga). Reusa a
+    # mesma chamada de Open-Meteo que a aba Manejo/PDF ja faz por
+    # fazenda (com cache, `_get_weather_for_site`) -- forecast_days=6 ja'
+    # vem na resposta, so' nao era guardado antes (ver
+    # `weather_forecast.get_weather_forecast`).
+    hoje = _hoje_cuiaba()
+    dias_previsao = []
+    if fim >= hoje - timedelta(days=2):
+        dias_previsao = [d for d in (
+            (hoje + timedelta(days=i)).isoformat() for i in range(1, 6)
+        ) if d not in dias]
+    dias_previsao_set = set(dias_previsao)
+    dias = dias + dias_previsao
+
+    coords_all = _coords_all()
+    previsao_horaria_por_site = {}
+    for site in sites:
+        if not dias_previsao:
+            break
+        clima = _get_weather_for_site(site, coords_all)
+        previsao_horaria_por_site[site] = (clima or {}).get("previsao_horaria_por_dia", {})
+
     translations = models.get_all_disease_translations()
     doencas_en = data_reader.read_unique_display_names()
     spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
     hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
     device_by_site = data_reader.read_site_device_ids()
+
+    def _horas_do_dia(site, dia_iso):
+        if dia_iso in dias_previsao_set:
+            return previsao_horaria_por_site.get(site, {}).get(dia_iso)
+        return hourly_lookup.get((device_by_site.get(site), dia_iso))
 
     doencas_payload = []
     for doenca_en in doencas_en:
@@ -1252,12 +1281,9 @@ def graficos_dados():
             # Risco/vento calculados por TODAS as estacoes do filtro
             # (mesmo as sem leitura de esporo) -- viram uma unica serie
             # media logo abaixo, nunca uma por fazenda.
-            device = device_by_site.get(site)
-            risco_por_site[site] = [
-                calc_risco_diario_pct(info, hourly_lookup.get((device, dia_iso))) for dia_iso in dias
-            ]
+            risco_por_site[site] = [calc_risco_diario_pct(info, _horas_do_dia(site, d)) for d in dias]
             vento_por_site[site] = [
-                data_reader.vento_predominante_do_dia(hourly_lookup.get((device, dia_iso))) for dia_iso in dias
+                data_reader.vento_predominante_do_dia(_horas_do_dia(site, d)) for d in dias
             ]
 
         # Media entre as fazendas selecionadas -- com 1 so' fazenda, e' a
@@ -1291,6 +1317,7 @@ def graficos_dados():
     return jsonify({
         "inicio": inicio.isoformat(), "fim": fim.isoformat(), "dias": dias,
         "doencas": doencas_payload, "rosa_ventos": rosa_ventos,
+        "num_dias_previsao": len(dias_previsao),
     })
 
 
