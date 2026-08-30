@@ -236,10 +236,11 @@
 
     // Marca d'agua de rosa-dos-ventos no fundo do grafico -- desenhada
     // em vetor (linhas/estrela), nao a foto que o usuario mandou no chat
-    // (nao ha' acesso a arquivo pra' essa imagem aqui), num cinza bem
-    // claro pra nao competir com os dados. Fica em `beforeDraw` (antes
-    // dos gomos de verdade), diferente do `rosaLabelsPlugin` abaixo (que
-    // e' texto por cima, em `afterDraw`).
+    // (nao ha' acesso a arquivo pra' essa imagem aqui) -- na cor sepia/
+    // marrom da foto de referencia, mais realçada (fundo continua
+    // branco, so' o desenho da bussola que usa essa cor). Fica em
+    // `beforeDraw` (antes dos gomos de verdade), diferente do
+    // `rosaLabelsPlugin` abaixo (que e' texto por cima, em `afterDraw`).
     function desenharPontaBussola(ctx, cx, cy, anguloGraus, comprimento, largura) {
         var ang = anguloGraus * Math.PI / 180;
         var dirx = Math.sin(ang), diry = -Math.cos(ang);
@@ -263,9 +264,9 @@
             var cx = scale.xCenter, cy = scale.yCenter;
             var raio = scale.drawingArea;
             ctx.save();
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.07)';
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(139, 94, 60, 0.4)';
+            ctx.fillStyle = 'rgba(139, 94, 60, 0.35)';
+            ctx.lineWidth = 1.2;
             ctx.beginPath();
             ctx.arc(cx, cy, raio, 0, 2 * Math.PI);
             ctx.stroke();
