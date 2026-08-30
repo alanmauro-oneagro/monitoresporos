@@ -21,7 +21,6 @@
         min-width: 100%; max-height: 12rem; overflow-y: auto; z-index: 1055;
     }
     .filtro-box-menu .form-check { margin-bottom: 0.15rem; white-space: nowrap; }
-    .rosa-card { background-color: #f3e8fd; }
 </style>
 {% endblock %}
 {% block content %}
@@ -305,7 +304,7 @@
             var cx = scale.xCenter, cy = scale.yCenter;
             var raio = scale.drawingArea + 14;
             ctx.save();
-            ctx.font = 'bold 11px sans-serif';
+            ctx.font = 'bold 13.2px sans-serif';
             ctx.fillStyle = '#495057';
             ctx.textBaseline = 'middle';
             ctx.textAlign = 'center';
@@ -351,7 +350,7 @@
         if (!valores.some(function (v) { return v > 0; })) return;
 
         var wrap = document.createElement('div');
-        wrap.className = 'card shadow-sm mb-4 rosa-card';
+        wrap.className = 'card shadow-sm mb-4';
         wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">Direcao predominante do vento</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
         rosaContainer.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
