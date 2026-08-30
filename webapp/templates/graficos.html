@@ -499,6 +499,13 @@
         container.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
 
+        // Tela estreita (celular) -- legenda e titulo dos eixos em fonte
+        // menor, senao dominam o espaco (a legenda de 6 itens sozinha
+        // podia passar de metade da altura do grafico).
+        var telaEstreita = window.innerWidth < 576;
+        var fonteLegenda = telaEstreita ? 8 : 10;
+        var fonteEixo = telaEstreita ? 10 : 13;
+
         var limites = null;
         doenca.series.forEach(function (s) {
             if (!limites && s.limite_maximo) {
@@ -546,11 +553,16 @@
                     yEsporos: {
                         type: 'linear', position: 'left', beginAtZero: true,
                         suggestedMax: limites ? limites.maximo : undefined,
-                        title: { display: true, text: 'Esporos por M³', font: { weight: 'bold' } },
+                        title: { display: true, text: 'Esporos por M³', font: { weight: 'bold', size: fonteEixo } },
+                        ticks: { font: { size: fonteLegenda } },
                     },
                     yRisco: {
                         type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false },
-                        title: { display: true, text: 'Risco de Infecção (%)', font: { weight: 'bold' }, color: '#e8590c' },
+                        title: { display: true, text: 'Risco de Infecção (%)', font: { weight: 'bold', size: fonteEixo }, color: '#e8590c' },
+                        ticks: { font: { size: fonteLegenda } },
+                    },
+                    x: {
+                        ticks: { font: { size: fonteLegenda } },
                     },
                 },
                 plugins: {
@@ -558,7 +570,7 @@
                         position: 'bottom',
                         labels: {
                             usePointStyle: true, pointStyle: 'circle',
-                            boxWidth: 8, font: { size: 10 },
+                            boxWidth: telaEstreita ? 6 : 8, font: { size: fonteLegenda },
                             // Com usePointStyle, o Chart.js pega a cor
                             // do pontinho de `pointBackgroundColor` --
                             // no esporos isso e' o vermelho do marcador
