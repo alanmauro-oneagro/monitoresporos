@@ -38,6 +38,32 @@ def estacoes_no_raio(lat, lon, raio_km, coords_reais):
     return vizinhas
 
 
+def interpolar_serie_diaria(vizinhas, dias, valor_do_dia):
+    """Extensao do mesmo IDW de `interpolar_cards`, mas dia a dia -- usado
+    pro grafico de Esporos e de Risco de Infeccao da aba Graficos
+    mostrarem uma serie pra fazenda virtual/estimada (que nao tem leitura
+    propria nenhuma). `vizinhas` e' o retorno de `estacoes_no_raio`
+    (fixo, independente do filtro Estado/Estacao da pagina -- a
+    interpolacao de um ponto virtual usa sempre as MESMAS fazendas reais
+    dentro do raio dele, nao so as que estao selecionadas no filtro no
+    momento). `valor_do_dia(site, dia_iso)` busca o valor (numero) de uma
+    fazenda real vizinha naquele dia, ou None se nao tiver leitura --
+    callback generico pra reusar com esporos e com risco (cada um busca
+    o valor de um jeito diferente). Retorna lista alinhada com `dias`,
+    com None nos dias em que NENHUMA fazenda da vizinhanca tem leitura."""
+    pesos = [(site, 1 / (max(d, DISTANCIA_MINIMA_KM) ** IDW_POTENCIA)) for site, d in vizinhas]
+    resultado = []
+    for dia_iso in dias:
+        entradas = [(peso, valor_do_dia(site, dia_iso)) for site, peso in pesos]
+        entradas = [(p, v) for p, v in entradas if v is not None]
+        if not entradas:
+            resultado.append(None)
+            continue
+        peso_total = sum(p for p, _ in entradas)
+        resultado.append(sum(p * v for p, v in entradas) / peso_total)
+    return resultado
+
+
 def interpolar_cards(lat, lon, raio_km, cards_by_site_reais, coords_reais):
     """Estima, por IDW, a concentracao de cada doenca no ponto (lat, lon)
     usando so as fazendas reais dentro de `raio_km`. Retorna

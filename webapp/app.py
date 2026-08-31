@@ -1245,18 +1245,22 @@ def _uf_por_site():
     """site_name -> UF (sigla do estado), pela estacao INMET mais proxima
     da coordenada da fazenda (mesmo catalogo usado em
     `_get_weather_for_site`) -- usado pro filtro de estado na aba
-    Graficos. Recalcula a cada chamada: `coords` vem direto do CSV (ver
-    `data_reader.read_site_coordinates`, sem cache), entao uma fazenda
-    cadastrada agora ja aparece no proximo carregamento da pagina, sem
-    esperar cache nenhum. NAO precisa de cache proprio aqui -- o catalogo
-    de estacoes do INMET (`inmet_stations.get_estacoes`, a parte cara
-    disso, um fetch de rede) ja tem seu proprio cache de 24h; com ele
-    pronto, calcular a UF de cada fazenda e' so' um haversine contra uma
-    lista ja em memoria (barato mesmo pra' dezenas de fazendas). Fazenda
-    sem coordenada, ou sem estacao INMET proxima resolvida (catalogo do
-    INMET fora do ar), fica com UF None -- nunca quebra a pagina por
-    causa disso, so' nao aparece nos filtros de estado."""
-    coords = data_reader.read_site_coordinates()
+    Graficos. Inclui fazenda real (`data_reader.read_site_coordinates`,
+    direto do CSV, sem cache -- uma fazenda cadastrada agora ja aparece
+    no proximo carregamento da pagina) e fazenda virtual/estimada
+    (`models.get_all_virtual_farms`, ver `_graficos_dados` pra como a
+    serie dela e' interpolada das fazendas reais na vizinhanca). NAO
+    precisa de cache proprio aqui -- o catalogo de estacoes do INMET
+    (`inmet_stations.get_estacoes`, a parte cara disso, um fetch de
+    rede) ja tem seu proprio cache de 24h; com ele pronto, calcular a UF
+    de cada fazenda e' so' um haversine contra uma lista ja em memoria
+    (barato mesmo pra' dezenas de fazendas). Fazenda sem coordenada, ou
+    sem estacao INMET proxima resolvida (catalogo do INMET fora do ar),
+    fica com UF None -- nunca quebra a pagina por causa disso, so' nao
+    aparece nos filtros de estado."""
+    coords = dict(data_reader.read_site_coordinates())
+    for vf in models.get_all_virtual_farms():
+        coords[vf["site_name"]] = (vf["lat"], vf["lon"])
     por_site = {}
     for site, latlon in coords.items():
         estacao = inmet_stations.estacao_mais_proxima(*latlon)
@@ -1442,12 +1446,95 @@ def graficos_dados():
             return previsao_horaria_por_site.get(site, {}).get(dia_iso)
         return hourly_lookup.get((device_by_site.get(site), dia_iso))
 
+    # Fazenda virtual/estimada nao tem leitura de esporo nem estacao
+    # propria -- os dias HISTORICOS de esporos/risco/vento dela vem do
+    # mesmo IDW (Inverse Distance Weighting) usado no Mapa Interpolado,
+    # dia a dia, a partir das fazendas reais dentro do raio dela (sempre
+    # as mesmas, independente do filtro Estado/Estacao da pagina --
+    # `estacoes_no_raio` usa `coords_reais_todas`, nao `sites`). Os dias
+    # de PREVISAO continuam vindo da previsao de verdade na coordenada
+    # do proprio ponto (`_horas_do_dia` acima, ja funciona pra fazenda
+    # virtual desde que ela tenha coordenada -- ver `_get_weather_for_site`).
+    coords_reais_todas = data_reader.read_site_coordinates()
+    vizinhas_por_ponto_virtual = {
+        vf["site_name"]: virtual_farms.estacoes_no_raio(vf["lat"], vf["lon"], vf["raio_km"], coords_reais_todas)
+        for vf in models.get_all_virtual_farms()
+        if vf["site_name"] in sites
+    }
+
     doencas_payload = []
     for doenca_en in doencas_en:
         info = translations.get(doenca_en, {})
         series = []
         risco_por_site, vento_por_site = {}, {}
         for site in sites:
+            if site in vizinhas_por_ponto_virtual:
+                vizinhas = vizinhas_por_ponto_virtual[site]
+
+                historico_por_vizinha = {
+                    real_site: {h["data"]: h for h in spore_lookup.get((real_site, doenca_en), [])}
+                    for real_site, _ in vizinhas
+                }
+                esporos_interp = virtual_farms.interpolar_serie_diaria(
+                    vizinhas, dias,
+                    lambda real_site, dia_iso: (historico_por_vizinha.get(real_site, {}).get(dia_iso) or {}).get("concentracao"),
+                )
+                limites_modelo = {}
+                for real_site, _ in vizinhas:
+                    lista = spore_lookup.get((real_site, doenca_en), [])
+                    if lista:
+                        limites_modelo = {k: lista[-1].get(k) for k in ("warn", "danger", "maximo")}
+                        break
+                maximo_modelo = limites_modelo.get("maximo")
+
+                esporos, excedido = [], []
+                for v in esporos_interp:
+                    if v is None:
+                        esporos.append(None)
+                        excedido.append(False)
+                    elif maximo_modelo and v > maximo_modelo:
+                        esporos.append(round(maximo_modelo, 1))
+                        excedido.append(True)
+                    else:
+                        esporos.append(round(v, 1))
+                        excedido.append(False)
+
+                if not all(v is None for v in esporos):
+                    series.append({
+                        "estacao": site, "esporos": esporos, "esporos_excedido": excedido,
+                        "limite_warn": limites_modelo.get("warn"), "limite_danger": limites_modelo.get("danger"),
+                        "limite_maximo": limites_modelo.get("maximo"),
+                    })
+
+                risco_idw = virtual_farms.interpolar_serie_diaria(
+                    vizinhas, dias,
+                    lambda real_site, dia_iso: calc_risco_diario_pct(
+                        info, hourly_lookup.get((device_by_site.get(real_site), dia_iso))
+                    ),
+                )
+                risco_do_ponto, vento_do_ponto = [], []
+                for idx, dia_iso in enumerate(dias):
+                    if dia_iso in dias_previsao_set:
+                        risco_do_ponto.append(calc_risco_diario_pct(info, _horas_do_dia(site, dia_iso)))
+                        vento_do_ponto.append(data_reader.vento_predominante_do_dia(_horas_do_dia(site, dia_iso)))
+                        continue
+                    risco_do_ponto.append(round(risco_idw[idx]) if risco_idw[idx] is not None else None)
+                    # Direcao do vento nao da pra' interpolar por IDW
+                    # numerico (e' categorica) -- media circular simples
+                    # das vizinhas com dado naquele dia, mesmo espirito
+                    # (sem peso por distancia) ja usado logo abaixo pra
+                    # media entre fazendas selecionadas.
+                    direcoes = [
+                        d for d in (
+                            data_reader.vento_predominante_do_dia(hourly_lookup.get((device_by_site.get(rs), dia_iso)))
+                            for rs, _ in vizinhas
+                        ) if d
+                    ]
+                    vento_do_ponto.append(data_reader.media_circular_direcoes(direcoes))
+                risco_por_site[site] = risco_do_ponto
+                vento_por_site[site] = vento_do_ponto
+                continue
+
             historico_lista = spore_lookup.get((site, doenca_en), [])
             historico = {h["data"]: h for h in historico_lista}
             ultimo = historico_lista[-1] if historico_lista else {}
