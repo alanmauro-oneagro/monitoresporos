@@ -354,12 +354,22 @@
     // senao toda vez que a pagina recarrega (ex.: logo apos adicionar um
     // ponto) o campo volta pro padrao de 120 km, obrigando a digitar de
     // novo se a pessoa estiver cadastrando varios pontos com o mesmo
-    // raio custom.
+    // raio custom. `localStorage` pode nao existir/lancar erro (modo
+    // privado, alguma politica do navegador/corporativa) -- sem o
+    // try/catch, esse acesso quebrava sem avisar e travava TODO o script
+    // dali pra baixo (inclusive o listener que atualiza o circulo do
+    // raio na hora, mais abaixo), fazendo a pagina parecer "travada" no
+    // raio padrao mesmo digitando outro valor na caixa -- mesmo cuidado
+    // ja tomado em `graficos.html` (`salvarFiltros`/`restaurarFiltros`).
     var RAIO_STORAGE_KEY = 'mapaInterpolado.raioKm';
-    var raioSalvo = localStorage.getItem(RAIO_STORAGE_KEY);
-    if (raioSalvo) { raioInput.value = raioSalvo; }
+    try {
+        var raioSalvo = localStorage.getItem(RAIO_STORAGE_KEY);
+        if (raioSalvo) { raioInput.value = raioSalvo; }
+    } catch (e) { /* localStorage indisponivel -- ignora, fica no padrao do campo */ }
     raioInput.addEventListener('input', function () {
-        if (raioInput.value) { localStorage.setItem(RAIO_STORAGE_KEY, raioInput.value); }
+        try {
+            if (raioInput.value) { localStorage.setItem(RAIO_STORAGE_KEY, raioInput.value); }
+        } catch (e) { /* localStorage indisponivel -- ignora */ }
     });
 
     function atualizarPreview(latlng) {
