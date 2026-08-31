@@ -581,19 +581,6 @@ def _risco_label(risco):
     return _RISCO_LABELS.get(risco)
 
 
-_DIAS_SEMANA_ABREV = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-
-
-def _rotulo_dia_previsao(dia, hoje):
-    """'Amanhã' pro primeiro dia da previsao, senao abreviacao do dia da
-    semana (Seg/Ter/...) -- mais facil de "sentir" o quao longe e' o dia
-    do que ler a data (usado so' no WhatsApp/PDF, didatico pro produtor;
-    a aba Graficos usa a data mesmo, ver `graficos.html`)."""
-    if dia == hoje + timedelta(days=1):
-        return "Amanhã"
-    return _DIAS_SEMANA_ABREV[dia.weekday()]
-
-
 def _calc_previsao_risco_germinacao(disease, weather):
     """Extensao do 'Risco climático' (`_calc_risco_germinacao`) pros
     proximos 5 dias, pro WhatsApp e o PDF -- mesma conta do grafico de
@@ -602,11 +589,13 @@ def _calc_previsao_risco_germinacao(disease, weather):
     incluida em `weather` por `_get_weather_for_site`), so' que o
     percentual e' convertido pro rotulo Baixo/Médio/Alto (mesmas faixas:
     100%+ = Alto, 50%+ = Medio, resto = Baixo) em vez do numero bruto --
-    fica no mesmo formato bolinha+palavra do Risco climático de agora,
-    sem percentual nenhum aparecendo pro produtor. Comeca amanha (nao
-    hoje, que ja tem o Risco climático "de agora" acima) e para no
-    primeiro dia sem previsao (ou sem limite cadastrado pra doenca).
-    Retorna [] quando falta previsao ou limite -- esconde a linha."""
+    sem percentual nenhum aparecendo pro produtor. `data_fmt` (DD/MM) usa
+    a MESMA data da previsao de chuva (`weather["previsao_5_dias"]`), pra
+    as duas linhas do relatorio baterem no mesmo dia. Comeca amanha e
+    para no primeiro dia sem previsao (ou sem limite cadastrado pra
+    doenca). Retorna [] quando falta previsao ou limite -- nesse caso
+    quem chama cai de volta pro "Risco climático" de agora
+    (`_calc_risco_germinacao`, baseado no horario ja observado)."""
     if not weather:
         return []
     previsao = weather.get("previsao_horaria_por_dia") or {}
@@ -628,7 +617,7 @@ def _calc_previsao_risco_germinacao(disease, weather):
             risco = "amarelo"
         else:
             risco = "verde"
-        resultado.append({"rotulo_dia": _rotulo_dia_previsao(dia, hoje), "risco": risco})
+        resultado.append({"data_fmt": dia.strftime("%d/%m"), "risco": risco})
     return resultado
 
 
@@ -723,30 +712,41 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
         else:
             lines.append("🌤️ *Clima agora*")
         if weather.get("previsao_5_dias"):
-            prev = " | ".join(
+            partes_prev = []
+            for i, d in enumerate(weather["previsao_5_dias"]):
                 # dd/mm, mesmo padrao de data do resto do relatorio (nao o
                 # AAAA-MM-DD cru que vem do forecast).
-                f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)"
-                for d in weather["previsao_5_dias"]
-            )
-            lines.append(f"Previsao: {prev}")
+                data_fmt = f"{d['data'][8:10]}/{d['data'][5:7]}"
+                # Temp. min/max so' nos 2 primeiros dias -- dias 3-5 sao
+                # os menos confiaveis da previsao (mais longe no tempo),
+                # deixa so' a chuva pra' nao poluir com numero pouco
+                # confiavel.
+                if i < 2:
+                    partes_prev.append(f"*{data_fmt}*: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)")
+                else:
+                    partes_prev.append(f"*{data_fmt}*: {d['chuva_mm']}mm")
+            lines.append("Previsao: " + " | ".join(partes_prev))
 
     lines.append(_WHATSAPP_SEPARADOR)
 
     for d in diseases:
         lines.append("")
         cabecalho = f"*{d['rotulo'].upper()}* - {_status_label(d['status'])}"
-        risco_label = _risco_label(d.get("risco"))
-        if risco_label:
-            cabecalho += f" // Risco climático: {risco_label}"
-        lines.append(cabecalho)
         previsao_risco = d.get("previsao_risco")
+        if not previsao_risco:
+            # Sem previsao (falha da Open-Meteo, ou doenca sem limite
+            # cadastrado) -- cai pro Risco climático "de agora", baseado
+            # no horario ja observado (`_calc_risco_germinacao`).
+            risco_label = _risco_label(d.get("risco"))
+            if risco_label:
+                cabecalho += f" // Risco climático: {risco_label}"
+        lines.append(cabecalho)
         if previsao_risco:
             dias_txt = " · ".join(
-                f"{_RISCO_EMOJI.get(p['risco'], '')} {p['rotulo_dia']} {_risco_label(p['risco'])}"
+                f"{_RISCO_EMOJI.get(p['risco'], '')} *{p['data_fmt']}*: {_risco_label(p['risco'])}"
                 for p in previsao_risco
             )
-            lines.append(f"Previsão: {dias_txt}")
+            lines.append(f"Risco climático: {dias_txt}")
         if d.get("germinacao"):
             lines.append(f"({d['cientifico']} — germinação: {d['germinacao']})")
         elif d.get("cientifico"):

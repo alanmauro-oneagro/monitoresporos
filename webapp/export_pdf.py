@@ -211,10 +211,16 @@ def build_recommendation_pdf(
         if partes:
             story.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
         if weather.get("previsao_5_dias"):
-            prev = " &nbsp;|&nbsp; ".join(
-                f"<b>{d['data'][8:10]}/{d['data'][5:7]}</b>: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)"
-                for d in weather["previsao_5_dias"]
-            )
+            partes_prev = []
+            for i, d in enumerate(weather["previsao_5_dias"]):
+                data_fmt = f"<b>{d['data'][8:10]}/{d['data'][5:7]}</b>"
+                # Temp. min/max so' nos 2 primeiros dias -- dias 3-5 sao
+                # os menos confiaveis da previsao (mais longe no tempo).
+                if i < 2:
+                    partes_prev.append(f"{data_fmt}: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)")
+                else:
+                    partes_prev.append(f"{data_fmt}: {d['chuva_mm']}mm")
+            prev = " &nbsp;|&nbsp; ".join(partes_prev)
             story.append(Paragraph(f"<b>Previsao:</b> {prev}", _ESTILO_NORMAL))
         story.append(Spacer(1, 4))
 
@@ -231,21 +237,21 @@ def build_recommendation_pdf(
                 f'{_STATUS_LABELS.get(d["status"], d["status"])} — Contagem: {d["concentracao"]} esporos/m³',
                 _ESTILO_DOENCA,
             ))
+            previsao_risco = d.get("previsao_risco")
             risco_label = _RISCO_LABELS.get(d.get("risco"))
-            if risco_label:
+            if previsao_risco:
+                dias_txt = " &nbsp;·&nbsp; ".join(
+                    f'<font color="{_RISCO_CORES.get(p["risco"], "#666666")}">●</font> '
+                    f'<b>{p["data_fmt"]}</b>: {_RISCO_LABELS.get(p["risco"], "")}'
+                    for p in previsao_risco
+                )
+                cabecalho.append(Paragraph(f"Risco climático: {dias_txt}", _ESTILO_PREVISAO_RISCO))
+            elif risco_label:
                 cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
                 cabecalho.append(Paragraph(
                     f'<font color="{cor_risco}">●</font> Risco climático: <b>{risco_label}</b>',
                     _ESTILO_RISCO_CLIMATICO,
                 ))
-                previsao_risco = d.get("previsao_risco")
-                if previsao_risco:
-                    dias_txt = " &nbsp;·&nbsp; ".join(
-                        f'<font color="{_RISCO_CORES.get(p["risco"], "#666666")}">●</font> '
-                        f'{p["rotulo_dia"]} {_RISCO_LABELS.get(p["risco"], "")}'
-                        for p in previsao_risco
-                    )
-                    cabecalho.append(Paragraph(f"Previsão: {dias_txt}", _ESTILO_PREVISAO_RISCO))
             elif d.get("cientifico"):
                 cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
             grafico = _build_spore_chart(d.get("historico") or [])
