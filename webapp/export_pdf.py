@@ -86,7 +86,11 @@ def _build_spore_chart(historico, largura=17.4 * cm, altura=4.5 * cm):
     warn = historico[-1]["warn"] or 0
     danger = historico[-1]["danger"] or (warn * 2 or 1)
     maximo = historico[-1]["maximo"] or (danger * 1.5)
-    topo = max(maximo, max(h["concentracao"] for h in historico) * 1.05)
+    # `historico` agora sempre cobre uma janela CORRIDA de dias (ver
+    # `data_reader.get_site_disease_history`) -- dia sem leitura entra
+    # com concentracao=None (gap), precisa filtrar antes do max().
+    concentracoes = [h["concentracao"] for h in historico if h["concentracao"] is not None]
+    topo = max(maximo, (max(concentracoes) * 1.05) if concentracoes else maximo)
 
     margem_esq, margem_dir, margem_topo, margem_baixo = 0.7 * cm, 0.2 * cm, 0.3 * cm, 0.9 * cm
     plot_w = largura - margem_esq - margem_dir
@@ -104,8 +108,20 @@ def _build_spore_chart(historico, largura=17.4 * cm, altura=4.5 * cm):
 
     n = len(historico)
     escala_x = plot_w / (n - 1) if n > 1 else 0
-    pontos = [(margem_esq + i * escala_x, y(h["concentracao"])) for i, h in enumerate(historico)]
-    d.add(_linha_suave(pontos))
+    # Um trecho por sequencia continua sem gap (dia sem leitura quebra a
+    # linha em vez de ligar reto por cima do buraco, mesmo espirito do
+    # `spanGaps:false` ja usado no grafico de Risco de Infeccao da aba
+    # Graficos).
+    trecho = []
+    for i, h in enumerate(historico):
+        if h["concentracao"] is None:
+            if len(trecho) >= 2:
+                d.add(_linha_suave(trecho))
+            trecho = []
+            continue
+        trecho.append((margem_esq + i * escala_x, y(h["concentracao"])))
+    if len(trecho) >= 2:
+        d.add(_linha_suave(trecho))
 
     for valor in sorted({0, warn, danger, topo}):
         d.add(String(margem_esq - 4, y(valor) - 2.5, f"{valor:g}", fontSize=6.5, fillColor=colors.grey, textAnchor="end"))

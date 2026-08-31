@@ -370,12 +370,19 @@ def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_mo
 
 def get_site_disease_history(site, doenca_en, dias=15):
     """Serie historica de concentracao (uma leitura por dia, a mais recente
-    do dia quando ha mais de uma) de uma doenca numa fazenda, pros ultimos
-    `dias` dias com leitura -- usado pra montar o graficozinho de
-    concentracao no PDF de recomendacao (mesmo eixo colorido do dashboard
-    do BioScout: verde/amarelo/vermelho conforme warningConcentrationThreshold/
-    dangerConcentrationThreshold/maximumConcentrationThreshold, que sao fixos
-    por doenca -- pega os do ultimo dia com leitura)."""
+    do dia quando ha mais de uma) de uma doenca numa fazenda -- usado pra
+    montar o graficozinho de concentracao no PDF de recomendacao (mesmo
+    eixo colorido do dashboard do BioScout: verde/amarelo/vermelho
+    conforme warningConcentrationThreshold/dangerConcentrationThreshold/
+    maximumConcentrationThreshold, que sao fixos por doenca -- pega os do
+    ultimo dia com leitura). SEMPRE cobre uma janela de `dias` dias
+    CORRIDOS (calendario) terminando no dia da leitura mais recente --
+    dia sem leitura entra com concentracao=None (gap no grafico, ver
+    `export_pdf._build_spore_chart`) em vez de "pular" pro dia com
+    leitura anterior; antes, um sensor com falha intermitente esticava a
+    janela silenciosamente pra' mais de `dias` dias corridos (contava
+    dias COM leitura, nao dias corridos), fazendo o grafico do PDF as
+    vezes olhar bem mais longe no passado do que os `dias` pedidos."""
     por_dia = {}
     for row in read_spore_counts():
         if row.get("siteName") != site or row.get("displayName") != doenca_en:
@@ -397,8 +404,21 @@ def get_site_disease_history(site, doenca_en, dias=15):
                 "danger": _to_float(row.get("dangerConcentrationThreshold")),
                 "maximo": _to_float(row.get("maximumConcentrationThreshold")),
             }
-    dias_ordenados = sorted(por_dia.values(), key=lambda r: r["_dt"])
-    return [{k: v for k, v in r.items() if k != "_dt"} for r in dias_ordenados[-dias:]]
+    if not por_dia:
+        return []
+    mais_recente = max(por_dia.values(), key=lambda r: r["_dt"])
+    ultima_data = mais_recente["_dt"].date()
+    limites = {k: mais_recente[k] for k in ("warn", "danger", "maximo")}
+    resultado = []
+    for i in range(dias):
+        dia = ultima_data - timedelta(days=dias - 1 - i)
+        iso = dia.isoformat()
+        r = por_dia.get(iso)
+        if r:
+            resultado.append({"data": iso, "concentracao": r["concentracao"], **limites})
+        else:
+            resultado.append({"data": iso, "concentracao": None, **limites})
+    return resultado
 
 
 def compute_status(concentration, warning_threshold, danger_threshold):
