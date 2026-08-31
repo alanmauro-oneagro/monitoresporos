@@ -100,12 +100,12 @@
     verde/amarelo/vermelho seguem os mesmos limites Normal/Atencao/Perigo
     do relatorio em PDF) e, logo abaixo, o risco de infeccao calculado a
     partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
-    (linha azul, escala 0-100% -- media entre as fazendas do filtro
+    (barras azuis, escala 0-100% -- media entre as fazendas do filtro
     atual, com faixas de fundo verde/amarelo/vermelho pros niveis Baixo/
-    Medio/Alto; passe o mouse num ponto pra ver o percentual e a direcao
-    predominante do vento daquele dia). A parte da linha tracejada
-    (ultimos 5 dias) e' previsao -- risco calculado com a previsao do
-    tempo (Open-Meteo) em vez do clima ja observado, so' aparece quando o
+    Medio/Alto; passe o mouse numa barra pra ver o percentual e a direcao
+    predominante do vento daquele dia). As barras mais claras (ultimos 5
+    dias) sao previsao -- risco calculado com a previsao do tempo
+    (Open-Meteo) em vez do clima ja observado, so' aparece quando o
     periodo do filtro vai ate perto de hoje. O checkbox "Ocultar Risco de
     Infeccao" acima esconde so' os graficos de risco (o de esporos
     continua aparecendo). Os filtros acima aplicam sozinhos ao mudar.
@@ -147,93 +147,12 @@
     };
     Chart.register(colorBandsPlugin);
 
-    // Risco de infeccao (linha laranja) e' DESENHADO NA MAO
-    // (getPixelForValue), nao pelo Chart.js nativo -- confirmado isolado
-    // que QUALQUER dataset numa segunda escala Y (yRisco) fica com a
-    // posicao de todos os pontos colapsada no mesmo lugar nesse
-    // Chart.js@4.4.4, seja linha ou so' ponto. O dataset do risco entao
-    // fica com cor transparente/borderWidth 0 (so' carrega o dado pro
-    // tooltip/legenda -- a direcao do vento continua disponivel so' no
-    // tooltip, sem icone fixo no grafico) e esse plugin cuida 100% do
-    // desenho visual -- a cor real fica em `ds.corLinha`. A linha
-    // respeita o checkbox "Risco (linha)" via `meta.visible`.
-    var riscoPlugin = {
-        id: 'riscoPlugin',
-        afterDatasetsDraw: function (chart) {
-            var ctx = chart.ctx;
-            var area = chart.chartArea;
-            chart.data.datasets.forEach(function (ds, i) {
-                if (!ds.riscoLabels) return;
-                var xScale = chart.scales.x;
-                var yScale = chart.scales[ds.yAxisID];
-                if (!xScale || !yScale) return;
-                var meta = chart.getDatasetMeta(i);
-
-                // Desenho manual (ver nota acima) nao ganha o recorte que
-                // o Chart.js aplica sozinho nos datasets nativos -- sem
-                // isso, a curva suavizada podia passar um pouco do
-                // maximo/minimo do eixo entre dois pontos (overshoot de
-                // spline) e vazar pra fora da area do grafico.
-                ctx.save();
-                ctx.beginPath();
-                ctx.rect(area.left, area.top, area.width, area.height);
-                ctx.clip();
-
-                if (meta.visible) {
-                    ctx.strokeStyle = ds.corLinha;
-                    ctx.lineWidth = 2.5;
-
-                    // Trecho de previsao (ultimos `numPrevisao` dias, ver
-                    // /graficos/dados) fica tracejado, pra' deixar claro
-                    // que dali pra frente e' estimativa (Open-Meteo), nao
-                    // o que realmente aconteceu -- o ponto de conexao
-                    // (ultimo dia com dado historico) entra nos dois
-                    // trechos, pra' linha nao ficar com buraco na virada.
-                    var tracarSegmento = function (pontos, tracejado) {
-                        ctx.beginPath();
-                        ctx.setLineDash(tracejado ? [5, 4] : (ds.dashLinha || []));
-                        var trecho = [];
-                        var desenharTrecho = function () {
-                            if (trecho.length) tracarLinhaSuave(ctx, trecho);
-                            trecho = [];
-                        };
-                        pontos.forEach(function (p) {
-                            if (p === null) { desenharTrecho(); return; }
-                            trecho.push(p);
-                        });
-                        desenharTrecho();
-                        ctx.stroke();
-                    };
-
-                    var numPrev = ds.numPrevisao || 0;
-                    var corteIdx = ds.data.length - numPrev;
-                    var pontosHist = [], pontosPrev = [];
-                    ds.data.forEach(function (v, idx) {
-                        var ponto = (v === null || v === undefined) ? null : { x: xScale.getPixelForValue(idx), y: yScale.getPixelForValue(v) };
-                        if (idx < corteIdx) {
-                            pontosHist.push(ponto);
-                            if (idx === corteIdx - 1 && ponto) pontosPrev.push(ponto);
-                        } else {
-                            pontosPrev.push(ponto);
-                        }
-                    });
-                    tracarSegmento(pontosHist, false);
-                    if (numPrev) tracarSegmento(pontosPrev, true);
-                }
-                ctx.restore();
-            });
-        },
-    };
-    Chart.register(riscoPlugin);
-
     // Esporos virou grafico de barra (uma cor por fazenda) -- pontos com
     // pointStyle nao existem em barra, entao o marcador de "valor
     // excedeu o maximo" vira uma setinha vermelha desenhada por cima da
-    // barra (mesmo lugar/ideia da seta que já existia na linha antes).
-    // yEsporos e' a escala PRIMARIA do grafico (nao a secundaria com o
-    // bug de posicionamento ja visto no risco) -- entao da' pra' confiar
-    // na posicao que o proprio Chart.js calculou pro elemento da barra
-    // (`getProps`), sem precisar recalcular na mao feito o riscoPlugin.
+    // barra. yEsporos e' a escala PRIMARIA do grafico, entao da' pra'
+    // confiar na posicao que o proprio Chart.js calculou pro elemento da
+    // barra (`getProps`), sem precisar desenhar nada na mao.
     var esporosExcedidoPlugin = {
         id: 'esporosExcedido',
         afterDatasetsDraw: function (chart) {
@@ -408,33 +327,9 @@
     }
 
     var DASHES = [[], [6, 3], [2, 2], [10, 3, 2, 3]];
-    // Uma cor por fazenda no grafico de esporos (risco continua sempre
-    // verde, ver dataset) -- evita vermelho (seta de excedido) e azul
-    // (seta de vento).
+    // Uma cor por fazenda no grafico de esporos -- evita vermelho (seta
+    // de excedido) e o azul do grafico de risco.
     var CORES_FAZENDA = ['#212529', '#fd7e14', '#6f42c1', '#e83e8c', '#795548', '#997404', '#0dcaf0', '#5c636a'];
-
-    // Catmull-Rom convertido pra Bezier cubica (mesma tecnica de
-    // `export_pdf._linha_suave`), passando exatamente pelos pontos em
-    // vez de uma polilinha com angulos retos -- so' suaviza dentro de
-    // cada trecho continuo (quebra a curva onde ha' `null`, mesmo
-    // espirito de spanGaps:false).
-    function tracarLinhaSuave(ctx, pontos) {
-        var n = pontos.length;
-        if (n < 2) {
-            if (n === 1) { ctx.moveTo(pontos[0].x, pontos[0].y); ctx.lineTo(pontos[0].x, pontos[0].y); }
-            return;
-        }
-        ctx.moveTo(pontos[0].x, pontos[0].y);
-        for (var i = 0; i < n - 1; i++) {
-            var p0 = i > 0 ? pontos[i - 1] : pontos[i];
-            var p1 = pontos[i];
-            var p2 = pontos[i + 1];
-            var p3 = i + 2 < n ? pontos[i + 2] : pontos[i + 1];
-            var c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
-            var c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
-            ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
-        }
-    }
 
     // Boxes de filtro (Estado/Estacao) que abrem/fecham ao clicar --
     // mesmo padrao do menu "Configuracoes" do menu principal, mas
@@ -705,24 +600,30 @@
         var fonteLegenda = telaEstreita ? 8 : 10;
         var fonteEixo = telaEstreita ? 10 : 13;
 
-        // Risco/vento: UMA linha so' (media entre as fazendas do filtro
+        // Risco/vento: UMA barra so' (media entre as fazendas do filtro
         // atual, ver `/graficos/dados` -- com 1 fazenda selecionada e' a
         // media de 1 valor, ou seja, ela mesma), nunca uma por fazenda.
+        // Ultimos `numPrevisao` dias (previsao Open-Meteo, nao o que
+        // realmente aconteceu) ficam com a barra mais clara (BarElement
+        // do Chart.js@4.4.4 nao suporta borderDash por barra, so' o
+        // contorno inteiro do dataset -- confirmado via `el.options`,
+        // por isso so' a opacidade diferencia, nao um contorno tracejado).
+        var numPrev = numPrevisao || 0;
+        var corteIdx = doenca.risco_pct.length - numPrev;
         var datasets = [{
             label: 'Risco de Infecção (%)',
             data: doenca.risco_pct,
-            borderColor: 'transparent',
-            backgroundColor: 'transparent',
-            borderWidth: 0,
-            pointRadius: 0,
+            backgroundColor: function (ctx) {
+                return ctx.dataIndex < corteIdx ? '#0a1f44' : 'rgba(10, 31, 68, 0.35)';
+            },
+            borderColor: '#0a1f44',
+            borderWidth: 1,
             yAxisID: 'yRisco',
-            riscoLabels: doenca.vento_predominante,
-            corLinha: '#0a1f44',
-            numPrevisao: numPrevisao || 0,
+            direcaoVento: doenca.vento_predominante,
         }];
 
         return new Chart(ctx, {
-            type: 'line',
+            type: 'bar',
             data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true,
@@ -761,12 +662,8 @@
                                 var ds = ctx.dataset;
                                 var v = ctx.parsed.y;
                                 if (v === null || v === undefined) return null;
-                                var dir = ds.riscoLabels[ctx.dataIndex];
+                                var dir = ds.direcaoVento[ctx.dataIndex];
                                 return ds.label + ': ' + v + '%' + (dir ? ' (' + dir + ')' : '');
-                            },
-                            labelColor: function (ctx) {
-                                var cor = ctx.dataset.corLinha;
-                                return { borderColor: cor, backgroundColor: cor };
                             },
                         },
                     },
