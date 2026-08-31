@@ -100,8 +100,9 @@
     verde/amarelo/vermelho seguem os mesmos limites Normal/Atencao/Perigo
     do relatorio em PDF) e, logo abaixo, o risco de infeccao calculado a
     partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
-    (linha laranja, escala 0-100% -- media entre as fazendas do filtro
-    atual; passe o mouse num ponto pra ver o percentual e a direcao
+    (linha azul, escala 0-100% -- media entre as fazendas do filtro
+    atual, com faixas de fundo verde/amarelo/vermelho pros niveis Baixo/
+    Medio/Alto; passe o mouse num ponto pra ver o percentual e a direcao
     predominante do vento daquele dia). A parte da linha tracejada
     (ultimos 5 dias) e' previsao -- risco calculado com a previsao do
     tempo (Open-Meteo) em vez do clima ja observado, so' aparece quando o
@@ -112,16 +113,18 @@
 
 <script>
 (function () {
-    // Faixas de fundo verde/amarelo/vermelho no grafico de esporos,
-    // usando os mesmos 3 limites (warning/danger/maximum) do relatorio em
-    // PDF -- registrado uma unica vez, cada grafico passa os seus
-    // proprios limites via options.plugins.colorBands.
+    // Faixas de fundo verde/amarelo/vermelho -- no grafico de esporos usa
+    // os mesmos 3 limites (warning/danger/maximum) do relatorio em PDF;
+    // no grafico de risco de infeccao usa os limiares de Baixo/Medio/Alto
+    // (ver `_calc_previsao_risco_germinacao` em app.py). Registrado uma
+    // unica vez, cada grafico passa os proprios limites e o id da escala
+    // (`scale`, default 'yEsporos') via options.plugins.colorBands.
     var colorBandsPlugin = {
         id: 'colorBands',
         beforeDatasetsDraw: function (chart) {
             var opts = chart.config.options.plugins && chart.config.options.plugins.colorBands;
             if (!opts || !opts.maximo) return;
-            var scale = chart.scales.yEsporos;
+            var scale = chart.scales[opts.scale || 'yEsporos'];
             if (!scale) return;
             var area = chart.chartArea;
             var ctx = chart.ctx;
@@ -714,7 +717,7 @@
             pointRadius: 0,
             yAxisID: 'yRisco',
             riscoLabels: doenca.vento_predominante,
-            corLinha: '#e8590c',
+            corLinha: '#0a1f44',
             numPrevisao: numPrevisao || 0,
         }];
 
@@ -728,7 +731,7 @@
                 scales: {
                     yRisco: {
                         type: 'linear', position: 'left', min: 0, max: 100,
-                        title: { display: true, text: 'Risco de Infecção (%)', font: { weight: 'bold', size: fonteEixo }, color: '#e8590c' },
+                        title: { display: true, text: 'Risco de Infecção (%)', font: { weight: 'bold', size: fonteEixo }, color: '#0a1f44' },
                         ticks: { font: { size: fonteLegenda } },
                     },
                     x: {
@@ -744,6 +747,14 @@
                             generateLabels: forcarCorNaLegenda,
                         },
                     },
+                    // Faixas de fundo verde/amarelo/vermelho seguindo os
+                    // mesmos limiares de Baixo/Medio/Alto usados no
+                    // WhatsApp/PDF (`_calc_previsao_risco_germinacao`:
+                    // <50% Baixo, 50-100% Medio) -- Alto so' existe
+                    // exatamente no teto (100%, capado), sem espaco
+                    // proprio de faixa; o vermelho fica nos ultimos 20%
+                    // (80-100) pra' representar a zona de maior risco.
+                    colorBands: { scale: 'yRisco', warn: 50, danger: 80, maximo: 100 },
                     tooltip: {
                         callbacks: {
                             label: function (ctx) {
