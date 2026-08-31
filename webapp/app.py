@@ -626,6 +626,10 @@ def _calc_previsao_risco_germinacao(disease, weather):
 
 
 _STATUS_LABELS = {"Perigo": "Alta concentração de esporos", "Atencao": "Moderada concentração de esporos"}
+# Mesma cor da bolinha do PDF (Perigo #ff6b6b -> vermelho, Atencao
+# #e6ac00 -> laranja/amarelo), so' que em emoji pro WhatsApp (texto puro
+# nao tem cor de verdade).
+_STATUS_EMOJI = {"Perigo": "🔴", "Atencao": "🟠"}
 
 
 def _status_label(status):
@@ -656,40 +660,56 @@ def _whatsapp_titulo(site, is_virtual=False):
     return f"*{nome_fazenda.upper()} - OneAgro*"
 
 
-def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None):
+def _format_whatsapp_message(
+    site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None,
+    safra_label=None, plantio_linhas=None, aplicacoes_linhas=None,
+):
     """Monta o relatorio inteiro de uma fazenda numa unica mensagem de
-    texto, agrupado POR DOENCA (status, contagem, recomendacao e
-    observacao juntos num bloco so, em vez de secoes separadas repetindo
-    o nome da doenca) -- mais facil do cliente ler e agir. `weather` e' o
-    retorno de `_get_weather_for_site` (ou None); `produtos` e'
-    {"quimico": [...], "biologico": [...]} com os itens que a fazenda ja
-    tem comprado (aba Recomendacoes > Produtos Fazenda). Sem nenhuma
-    doenca em Atencao/Perigo, a mensagem e' so o aviso de que esta tudo
-    tranquilo (mesmo texto usado na tela de Recomendacoes). As caixas de
-    Observacao (por doenca) e Produtos Fazenda sempre aparecem, mesmo
-    vazias -- nesse caso o valor e' so "*", pra manter o mesmo formato de
-    relatorio sempre (nao muda de estrutura conforme o que foi
-    preenchido). `is_virtual` (fazenda virtual/estimada, ver
-    `virtual_farms.py`) so muda o jeito de extrair o nome do site_name pro
-    titulo (`_whatsapp_titulo`) -- a mensagem em si nao tem nenhum aviso
-    de que o valor e' estimado, pro relatorio ficar igual ao de uma
-    fazenda real. `cultura` (nome da cultura atual definida na aba Manejo,
-    ou None/"" se ainda estiver "(vazio)") aparece em destaque (negrito,
+    texto -- MESMO conteudo e ordem do PDF (`export_pdf.build_recommendation_pdf`),
+    so' sem o graficozinho de concentracao (texto puro nao desenha grafico),
+    agrupado POR DOENCA (status, contagem, recomendacao e observacao
+    juntos num bloco so, em vez de secoes separadas repetindo o nome da
+    doenca) -- mais facil do cliente ler e agir. `weather` e' o retorno de
+    `_get_weather_for_site` (ou None); `produtos` e' {"quimico": [...],
+    "biologico": [...]} com os itens que a fazenda ja tem comprado (aba
+    Recomendacoes > Produtos Fazenda); `safra_label`/`plantio_linhas`/
+    `aplicacoes_linhas` vem do mesmo lugar que alimenta o PDF (ver
+    `_build_site_pdf`/`_farm_plantio_aplicacoes_estoque`) -- omitidos
+    (None), a mensagem so' fica sem essas partes, sem quebrar. Sem
+    nenhuma doenca em Atencao/Perigo, a mensagem e' so o aviso de que
+    esta tudo tranquilo (mesmo texto usado na tela de Recomendacoes) --
+    esse caminho curto NAO repete Produtos/Plantio/Pulverizacao (ao
+    contrario do PDF, que sempre mostra essas secoes), de proposito, pra'
+    manter o aviso "esta tudo tranquilo" curto. As caixas de Observacao
+    (por doenca) e Produtos Fazenda sempre aparecem, mesmo vazias --
+    nesse caso o valor e' so "*", pra manter o mesmo formato de relatorio
+    sempre (nao muda de estrutura conforme o que foi preenchido).
+    `is_virtual` (fazenda virtual/estimada, ver `virtual_farms.py`) so
+    muda o jeito de extrair o nome do site_name pro titulo
+    (`_whatsapp_titulo`) -- a mensagem em si nao tem nenhum aviso de que
+    o valor e' estimado, pro relatorio ficar igual ao de uma fazenda
+    real. `cultura` (nome da cultura atual definida na aba Manejo, ou
+    None/"" se ainda estiver "(vazio)") aparece em destaque (negrito,
     maiuscula), logo abaixo do titulo, antes do clima. A data/hora de
     atualizacao (e a cidade da estacao de referencia, se houver) fica no
     rodape do relatorio, nao mais logo abaixo do titulo. Ordem do
-    cabecalho: titulo -> Cultura -> Clima agora -> separador -> um bloco
-    por doenca (nome, concentracao/risco, germinacao, recomendacao,
-    sugestao). "Powered by BioScout" e' sempre a ultima linha (assinatura
-    do rodape, em todo relatorio -- com ou sem doenca)."""
+    relatorio: titulo -> Manejo/Cultura -> Clima agora -> separador ->
+    "Doencas em Atencao/Perigo" -> um bloco por doenca (nome, contagem,
+    risco, germinacao, recomendacao, sugestao) -> Produtos ja
+    disponiveis -> Datas de Plantio -> Datas de Pulverizacao -> rodape
+    (fonte do clima, atualizado em, instituicoes consultadas, aviso de
+    nao substituir agronomo, "Powered by BioScout" sempre por ultimo)."""
     rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
     if weather and weather.get("cidade"):
         rodape_data += f" · {weather['cidade']}/{weather['uf']}"
 
     if not diseases:
         partes = [_whatsapp_titulo(site, is_virtual), ""]
+        if safra_label:
+            partes.append(f"Manejo: *{safra_label}*")
         if cultura:
             partes.append(f"Cultura: *{cultura.upper()}*")
+        if safra_label or cultura:
             partes.append("")
         partes.append("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.")
         partes.append("")
@@ -699,8 +719,11 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
 
     lines = [_whatsapp_titulo(site, is_virtual), ""]
 
+    if safra_label:
+        lines.append(f"Manejo: *{safra_label}*")
     if cultura:
         lines.append(f"Cultura: *{cultura.upper()}*")
+    if safra_label or cultura:
         lines.append("")
 
     if weather:
@@ -732,10 +755,16 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
             lines.append("Previsao: " + " | ".join(partes_prev))
 
     lines.append(_WHATSAPP_SEPARADOR)
+    lines.append("*Doenças em Atenção / Perigo*")
 
+    fontes_pesquisadas = []
     for d in diseases:
         lines.append("")
-        cabecalho = f"*{d['rotulo'].upper()}* - {_status_label(d['status'])}"
+        emoji_status = _STATUS_EMOJI.get(d["status"], "")
+        cabecalho = (
+            f"{emoji_status} *{d['rotulo'].upper()}* - {_status_label(d['status'])} - "
+            f"Contagem: {d['concentracao']} esporos/m³"
+        )
         previsao_risco = d.get("previsao_risco")
         if not previsao_risco:
             # Sem previsao (falha da Open-Meteo, ou doenca sem limite
@@ -766,6 +795,9 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
             if quimicos_itens:
                 ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens)
                 lines.append(f"⚗️ *Quimicos:* {ativos}")
+            for grupo in (d.get("biologicos"), d.get("quimicos")):
+                if grupo and grupo.get("fonte"):
+                    fontes_pesquisadas.append(grupo["fonte"].split(" -- ")[0])
         lines.append(_WHATSAPP_SEPARADOR)
         lines.append(f"📝 Sugestão: {d.get('nota') or '*'}")
 
@@ -783,9 +815,47 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
     lines.append("")
 
     lines.append(_WHATSAPP_SEPARADOR)
+    lines.append("🌱 *Datas de Plantio*")
+    plantio_validas = [l for l in (plantio_linhas or []) if any(l.values())]
+    if not plantio_validas:
+        lines.append("Nenhum plantio cadastrado para esta safra.")
+    else:
+        for l in plantio_validas:
+            partes_plantio = [models.fmt_data_br(l.get("data_plantio")) or "-"]
+            if l.get("talhao"):
+                partes_plantio.append(f"Talhão {l['talhao']}")
+            if l.get("variedade"):
+                partes_plantio.append(l["variedade"])
+            if l.get("ciclo_dias"):
+                partes_plantio.append(f"Ciclo {l['ciclo_dias']} dias")
+            lines.append(" - ".join(partes_plantio))
+    lines.append("")
+
+    lines.append(_WHATSAPP_SEPARADOR)
+    lines.append("🚿 *Datas de Pulverização*")
+    aplicacoes_validas = [l for l in (aplicacoes_linhas or []) if any(l.values())]
+    if not aplicacoes_validas:
+        lines.append("Nenhuma pulverizacao cadastrada para esta safra.")
+    else:
+        for l in aplicacoes_validas:
+            partes_ap = [models.fmt_data_br(l.get("data_aplicacao")) or "-"]
+            if l.get("talhao"):
+                partes_ap.append(f"Talhão {l['talhao']}")
+            if l.get("fungicidas_quimicos"):
+                partes_ap.append(f"Químicos: {l['fungicidas_quimicos']}")
+            if l.get("fungicidas_biologicos"):
+                partes_ap.append(f"Biológicos: {l['fungicidas_biologicos']}")
+            lines.append(" - ".join(partes_ap))
+    lines.append("")
+
+    lines.append(_WHATSAPP_SEPARADOR)
     if weather:
         lines.append(f"Fonte do clima: {weather['fonte']}")
     lines.append(rodape_data)
+    if fontes_pesquisadas:
+        fontes_unicas = sorted(set(fontes_pesquisadas))
+        lines.append(f"Instituições de pesquisa consultadas para as recomendações acima: {' · '.join(fontes_unicas)}.")
+    lines.append("Isso não substitui a avaliação de um agrônomo responsável.")
     lines.append("Powered by BioScout")
 
     return "\n".join(lines).strip()
@@ -921,8 +991,11 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     text = None
     if enviar_texto:
         is_virtual = models.get_virtual_farm(site) is not None
+        safra_label = SAFRA_LABELS[safra] if safra else "todas as safras"
+        plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
         text = _format_whatsapp_message(
-            site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura
+            site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura,
+            safra_label=safra_label, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
         )
 
     # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
@@ -1653,6 +1726,8 @@ def recommendations(safra):
     notes = models.get_all_recommendation_notes()
     coords = _weather_coords_all()
     produtos_by_site = models.get_all_farm_produtos()
+    plantio_by_site = models.get_all_farm_plantio()
+    aplicacoes_by_site = models.get_all_farm_aplicacoes()
     virtual_names = models.virtual_farm_site_names()
 
     sites_data = []
@@ -1662,6 +1737,7 @@ def recommendations(safra):
         weather = _get_weather_for_site(site, coords)
         for d in diseases:
             d["risco"] = _calc_risco_germinacao(d, weather)
+            d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
         thumbnails = sorted(cards, key=lambda c: c["doenca"])
         existentes = produtos_by_site.get(site, {})
         estoque_rapido = {}
@@ -1694,6 +1770,9 @@ def recommendations(safra):
             else _format_whatsapp_message(
                 site, diseases, weather=weather, produtos=_farm_produtos_estoque(site, safra),
                 is_virtual=is_virtual, cultura=cultura_info.get("cultura") or "",
+                safra_label=SAFRA_LABELS[safra],
+                plantio_linhas=plantio_by_site.get(site, {}).get(safra, []),
+                aplicacoes_linhas=aplicacoes_by_site.get(site, {}).get(safra, []),
             )
         )
         sites_data.append({
