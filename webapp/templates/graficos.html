@@ -231,12 +231,19 @@
     };
     Chart.register(anotacoesPlugin);
 
-    // {site: [{data_iso|dia_mes, tipo}, ...]} (vindo de /graficos/dados)
-    // -> {indice_do_eixo_x: {tipo: [site, ...]}} -- `dia_mes` (anotacao
-    // sem ano, campo e' texto livre) casa contra QUALQUER dia de `dias`
-    // com o mesmo dia/mes (pode marcar mais de um indice se o periodo
-    // do filtro passar de 1 ano).
-    function calcularAnotacoesPorIndice(anotacoesPorSite, dias) {
+    // {site: [{data_iso|dia_mes, tipo}, ...]} (vindo de /graficos/dados,
+    // ja restrito as fazendas do filtro Estado/Estacao) -> {indice_do_
+    // eixo_x: {tipo: [site, ...]}} -- `dia_mes` (anotacao sem ano, campo
+    // e' texto livre) casa contra QUALQUER dia de `dias` com o mesmo
+    // dia/mes (pode marcar mais de um indice se o periodo do filtro
+    // passar de 1 ano). `sitesPermitidos` (Set, opcional) restringe
+    // ainda mais pras fazendas que de fato aparecem NESSE grafico --
+    // usado no de Esporos, que so mostra barra das fazendas com leitura
+    // daquela doenca (senao uma fazenda so' com anotacao, sem barra
+    // nenhuma nesse grafico, ficava com um icone "orfao"); sem esse
+    // parametro (grafico de Risco, que agrega TODAS as fazendas do
+    // filtro numa unica barra), mostra todas.
+    function calcularAnotacoesPorIndice(anotacoesPorSite, dias, sitesPermitidos) {
         var porIndice = {};
         var indicesPorDiaMes = {};
         dias.forEach(function (iso, idx) {
@@ -244,6 +251,7 @@
             (indicesPorDiaMes[chave] = indicesPorDiaMes[chave] || []).push(idx);
         });
         Object.keys(anotacoesPorSite || {}).forEach(function (site) {
+            if (sitesPermitidos && !sitesPermitidos.has(site)) return;
             anotacoesPorSite[site].forEach(function (a) {
                 var indices = a.data_iso ? [dias.indexOf(a.data_iso)] : (indicesPorDiaMes[a.dia_mes] || []);
                 indices.forEach(function (idx) {
@@ -627,12 +635,19 @@
         });
     }
 
-    function montarGraficoEsporos(doenca, labels, anotacoesPorIndice) {
+    function montarGraficoEsporos(doenca, labels, anotacoesPorSite, dias) {
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4 graf-card';
         wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + ' &mdash; Esporos por M³</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
         container.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
+
+        // So' as fazendas com barra NESSE grafico (leitura de esporo
+        // dessa doenca) -- uma fazenda so' com anotacao e sem leitura
+        // aqui nao teria bar nenhuma pra' "ancorar" o icone, ficava
+        // orfao (ver nota em `calcularAnotacoesPorIndice`).
+        var sitesDoGrafico = new Set(doenca.series.map(function (s) { return s.estacao; }));
+        var anotacoesPorIndice = calcularAnotacoesPorIndice(anotacoesPorSite, dias, sitesDoGrafico);
 
         // Tela estreita (celular) -- legenda e titulo dos eixos em fonte
         // menor, senao dominam o espaco (a legenda de 6 itens sozinha
@@ -711,13 +726,18 @@
         });
     }
 
-    function montarGraficoRisco(doenca, labels, numPrevisao, anotacoesPorIndice) {
+    function montarGraficoRisco(doenca, labels, numPrevisao, anotacoesPorSite, dias) {
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4 graf-card';
         wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + ' &mdash; Risco de Infecção</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
         container.appendChild(wrap);
         riscoWraps.push(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
+
+        // Risco/vento agrega TODAS as fazendas do filtro (nao so' as com
+        // leitura de esporo, ver /graficos/dados) -- sem restricao extra
+        // de fazenda, so' o que ja veio filtrado do backend.
+        var anotacoesPorIndice = calcularAnotacoesPorIndice(anotacoesPorSite, dias);
 
         var telaEstreita = window.innerWidth < 576;
         var fonteLegenda = telaEstreita ? 8 : 10;
@@ -820,14 +840,11 @@
                     return;
                 }
                 status.textContent = '';
-                // Mesma pra' todo grafico da pagina (TS/Sulco/Folha/
-                // Plantio nao sao especificos de uma doenca) -- calculada
-                // uma unica vez aqui, nao por grafico.
-                var anotacoesPorIndice = calcularAnotacoesPorIndice(data.anotacoes || {}, data.dias);
+                var anotacoesPorSite = data.anotacoes || {};
                 data.doencas.forEach(function (doenca) {
                     charts[doenca.doenca_en] = {
-                        esporos: montarGraficoEsporos(doenca, labels, anotacoesPorIndice),
-                        risco: montarGraficoRisco(doenca, labels, data.num_dias_previsao, anotacoesPorIndice),
+                        esporos: montarGraficoEsporos(doenca, labels, anotacoesPorSite, data.dias),
+                        risco: montarGraficoRisco(doenca, labels, data.num_dias_previsao, anotacoesPorSite, data.dias),
                     };
                 });
                 aplicarVisibilidadeRisco();
