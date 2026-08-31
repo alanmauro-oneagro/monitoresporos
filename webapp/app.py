@@ -1241,29 +1241,26 @@ def dashboard():
     )
 
 
-_uf_cache = {"timestamp": 0, "por_site": {}}
-_UF_CACHE_TTL_SECONDS = 24 * 60 * 60
-
-
 def _uf_por_site():
     """site_name -> UF (sigla do estado), pela estacao INMET mais proxima
     da coordenada da fazenda (mesmo catalogo usado em
-    `_get_weather_for_site`) -- cache em memoria por 24h (o catalogo de
-    estacoes quase nunca muda, e a coordenada de cada fazenda tambem
-    nao). Usado pro filtro de estado na aba Graficos. Fazenda sem
-    coordenada, ou sem estacao INMET proxima resolvida (catalogo do
+    `_get_weather_for_site`) -- usado pro filtro de estado na aba
+    Graficos. Recalcula a cada chamada: `coords` vem direto do CSV (ver
+    `data_reader.read_site_coordinates`, sem cache), entao uma fazenda
+    cadastrada agora ja aparece no proximo carregamento da pagina, sem
+    esperar cache nenhum. NAO precisa de cache proprio aqui -- o catalogo
+    de estacoes do INMET (`inmet_stations.get_estacoes`, a parte cara
+    disso, um fetch de rede) ja tem seu proprio cache de 24h; com ele
+    pronto, calcular a UF de cada fazenda e' so' um haversine contra uma
+    lista ja em memoria (barato mesmo pra' dezenas de fazendas). Fazenda
+    sem coordenada, ou sem estacao INMET proxima resolvida (catalogo do
     INMET fora do ar), fica com UF None -- nunca quebra a pagina por
     causa disso, so' nao aparece nos filtros de estado."""
-    now = time.time()
-    if _uf_cache["por_site"] and now - _uf_cache["timestamp"] < _UF_CACHE_TTL_SECONDS:
-        return _uf_cache["por_site"]
     coords = data_reader.read_site_coordinates()
     por_site = {}
     for site, latlon in coords.items():
         estacao = inmet_stations.estacao_mais_proxima(*latlon)
         por_site[site] = estacao["uf"] if estacao else None
-    _uf_cache["por_site"] = por_site
-    _uf_cache["timestamp"] = now
     return por_site
 
 
