@@ -1217,6 +1217,66 @@ def _parse_iso_date(value):
         return None
 
 
+def _parse_data_anotacao(texto):
+    """O campo "Data/Anotacao" da aba Anotacoes de Safra (TS/Sulco/Folha)
+    e "Data plantio" (Dados de Plantio) sao texto livre, nao um
+    `<input type=date>` -- tenta 'DD/MM/AAAA', 'DD/MM/AA' e 'DD/MM'
+    nessa ordem. Com ano, devolve a data ISO exata (`data_iso`); so' dia/
+    mes (sem ano), devolve `dia_mes` ("DD/MM") pra' quem usa casar contra
+    QUALQUER ano do periodo mostrado no grafico (ver `graficos.html`,
+    onde pode ter ambiguidade se o periodo passar de 1 ano -- mostra a
+    marca em todo ano que bater). None quando o texto nao bate com
+    nenhum formato (anotacao solta tipo "meados de marco" e' so'
+    ignorada, sem quebrar o grafico)."""
+    texto = (texto or "").strip()
+    if not texto:
+        return None
+    for fmt in ("%d/%m/%Y", "%d/%m/%y"):
+        try:
+            return {"data_iso": datetime.strptime(texto, fmt).date().isoformat(), "dia_mes": None}
+        except ValueError:
+            continue
+    try:
+        dt = datetime.strptime(texto, "%d/%m")
+        return {"data_iso": None, "dia_mes": f"{dt.day:02d}/{dt.month:02d}"}
+    except ValueError:
+        return None
+
+
+def _farm_anotacoes(site, produtos_by_site, plantio_by_site):
+    """Lista de {"data_iso"|"dia_mes", "tipo"} (`tipo` = 'ts'/'sulco'/
+    'folha'/'plantio') pra marcar no grafico de Esporos e de Risco de
+    Infeccao (aba Graficos, `montarGraficoEsporos`/`montarGraficoRisco`
+    em graficos.html) -- reune TS/Sulco/Folha (aba Anotacoes de Safra) e
+    Plantio (Dados de Plantio) de TODAS as safras dessa fazenda (o
+    grafico pode olhar qualquer periodo, nao so' uma safra). Deduplicado
+    por (data, tipo) -- uma fazenda com quimico E biologico no mesmo dia
+    do mesmo momento vira UMA marca so', nao duas sobrepostas."""
+    vistos = set()
+    resultado = []
+    for (safra, momento, tipo), linhas in produtos_by_site.get(site, {}).items():
+        for linha in linhas:
+            parsed = _parse_data_anotacao(linha.get("data_anotacao"))
+            if not parsed:
+                continue
+            chave = (parsed["data_iso"] or parsed["dia_mes"], momento)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            resultado.append({**parsed, "tipo": momento})
+    for safra, linhas in plantio_by_site.get(site, {}).items():
+        for linha in linhas:
+            parsed = _parse_data_anotacao(linha.get("data_plantio"))
+            if not parsed:
+                continue
+            chave = (parsed["data_iso"] or parsed["dia_mes"], "plantio")
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            resultado.append({**parsed, "tipo": "plantio"})
+    return resultado
+
+
 @app.route("/graficos")
 @login_required
 def graficos():
@@ -1378,10 +1438,18 @@ def graficos_dados():
         for d, c in vento_contagem.items()
     }
 
+    produtos_by_site = models.get_all_farm_produtos()
+    plantio_by_site = models.get_all_farm_plantio()
+    anotacoes = {}
+    for site in sites:
+        marcas = _farm_anotacoes(site, produtos_by_site, plantio_by_site)
+        if marcas:
+            anotacoes[site] = marcas
+
     return jsonify({
         "inicio": inicio.isoformat(), "fim": fim.isoformat(), "dias": dias,
         "doencas": doencas_payload, "rosa_ventos": rosa_ventos,
-        "num_dias_previsao": len(dias_previsao),
+        "num_dias_previsao": len(dias_previsao), "anotacoes": anotacoes,
     })
 
 

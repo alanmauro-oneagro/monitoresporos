@@ -108,7 +108,11 @@
     (Open-Meteo) em vez do clima ja observado, so' aparece quando o
     periodo do filtro vai ate perto de hoje. O checkbox "Ocultar Risco de
     Infeccao" acima esconde so' os graficos de risco (o de esporos
-    continua aparecendo). Os filtros acima aplicam sozinhos ao mudar.
+    continua aparecendo). Datas preenchidas na aba Anotações de Safra
+    (TS 🌰, Sulco 〰️, Folha 🍃) e em Dados de Plantio (🌱) aparecem nos
+    dois graficos como uma linha vertical tracejada com o icone do tipo
+    no topo -- passe o mouse na linha pra ver qual fazenda. Os filtros
+    acima aplicam sozinhos ao mudar.
 </p>
 
 <script>
@@ -178,6 +182,97 @@
         },
     };
     Chart.register(esporosExcedidoPlugin);
+
+    // Marcas de TS/Sulco/Folha (aba Anotacoes de Safra) e Plantio (Dados
+    // de Plantio), um icone por tipo pra' identificar de longe sem
+    // precisar passar o mouse. Emoji desenhado direto (nao a imagem
+    // hexagonal do anexo -- so' texto/formas, ver nota da rosa dos
+    // ventos acima sobre nao ter acesso a arquivo de imagem aqui).
+    var ICONE_MOMENTO = { ts: '🌰', sulco: '〰️', folha: '🍃', plantio: '🌱' };
+    var LABEL_MOMENTO = { ts: 'TS', sulco: 'Sulco', folha: 'Folha', plantio: 'Plantio' };
+
+    // Linha vertical tracejada + icone(s) no topo, um por indice do eixo
+    // X que tiver pelo menos uma anotacao (`chart.config.options.plugins
+    // .anotacoes`, ver `calcularAnotacoesPorIndice`) -- fica em
+    // `afterDatasetsDraw` (por cima das barras). O hover/tooltip com o
+    // detalhe (tipo + fazenda) e' de um dataset "fantasma" separado (ver
+    // `montarGraficoEsporos`/`montarGraficoRisco`), que reusa o sistema
+    // de tooltip nativo do Chart.js em vez de hit-test na mao.
+    var anotacoesPlugin = {
+        id: 'anotacoesPlugin',
+        afterDatasetsDraw: function (chart) {
+            var opts = chart.config.options.plugins && chart.config.options.plugins.anotacoes;
+            if (!opts) return;
+            var xScale = chart.scales.x;
+            var area = chart.chartArea;
+            var ctx = chart.ctx;
+            Object.keys(opts).forEach(function (idxStr) {
+                var tipos = Object.keys(opts[idxStr]);
+                if (!tipos.length) return;
+                var x = xScale.getPixelForValue(Number(idxStr));
+                ctx.save();
+                ctx.strokeStyle = 'rgba(73, 80, 87, 0.55)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 3]);
+                ctx.beginPath();
+                ctx.moveTo(x, area.top);
+                ctx.lineTo(x, area.bottom);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                tipos.forEach(function (tipo, i) {
+                    ctx.fillText(ICONE_MOMENTO[tipo] || '•', x, area.top - 2 - i * 14);
+                });
+                ctx.restore();
+            });
+        },
+    };
+    Chart.register(anotacoesPlugin);
+
+    // {site: [{data_iso|dia_mes, tipo}, ...]} (vindo de /graficos/dados)
+    // -> {indice_do_eixo_x: {tipo: [site, ...]}} -- `dia_mes` (anotacao
+    // sem ano, campo e' texto livre) casa contra QUALQUER dia de `dias`
+    // com o mesmo dia/mes (pode marcar mais de um indice se o periodo
+    // do filtro passar de 1 ano).
+    function calcularAnotacoesPorIndice(anotacoesPorSite, dias) {
+        var porIndice = {};
+        var indicesPorDiaMes = {};
+        dias.forEach(function (iso, idx) {
+            var chave = iso.slice(8, 10) + '/' + iso.slice(5, 7);
+            (indicesPorDiaMes[chave] = indicesPorDiaMes[chave] || []).push(idx);
+        });
+        Object.keys(anotacoesPorSite || {}).forEach(function (site) {
+            anotacoesPorSite[site].forEach(function (a) {
+                var indices = a.data_iso ? [dias.indexOf(a.data_iso)] : (indicesPorDiaMes[a.dia_mes] || []);
+                indices.forEach(function (idx) {
+                    if (idx < 0) return;
+                    var doDia = (porIndice[idx] = porIndice[idx] || {});
+                    (doDia[a.tipo] = doDia[a.tipo] || []).push(site);
+                });
+            });
+        });
+        return porIndice;
+    }
+
+    // Dataset "fantasma" (sem barra/linha visivel) que so' carrega os
+    // dados de anotacao pro tooltip nativo do Chart.js -- `type:'line'`
+    // fixo (mesmo o grafico de esporos sendo 'bar') pra' nao entrar na
+    // divisao de largura das barras de verdade (so' dataset tipo 'bar'
+    // conta nisso). `null` nos dias sem anotacao tira a linha da
+    // tooltip (mesmo padrao ja usado no callback `label` abaixo).
+    function montarDatasetAnotacoes(anotacoesPorIndice, labels, yAxisID) {
+        var indices = Object.keys(anotacoesPorIndice);
+        if (!indices.length) return null;
+        return {
+            type: 'line', label: 'Anotações',
+            data: labels.map(function (_, idx) { return anotacoesPorIndice[idx] ? 0 : null; }),
+            pointRadius: 0, borderWidth: 0, showLine: false,
+            borderColor: 'transparent', backgroundColor: 'transparent',
+            yAxisID: yAxisID, isAnotacaoDataset: true, anotacoesPorIndice: anotacoesPorIndice,
+        };
+    }
 
     var container = document.getElementById('graficosContainer');
     var rosaContainer = document.getElementById('rosaVentosContainer');
@@ -501,6 +596,14 @@
     // completo), pra' nao quebrar em varias linhas no mobile.
     function forcarCorNaLegenda(chart) {
         var itens = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+        // Dataset fantasma das anotacoes (ver `montarDatasetAnotacoes`)
+        // nao aparece na legenda -- os icones no topo do grafico ja
+        // identificam o tipo, uma entrada "Anotações" so' ocuparia
+        // espaco.
+        itens = itens.filter(function (item) {
+            var ds = chart.data.datasets[item.datasetIndex];
+            return !(ds && ds.isAnotacaoDataset);
+        });
         itens.forEach(function (item) {
             var ds = chart.data.datasets[item.datasetIndex];
             var cor = ds ? (ds.corLinha || ds.borderColor) : item.fillStyle;
@@ -512,7 +615,19 @@
         return itens;
     }
 
-    function montarGraficoEsporos(doenca, labels) {
+    // Linhas do tooltip nativo do Chart.js pro dataset fantasma das
+    // anotacoes (ver `montarDatasetAnotacoes`) -- uma linha por tipo
+    // ("TS: Grupo PIVA, Dallas"), ou null (esconde o item) no dia sem
+    // anotacao.
+    function linhasTooltipAnotacoes(ctx) {
+        var porTipo = ctx.dataset.anotacoesPorIndice[ctx.dataIndex];
+        if (!porTipo) return null;
+        return Object.keys(porTipo).map(function (tipo) {
+            return (LABEL_MOMENTO[tipo] || tipo) + ': ' + porTipo[tipo].map(nomeCurtoLegenda).join(', ');
+        });
+    }
+
+    function montarGraficoEsporos(doenca, labels, anotacoesPorIndice) {
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4 graf-card';
         wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + ' &mdash; Esporos por M³</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
@@ -545,6 +660,8 @@
                 yAxisID: 'yEsporos',
             };
         });
+        var dsAnotacoes = montarDatasetAnotacoes(anotacoesPorIndice, labels, 'yEsporos');
+        if (dsAnotacoes) datasets.push(dsAnotacoes);
 
         return new Chart(ctx, {
             type: 'bar',
@@ -553,6 +670,10 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
+                // Espaco reservado em cima pros icones de anotacao (TS/
+                // Sulco/Folha/Plantio, ver `anotacoesPlugin`) nao ficarem
+                // cortados no topo do canvas.
+                layout: { padding: { top: 20 } },
                 scales: {
                     yEsporos: {
                         type: 'linear', position: 'left', beginAtZero: true,
@@ -574,9 +695,11 @@
                         },
                     },
                     colorBands: limites,
+                    anotacoes: anotacoesPorIndice,
                     tooltip: {
                         callbacks: {
                             label: function (ctx) {
+                                if (ctx.dataset.isAnotacaoDataset) return linhasTooltipAnotacoes(ctx);
                                 var v = ctx.parsed.y;
                                 if (v === null || v === undefined) return null;
                                 return ctx.dataset.label + ': ' + v;
@@ -588,7 +711,7 @@
         });
     }
 
-    function montarGraficoRisco(doenca, labels, numPrevisao) {
+    function montarGraficoRisco(doenca, labels, numPrevisao, anotacoesPorIndice) {
         var wrap = document.createElement('div');
         wrap.className = 'card shadow-sm mb-4 graf-card';
         wrap.innerHTML = '<div class="card-body"><h6 class="mb-2">' + doenca.doenca_pt + ' &mdash; Risco de Infecção</h6><div class="graf-canvas-wrap"><canvas></canvas></div></div>';
@@ -621,6 +744,8 @@
             yAxisID: 'yRisco',
             direcaoVento: doenca.vento_predominante,
         }];
+        var dsAnotacoes = montarDatasetAnotacoes(anotacoesPorIndice, labels, 'yRisco');
+        if (dsAnotacoes) datasets.push(dsAnotacoes);
 
         return new Chart(ctx, {
             type: 'bar',
@@ -629,6 +754,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
+                layout: { padding: { top: 20 } },
                 scales: {
                     yRisco: {
                         type: 'linear', position: 'left', min: 0, max: 100,
@@ -656,10 +782,12 @@
                     // proprio de faixa; o vermelho fica nos ultimos 20%
                     // (80-100) pra' representar a zona de maior risco.
                     colorBands: { scale: 'yRisco', warn: 50, danger: 80, maximo: 100 },
+                    anotacoes: anotacoesPorIndice,
                     tooltip: {
                         callbacks: {
                             label: function (ctx) {
                                 var ds = ctx.dataset;
+                                if (ds.isAnotacaoDataset) return linhasTooltipAnotacoes(ctx);
                                 var v = ctx.parsed.y;
                                 if (v === null || v === undefined) return null;
                                 var dir = ds.direcaoVento[ctx.dataIndex];
@@ -692,10 +820,14 @@
                     return;
                 }
                 status.textContent = '';
+                // Mesma pra' todo grafico da pagina (TS/Sulco/Folha/
+                // Plantio nao sao especificos de uma doenca) -- calculada
+                // uma unica vez aqui, nao por grafico.
+                var anotacoesPorIndice = calcularAnotacoesPorIndice(data.anotacoes || {}, data.dias);
                 data.doencas.forEach(function (doenca) {
                     charts[doenca.doenca_en] = {
-                        esporos: montarGraficoEsporos(doenca, labels),
-                        risco: montarGraficoRisco(doenca, labels, data.num_dias_previsao),
+                        esporos: montarGraficoEsporos(doenca, labels, anotacoesPorIndice),
+                        risco: montarGraficoRisco(doenca, labels, data.num_dias_previsao, anotacoesPorIndice),
                     };
                 });
                 aplicarVisibilidadeRisco();
