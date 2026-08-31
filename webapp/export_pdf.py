@@ -47,7 +47,7 @@ _ESTILO_RISCO_CLIMATICO = ParagraphStyle(
     "RiscoClimatico", parent=_styles["Normal"], fontSize=10.5, leading=14, spaceAfter=2,
 )
 _ESTILO_PREVISAO_RISCO = ParagraphStyle(
-    "PrevisaoRisco", parent=_styles["Normal"], fontSize=8.5, textColor=colors.grey, spaceAfter=2,
+    "PrevisaoRisco", parent=_styles["Normal"], fontSize=8.5, spaceAfter=2,
 )
 
 _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
@@ -221,7 +221,10 @@ def build_recommendation_pdf(
                 else:
                     partes_prev.append(f"{data_fmt}: {d['chuva_mm']}mm")
             prev = " &nbsp;|&nbsp; ".join(partes_prev)
-            story.append(Paragraph(f"<b>Previsao:</b> {prev}", _ESTILO_NORMAL))
+            # <br/> depois do rotulo -- os 5 dias sozinhos numa linha
+            # cabem sem quebrar no meio de um dia (feio, deixava um
+            # pedacinho orfao numa 2a linha).
+            story.append(Paragraph(f"<b>Previsao:</b><br/>{prev}", _ESTILO_NORMAL))
         story.append(Spacer(1, 4))
 
     story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
@@ -245,11 +248,11 @@ def build_recommendation_pdf(
                     f'<b>{p["data_fmt"]}</b>: {_RISCO_LABELS.get(p["risco"], "")}'
                     for p in previsao_risco
                 )
-                cabecalho.append(Paragraph(f"Risco climático: {dias_txt}", _ESTILO_PREVISAO_RISCO))
+                cabecalho.append(Paragraph(f"Risco de infecção: {dias_txt}", _ESTILO_PREVISAO_RISCO))
             elif risco_label:
                 cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
                 cabecalho.append(Paragraph(
-                    f'<font color="{cor_risco}">●</font> Risco climático: <b>{risco_label}</b>',
+                    f'<font color="{cor_risco}">●</font> Risco de infecção: <b>{risco_label}</b>',
                     _ESTILO_RISCO_CLIMATICO,
                 ))
             elif d.get("cientifico"):

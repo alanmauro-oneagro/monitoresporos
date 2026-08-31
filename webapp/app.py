@@ -582,30 +582,34 @@ def _risco_label(risco):
 
 
 def _calc_previsao_risco_germinacao(disease, weather):
-    """Extensao do 'Risco climático' (`_calc_risco_germinacao`) pros
+    """Extensao do Risco de Infeccao (`_calc_risco_germinacao`) pros
     proximos 5 dias, pro WhatsApp e o PDF -- mesma conta do grafico de
     Risco de Infeccao da aba Graficos (`calc_risco_diario_pct`, que usa a
     previsao horaria da Open-Meteo em `previsao_horaria_por_dia`, ja
     incluida em `weather` por `_get_weather_for_site`), so' que o
     percentual e' convertido pro rotulo Baixo/Médio/Alto (mesmas faixas:
     100%+ = Alto, 50%+ = Medio, resto = Baixo) em vez do numero bruto --
-    sem percentual nenhum aparecendo pro produtor. `data_fmt` (DD/MM) usa
-    a MESMA data da previsao de chuva (`weather["previsao_5_dias"]`), pra
-    as duas linhas do relatorio baterem no mesmo dia. Comeca amanha e
-    para no primeiro dia sem previsao (ou sem limite cadastrado pra
-    doenca). Retorna [] quando falta previsao ou limite -- nesse caso
-    quem chama cai de volta pro "Risco climático" de agora
-    (`_calc_risco_germinacao`, baseado no horario ja observado)."""
+    sem percentual nenhum aparecendo pro produtor. Os dias vem de
+    `weather["previsao_5_dias"]` (NAO recalculados a partir de
+    `_hoje_cuiaba()`) pra' bater exatamente com os mesmos dias da linha
+    de previsao de chuva -- `_hoje_cuiaba()` assume um deslocamento fixo
+    (UTC-4) igual pra toda fazenda, enquanto a Open-Meteo calcula o "hoje"
+    de cada `previsao_5_dias` pelo fuso horario real da coordenada
+    (`timezone: "auto"`); fazenda fora do fuso de Cuiaba divergia 1 dia
+    entre as duas linhas. Retorna [] quando falta previsao ou limite
+    cadastrado -- nesse caso quem chama cai de volta pro Risco de
+    Infeccao "de agora" (`_calc_risco_germinacao`, baseado no horario ja
+    observado)."""
     if not weather:
         return []
-    previsao = weather.get("previsao_horaria_por_dia") or {}
-    if not previsao:
+    previsao_dias = weather.get("previsao_5_dias") or []
+    previsao_horas = weather.get("previsao_horaria_por_dia") or {}
+    if not previsao_dias or not previsao_horas:
         return []
-    hoje = _hoje_cuiaba()
     resultado = []
-    for i in range(1, 6):
-        dia = hoje + timedelta(days=i)
-        horas = previsao.get(dia.isoformat())
+    for dia in previsao_dias:
+        data_iso = dia.get("data")
+        horas = previsao_horas.get(data_iso)
         if not horas:
             continue
         pct = calc_risco_diario_pct(disease, horas)
@@ -617,7 +621,7 @@ def _calc_previsao_risco_germinacao(disease, weather):
             risco = "amarelo"
         else:
             risco = "verde"
-        resultado.append({"data_fmt": dia.strftime("%d/%m"), "risco": risco})
+        resultado.append({"data_fmt": f"{data_iso[8:10]}/{data_iso[5:7]}", "risco": risco})
     return resultado
 
 
@@ -735,18 +739,18 @@ def _format_whatsapp_message(site, diseases, weather=None, produtos=None, is_vir
         previsao_risco = d.get("previsao_risco")
         if not previsao_risco:
             # Sem previsao (falha da Open-Meteo, ou doenca sem limite
-            # cadastrado) -- cai pro Risco climático "de agora", baseado
+            # cadastrado) -- cai pro Risco de Infeccao "de agora", baseado
             # no horario ja observado (`_calc_risco_germinacao`).
             risco_label = _risco_label(d.get("risco"))
             if risco_label:
-                cabecalho += f" // Risco climático: {risco_label}"
+                cabecalho += f" // Risco de infecção: {risco_label}"
         lines.append(cabecalho)
         if previsao_risco:
             dias_txt = " · ".join(
                 f"{_RISCO_EMOJI.get(p['risco'], '')} *{p['data_fmt']}*: {_risco_label(p['risco'])}"
                 for p in previsao_risco
             )
-            lines.append(f"Risco climático: {dias_txt}")
+            lines.append(f"Risco de infecção: {dias_txt}")
         if d.get("germinacao"):
             lines.append(f"({d['cientifico']} — germinação: {d['germinacao']})")
         elif d.get("cientifico"):
