@@ -34,8 +34,8 @@
     clique para abrir direto aquela fazenda na aba Fazendas. As
     linhas amarelas mostram as divisas de pais e estado, as linhas brancas
     mostram as divisas de municipio (fonte: IBGE -- pode levar alguns
-    segundos para carregar) e a linha laranja e' a rodovia BR-163 de ponta
-    a ponta (fonte: OpenStreetMap). Os pinos azuis 📡 sao so as estacoes do
+    segundos para carregar) e as linhas laranjas sao as rodovias federais e
+    estaduais da regiao (fonte: OpenStreetMap). Os pinos azuis 📡 sao so as estacoes do
     INMET que estao realmente sendo usadas como base pra alguma fazenda
     (a mais proxima de cada uma, ou a escolhida manualmente na aba
     Fazendas) -- so como referencia de localizacao/cidade, os dados de
@@ -199,24 +199,37 @@
         return Object.keys(codes);
     }
 
-    // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
-    // (leve, um pedido so) e municipios (pesado -- so busca dos estados
-    // onde realmente tem fazenda ou estacao, senao seria o Brasil inteiro).
-    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
-    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
-        .then(function (ufGeojson) {
-            if (!ufGeojson) return;
-            findUfCodes(ufGeojson, ufReferencePoints).forEach(function (codarea) {
-                addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
-            });
-        });
+    // Sigla de cada UF a partir do codigo IBGE (codarea) -- tabela fixa
+    // oficial (nunca muda), usada so' pra montar o filtro de area da
+    // consulta de rodovias no Overpass (precisa da sigla, o IBGE so'
+    // devolve o codigo numerico).
+    var SIGLA_POR_CODAREA = {
+        '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+        '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL',
+        '28': 'SE', '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP', '41': 'PR',
+        '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF',
+    };
 
-    // BR-163 (Guaranta do Norte/PA ate a fronteira em Mundo Novo/MS) via
-    // Overpass (dados do OpenStreetMap) -- busca todos os trechos com essa
-    // referencia e desenha cada um como uma linha laranja, ponta a ponta.
-    var OVERPASS_URL = 'https://overpass-api.de/api/interpreter?data=' +
-        encodeURIComponent('[out:json][timeout:90];way["ref"="BR-163"];out geom;');
-    fetch(OVERPASS_URL)
+    // Rodovias federais (BR-xxx, tag highway=trunk no OpenStreetMap) e
+    // estaduais (ex. MT-xxx, tag highway=primary) via Overpass, recortadas
+    // pela area administrativa oficial de cada UF com fazenda/estacao (nao
+    // uma caixa retangular -- testado que uma caixa cobrindo so' as
+    // fazendas ja trazia 84 mil trechos de rodovias de estados bem
+    // distantes tambem cobertos pela caixa; por UF real ficou em ~3 mil
+    // por estado, so' das rodovias que realmente passam por ele). Filtra
+    // por ter um "ref" (numero da rodovia) pra nao trazer rua sem nome.
+    function buscarRodovias(codareas) {
+        var siglas = codareas.map(function (c) { return SIGLA_POR_CODAREA[c]; }).filter(Boolean);
+        if (!siglas.length) return;
+        var areas = siglas.map(function (sigla, i) {
+            return 'area["ISO3166-2"="BR-' + sigla + '"]->.a' + i + ';';
+        }).join('');
+        var buscas = siglas.map(function (sigla, i) {
+            return 'way["highway"~"^(trunk|primary)$"]["ref"](area.a' + i + ');';
+        }).join('');
+        var query = '[out:json][timeout:90];' + areas + '(' + buscas + ');out geom;';
+        var url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+        fetch(url)
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (data) {
             if (!data || !data.elements) return;
@@ -226,7 +239,24 @@
                 L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
             });
         })
-        .catch(function () { /* Overpass fora do ar ou sem internet -- so nao mostra a rodovia */ });
+        .catch(function () { /* Overpass fora do ar ou sem internet -- so nao mostra as rodovias */ });
+    }
+
+    // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
+    // (leve, um pedido so) e municipios (pesado -- so busca dos estados
+    // onde realmente tem fazenda ou estacao, senao seria o Brasil inteiro).
+    // As rodovias (laranja) seguem a mesma regra: so' dos estados com
+    // fazenda/estacao.
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
+        .then(function (ufGeojson) {
+            if (!ufGeojson) return;
+            var codareas = findUfCodes(ufGeojson, ufReferencePoints);
+            codareas.forEach(function (codarea) {
+                addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
+            });
+            buscarRodovias(codareas);
+        });
 
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
     var latlngs = sites.map(function (s) { return [s.lat, s.lon]; });
