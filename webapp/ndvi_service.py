@@ -1,0 +1,228 @@
+"""Busca de imagens NDVI (Sentinel-2, via Copernicus Data Space Ecosystem)
+pro contorno KML cadastrado de cada fazenda na aba NDVI.
+
+O SICAR (onde o contorno da propriedade e' obtido a partir do CAR) nao tem
+API publica de consulta por ponto -- por isso o contorno precisa ser baixado
+manualmente em consulta.car.gov.br (ou consultapublica.car.gov.br) e colado/
+enviado aqui uma vez por fazenda; a partir dai a busca do NDVI e' automatica.
+
+Contas Copernicus tambem nao podem ser criadas por este app -- o usuario
+precisa criar uma conta gratuita em https://dataspace.copernicus.eu/, gerar
+um "OAuth client" (Dashboard > User Settings > OAuth clients) e definir
+COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET nas variaveis de ambiente
+(mesmo padrao usado por ADMIN_BOOTSTRAP_USERNAME/BIOSCOUT_WEB_SECRET). Sem
+essas variaveis, `buscar_ndvi` devolve (None, mensagem) em vez de quebrar."""
+import json
+import os
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
+
+TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
+
+TOKEN_CACHE_MARGIN_SECONDS = 60  # renova um pouco antes do token expirar de verdade
+
+KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
+
+_token_cache = {"token": None, "expira_em": 0.0}
+
+# NDVI = (B08 - B04) / (B08 + B04). SCL (Scene Classification, Sentinel-2 L2A):
+# 3 sombra de nuvem, 8/9 nuvem media/alta, 10 cirrus, 11 neve -- tudo isso vira
+# transparente em vez de colorido, pra nao mostrar "vegetacao" onde na verdade
+# tem nuvem cobrindo a imagem.
+EVALSCRIPT_NDVI = """
+//VERSION=3
+function setup() {
+  return {
+    input: [{ bands: ["B04", "B08", "SCL", "dataMask"] }],
+    output: { bands: 4 }
+  };
+}
+
+var RAMPA = [
+  [-1.0, [0.05, 0.05, 0.05]],
+  [0.0,  [0.65, 0.35, 0.15]],
+  [0.2,  [0.90, 0.80, 0.40]],
+  [0.4,  [0.65, 0.85, 0.30]],
+  [0.6,  [0.20, 0.65, 0.15]],
+  [1.0,  [0.00, 0.30, 0.00]]
+];
+
+function corDaRampa(v) {
+  for (var i = 1; i < RAMPA.length; i++) {
+    if (v <= RAMPA[i][0]) {
+      var v0 = RAMPA[i - 1][0], c0 = RAMPA[i - 1][1];
+      var v1 = RAMPA[i][0], c1 = RAMPA[i][1];
+      var t = (v - v0) / (v1 - v0);
+      return [
+        c0[0] + t * (c1[0] - c0[0]),
+        c0[1] + t * (c1[1] - c0[1]),
+        c0[2] + t * (c1[2] - c0[2])
+      ];
+    }
+  }
+  return RAMPA[RAMPA.length - 1][1];
+}
+
+function evaluatePixel(s) {
+  var nublado = [3, 8, 9, 10, 11].indexOf(s.SCL) !== -1;
+  if (s.dataMask === 0 || nublado) {
+    return [0, 0, 0, 0];
+  }
+  var ndvi = (s.B08 - s.B04) / (s.B08 + s.B04 + 1e-6);
+  var cor = corDaRampa(Math.max(-1, Math.min(1, ndvi)));
+  return [cor[0], cor[1], cor[2], 1];
+}
+"""
+
+
+def credenciais_configuradas():
+    return bool(os.environ.get("COPERNICUS_CLIENT_ID") and os.environ.get("COPERNICUS_CLIENT_SECRET"))
+
+
+def parse_kml_poligono(kml_texto):
+    """Extrai o anel externo de todo <Polygon> do KML, como lista de aneis
+    no formato [[lon, lat], ...] (GeoJSON, sem altitude). Aceita KML com ou
+    sem namespace (alguns exports, ex. SICAR, omitem o xmlns). Levanta
+    ValueError com mensagem amigavel se nao achar nenhum poligono valido."""
+    texto = (kml_texto or "").strip()
+    if not texto:
+        raise ValueError("Arquivo KML vazio.")
+    try:
+        root = ET.fromstring(texto)
+    except ET.ParseError as exc:
+        raise ValueError(f"KML invalido: {exc}") from exc
+
+    def achar_todos(tag):
+        achados = root.findall(f".//kml:{tag}", KML_NS)
+        return achados if achados else root.findall(f".//{tag}")
+
+    aneis = []
+    for poligono in achar_todos("Polygon"):
+        outer = poligono.find("kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", KML_NS)
+        if outer is None:
+            outer = poligono.find("outerBoundaryIs/LinearRing/coordinates")
+        if outer is None or not outer.text:
+            continue
+        anel = []
+        for ponto in outer.text.strip().split():
+            partes = ponto.split(",")
+            if len(partes) < 2:
+                continue
+            try:
+                lon, lat = float(partes[0]), float(partes[1])
+            except ValueError:
+                continue
+            anel.append([lon, lat])
+        if len(anel) >= 3:
+            aneis.append(anel)
+
+    if not aneis:
+        raise ValueError("Nenhum poligono encontrado no KML (esperado <Polygon><outerBoundaryIs>).")
+    return aneis
+
+
+def _bbox(aneis):
+    lons = [pt[0] for anel in aneis for pt in anel]
+    lats = [pt[1] for anel in aneis for pt in anel]
+    return min(lons), min(lats), max(lons), max(lats)
+
+
+def _obter_token():
+    agora = time.time()
+    if _token_cache["token"] and agora < _token_cache["expira_em"]:
+        return _token_cache["token"]
+
+    client_id = os.environ.get("COPERNICUS_CLIENT_ID")
+    client_secret = os.environ.get("COPERNICUS_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return None
+
+    corpo = urllib.parse.urlencode({
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }).encode()
+    req = urllib.request.Request(TOKEN_URL, data=corpo, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resposta = json.load(resp)
+    except Exception:
+        return None
+
+    token = resposta.get("access_token")
+    if not token:
+        return None
+    _token_cache["token"] = token
+    _token_cache["expira_em"] = agora + resposta.get("expires_in", 300) - TOKEN_CACHE_MARGIN_SECONDS
+    return token
+
+
+def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
+    """Busca a imagem NDVI (menor cobertura de nuvem nos ultimos
+    `dias_historico` dias) pro poligono dado. Devolve (bytes_png, None) em
+    caso de sucesso, ou (None, mensagem_de_erro) -- nunca levanta excecao,
+    pra rota poder mostrar uma mensagem amigavel em vez de quebrar a
+    pagina."""
+    token = _obter_token()
+    if not token:
+        return None, (
+            "Credenciais da Copernicus Data Space Ecosystem nao configuradas "
+            "(variaveis de ambiente COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET)."
+        )
+
+    min_lon, min_lat, max_lon, max_lat = _bbox(aneis)
+    largura_graus = max(max_lon - min_lon, 0.0005)
+    altura_graus = max(max_lat - min_lat, 0.0005)
+    altura_px = max(1, round(largura_px * altura_graus / largura_graus))
+
+    hoje = datetime.now(timezone.utc).date()
+    desde = hoje - timedelta(days=dias_historico)
+
+    corpo = {
+        "input": {
+            "bounds": {
+                "geometry": {"type": "Polygon", "coordinates": aneis},
+                "properties": {"crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"},
+            },
+            "data": [{
+                "type": "sentinel-2-l2a",
+                "dataFilter": {
+                    "timeRange": {
+                        "from": f"{desde.isoformat()}T00:00:00Z",
+                        "to": f"{hoje.isoformat()}T23:59:59Z",
+                    },
+                    "mosaickingOrder": "leastCC",
+                },
+            }],
+        },
+        "output": {
+            "width": largura_px,
+            "height": altura_px,
+            "responses": [{"identifier": "default", "format": {"type": "image/png"}}],
+        },
+        "evalscript": EVALSCRIPT_NDVI,
+    }
+
+    req = urllib.request.Request(
+        PROCESS_URL,
+        data=json.dumps(corpo).encode(),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "image/png",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read(), None
+    except urllib.error.HTTPError as exc:
+        detalhe = exc.read().decode(errors="replace")[:300]
+        return None, f"Copernicus recusou o pedido (HTTP {exc.code}): {detalhe}"
+    except Exception as exc:
+        return None, f"Falha ao buscar imagem NDVI: {exc}"

@@ -39,6 +39,7 @@ import whatsapp
 import weather_forecast
 import inmet_stations
 import virtual_farms
+import ndvi_service
 from data_reader import read_sites, get_dashboard_data
 
 # Fuso horario do site: Cuiaba-MT (America/Cuiaba, UTC-4 o ano todo -- Brasil
@@ -2148,6 +2149,94 @@ def fazendas():
         "fazendas.html", sites_data=sites_data, no_access=False,
         weekday_labels=list(enumerate(WEEKDAY_LABELS)),
     )
+
+
+@app.route("/ndvi")
+@login_required
+def ndvi():
+    virtual_names = models.virtual_farm_site_names()
+    if current_user.is_admin:
+        sites = sorted(set(read_sites()) | virtual_names)
+    else:
+        sites = sorted(models.get_user_permitted_site_names(int(current_user.id)))
+        if not sites:
+            return render_template("ndvi.html", sites_data=[], no_access=True, credenciais_ok=True)
+
+    areas = models.get_all_farm_ndvi_areas()
+    sites_data = [
+        {
+            "site": site,
+            "area": areas.get(site),
+        }
+        for site in sites
+    ]
+    return render_template(
+        "ndvi.html", sites_data=sites_data, no_access=False,
+        credenciais_ok=ndvi_service.credenciais_configuradas(),
+    )
+
+
+def _checar_acesso_site(site_name):
+    if not current_user.is_admin:
+        allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
+        if site_name not in allowed:
+            abort(403)
+
+
+@app.route("/ndvi/area/save", methods=["POST"])
+@login_required
+def save_ndvi_area():
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    arquivo = request.files.get("kml_file")
+    if arquivo and arquivo.filename:
+        kml_texto = arquivo.read().decode("utf-8", errors="replace")
+    else:
+        kml_texto = request.form.get("kml_texto", "")
+    try:
+        ndvi_service.parse_kml_poligono(kml_texto)
+    except ValueError as exc:
+        return _save_response(f"Nao foi possivel salvar o contorno de '{site_name}': {exc}", "ndvi", ok=False)
+    models.set_farm_ndvi_area(site_name, kml_texto)
+    return _save_response(f"Contorno de '{site_name}' salvo -- agora e' so' clicar em \"Gerar NDVI\".", "ndvi")
+
+
+@app.route("/ndvi/area/delete", methods=["POST"])
+@login_required
+def delete_ndvi_area():
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    models.delete_farm_ndvi_area(site_name)
+    return _save_response(f"Contorno de '{site_name}' removido.", "ndvi")
+
+
+@app.route("/ndvi/gerar", methods=["POST"])
+@login_required
+def gerar_ndvi():
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    area = models.get_farm_ndvi_area(site_name)
+    if not area:
+        return _save_response(f"'{site_name}' ainda nao tem contorno KML cadastrado.", "ndvi", ok=False)
+    try:
+        aneis = ndvi_service.parse_kml_poligono(area["kml"])
+    except ValueError as exc:
+        return _save_response(f"Contorno de '{site_name}' invalido: {exc}", "ndvi", ok=False)
+    imagem, erro = ndvi_service.buscar_ndvi(aneis)
+    if erro:
+        return _save_response(f"Nao foi possivel gerar o NDVI de '{site_name}': {erro}", "ndvi", ok=False)
+    models.save_farm_ndvi_image(site_name, imagem)
+    return _save_response(f"NDVI de '{site_name}' atualizado.", "ndvi")
+
+
+@app.route("/ndvi/imagem/<path:site_name>")
+@login_required
+def imagem_ndvi(site_name):
+    _checar_acesso_site(site_name)
+    imagem = models.get_farm_ndvi_image(site_name)
+    if not imagem:
+        abort(404)
+    return send_file(io.BytesIO(imagem), mimetype="image/png")
 
 
 @app.route("/recommendations/cultura/save", methods=["POST"])

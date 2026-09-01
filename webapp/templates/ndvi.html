@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}NDVI - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">NDVI (Sentinel-2)</h4>
+<p class="text-muted small mb-3">
+    Cadastre o contorno da fazenda (arquivo KML baixado do
+    <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener">SICAR</a>,
+    a partir do CAR da propriedade) e gere a imagem NDVI mais recente pra essa area,
+    calculada em cima de imagens Sentinel-2 (Copernicus).
+</p>
+
+{% if not credenciais_ok %}
+<div class="alert alert-warning">
+    Busca de NDVI ainda nao configurada neste servidor -- faltam as credenciais da
+    Copernicus Data Space Ecosystem (variaveis de ambiente
+    <code>COPERNICUS_CLIENT_ID</code> / <code>COPERNICUS_CLIENT_SECRET</code>).
+    O contorno de cada fazenda pode ser cadastrado normalmente; "Gerar NDVI" so' vai
+    funcionar depois que essas variaveis forem definidas.
+</div>
+{% endif %}
+
+{% if no_access %}
+<div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
+{% elif not sites_data %}
+<div class="alert alert-info">Nenhuma fazenda cadastrada ainda.</div>
+{% else %}
+{% for site_group in sites_data %}
+<div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
+    <div class="card-body">
+        <div class="fw-bold mb-2">{{ site_group.site }}</div>
+        <div class="row g-3">
+            <div class="col-12 col-lg-6">
+                <form method="post" action="{{ url_for('save_ndvi_area') }}" enctype="multipart/form-data">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="small text-muted mb-1" for="kml_file_{{ loop.index0 }}">Arquivo KML</label>
+                    <input type="file" class="form-control form-control-sm mb-2" id="kml_file_{{ loop.index0 }}" name="kml_file" accept=".kml">
+                    <label class="small text-muted mb-1" for="kml_texto_{{ loop.index0 }}">...ou cole o conteudo do KML aqui</label>
+                    <textarea class="form-control form-control-sm mb-2" id="kml_texto_{{ loop.index0 }}" name="kml_texto" rows="4" placeholder="&lt;kml&gt;...&lt;/kml&gt;">{{ site_group.area.kml if site_group.area else '' }}</textarea>
+                    <button type="submit" class="btn btn-sm btn-success">Salvar contorno</button>
+                    {% if site_group.area %}
+                    <span class="small text-muted ms-2">Salvo em {{ site_group.area.atualizado_em | data_br }}</span>
+                    {% endif %}
+                </form>
+                {% if site_group.area %}
+                <form method="post" action="{{ url_for('delete_ndvi_area') }}" class="mt-2" onsubmit="return confirm('Remover o contorno de {{ site_group.site }}?');">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Remover contorno</button>
+                </form>
+                {% endif %}
+            </div>
+            <div class="col-12 col-lg-6">
+                {% if site_group.area %}
+                <form method="post" action="{{ url_for('gerar_ndvi') }}" class="mb-2">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <button type="submit" class="btn btn-sm btn-primary" {% if not credenciais_ok %}disabled{% endif %}>Gerar NDVI</button>
+                    {% if site_group.area.imagem_gerada_em %}
+                    <span class="small text-muted ms-2">Ultima imagem: {{ site_group.area.imagem_gerada_em | data_br }}</span>
+                    {% endif %}
+                </form>
+                {% if site_group.area.imagem_gerada_em %}
+                <img src="{{ url_for('imagem_ndvi', site_name=site_group.site) }}" class="img-fluid border rounded" alt="NDVI de {{ site_group.site }}">
+                {% else %}
+                <div class="text-muted small">Nenhuma imagem gerada ainda.</div>
+                {% endif %}
+                {% else %}
+                <div class="text-muted small">Cadastre o contorno KML pra poder gerar o NDVI.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}
