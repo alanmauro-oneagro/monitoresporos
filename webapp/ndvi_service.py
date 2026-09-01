@@ -305,10 +305,23 @@ def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
     hoje = datetime.now(timezone.utc).date()
     desde = hoje - timedelta(days=dias_historico)
 
+    if len(aneis) == 1:
+        # GeoJSON Polygon: 1 anel externo (buracos exigiriam aneis
+        # aninhados DENTRO dele, o que nao suportamos).
+        geometria = {"type": "Polygon", "coordinates": [aneis[0]]}
+    else:
+        # Mais de 1 anel = propriedade com partes separadas (ex. talhoes
+        # nao contiguos no mesmo registro CAR) -- cada anel vira um Polygon
+        # independente dentro de um MultiPolygon. Empilhar todos como se
+        # fossem "buracos" de um unico Polygon (como era antes) e' invalido
+        # quando os aneis nao estao aninhados um dentro do outro, e a
+        # Copernicus rejeitava com "Polygon rings are intersecting".
+        geometria = {"type": "MultiPolygon", "coordinates": [[anel] for anel in aneis]}
+
     corpo = {
         "input": {
             "bounds": {
-                "geometry": {"type": "Polygon", "coordinates": aneis},
+                "geometry": geometria,
                 "properties": {"crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"},
             },
             "data": [{
