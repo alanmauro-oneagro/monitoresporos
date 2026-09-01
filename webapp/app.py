@@ -57,6 +57,7 @@ if hasattr(time, "tzset"):
 WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda ... 6=Domingo (Python date.weekday())
 WHATSAPP_SEND_HOUR = 7  # hora do dia (0-23) em que o envio automatico roda
 WEATHER_CACHE_TTL_SECONDS = 30 * 60  # nao busca de novo na Open-Meteo antes disso, por fazenda
+NDVI_PREVIEW_TTL_SECONDS = 30 * 60  # pre-visualizacao de NDVI expira sozinha se ninguem confirmar/descartar
 DADOS_AVISO_DIAS = 7  # ate isso = verde (ok); acima = aviso (amarelo)
 DADOS_BLOQUEIO_DIAS = 15  # acima disso (16+ dias) = vermelho, bloqueia envio/copia da recomendacao
 
@@ -136,6 +137,7 @@ def _resolve_site_cards(site, translations):
 
 
 _weather_cache = {}  # site_name -> (timestamp, dados)
+_ndvi_preview_cache = {}  # site_name -> (timestamp, {"imagem":..., "data":..., "cobertura_nuvens":...})
 
 
 def _get_weather_for_site(site, coords):
@@ -2151,6 +2153,20 @@ def fazendas():
     )
 
 
+def _get_ndvi_preview(site_name):
+    """Devolve a pre-visualizacao pendente desse site (dict) ou None -- se
+    tiver expirado (`NDVI_PREVIEW_TTL_SECONDS`), remove do cache e devolve
+    None tambem, como se nunca tivesse existido."""
+    entrada = _ndvi_preview_cache.get(site_name)
+    if not entrada:
+        return None
+    timestamp, dados = entrada
+    if time.time() - timestamp > NDVI_PREVIEW_TTL_SECONDS:
+        _ndvi_preview_cache.pop(site_name, None)
+        return None
+    return dados
+
+
 @app.route("/ndvi")
 @login_required
 def ndvi():
@@ -2170,6 +2186,7 @@ def ndvi():
             "area": areas.get(site),
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
+            "preview": _get_ndvi_preview(site),
         }
         for site in sites
     ]
@@ -2219,9 +2236,9 @@ def delete_ndvi_area():
     return _save_response(f"Contorno de '{site_name}' removido.", "ndvi")
 
 
-@app.route("/ndvi/gerar", methods=["POST"])
+@app.route("/ndvi/pre_visualizar", methods=["POST"])
 @login_required
-def gerar_ndvi():
+def pre_visualizar_ndvi():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
     area = models.get_farm_ndvi_area(site_name)
@@ -2245,15 +2262,45 @@ def gerar_ndvi():
     resultado, erro = ndvi_service.buscar_ndvi(aneis, data_alvo=data_alvo)
     if erro:
         return _save_response(f"Nao foi possivel gerar o NDVI de '{site_name}': {erro}", "ndvi", ok=False)
-    models.add_farm_ndvi_historico(
-        site_name, resultado["data"].isoformat(), resultado["imagem"], resultado["cobertura_nuvens"]
-    )
-    models.save_farm_ndvi_image(site_name, resultado["imagem"])
-    mensagem = f"NDVI de '{site_name}' gerado (cena de {resultado['data'].strftime('%d/%m/%Y')}"
+    _ndvi_preview_cache[site_name] = (time.time(), resultado)
+    mensagem = f"Pre-visualizacao de '{site_name}' pronta (cena de {resultado['data'].strftime('%d/%m/%Y')}"
     if resultado["cobertura_nuvens"] is not None:
         mensagem += f", {resultado['cobertura_nuvens']:.0f}% de nuvens"
-    mensagem += ") e adicionado a galeria."
+    mensagem += ") -- confira antes de salvar na galeria."
     return _save_response(mensagem, "ndvi")
+
+
+@app.route("/ndvi/pre_visualizar/imagem/<path:site_name>")
+@login_required
+def imagem_ndvi_preview(site_name):
+    _checar_acesso_site(site_name)
+    preview = _get_ndvi_preview(site_name)
+    if not preview:
+        abort(404)
+    return send_file(io.BytesIO(preview["imagem"]), mimetype="image/png")
+
+
+@app.route("/ndvi/pre_visualizar/confirmar", methods=["POST"])
+@login_required
+def confirmar_ndvi_preview():
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    preview = _get_ndvi_preview(site_name)
+    if not preview:
+        return _save_response("Essa pre-visualizacao expirou -- gere de novo.", "ndvi", ok=False)
+    models.add_farm_ndvi_historico(site_name, preview["data"].isoformat(), preview["imagem"], preview["cobertura_nuvens"])
+    models.save_farm_ndvi_image(site_name, preview["imagem"])
+    _ndvi_preview_cache.pop(site_name, None)
+    return _save_response(f"NDVI de '{site_name}' salvo na galeria.", "ndvi")
+
+
+@app.route("/ndvi/pre_visualizar/descartar", methods=["POST"])
+@login_required
+def descartar_ndvi_preview():
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    _ndvi_preview_cache.pop(site_name, None)
+    return _save_response(f"Pre-visualizacao de '{site_name}' descartada.", "ndvi")
 
 
 @app.route("/ndvi/imagem/<path:site_name>")

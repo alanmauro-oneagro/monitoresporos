@@ -58,13 +58,38 @@
             </div>
             <div class="col-12 col-lg-6">
                 {% if site_group.area %}
-                <form method="post" action="{{ url_for('gerar_ndvi') }}" class="mb-2 d-flex align-items-center flex-wrap gap-2">
+                <form method="post" action="{{ url_for('pre_visualizar_ndvi') }}" class="mb-2 d-flex align-items-center flex-wrap gap-2">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <label class="small text-muted mb-0" for="data_alvo_{{ loop.index0 }}">Data (opcional):</label>
                     <input type="date" class="form-control form-control-sm" style="width: auto;" id="data_alvo_{{ loop.index0 }}" name="data_alvo" max="{{ hoje }}" min="2015-06-23">
-                    <button type="submit" class="btn btn-sm btn-primary" {% if not credenciais_ok %}disabled{% endif %}>Gerar NDVI</button>
+                    <button type="submit" class="btn btn-sm btn-primary" {% if not credenciais_ok %}disabled{% endif %}>Pre-visualizar</button>
                 </form>
                 <div class="text-muted small mb-2">Deixe a data em branco pra buscar a imagem mais recente disponivel.</div>
+                {% if site_group.preview %}
+                <div class="card bg-light mb-3">
+                    <div class="card-body py-2">
+                        <div class="fw-bold small mb-1">Pre-visualizacao</div>
+                        <div class="small text-muted mb-2">
+                            Cena de {{ site_group.preview.data | data_br }}
+                            {% if site_group.preview.cobertura_nuvens is not none %}-- {{ "%.0f"|format(site_group.preview.cobertura_nuvens) }}% de nuvens{% endif %}
+                            -- ainda nao esta na galeria.
+                        </div>
+                        <img src="{{ url_for('imagem_ndvi_preview', site_name=site_group.site) }}"
+                             style="max-width: 100%; max-height: 200px;" class="border rounded d-block mb-2"
+                             alt="Pre-visualizacao NDVI de {{ site_group.site }}">
+                        <div class="d-flex gap-2">
+                            <form method="post" action="{{ url_for('confirmar_ndvi_preview') }}">
+                                <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                                <button type="submit" class="btn btn-sm btn-success">Salvar na galeria</button>
+                            </form>
+                            <form method="post" action="{{ url_for('descartar_ndvi_preview') }}">
+                                <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Descartar</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
                 {% if site_group.historico %}
                 <div class="d-flex gap-2 overflow-auto pb-1" style="max-width: 100%;">
                     {% for item in site_group.historico %}

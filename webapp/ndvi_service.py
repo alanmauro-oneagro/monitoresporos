@@ -34,7 +34,7 @@ PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 CATALOG_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search"
 
 TOKEN_CACHE_MARGIN_SECONDS = 60  # renova um pouco antes do token expirar de verdade
-COBERTURA_NUVENS_MAXIMA = 70  # % -- cenas com mais nuvem que isso sao descartadas
+COBERTURA_NUVENS_MAXIMA = 5  # % -- cenas com mais nuvem que isso sao descartadas
 
 KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 
@@ -488,10 +488,12 @@ def _desenhar_data(imagem_bytes, data):
     return saida.getvalue()
 
 
-def buscar_ndvi(aneis, data_alvo=None, janela_dias=45, largura_px=512):
+def buscar_ndvi(aneis, data_alvo=None, janela_dias=90, largura_px=512):
     """Busca a cena Sentinel-2 mais proxima de `data_alvo` (ou de hoje, se
     nao informada) dentro de uma janela de +/-`janela_dias`, descartando
-    cenas com mais de `COBERTURA_NUVENS_MAXIMA`% de nuvens -- primeiro
+    cenas com mais de `COBERTURA_NUVENS_MAXIMA`% de nuvens -- com o limite
+    tao baixo (5%), a janela precisa ser mais larga que antes pra ter chance
+    de achar alguma cena boa o suficiente. Primeiro
     consulta a Catalog API (metadado leve) pra escolher a melhor cena, so'
     DEPOIS pede a imagem de verdade (Process API) pra essa cena especifica,
     em vez de so' confiar no "menor nuvem" automatico da Process API (que
