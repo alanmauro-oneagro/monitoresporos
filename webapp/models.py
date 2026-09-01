@@ -281,6 +281,15 @@ def init_db():
             imagem BLOB,
             imagem_gerada_em TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS farm_ndvi_historico (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_name TEXT NOT NULL,
+            data_alvo TEXT NOT NULL,
+            imagem BLOB NOT NULL,
+            gerado_em TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_farm_ndvi_historico_site ON farm_ndvi_historico(site_name);
         """
     )
     # farm_sulco_plantio (campo unico de texto livre pro sulco de plantio)
@@ -1053,6 +1062,51 @@ def get_farm_ndvi_image(site_name):
     return row["imagem"] if row and row["imagem"] else None
 
 
+def add_farm_ndvi_historico(site_name, data_alvo, imagem_bytes):
+    """Guarda mais uma imagem no historico (nao sobrescreve as anteriores)
+    -- cada "Gerar NDVI" vira uma entrada nova na galeria da aba NDVI,
+    permitindo comparar datas diferentes em vez de so' ver a mais recente."""
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO farm_ndvi_historico (site_name, data_alvo, imagem, gerado_em) VALUES (?, ?, ?, ?)",
+        (site_name, data_alvo, imagem_bytes, _agora_cuiaba()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_farm_ndvi_historico(site_name):
+    """Lista (sem os bytes da imagem, que pode ser grande) ordenada da mais
+    recente pra mais antiga -- usada pra montar a galeria de miniaturas."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, data_alvo, gerado_em FROM farm_ndvi_historico WHERE site_name = ? ORDER BY data_alvo DESC, id DESC",
+        (site_name,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_farm_ndvi_historico_imagem(historico_id, site_name):
+    """`site_name` tambem filtrado (alem do id) pra garantir que a imagem
+    pedida realmente pertence a uma fazenda que o usuario tem acesso --
+    a rota ja' checa a permissao pro `site_name`, isso so' fecha o vinculo
+    entre o id pedido e esse site."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT imagem FROM farm_ndvi_historico WHERE id = ? AND site_name = ?", (historico_id, site_name)
+    ).fetchone()
+    conn.close()
+    return row["imagem"] if row else None
+
+
+def delete_farm_ndvi_historico_de_site(site_name):
+    conn = get_db()
+    conn.execute("DELETE FROM farm_ndvi_historico WHERE site_name = ?", (site_name,))
+    conn.commit()
+    conn.close()
+
+
 def get_culturas():
     """Lista de 10 nomes na ordem dos slots (com "" nos ainda nao
     preenchidos) -- menu Opcoes > Nome Culturas."""
@@ -1249,7 +1303,7 @@ def update_virtual_farm(site_name, nome, lat, lon, raio_km):
         for tabela in (
             "sites", "recommendation_notes", "whatsapp_schedule", "whatsapp_schedule_pdf",
             "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
-            "farm_culturas", "weather_station_overrides", "farm_ndvi_area",
+            "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_historico",
         ):
             conn.execute(f"UPDATE {tabela} SET site_name=? WHERE site_name=?", (novo_site_name, site_name))
     conn.commit()
@@ -1276,6 +1330,7 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM farm_culturas WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_ndvi_area WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM farm_ndvi_historico WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 

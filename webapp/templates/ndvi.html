@@ -5,8 +5,10 @@
 <p class="text-muted small mb-3">
     Cadastre o contorno da fazenda (arquivo KML baixado do
     <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener">SICAR</a>,
-    a partir do CAR da propriedade) e gere a imagem NDVI mais recente pra essa area,
-    calculada em cima de imagens Sentinel-2 (Copernicus).
+    a partir do CAR da propriedade) e gere imagens NDVI pra essa area, calculadas em
+    cima de imagens Sentinel-2 (Copernicus) -- disponivel desde 06/2015. Cada imagem
+    gerada fica na galeria de miniaturas (ordenada da mais recente pra mais antiga);
+    clique numa miniatura pra abrir em outra aba do navegador e comparar datas.
 </p>
 
 {% if not credenciais_ok %}
@@ -56,15 +58,25 @@
             </div>
             <div class="col-12 col-lg-6">
                 {% if site_group.area %}
-                <form method="post" action="{{ url_for('gerar_ndvi') }}" class="mb-2">
+                <form method="post" action="{{ url_for('gerar_ndvi') }}" class="mb-2 d-flex align-items-center flex-wrap gap-2">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="small text-muted mb-0" for="data_alvo_{{ loop.index0 }}">Data (opcional):</label>
+                    <input type="date" class="form-control form-control-sm" style="width: auto;" id="data_alvo_{{ loop.index0 }}" name="data_alvo" max="{{ hoje }}" min="2015-06-23">
                     <button type="submit" class="btn btn-sm btn-primary" {% if not credenciais_ok %}disabled{% endif %}>Gerar NDVI</button>
-                    {% if site_group.area.imagem_gerada_em %}
-                    <span class="small text-muted ms-2">Ultima imagem: {{ site_group.area.imagem_gerada_em | data_br }}</span>
-                    {% endif %}
                 </form>
-                {% if site_group.area.imagem_gerada_em %}
-                <img src="{{ url_for('imagem_ndvi', site_name=site_group.site) }}" class="img-fluid border rounded" alt="NDVI de {{ site_group.site }}">
+                <div class="text-muted small mb-2">Deixe a data em branco pra buscar a imagem mais recente disponivel.</div>
+                {% if site_group.historico %}
+                <div class="d-flex gap-2 overflow-auto pb-1" style="max-width: 100%;">
+                    {% for item in site_group.historico %}
+                    <a href="{{ url_for('imagem_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
+                       target="_blank" rel="noopener" class="text-center text-decoration-none flex-shrink-0" title="Abrir em nova aba">
+                        <img src="{{ url_for('imagem_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
+                             style="width: 90px; height: 90px; object-fit: cover;" class="border rounded d-block mb-1"
+                             alt="NDVI de {{ site_group.site }} em {{ item.data_alvo | data_br }}" loading="lazy">
+                        <span class="small text-muted d-block">{{ item.data_alvo | data_br }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
                 {% else %}
                 <div class="text-muted small">Nenhuma imagem gerada ainda.</div>
                 {% endif %}

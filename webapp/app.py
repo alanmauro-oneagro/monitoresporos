@@ -2169,12 +2169,14 @@ def ndvi():
             "site": site,
             "area": areas.get(site),
             "coords": coords.get(site),
+            "historico": models.get_farm_ndvi_historico(site),
         }
         for site in sites
     ]
     return render_template(
         "ndvi.html", sites_data=sites_data, no_access=False,
         credenciais_ok=ndvi_service.credenciais_configuradas(),
+        hoje=datetime.now(timezone.utc).date().isoformat(),
     )
 
 
@@ -2225,15 +2227,27 @@ def gerar_ndvi():
     area = models.get_farm_ndvi_area(site_name)
     if not area:
         return _save_response(f"'{site_name}' ainda nao tem contorno KML cadastrado.", "ndvi", ok=False)
+
+    data_texto = request.form.get("data_alvo", "").strip()
+    data_alvo = None
+    if data_texto:
+        try:
+            data_alvo = datetime.strptime(data_texto, "%Y-%m-%d").date()
+        except ValueError:
+            return _save_response(f"Data invalida: '{data_texto}'.", "ndvi", ok=False)
+        if data_alvo > datetime.now(timezone.utc).date():
+            return _save_response("Nao e' possivel gerar NDVI de uma data no futuro.", "ndvi", ok=False)
+
     try:
         aneis = ndvi_service.parse_kml_poligono(area["kml"])
     except ValueError as exc:
         return _save_response(f"Contorno de '{site_name}' invalido: {exc}", "ndvi", ok=False)
-    imagem, erro = ndvi_service.buscar_ndvi(aneis)
+    imagem, erro = ndvi_service.buscar_ndvi(aneis, data_alvo=data_alvo)
     if erro:
         return _save_response(f"Nao foi possivel gerar o NDVI de '{site_name}': {erro}", "ndvi", ok=False)
+    models.add_farm_ndvi_historico(site_name, (data_alvo or datetime.now(timezone.utc).date()).isoformat(), imagem)
     models.save_farm_ndvi_image(site_name, imagem)
-    return _save_response(f"NDVI de '{site_name}' atualizado.", "ndvi")
+    return _save_response(f"NDVI de '{site_name}' gerado e adicionado a galeria.", "ndvi")
 
 
 @app.route("/ndvi/imagem/<path:site_name>")
@@ -2241,6 +2255,16 @@ def gerar_ndvi():
 def imagem_ndvi(site_name):
     _checar_acesso_site(site_name)
     imagem = models.get_farm_ndvi_image(site_name)
+    if not imagem:
+        abort(404)
+    return send_file(io.BytesIO(imagem), mimetype="image/png")
+
+
+@app.route("/ndvi/imagem_historico/<int:historico_id>/<path:site_name>")
+@login_required
+def imagem_ndvi_historico(historico_id, site_name):
+    _checar_acesso_site(site_name)
+    imagem = models.get_farm_ndvi_historico_imagem(historico_id, site_name)
     if not imagem:
         abort(404)
     return send_file(io.BytesIO(imagem), mimetype="image/png")

@@ -430,12 +430,16 @@ def _resumir_erro_process_api(corpo_erro):
     return " -- ".join(partes)
 
 
-def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
-    """Busca a imagem NDVI (menor cobertura de nuvem nos ultimos
-    `dias_historico` dias) pro poligono dado. Devolve (bytes_png, None) em
-    caso de sucesso, ou (None, mensagem_de_erro) -- nunca levanta excecao,
-    pra rota poder mostrar uma mensagem amigavel em vez de quebrar a
-    pagina."""
+def buscar_ndvi(aneis, data_alvo=None, janela_dias=15, largura_px=512):
+    """Busca a imagem NDVI (menor cobertura de nuvem numa janela de
+    +/-`janela_dias` em volta de `data_alvo`) pro poligono dado. Sem
+    `data_alvo`, usa os ultimos 30 dias ate hoje (comportamento antigo, pra
+    "imagem mais recente"). Sentinel-2 tem cobertura desde 2015-06-23, entao
+    qualquer data a partir dai funciona -- inclusive meses/anos atras, pra
+    comparar a evolucao da area ao longo do tempo. Devolve (bytes_png, None)
+    em caso de sucesso, ou (None, mensagem_de_erro) -- nunca levanta
+    excecao, pra rota poder mostrar uma mensagem amigavel em vez de quebrar
+    a pagina."""
     token, erro = _obter_token()
     if not token:
         return None, f"Nao foi possivel autenticar na Copernicus Data Space Ecosystem: {erro}."
@@ -446,7 +450,11 @@ def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
     altura_px = max(1, round(largura_px * altura_graus / largura_graus))
 
     hoje = datetime.now(timezone.utc).date()
-    desde = hoje - timedelta(days=dias_historico)
+    if data_alvo:
+        desde = data_alvo - timedelta(days=janela_dias)
+        hoje = min(data_alvo + timedelta(days=janela_dias), hoje)
+    else:
+        desde = hoje - timedelta(days=30)
 
     try:
         geometria = _geometria_valida(aneis)
