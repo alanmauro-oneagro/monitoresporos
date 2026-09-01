@@ -34,7 +34,8 @@
             <div class="col-12 col-lg-6">
                 <form method="post" action="{{ url_for('save_ndvi_area') }}" enctype="multipart/form-data">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                    <label class="small text-muted mb-1" for="kml_file_{{ loop.index0 }}">Arquivo KML</label>
+                    <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener" class="small d-inline-block mb-2">Buscar contorno da fazenda no SICAR &raquo;</a>
+                    <label class="small text-muted mb-1 d-block" for="kml_file_{{ loop.index0 }}">Arquivo KML</label>
                     <input type="file" class="form-control form-control-sm mb-2" id="kml_file_{{ loop.index0 }}" name="kml_file" accept=".kml">
                     <label class="small text-muted mb-1" for="kml_texto_{{ loop.index0 }}">...ou cole o conteudo do KML aqui</label>
                     <textarea class="form-control form-control-sm mb-2" id="kml_texto_{{ loop.index0 }}" name="kml_texto" rows="4" placeholder="&lt;kml&gt;...&lt;/kml&gt;">{{ site_group.area.kml if site_group.area else '' }}</textarea>
