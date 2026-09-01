@@ -374,14 +374,19 @@
         '<ellipse cx="22" cy="37" rx="20" ry="17" fill="#ffffff"/>' +
         '<ellipse cx="50" cy="45" rx="38" ry="17" fill="#ffffff"/>';
 
+    var NUVEM_COBERTURA_MINIMA = 10; // % -- abaixo disso nem desenha (ceu praticamente limpo, so' teria poluido a tela sem informar nada util)
+
     function iconeNuvem(pct, espelhada) {
-        // Mais nuvem = icone maior e mais opaco (quase invisivel perto de
-        // 0%, bem solido perto de 100%) -- transmite intensidade visual da
-        // cobertura, nao so' presenca/ausencia.
+        // Mais nuvem = icone maior e mais opaco -- transmite intensidade
+        // visual da cobertura, nao so' presenca/ausencia. Faixa de
+        // opacidade mais baixa (max 0.5) do que a versao original (que
+        // ia ate 0.9) porque com centenas de pontos cobrindo o Brasil
+        // inteiro, icones muito solidos deixavam o mapa poluido/dificil
+        // de enxergar o satelite por baixo.
         var p = Math.max(0, Math.min(100, pct));
         var largura = 55 + (p / 100) * 90;   // 55px a 145px
         var altura = largura * 0.6;
-        var opacidade = 0.12 + (p / 100) * 0.78; // 0.12 a 0.9
+        var opacidade = 0.08 + (p / 100) * 0.42; // 0.08 a 0.5
         var miolo = espelhada ? NUVEM_SVG_ESPELHADA : NUVEM_SVG_NORMAL;
         var html = '<svg viewBox="0 0 100 60" width="' + largura + '" height="' + altura +
             '" style="opacity:' + opacidade + ';">' + miolo + '</svg>';
@@ -401,7 +406,7 @@
         if (!gradeNuvens) return;
         gradeNuvens.forEach(function (ponto, indice) {
             var pct = (ponto.nuvens_pct_por_dia || [])[diaSelecionado];
-            if (pct === null || pct === undefined) return;
+            if (pct === null || pct === undefined || pct < NUVEM_COBERTURA_MINIMA) return;
             var marcador = L.marker([ponto.lat, ponto.lon], {
                 icon: iconeNuvem(pct, indice % 2 === 1),
                 interactive: false, keyboard: false,
