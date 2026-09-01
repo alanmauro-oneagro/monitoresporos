@@ -12,11 +12,11 @@
     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="ndviZoomReset()">Restaurar</button>
     <span class="small text-muted align-self-center">(ou Ctrl + roda do mouse sobre a imagem)</span>
 </div>
-<div id="ndviZoomWrap" style="overflow: auto; max-height: 78vh; border: 1px solid #dee2e6; border-radius: 0.375rem; background: #f8f9fa;">
+<div id="ndviZoomWrap" style="overflow: auto; max-height: 78vh; border: 1px solid #dee2e6; border-radius: 0.375rem; background: #f8f9fa; text-align: center;">
     <img id="ndviZoomImg"
          src="{{ url_for('imagem_ndvi_historico', historico_id=item.id, site_name=site_name) }}"
          alt="NDVI de {{ site_name }} em {{ item.data_alvo | data_br }}"
-         style="display: block; transform-origin: 0 0;">
+         style="display: inline-block; max-width: 100%; height: auto; transform-origin: center top;">
 </div>
 <script>
 (function () {

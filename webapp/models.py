@@ -1120,6 +1120,15 @@ def get_farm_ndvi_historico_imagem(historico_id, site_name):
     return row["imagem"] if row else None
 
 
+def delete_farm_ndvi_historico_item(historico_id, site_name):
+    """Remove uma imagem especifica da galeria (`site_name` filtrado pelo
+    mesmo motivo de `get_farm_ndvi_historico_imagem`)."""
+    conn = get_db()
+    conn.execute("DELETE FROM farm_ndvi_historico WHERE id = ? AND site_name = ?", (historico_id, site_name))
+    conn.commit()
+    conn.close()
+
+
 def delete_farm_ndvi_historico_de_site(site_name):
     conn = get_db()
     conn.execute("DELETE FROM farm_ndvi_historico WHERE site_name = ?", (site_name,))

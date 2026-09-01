@@ -2286,6 +2286,18 @@ def ver_ndvi_historico(historico_id, site_name):
     return render_template("ndvi_visualizar.html", site_name=site_name, item=item)
 
 
+@app.route("/ndvi/historico/delete", methods=["POST"])
+@login_required
+def delete_ndvi_historico():
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    historico_id = request.form.get("historico_id", type=int)
+    if historico_id is None:
+        abort(400)
+    models.delete_farm_ndvi_historico_item(historico_id, site_name)
+    return _save_response(f"Imagem removida da galeria de '{site_name}'.", "ndvi")
+
+
 @app.route("/ndvi/debug/<path:site_name>")
 @login_required
 def debug_ndvi(site_name):

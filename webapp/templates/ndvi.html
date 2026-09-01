@@ -68,14 +68,22 @@
                 {% if site_group.historico %}
                 <div class="d-flex gap-2 overflow-auto pb-1" style="max-width: 100%;">
                     {% for item in site_group.historico %}
-                    <a href="{{ url_for('ver_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
-                       target="_blank" rel="noopener" class="text-center text-decoration-none flex-shrink-0" title="Abrir em nova aba (com zoom)">
-                        <img src="{{ url_for('imagem_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
-                             style="width: 90px; height: 90px; object-fit: cover;" class="border rounded d-block mb-1"
-                             alt="NDVI de {{ site_group.site }} em {{ item.data_alvo | data_br }}" loading="lazy">
-                        <span class="small text-muted d-block">{{ item.data_alvo | data_br }}</span>
-                        {% if item.cobertura_nuvens is not none %}<span class="small text-muted d-block">{{ "%.0f"|format(item.cobertura_nuvens) }}% nuvens</span>{% endif %}
-                    </a>
+                    <div class="text-center flex-shrink-0" style="width: 90px;">
+                        <a href="{{ url_for('ver_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
+                           target="_blank" rel="noopener" class="text-decoration-none d-block" title="Abrir em nova aba (com zoom)">
+                            <img src="{{ url_for('imagem_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
+                                 style="width: 90px; height: 90px; object-fit: cover;" class="border rounded d-block mb-1"
+                                 alt="NDVI de {{ site_group.site }} em {{ item.data_alvo | data_br }}" loading="lazy">
+                            <span class="small text-muted d-block">{{ item.data_alvo | data_br }}</span>
+                            {% if item.cobertura_nuvens is not none %}<span class="small text-muted d-block">{{ "%.0f"|format(item.cobertura_nuvens) }}% nuvens</span>{% endif %}
+                        </a>
+                        <form method="post" action="{{ url_for('delete_ndvi_historico') }}" class="mt-1"
+                              onsubmit="return confirm('Remover essa imagem da galeria?');">
+                            <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                            <input type="hidden" name="historico_id" value="{{ item.id }}">
+                            <button type="submit" class="btn btn-outline-danger py-0 px-1" style="font-size: 0.7rem;" title="Remover imagem">Remover</button>
+                        </form>
+                    </div>
                     {% endfor %}
                 </div>
                 {% else %}
