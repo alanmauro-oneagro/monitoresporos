@@ -157,7 +157,7 @@ html { font-size: 14px; }
                 <span class="fw-bold">Risco de infecção:</span>
                 {% for p in row.previsao_risco %}
                 <span class="text-nowrap ms-1">
-                    <span style="color: {{ '#c0392b' if p.risco == 'vermelho' else ('#b7860b' if p.risco == 'amarelo' else '#2e7d32') }}; font-size: 2.25em;">●</span>
+                    <span style="color: {{ '#c0392b' if p.risco == 'vermelho' else ('#b7860b' if p.risco == 'amarelo' else '#2e7d32') }}; font-size: 3em;">●</span>
                     <strong>{{ p.data_fmt }}</strong>: {{ 'Alto' if p.risco == 'vermelho' else ('Médio' if p.risco == 'amarelo' else 'Baixo') }}
                 </span>{% if not loop.last %} ·{% endif %}
                 {% endfor %}
