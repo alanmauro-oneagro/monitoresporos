@@ -24,7 +24,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 
 import shapefile
-from shapely.geometry import mapping, shape
+from shapely.geometry import Polygon, shape
 from shapely.ops import unary_union
 from shapely.validation import make_valid
 
@@ -322,30 +322,49 @@ def _horario(anel):
     return anel if _eh_horario(anel) else list(reversed(anel))
 
 
-def _geometria_valida(aneis):
-    """Monta a geometria (Polygon com 1 anel, MultiPolygon com mais de 1) e
-    corrige automaticamente se vier invalida/auto-intersectante -- problema
-    real e conhecido em shapefiles do CAR/SICAR (digitalizacao manual gera
-    poligono "bowtie" as vezes). Usa shapely/GEOS `make_valid` (mesmo truque
-    de correcao que QGIS/PostGIS usam) em vez de simplesmente rejeitar --
-    confirmado com um caso real (fazenda com 5 aneis, um deles com 111
-    pontos se auto-intersectando) onde sem isso a Copernicus recusava o
-    pedido inteiro."""
-    geom_ingenua = (
-        {"type": "Polygon", "coordinates": [aneis[0]]}
-        if len(aneis) == 1
-        else {"type": "MultiPolygon", "coordinates": [[anel] for anel in aneis]}
-    )
-    geom = shape(geom_ingenua)
-    if not geom.is_valid:
-        geom = make_valid(geom)
-        if geom.geom_type == "GeometryCollection":
-            partes = [g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")]
-            if not partes:
-                raise ValueError("contorno com geometria invalida demais pra corrigir automaticamente")
-            geom = unary_union(partes)
+def _corrigir_anel(anel):
+    """Devolve uma lista de poligonos (shapely) validos a partir de UM anel
+    -- normalmente so' 1 (o anel ja' era valido), mas pode virar varios
+    fragmentos se o anel precisar de correcao (`make_valid`) e a correcao
+    partir a forma em pedacos. Devolve lista vazia se o anel for degenerado
+    demais pra virar qualquer area (ex. so' 2 pontos unicos)."""
+    p = Polygon(anel)
+    if p.is_valid:
+        return [p] if p.area > 0 else []
+    p = make_valid(p)
+    if p.geom_type == "GeometryCollection":
+        partes = [g for g in p.geoms if g.geom_type in ("Polygon", "MultiPolygon")]
+        p = unary_union(partes) if partes else None
+    if p is None or p.is_empty:
+        return []
+    return [p] if p.geom_type == "Polygon" else list(p.geoms)
 
-    poligonos = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
+
+def _geometria_valida(aneis):
+    """Monta a geometria (Polygon com 1 poligono resultante, MultiPolygon
+    com mais de 1) validando/corrigindo CADA ANEL DE ENTRADA
+    INDEPENDENTEMENTE (nao o contorno inteiro de uma vez) -- shapefiles do
+    CAR/SICAR as vezes tem um anel com defeito serio de digitalizacao
+    (auto-intersecao grave, nao so' um cruzamento simples), e corrigir
+    tudo junto deixava esse anel ruim contaminar os aneis bons: um caso
+    real (fazenda com 5 aneis, um com 111 pontos bagunçados) virou 41
+    fragmentos, quase todos com area numerica proxima de zero, cobrindo
+    uma fracao minuscula da area real da propriedade.
+
+    Depois de corrigir anel por anel, descarta fragmentos residuais cuja
+    area e' insignificante (<0.1%) comparada ao maior poligono resultante
+    -- isso remove o "ruido" de um anel corrompido sem descartar partes
+    legitimas da propriedade (talhoes menores mas reais)."""
+    poligonos = []
+    for anel in aneis:
+        poligonos.extend(_corrigir_anel(anel))
+
+    if not poligonos:
+        raise ValueError("nenhum anel do contorno resultou em geometria valida")
+
+    maior_area = max(p.area for p in poligonos)
+    poligonos = [p for p in poligonos if p.area >= maior_area * 0.001]
+
     aneis_finais = []
     for p in poligonos:
         exterior = _anti_horario([list(pt) for pt in p.exterior.coords])
