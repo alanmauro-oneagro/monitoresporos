@@ -481,6 +481,7 @@ def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=N
             "germ_temp_max": info.get("germ_temp_max"),
             "germ_ur_min": info.get("germ_ur_min"),
             "germ_agua_livre_inibe": info.get("germ_agua_livre_inibe", False),
+            "germ_molhamento_horas": info.get("germ_molhamento_horas"),
             "quimicos": quimicos,
             "biologicos": biologicos,
             "classe_label": fungicida_data.CLASSE_LABEL,
@@ -1067,11 +1068,19 @@ def _run_scheduled_whatsapp_sends():
     weekday = today.weekday()
     schedule_texto = models.get_all_whatsapp_days()
     schedule_pdf = models.get_all_whatsapp_days_pdf()
-    for site in set(schedule_texto) | set(schedule_pdf):
+    sites_do_dia = [
+        site for site in set(schedule_texto) | set(schedule_pdf)
+        if weekday in schedule_texto.get(site, set()) or weekday in schedule_pdf.get(site, set())
+    ]
+    # Aquece o cache de clima de todas as fazendas do dia em paralelo antes
+    # de mandar -- sem isso, `_send_site_whatsapp` buscava o clima de cada
+    # fazenda um de cada vez (rede, ~1-1.5s cada), somando varios segundos
+    # so' de espera sequencial toda vez que o agendador roda.
+    _prefetch_weather(sites_do_dia, _weather_coords_all())
+    for site in sites_do_dia:
         enviar_texto = weekday in schedule_texto.get(site, set())
         enviar_pdf = weekday in schedule_pdf.get(site, set())
-        if enviar_texto or enviar_pdf:
-            _send_site_whatsapp(site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+        _send_site_whatsapp(site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
     _scheduler_last_run_date = today
 
 
@@ -1222,8 +1231,13 @@ def dashboard():
     dados_status_by_site = {}
     nomes_virtuais = {vf["site_name"]: vf["nome"] for vf in models.get_all_virtual_farms()}
     coords = _weather_coords_all()
+    mais_recente_by_site = {site: max(cards, key=lambda c: c["data"]) for site, cards in cards_by_site.items()}
+    _prefetch_weather(
+        [s for s, m in mais_recente_by_site.items() if s in nomes_virtuais and m["umidade"] is None and m["chuva"] is None],
+        coords,
+    )
     for site, cards in cards_by_site.items():
-        mais_recente = max(cards, key=lambda c: c["data"])
+        mais_recente = mais_recente_by_site[site]
         umidade, chuva = mais_recente["umidade"], mais_recente["chuva"]
         if umidade is None and chuva is None and site in nomes_virtuais:
             # Fazenda virtual/estimada nao tem sensor de umidade/chuva
@@ -1276,9 +1290,7 @@ def _uf_por_site():
     sem estacao INMET proxima resolvida (catalogo do INMET fora do ar),
     fica com UF None -- nunca quebra a pagina por causa disso, so' nao
     aparece nos filtros de estado."""
-    coords = dict(data_reader.read_site_coordinates())
-    for vf in models.get_all_virtual_farms():
-        coords[vf["site_name"]] = (vf["lat"], vf["lon"])
+    coords = _coords_all()
     por_site = {}
     for site, latlon in coords.items():
         estacao = inmet_stations.estacao_mais_proxima(*latlon)
