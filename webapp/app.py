@@ -1859,6 +1859,8 @@ def recommendations(safra):
                 aplicacoes_linhas=aplicacoes_by_site.get(site, {}).get(safra, []),
             )
         )
+        plantio_linhas = [l for l in plantio_by_site.get(site, {}).get(safra, []) if any(l.values())]
+        aplicacoes_linhas = [l for l in aplicacoes_by_site.get(site, {}).get(safra, []) if any(l.values())]
         sites_data.append({
             "site": site, "diseases": diseases, "thumbnails": thumbnails,
             "virtual": is_virtual,
@@ -1871,6 +1873,8 @@ def recommendations(safra):
             "nivel_dados": nivel_dados,
             "whatsapp_destinos": len(_site_whatsapp_destinations(site)),
             "whatsapp_text": whatsapp_text,
+            "plantio_linhas": plantio_linhas,
+            "aplicacoes_linhas": aplicacoes_linhas,
         })
     sites_data.sort(key=lambda s: s["site"])
     any_whatsapp_configured = any(s["whatsapp_destinos"] > 0 for s in sites_data)

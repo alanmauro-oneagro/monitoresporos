@@ -145,18 +145,31 @@ html { font-size: 14px; }
                 <span class="badge ms-2 {{ 'bg-danger' if row.status == 'Perigo' else 'bg-warning text-dark' }}">
                     {{ 'Alta concentração de esporos' if row.status == 'Perigo' else 'Moderada concentração de esporos' }}
                 </span>
-                {% if row.risco %}
-                <span class="badge ms-2 {{ 'bg-danger' if row.risco == 'vermelho' else ('bg-warning text-dark' if row.risco == 'amarelo' else 'bg-success') }}"
-                      title="Risco de germinacao do fungo agora, pelo clima atual da fazenda (Open-Meteo)">
-                    Risco climático: {{ 'Alto' if row.risco == 'vermelho' else ('Médio' if row.risco == 'amarelo' else 'Baixo') }}
-                </span>
-                {% endif %}
+                <span class="small text-muted ms-2">Contagem: {{ row.concentracao }} esporos/m³</span>
                 {% if row.germinacao %}
                 <span class="small text-muted ms-2">({{ row.cientifico }} — germinação: {{ row.germinacao }})</span>
                 {% elif row.cientifico %}
                 <span class="small text-muted fst-italic ms-2">({{ row.cientifico }})</span>
                 {% endif %}
             </div>
+            {% if row.previsao_risco %}
+            <div class="small mt-1">
+                <span class="fw-bold">Risco de infecção:</span>
+                {% for p in row.previsao_risco %}
+                <span class="text-nowrap ms-1">
+                    <span style="color: {{ '#c0392b' if p.risco == 'vermelho' else ('#b7860b' if p.risco == 'amarelo' else '#2e7d32') }};">●</span>
+                    <strong>{{ p.data_fmt }}</strong>: {{ 'Alto' if p.risco == 'vermelho' else ('Médio' if p.risco == 'amarelo' else 'Baixo') }}
+                </span>{% if not loop.last %} ·{% endif %}
+                {% endfor %}
+            </div>
+            {% elif row.risco %}
+            <div class="small mt-1">
+                <span class="badge {{ 'bg-danger' if row.risco == 'vermelho' else ('bg-warning text-dark' if row.risco == 'amarelo' else 'bg-success') }}"
+                      title="Risco de infeccao agora, pelo clima ja observado (sem previsao disponivel)">
+                    Risco de infecção: {{ 'Alto' if row.risco == 'vermelho' else ('Médio' if row.risco == 'amarelo' else 'Baixo') }}
+                </span>
+            </div>
+            {% endif %}
 
             {% if (row.quimicos and row.quimicos.itens) or (row.biologicos and row.biologicos.itens) %}
             <div class="mt-2">
@@ -210,6 +223,32 @@ html { font-size: 14px; }
                 <span class="autosave-status small ms-2"></span>
             </form>
         </div>
+
+        {% if site_group.plantio_linhas %}
+        <div class="mt-3 pt-3 border-top">
+            <label class="form-label small fw-bold d-block mb-1">Datas de Plantio</label>
+            <div class="small">
+                {% for l in site_group.plantio_linhas %}
+                <div>
+                    {{ l.data_plantio | data_br }}{% if l.talhao %} — Talhão {{ l.talhao }}{% endif %}{% if l.variedade %} — {{ l.variedade }}{% endif %}{% if l.ciclo_dias %} — Ciclo {{ l.ciclo_dias }} dias{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if site_group.aplicacoes_linhas %}
+        <div class="mt-3 pt-3 border-top">
+            <label class="form-label small fw-bold d-block mb-1">Datas de Pulverização</label>
+            <div class="small">
+                {% for l in site_group.aplicacoes_linhas %}
+                <div>
+                    {{ l.data_aplicacao | data_br }}{% if l.talhao %} — Talhão {{ l.talhao }}{% endif %}{% if l.fungicidas_quimicos %} — Químicos: {{ l.fungicidas_quimicos }}{% endif %}{% if l.fungicidas_biologicos %} — Biológicos: {{ l.fungicidas_biologicos }}{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         </div>
     </div>
