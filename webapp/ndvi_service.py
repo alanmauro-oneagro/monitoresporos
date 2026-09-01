@@ -12,6 +12,7 @@ um "OAuth client" (Dashboard > User Settings > OAuth clients) e definir
 COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET nas variaveis de ambiente
 (mesmo padrao usado por ADMIN_BOOTSTRAP_USERNAME/BIOSCOUT_WEB_SECRET). Sem
 essas variaveis, `buscar_ndvi` devolve (None, mensagem) em vez de quebrar."""
+import io
 import json
 import os
 import time
@@ -19,7 +20,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from datetime import datetime, timedelta, timezone
+
+import shapefile
 
 TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
@@ -124,6 +128,74 @@ def parse_kml_poligono(kml_texto):
     if not aneis:
         raise ValueError("Nenhum poligono encontrado no KML (esperado <Polygon><outerBoundaryIs>).")
     return aneis
+
+
+def parse_shapefile_zip(zip_bytes):
+    """Extrai o(s) anel(is) externo(s) de um shapefile (.zip com .shp/.shx/
+    .dbf/.prj) -- formato que o SICAR baixa quando "Baixar feicoes" nao
+    oferece a opcao de KML. So' aceita shapefile em coordenadas geograficas
+    (lat/lon, datum SIRGAS2000 no caso do CAR) -- projetado (ex. UTM) nao e'
+    suportado, pra nao precisar de uma biblioteca de reprojecao (pyproj) so'
+    pra esse caso raro."""
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"Arquivo .zip invalido: {exc}") from exc
+
+    por_extensao_lower = {n.lower(): n for n in zf.namelist()}
+    shp_key = next((k for k in por_extensao_lower if k.endswith(".shp")), None)
+    if not shp_key:
+        raise ValueError("Nenhum arquivo .shp encontrado dentro do .zip.")
+    base = shp_key[:-4]
+    shp_nome = por_extensao_lower[shp_key]
+    shx_nome = por_extensao_lower.get(base + ".shx")
+    dbf_nome = por_extensao_lower.get(base + ".dbf")
+    prj_nome = por_extensao_lower.get(base + ".prj")
+
+    if prj_nome:
+        prj_texto = zf.read(prj_nome).decode("ascii", errors="replace").upper()
+        if "PROJCS" in prj_texto:
+            raise ValueError(
+                "Shapefile esta em coordenadas projetadas (ex. UTM) -- so' e' "
+                "suportado shapefile em coordenadas geograficas (lat/lon)."
+            )
+
+    leitor = shapefile.Reader(
+        shp=io.BytesIO(zf.read(shp_nome)),
+        shx=io.BytesIO(zf.read(shx_nome)) if shx_nome else None,
+        dbf=io.BytesIO(zf.read(dbf_nome)) if dbf_nome else None,
+    )
+
+    aneis = []
+    for forma in leitor.shapes():
+        if forma.shapeType not in (shapefile.POLYGON, shapefile.POLYGONZ, shapefile.POLYGONM):
+            continue
+        limites = list(forma.parts) + [len(forma.points)]
+        for i in range(len(limites) - 1):
+            anel = [[pt[0], pt[1]] for pt in forma.points[limites[i]:limites[i + 1]]]
+            if len(anel) >= 3:
+                aneis.append(anel)
+
+    if not aneis:
+        raise ValueError("Nenhum poligono encontrado no shapefile.")
+    return aneis
+
+
+def aneis_para_kml(aneis):
+    """Serializa aneis [[lon, lat], ...] como KML minimo -- usado pra sempre
+    guardar o mesmo formato em `farm_ndvi_area.kml`, independente da origem
+    ter sido um KML de verdade ou um shapefile convertido."""
+    placemarks = "".join(
+        "<Placemark><Polygon><outerBoundaryIs><LinearRing><coordinates>"
+        + " ".join(f"{lon},{lat},0" for lon, lat in anel)
+        + "</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>"
+        for anel in aneis
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+        f"{placemarks}</Document></kml>"
+    )
 
 
 def _bbox(aneis):

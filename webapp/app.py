@@ -2191,15 +2191,20 @@ def save_ndvi_area():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
     arquivo = request.files.get("kml_file")
-    if arquivo and arquivo.filename:
-        kml_texto = arquivo.read().decode("utf-8", errors="replace")
-    else:
-        kml_texto = request.form.get("kml_texto", "")
     try:
-        ndvi_service.parse_kml_poligono(kml_texto)
+        if arquivo and arquivo.filename:
+            conteudo = arquivo.read()
+            if arquivo.filename.lower().endswith(".zip"):
+                aneis = ndvi_service.parse_shapefile_zip(conteudo)
+            else:
+                aneis = ndvi_service.parse_kml_poligono(conteudo.decode("utf-8", errors="replace"))
+        else:
+            aneis = ndvi_service.parse_kml_poligono(request.form.get("kml_texto", ""))
     except ValueError as exc:
         return _save_response(f"Nao foi possivel salvar o contorno de '{site_name}': {exc}", "ndvi", ok=False)
-    models.set_farm_ndvi_area(site_name, kml_texto)
+    # Sempre grava KML de verdade (mesmo quando a origem foi um shapefile),
+    # pra `gerar_ndvi` ter so' um formato pra reler do banco.
+    models.set_farm_ndvi_area(site_name, ndvi_service.aneis_para_kml(aneis))
     return _save_response(f"Contorno de '{site_name}' salvo -- agora e' so' clicar em \"Gerar NDVI\".", "ndvi")
 
 
