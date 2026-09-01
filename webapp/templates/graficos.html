@@ -95,16 +95,16 @@
     percentual exato).
     <br>
     Dois graficos por doenca, em sequencia: concentracao de esporos (uma
-    cor por fazenda, nunca passa do maximo cadastrado -- quando o valor
-    real excede, uma seta vermelha marca o ponto; as faixas
+    linha por fazenda, nunca passa do maximo cadastrado -- quando o valor
+    real excede, um triangulo vermelho marca o ponto; as faixas
     verde/amarelo/vermelho seguem os mesmos limites Normal/Atencao/Perigo
     do relatorio em PDF) e, logo abaixo, o risco de infeccao calculado a
     partir dos parametros de "Condicoes p/ germinacao" da aba Doencas
-    (barras azuis, escala 0-100% -- media entre as fazendas do filtro
+    (linha azul, escala 0-100% -- media entre as fazendas do filtro
     atual, com faixas de fundo verde/amarelo/vermelho pros niveis Baixo/
-    Medio/Alto; passe o mouse numa barra pra ver o percentual e a direcao
-    predominante do vento daquele dia). As barras mais claras (ultimos 5
-    dias) sao previsao -- risco calculado com a previsao do tempo
+    Medio/Alto; passe o mouse na linha pra ver o percentual e a direcao
+    predominante do vento daquele dia). O trecho tracejado (ultimos 5
+    dias) e' previsao -- risco calculado com a previsao do tempo
     (Open-Meteo) em vez do clima ja observado, so' aparece quando o
     periodo do filtro vai ate perto de hoje. O checkbox "Ocultar Risco de
     Infeccao" acima esconde so' os graficos de risco (o de esporos
@@ -155,38 +155,6 @@
     };
     Chart.register(colorBandsPlugin);
 
-    // Esporos virou grafico de barra (uma cor por fazenda) -- pontos com
-    // pointStyle nao existem em barra, entao o marcador de "valor
-    // excedeu o maximo" vira uma setinha vermelha desenhada por cima da
-    // barra. yEsporos e' a escala PRIMARIA do grafico, entao da' pra'
-    // confiar na posicao que o proprio Chart.js calculou pro elemento da
-    // barra (`getProps`), sem precisar desenhar nada na mao.
-    var esporosExcedidoPlugin = {
-        id: 'esporosExcedido',
-        afterDatasetsDraw: function (chart) {
-            var ctx = chart.ctx;
-            chart.data.datasets.forEach(function (ds, i) {
-                if (!ds.excedidoFlags) return;
-                var meta = chart.getDatasetMeta(i);
-                if (!meta.visible) return;
-                meta.data.forEach(function (barEl, idx) {
-                    if (!ds.excedidoFlags[idx]) return;
-                    var pos = barEl.getProps(['x', 'y'], true);
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.moveTo(pos.x, pos.y - 10);
-                    ctx.lineTo(pos.x - 4, pos.y - 3);
-                    ctx.lineTo(pos.x + 4, pos.y - 3);
-                    ctx.closePath();
-                    ctx.fillStyle = '#dc3545';
-                    ctx.fill();
-                    ctx.restore();
-                });
-            });
-        },
-    };
-    Chart.register(esporosExcedidoPlugin);
-
     // Marcas de TS/Sulco/Folha (aba Anotacoes de Safra) e Plantio (Dados
     // de Plantio), um icone por tipo pra' identificar de longe sem
     // precisar passar o mouse. Emoji desenhado direto (nao a imagem
@@ -198,7 +166,7 @@
     // Linha vertical tracejada + icone(s) no topo, um por indice do eixo
     // X que tiver pelo menos uma anotacao (`chart.config.options.plugins
     // .anotacoes`, ver `calcularAnotacoesPorIndice`) -- fica em
-    // `afterDatasetsDraw` (por cima das barras). O hover/tooltip com o
+    // `afterDatasetsDraw` (por cima das linhas). O hover/tooltip com o
     // detalhe (tipo + fazenda) e' de um dataset "fantasma" separado (ver
     // `montarGraficoEsporos`/`montarGraficoRisco`), que reusa o sistema
     // de tooltip nativo do Chart.js em vez de hit-test na mao.
@@ -242,11 +210,11 @@
     // dia/mes (pode marcar mais de um indice se o periodo do filtro
     // passar de 1 ano). `sitesPermitidos` (Set, opcional) restringe
     // ainda mais pras fazendas que de fato aparecem NESSE grafico --
-    // usado no de Esporos, que so mostra barra das fazendas com leitura
-    // daquela doenca (senao uma fazenda so' com anotacao, sem barra
+    // usado no de Esporos, que so mostra linha das fazendas com leitura
+    // daquela doenca (senao uma fazenda so' com anotacao, sem linha
     // nenhuma nesse grafico, ficava com um icone "orfao"); sem esse
     // parametro (grafico de Risco, que agrega TODAS as fazendas do
-    // filtro numa unica barra), mostra todas.
+    // filtro numa unica linha), mostra todas.
     function calcularAnotacoesPorIndice(anotacoesPorSite, dias, sitesPermitidos) {
         var porIndice = {};
         var indicesPorDiaMes = {};
@@ -268,12 +236,11 @@
         return porIndice;
     }
 
-    // Dataset "fantasma" (sem barra/linha visivel) que so' carrega os
-    // dados de anotacao pro tooltip nativo do Chart.js -- `type:'line'`
-    // fixo (mesmo o grafico de esporos sendo 'bar') pra' nao entrar na
-    // divisao de largura das barras de verdade (so' dataset tipo 'bar'
-    // conta nisso). `null` nos dias sem anotacao tira a linha da
-    // tooltip (mesmo padrao ja usado no callback `label` abaixo).
+    // Dataset "fantasma" (sem linha visivel) que so' carrega os dados de
+    // anotacao pro tooltip nativo do Chart.js (`showLine:false` esconde
+    // a linha, so' sobra o ponto invisivel de cada dia com anotacao).
+    // `null` nos dias sem anotacao tira a linha da tooltip (mesmo padrao
+    // ja usado no callback `label` abaixo).
     function montarDatasetAnotacoes(anotacoesPorIndice, labels, yAxisID) {
         var indices = Object.keys(anotacoesPorIndice);
         if (!indices.length) return null;
@@ -670,9 +637,9 @@
         container.appendChild(wrap);
         var ctx = wrap.querySelector('canvas').getContext('2d');
 
-        // So' as fazendas com barra NESSE grafico (leitura de esporo
+        // So' as fazendas com linha NESSE grafico (leitura de esporo
         // dessa doenca) -- uma fazenda so' com anotacao e sem leitura
-        // aqui nao teria bar nenhuma pra' "ancorar" o icone, ficava
+        // aqui nao teria linha nenhuma pra' "ancorar" o icone, ficava
         // orfao (ver nota em `calcularAnotacoesPorIndice`).
         var sitesDoGrafico = new Set(doenca.series.map(function (s) { return s.estacao; }));
         var anotacoesPorIndice = calcularAnotacoesPorIndice(anotacoesPorSite, dias, sitesDoGrafico);
@@ -693,13 +660,25 @@
 
         var datasets = doenca.series.map(function (s, idx) {
             var corFazenda = CORES_FAZENDA[idx % CORES_FAZENDA.length];
+            var excedido = s.esporos_excedido;
             return {
                 label: 'Esporos - ' + s.estacao,
                 data: s.esporos,
-                backgroundColor: corFazenda,
                 borderColor: corFazenda,
-                borderWidth: 1,
-                excedidoFlags: s.esporos_excedido,
+                backgroundColor: corFazenda,
+                borderWidth: 2,
+                fill: false,
+                cubicInterpolationMode: 'monotone',
+                spanGaps: false,
+                // Ponto onde o valor real passou do maximo cadastrado
+                // (capado em `s.esporos`) vira um triangulo vermelho
+                // maior em vez de bolinha normal -- estilo nativo do
+                // ponto, sem precisar desenhar nada na mao.
+                pointStyle: function (ctx) { return excedido[ctx.dataIndex] ? 'triangle' : 'circle'; },
+                pointRadius: function (ctx) { return excedido[ctx.dataIndex] ? 6 : 2; },
+                pointHoverRadius: function (ctx) { return excedido[ctx.dataIndex] ? 8 : 4; },
+                pointBackgroundColor: function (ctx) { return excedido[ctx.dataIndex] ? '#dc3545' : corFazenda; },
+                pointBorderColor: function (ctx) { return excedido[ctx.dataIndex] ? '#dc3545' : corFazenda; },
                 yAxisID: 'yEsporos',
             };
         });
@@ -707,7 +686,7 @@
         if (dsAnotacoes) datasets.push(dsAnotacoes);
 
         return new Chart(ctx, {
-            type: 'bar',
+            type: 'line',
             data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true,
@@ -771,24 +750,29 @@
         var fonteLegenda = telaEstreita ? 8 : 10;
         var fonteEixo = telaEstreita ? 10 : 13;
 
-        // Risco/vento: UMA barra so' (media entre as fazendas do filtro
+        // Risco/vento: UMA linha so' (media entre as fazendas do filtro
         // atual, ver `/graficos/dados` -- com 1 fazenda selecionada e' a
         // media de 1 valor, ou seja, ela mesma), nunca uma por fazenda.
         // Ultimos `numPrevisao` dias (previsao Open-Meteo, nao o que
-        // realmente aconteceu) ficam com a barra mais clara (BarElement
-        // do Chart.js@4.4.4 nao suporta borderDash por barra, so' o
-        // contorno inteiro do dataset -- confirmado via `el.options`,
-        // por isso so' a opacidade diferencia, nao um contorno tracejado).
+        // realmente aconteceu) ficam tracejados -- `segment.borderDash`
+        // estiliza so' o TRECHO que termina num indice de previsao,
+        // deixando o resto (historico) solido.
         var numPrev = numPrevisao || 0;
         var corteIdx = doenca.risco_pct.length - numPrev;
         var datasets = [{
             label: 'Risco de Infecção (%)',
             data: doenca.risco_pct,
-            backgroundColor: function (ctx) {
-                return ctx.dataIndex < corteIdx ? '#0a1f44' : 'rgba(10, 31, 68, 0.35)';
-            },
             borderColor: '#0a1f44',
-            borderWidth: 1,
+            backgroundColor: '#0a1f44',
+            borderWidth: 2.5,
+            fill: false,
+            cubicInterpolationMode: 'monotone',
+            spanGaps: false,
+            pointRadius: 2,
+            pointHoverRadius: 4,
+            segment: {
+                borderDash: function (ctx) { return ctx.p1DataIndex >= corteIdx ? [5, 4] : undefined; },
+            },
             yAxisID: 'yRisco',
             direcaoVento: doenca.vento_predominante,
         }];
@@ -796,7 +780,7 @@
         if (dsAnotacoes) datasets.push(dsAnotacoes);
 
         return new Chart(ctx, {
-            type: 'bar',
+            type: 'line',
             data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true,
