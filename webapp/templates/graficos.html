@@ -423,7 +423,20 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                layout: { padding: 28 },
+                // Espaco reservado fora do circulo pros rotulos LESTE/
+                // OESTE ('rosaLabelsPlugin') nao ficarem cortados --
+                // "OESTE"/"LESTE" em bold 13.2px tem uns 43-45px de
+                // largura e o texto se estende NA HORIZONTAL a partir
+                // de perto da borda do circulo (~47px pra fora dela no
+                // pior caso, ver comentario no plugin), bem mais do que
+                // o espaco vertical que NORTE/SUL precisam (so' a
+                // altura do texto, ~21px). Com padding uniforme (28px)
+                // isso cortava "LESTE"/"OESTE" pra "LES"/"STE" numa tela
+                // estreita (mobile), onde a largura do canvas e' quem
+                // limita o raio do circulo -- padding assimetrico
+                // reserva o que cada lado realmente precisa, sem
+                // encolher o circulo a toa no eixo vertical.
+                layout: { padding: { left: 50, right: 50, top: 24, bottom: 24 } },
                 // Chart.js comeca o gomo do indice 0 (N) EXATAMENTE em
                 // cima (-90°) e vai 45° no sentido horario a partir
                 // dali -- ou seja, por padrao cada gomo fica com a
