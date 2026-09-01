@@ -10,6 +10,7 @@
         .col-mapa-interpolado-form { flex: 0 0 20%; max-width: 20%; }
     }
     .mapa-pin-icon { background: transparent; border: none; }
+    .mapa-nuvem-icon { background: transparent; border: none; pointer-events: none; }
     .mapa-tooltip { font-size: 0.8rem; }
     .mapa-tt-title { font-weight: 700; }
     .mapa-tt-data { font-size: 0.7rem; opacity: 0.75; margin-bottom: 0.25rem; }
@@ -329,11 +330,36 @@
     var diaSelecionado = 0;
     var gradeNuvens = null;  // null = ainda nao buscou; [] = buscou e nao achou nada
 
-    function corDeFundoNuvem(pct) {
-        // 0% quase transparente (deixa a imagem de satelite aparecer),
-        // 100% bem opaco/branco -- transmite "cobrindo o ceu".
-        var opacidade = Math.max(0, Math.min(100, pct)) / 100 * 0.6;
-        return { fillColor: '#ffffff', fillOpacity: opacidade, color: '#dee2e6', weight: 0 };
+    // Nuvem "de desenho" (elipses sobrepostas, tipo icone de previsao do
+    // tempo) em vez de um circulo geometrico -- fica bem mais parecido com
+    // nuvem de verdade. Uma variante espelhada (pontos de indice impar)
+    // pra nao ficar tudo identico/repetitivo no mapa.
+    var NUVEM_SVG_NORMAL =
+        '<ellipse cx="30" cy="38" rx="22" ry="18" fill="#ffffff"/>' +
+        '<ellipse cx="58" cy="24" rx="27" ry="24" fill="#ffffff"/>' +
+        '<ellipse cx="78" cy="37" rx="20" ry="17" fill="#ffffff"/>' +
+        '<ellipse cx="50" cy="45" rx="38" ry="17" fill="#ffffff"/>';
+    var NUVEM_SVG_ESPELHADA =
+        '<ellipse cx="70" cy="38" rx="22" ry="18" fill="#ffffff"/>' +
+        '<ellipse cx="42" cy="24" rx="27" ry="24" fill="#ffffff"/>' +
+        '<ellipse cx="22" cy="37" rx="20" ry="17" fill="#ffffff"/>' +
+        '<ellipse cx="50" cy="45" rx="38" ry="17" fill="#ffffff"/>';
+
+    function iconeNuvem(pct, espelhada) {
+        // Mais nuvem = icone maior e mais opaco (quase invisivel perto de
+        // 0%, bem solido perto de 100%) -- transmite intensidade visual da
+        // cobertura, nao so' presenca/ausencia.
+        var p = Math.max(0, Math.min(100, pct));
+        var largura = 55 + (p / 100) * 90;   // 55px a 145px
+        var altura = largura * 0.6;
+        var opacidade = 0.12 + (p / 100) * 0.78; // 0.12 a 0.9
+        var miolo = espelhada ? NUVEM_SVG_ESPELHADA : NUVEM_SVG_NORMAL;
+        var html = '<svg viewBox="0 0 100 60" width="' + largura + '" height="' + altura +
+            '" style="opacity:' + opacidade + ';">' + miolo + '</svg>';
+        return L.divIcon({
+            html: html, className: 'mapa-nuvem-icon',
+            iconSize: [largura, altura], iconAnchor: [largura / 2, altura / 2],
+        });
     }
 
     function limparCamadaNuvens() {
@@ -344,18 +370,14 @@
     function desenharCamadaNuvens() {
         limparCamadaNuvens();
         if (!gradeNuvens) return;
-        gradeNuvens.forEach(function (ponto) {
+        gradeNuvens.forEach(function (ponto, indice) {
             var pct = (ponto.nuvens_pct_por_dia || [])[diaSelecionado];
             if (pct === null || pct === undefined) return;
-            var estilo = corDeFundoNuvem(pct);
-            var circulo = L.circle([ponto.lat, ponto.lon], {
-                // raio um pouco maior que a metade do passo da grade (~165km),
-                // pra os circulos vizinhos se sobreporem um pouco e nao
-                // deixar buraco entre um ponto e outro.
-                radius: 100000, fillColor: estilo.fillColor, fillOpacity: estilo.fillOpacity,
-                color: estilo.color, weight: estilo.weight, interactive: false,
+            var marcador = L.marker([ponto.lat, ponto.lon], {
+                icon: iconeNuvem(pct, indice % 2 === 1),
+                interactive: false, keyboard: false,
             }).addTo(map);
-            circulosNuvens.push(circulo);
+            circulosNuvens.push(marcador);
         });
     }
 
