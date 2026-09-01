@@ -1772,6 +1772,17 @@ def mapa_interpolado():
                 "estacoes_usadas": estacoes_usadas,
             })
 
+    # Previsao de nuvens (camada opcional do mapa) -- Open-Meteo devolve
+    # qualquer coordenada do mundo diretamente, sem precisar de IDW entre
+    # fazendas (diferente da concentracao de doenca, que so' existe onde
+    # ha leitura real por perto). Mesmo cache/prefetch em paralelo ja
+    # usado no resto do app (`_weather_cache`/`_prefetch_weather`).
+    coords_clima = _weather_coords_all()
+    _prefetch_weather([s["site"] for s in sites_data], coords_clima)
+    for s in sites_data:
+        dados_clima = _get_weather_for_site(s["site"], coords_clima)
+        s["nuvens_pct_por_dia"] = dados_clima.get("nuvens_pct_por_dia") if dados_clima else None
+
     sites_data.sort(key=lambda s: s["site"])
     pontos_virtuais.sort(key=lambda p: p["nome"])
 

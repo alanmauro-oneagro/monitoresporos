@@ -22,7 +22,7 @@ def get_weather_forecast(lat, lon):
         "longitude": lon,
         "current": "temperature_2m,relative_humidity_2m,precipitation",
         "hourly": "temperature_2m,relative_humidity_2m,precipitation",
-        "daily": "precipitation_sum,temperature_2m_max,temperature_2m_min",
+        "daily": "precipitation_sum,temperature_2m_max,temperature_2m_min,cloud_cover_mean",
         "past_days": 1,
         "forecast_days": 6,
         "timezone": "auto",
@@ -40,6 +40,7 @@ def get_weather_forecast(lat, lon):
     chuva = daily.get("precipitation_sum", [])
     tmax = daily.get("temperature_2m_max", [])
     tmin = daily.get("temperature_2m_min", [])
+    nuvens = daily.get("cloud_cover_mean", [])
 
     previsao = []
     for i in range(1, len(dias)):  # indice 0 e' hoje, ja coberto por "atual"
@@ -48,6 +49,7 @@ def get_weather_forecast(lat, lon):
             "chuva_mm": chuva[i] if i < len(chuva) else None,
             "temp_max": tmax[i] if i < len(tmax) else None,
             "temp_min": tmin[i] if i < len(tmin) else None,
+            "nuvens_pct": nuvens[i] if i < len(nuvens) else None,
         })
 
     hourly = data.get("hourly", {})
@@ -83,4 +85,8 @@ def get_weather_forecast(lat, lon):
         "previsao_5_dias": previsao[:5],
         "ultimas_24h": passadas[-24:],
         "previsao_horaria_por_dia": futuras_por_dia,
+        # indice 0 = hoje, indice 5 = daqui a 5 dias -- usado pela camada
+        # de nuvens do Mapa Interpolado (mostra a previsao de cobertura de
+        # nuvens de cada fazenda/ponto pro dia escolhido).
+        "nuvens_pct_por_dia": nuvens[:6],
     }
