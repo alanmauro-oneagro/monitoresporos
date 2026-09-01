@@ -2246,6 +2246,29 @@ def imagem_ndvi(site_name):
     return send_file(io.BytesIO(imagem), mimetype="image/png")
 
 
+@app.route("/ndvi/debug/<path:site_name>")
+@login_required
+def debug_ndvi(site_name):
+    """Diagnostico temporario -- a Copernicus rejeita poligono
+    auto-intersectante sem dizer quais vertices sao o problema, entao essa
+    rota mostra o numero de aneis/pontos e se cada um se auto-intersecta,
+    pra achar a causa real sem precisar adivinhar."""
+    if not current_user.is_admin:
+        abort(403)
+    area = models.get_farm_ndvi_area(site_name)
+    if not area:
+        return {"erro": "sem contorno cadastrado"}
+    aneis = ndvi_service.parse_kml_poligono(area["kml"])
+    return {
+        "site": site_name,
+        "n_aneis": len(aneis),
+        "aneis": [
+            {"indice": i, "pontos": len(anel), "auto_intersecta": ndvi_service.anel_auto_intersecta(anel)}
+            for i, anel in enumerate(aneis)
+        ],
+    }
+
+
 @app.route("/recommendations/cultura/save", methods=["POST"])
 @login_required
 def save_farm_cultura():

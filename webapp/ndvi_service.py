@@ -256,6 +256,48 @@ def _obter_token():
     return token, None
 
 
+def _orientacao(a, b, c):
+    val = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    if abs(val) < 1e-12:
+        return 0
+    return 1 if val > 0 else 2
+
+
+def _no_segmento(a, b, c):
+    return min(a[0], b[0]) <= c[0] <= max(a[0], b[0]) and min(a[1], b[1]) <= c[1] <= max(a[1], b[1])
+
+
+def _segmentos_se_cruzam(p1, p2, p3, p4):
+    o1, o2 = _orientacao(p1, p2, p3), _orientacao(p1, p2, p4)
+    o3, o4 = _orientacao(p3, p4, p1), _orientacao(p3, p4, p2)
+    if o1 != o2 and o3 != o4:
+        return True
+    if o1 == 0 and _no_segmento(p1, p2, p3):
+        return True
+    if o2 == 0 and _no_segmento(p1, p2, p4):
+        return True
+    if o3 == 0 and _no_segmento(p3, p4, p1):
+        return True
+    if o4 == 0 and _no_segmento(p3, p4, p2):
+        return True
+    return False
+
+
+def anel_auto_intersecta(anel):
+    """Testa (O(n^2), pontos suficientes pra um contorno de propriedade)
+    se algum par de lados nao-adjacentes do anel se cruza -- usado so' pra
+    diagnostico (rota /ndvi/debug), ja que a Copernicus rejeita poligono
+    auto-intersectante sem dizer QUAIS vertices sao o problema."""
+    n = len(anel) - 1  # ultimo ponto repete o primeiro (anel fechado)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if j == i + 1 or (i == 0 and j == n - 1):
+                continue  # lados adjacentes sempre "se tocam" no vertice em comum
+            if _segmentos_se_cruzam(anel[i], anel[i + 1], anel[j], anel[j + 1]):
+                return True
+    return False
+
+
 def _anti_horario(anel):
     """GeoJSON (RFC 7946) exige o anel externo no sentido anti-horario --
     shapefile (ESRI) usa o sentido horario por convencao, entao um contorno
