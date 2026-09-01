@@ -214,14 +214,24 @@ def _bbox(aneis):
 
 
 def _obter_token():
+    """Devolve (token, erro) -- so' um dos dois e' preenchido. Antes essa
+    funcao devolvia so' None em qualquer falha (env var ausente, credencial
+    errada, rede fora), e quem chamava sempre mostrava a mensagem de "nao
+    configurado" mesmo quando as variaveis estavam certas mas a autenticacao
+    falhava por outro motivo (ex. client_secret invalido/revogado) --
+    confirmado com um caso real onde as variaveis estavam corretas no
+    Railway mas a mensagem de "nao configurado" continuava aparecendo."""
     agora = time.time()
     if _token_cache["token"] and agora < _token_cache["expira_em"]:
-        return _token_cache["token"]
+        return _token_cache["token"], None
 
     client_id = os.environ.get("COPERNICUS_CLIENT_ID")
     client_secret = os.environ.get("COPERNICUS_CLIENT_SECRET")
     if not client_id or not client_secret:
-        return None
+        return None, (
+            "credenciais nao configuradas (variaveis de ambiente "
+            "COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET)"
+        )
 
     corpo = urllib.parse.urlencode({
         "grant_type": "client_credentials",
@@ -232,15 +242,18 @@ def _obter_token():
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             resposta = json.load(resp)
-    except Exception:
-        return None
+    except urllib.error.HTTPError as exc:
+        detalhe = exc.read().decode(errors="replace")[:300]
+        return None, f"Copernicus recusou a autenticacao (HTTP {exc.code}): {detalhe}"
+    except Exception as exc:
+        return None, f"falha de rede ao autenticar na Copernicus: {exc}"
 
     token = resposta.get("access_token")
     if not token:
-        return None
+        return None, "resposta da Copernicus sem access_token"
     _token_cache["token"] = token
     _token_cache["expira_em"] = agora + resposta.get("expires_in", 300) - TOKEN_CACHE_MARGIN_SECONDS
-    return token
+    return token, None
 
 
 def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
@@ -249,12 +262,9 @@ def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
     caso de sucesso, ou (None, mensagem_de_erro) -- nunca levanta excecao,
     pra rota poder mostrar uma mensagem amigavel em vez de quebrar a
     pagina."""
-    token = _obter_token()
+    token, erro = _obter_token()
     if not token:
-        return None, (
-            "Credenciais da Copernicus Data Space Ecosystem nao configuradas "
-            "(variaveis de ambiente COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET)."
-        )
+        return None, f"Nao foi possivel autenticar na Copernicus Data Space Ecosystem: {erro}."
 
     min_lon, min_lat, max_lon, max_lat = _bbox(aneis)
     largura_graus = max(max_lon - min_lon, 0.0005)
