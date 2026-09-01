@@ -256,6 +256,17 @@ def _obter_token():
     return token, None
 
 
+def _anti_horario(anel):
+    """GeoJSON (RFC 7946) exige o anel externo no sentido anti-horario --
+    shapefile (ESRI) usa o sentido horario por convencao, entao um contorno
+    vindo de .zip/shapefile chega invertido e a Copernicus recusa o
+    poligono como invalido (COMMON_BAD_PAYLOAD) sem essa correcao. KML ja
+    costuma vir no sentido certo, mas normalizar sempre e' inofensivo (so'
+    inverte a ordem dos pontos, nao muda a forma)."""
+    soma = sum((anel[i + 1][0] - anel[i][0]) * (anel[i + 1][1] + anel[i][1]) for i in range(len(anel) - 1))
+    return anel if soma < 0 else list(reversed(anel))
+
+
 def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
     """Busca a imagem NDVI (menor cobertura de nuvem nos ultimos
     `dias_historico` dias) pro poligono dado. Devolve (bytes_png, None) em
@@ -266,6 +277,7 @@ def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
     if not token:
         return None, f"Nao foi possivel autenticar na Copernicus Data Space Ecosystem: {erro}."
 
+    aneis = [_anti_horario(anel) for anel in aneis]
     min_lon, min_lat, max_lon, max_lat = _bbox(aneis)
     largura_graus = max(max_lon - min_lon, 0.0005)
     altura_graus = max(max_lat - min_lat, 0.0005)
