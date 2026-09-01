@@ -130,13 +130,15 @@ def parse_kml_poligono(kml_texto):
     return aneis
 
 
-def parse_shapefile_zip(zip_bytes):
+def parse_shapefile_zip(zip_bytes, _profundidade=0):
     """Extrai o(s) anel(is) externo(s) de um shapefile (.zip com .shp/.shx/
     .dbf/.prj) -- formato que o SICAR baixa quando "Baixar feicoes" nao
     oferece a opcao de KML. So' aceita shapefile em coordenadas geograficas
     (lat/lon, datum SIRGAS2000 no caso do CAR) -- projetado (ex. UTM) nao e'
     suportado, pra nao precisar de uma biblioteca de reprojecao (pyproj) so'
-    pra esse caso raro."""
+    pra esse caso raro. Se o .shp nao estiver na raiz (o SICAR as vezes
+    entrega um .zip com outro .zip dentro, por feicao), procura recursivamente
+    dentro de qualquer .zip aninhado, ate 3 niveis de profundidade."""
     try:
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile as exc:
@@ -145,6 +147,13 @@ def parse_shapefile_zip(zip_bytes):
     por_extensao_lower = {n.lower(): n for n in zf.namelist()}
     shp_key = next((k for k in por_extensao_lower if k.endswith(".shp")), None)
     if not shp_key:
+        if _profundidade < 3:
+            for nome_interno in zf.namelist():
+                if nome_interno.lower().endswith(".zip"):
+                    try:
+                        return parse_shapefile_zip(zf.read(nome_interno), _profundidade + 1)
+                    except ValueError:
+                        continue
         raise ValueError("Nenhum arquivo .shp encontrado dentro do .zip.")
     base = shp_key[:-4]
     shp_nome = por_extensao_lower[shp_key]
