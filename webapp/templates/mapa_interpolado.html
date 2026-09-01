@@ -276,13 +276,16 @@
         '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF',
     };
 
-    // Rodovias federais (BR-xxx, tag highway=trunk no OpenStreetMap) e
-    // estaduais (ex. MT-xxx, tag highway=primary) via Overpass, recortadas
-    // pela area administrativa oficial de cada UF com fazenda/ponto (nao
-    // uma caixa retangular -- testado que uma caixa cobrindo so' as
-    // fazendas ja trazia 84 mil trechos de rodovias de estados bem
-    // distantes tambem cobertos pela caixa). Filtra por ter um "ref"
-    // (numero da rodovia) pra nao trazer rua sem nome.
+    // So' as rodovias FEDERAIS principais (BR-xxx) via Overpass -- nao
+    // estaduais, pra manter a consulta pequena e confiavel (ver historico
+    // abaixo). Filtra direto pelo prefixo "BR-" na referencia (em vez de
+    // por tipo highway=trunk/primary), que sozinho ja garante que so'
+    // vem rodovia federal, seja qual for a tag usada no OpenStreetMap.
+    // Recortada pela area administrativa oficial de cada UF com fazenda/
+    // ponto (mesma UF usada pras divisas de municipio -- ver
+    // ufReferencePoints/findUfCodes acima) -- nao uma caixa retangular
+    // (uma caixa cobrindo so' as fazendas ja trouxe 84 mil trechos de
+    // rodovias de estados bem distantes tambem cobertos pela caixa).
     //
     // UMA CONSULTA POR ESTADO, EM SEQUENCIA (nao todas juntas nem todas em
     // paralelo) -- testado que uma unica consulta combinando 3 estados de
@@ -301,7 +304,7 @@
             var sigla = siglas[indice];
             indice++;
             var query = '[out:json][timeout:60];area["ISO3166-2"="BR-' + sigla + '"]->.a;' +
-                'way["highway"~"^(trunk|primary)$"]["ref"](area.a);out geom;';
+                'way["ref"~"^BR-"](area.a);out geom;';
             fetch('https://overpass-api.de/api/interpreter', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
