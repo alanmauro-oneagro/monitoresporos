@@ -1772,17 +1772,6 @@ def mapa_interpolado():
                 "estacoes_usadas": estacoes_usadas,
             })
 
-    # Previsao de nuvens (camada opcional do mapa) -- Open-Meteo devolve
-    # qualquer coordenada do mundo diretamente, sem precisar de IDW entre
-    # fazendas (diferente da concentracao de doenca, que so' existe onde
-    # ha leitura real por perto). Mesmo cache/prefetch em paralelo ja
-    # usado no resto do app (`_weather_cache`/`_prefetch_weather`).
-    coords_clima = _weather_coords_all()
-    _prefetch_weather([s["site"] for s in sites_data], coords_clima)
-    for s in sites_data:
-        dados_clima = _get_weather_for_site(s["site"], coords_clima)
-        s["nuvens_pct_por_dia"] = dados_clima.get("nuvens_pct_por_dia") if dados_clima else None
-
     sites_data.sort(key=lambda s: s["site"])
     pontos_virtuais.sort(key=lambda p: p["nome"])
 
@@ -1794,6 +1783,26 @@ def mapa_interpolado():
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, estacoes=estacoes,
     )
+
+
+@app.route("/mapa-interpolado/nuvens-grade", methods=["POST"])
+@admin_required
+def nuvens_grade():
+    """Devolve a previsao de nuvens (6 dias) pra uma grade de coordenadas
+    -- usado pela camada de nuvens do Mapa Interpolado, que cobre o Brasil
+    inteiro (mesma logica de "cobrir o pais todo" ja usada pras divisas de
+    municipio: o frontend recorta a grade pelo contorno oficial do Brasil,
+    aqui so' busca o clima dos pontos que sobraram). Um unico pedido em
+    lote pra Open-Meteo (aceita varias coordenadas separadas por virgula
+    numa chamada so'), em vez de uma chamada por ponto da grade."""
+    corpo = request.get_json(silent=True) or {}
+    lats = corpo.get("lats") or []
+    lons = corpo.get("lons") or []
+    if not lats or len(lats) != len(lons):
+        abort(400)
+    if len(lats) > 600:
+        abort(400)
+    return jsonify(weather_forecast.get_cloud_forecast_grid(lats, lons))
 
 
 @app.route("/mapa-interpolado/adicionar", methods=["POST"])

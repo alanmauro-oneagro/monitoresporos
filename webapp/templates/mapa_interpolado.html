@@ -43,6 +43,7 @@
                     <label class="form-check-label small fw-bold" for="nuvens-toggle">☁️ Previsao de nuvens</label>
                 </div>
                 <div id="nuvens-dias" class="btn-group btn-group-sm d-none" role="group"></div>
+                <span id="nuvens-status" class="small text-muted d-none"></span>
             </div>
         </div>
         <div id="farm-map"></div>
@@ -271,7 +272,7 @@
     // ou ponto entrar num estado novo, ele ja ganha as mesmas linhas de
     // municipio automaticamente.
     var ufReferencePoints = sites.map(function (s) { return [s.lon, s.lat]; });
-    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
+    var paisGeojsonPromise = addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
         .then(function (ufGeojson) {
             if (!ufGeojson) return;
@@ -311,22 +312,28 @@
             });
     });
 
-    // Camada opcional de previsao de nuvens -- um circulo semi-transparente
-    // por fazenda/ponto, mais branco/opaco quanto maior a % de nuvens do
-    // dia escolhido (Open-Meteo, ja vem prontinho do backend pros 6 dias,
-    // sem chamada nova ao trocar de dia). So desenha se a pessoa ligar o
-    // interruptor -- por padrao a camada fica desligada (nao polui o mapa
-    // que ja tem fazenda/estacao/divisas).
+    // Camada opcional de previsao de nuvens cobrindo o Brasil INTEIRO --
+    // mesma regra ja usada pras divisas de municipio (recorta pelo contorno
+    // oficial do IBGE do pais, so' que aqui pra gerar uma grade de pontos
+    // em vez de desenhar linha). Uma grade regular (1.5 grau) e' recortada
+    // pelo poligono do Brasil (reaproveita pointInGeometry, ja usado pra
+    // achar em qual estado cada fazenda esta) -- so' os pontos que sobram
+    // dentro do pais vao pro backend, que busca a previsao de nuvens de
+    // todos eles numa unica chamada em lote na Open-Meteo. Busca so' uma
+    // vez (a primeira vez que o interruptor liga); trocar de dia depois so'
+    // redesenha com o que ja foi baixado, sem chamada nova.
     var DIAS_NUVENS = ['Hoje', '+1', '+2', '+3', '+4', '+5'];
     var NUVENS_STORAGE_KEY = 'mapaInterpolado.nuvensDia';
+    var GRADE_PASSO_GRAUS = 1.5;
     var circulosNuvens = [];
     var diaSelecionado = 0;
+    var gradeNuvens = null;  // null = ainda nao buscou; [] = buscou e nao achou nada
 
     function corDeFundoNuvem(pct) {
         // 0% quase transparente (deixa a imagem de satelite aparecer),
         // 100% bem opaco/branco -- transmite "cobrindo o ceu".
-        var opacidade = Math.max(0, Math.min(100, pct)) / 100 * 0.65;
-        return { fillColor: '#ffffff', fillOpacity: opacidade, color: '#dee2e6', weight: 1 };
+        var opacidade = Math.max(0, Math.min(100, pct)) / 100 * 0.6;
+        return { fillColor: '#ffffff', fillOpacity: opacidade, color: '#dee2e6', weight: 0 };
     }
 
     function limparCamadaNuvens() {
@@ -336,26 +343,63 @@
 
     function desenharCamadaNuvens() {
         limparCamadaNuvens();
-        sites.forEach(function (site) {
-            var lista = site.nuvens_pct_por_dia || [];
-            var pct = lista[diaSelecionado];
+        if (!gradeNuvens) return;
+        gradeNuvens.forEach(function (ponto) {
+            var pct = (ponto.nuvens_pct_por_dia || [])[diaSelecionado];
             if (pct === null || pct === undefined) return;
             var estilo = corDeFundoNuvem(pct);
-            var circulo = L.circle([site.lat, site.lon], {
-                radius: 45000, fillColor: estilo.fillColor, fillOpacity: estilo.fillOpacity,
+            var circulo = L.circle([ponto.lat, ponto.lon], {
+                // raio um pouco maior que a metade do passo da grade (~165km),
+                // pra os circulos vizinhos se sobreporem um pouco e nao
+                // deixar buraco entre um ponto e outro.
+                radius: 100000, fillColor: estilo.fillColor, fillOpacity: estilo.fillOpacity,
                 color: estilo.color, weight: estilo.weight, interactive: false,
             }).addTo(map);
-            circulo.bindTooltip(
-                '<div class="mapa-tooltip"><div class="mapa-tt-title">☁️ ' + escapeHtml(site.site) + '</div>' +
-                Math.round(pct) + '% de nuvens (' + DIAS_NUVENS[diaSelecionado] + ')</div>',
-                { direction: 'top', opacity: 0.95 }
-            );
             circulosNuvens.push(circulo);
         });
     }
 
+    function gerarGradeBrasil(paisGeojson) {
+        var pontos = [];
+        for (var lat = -34; lat <= 6; lat += GRADE_PASSO_GRAUS) {
+            for (var lon = -74; lon <= -34; lon += GRADE_PASSO_GRAUS) {
+                if (pointInGeometry([lon, lat], paisGeojson.features[0].geometry)) {
+                    pontos.push([lat, lon]);
+                }
+            }
+        }
+        return pontos;
+    }
+
     var nuvensToggle = document.getElementById('nuvens-toggle');
     var nuvensDiasWrap = document.getElementById('nuvens-dias');
+    var nuvensStatus = document.getElementById('nuvens-status');
+
+    function buscarGradeNuvens() {
+        nuvensStatus.textContent = 'Carregando previsao de nuvens do Brasil todo...';
+        nuvensStatus.classList.remove('d-none');
+        paisGeojsonPromise.then(function (paisGeojson) {
+            if (!paisGeojson) throw new Error('sem contorno do Brasil (IBGE fora do ar?)');
+            var pontosGrade = gerarGradeBrasil(paisGeojson);
+            return fetch('{{ url_for("nuvens_grade") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lats: pontosGrade.map(function (p) { return p[0]; }),
+                    lons: pontosGrade.map(function (p) { return p[1]; }),
+                }),
+            });
+        }).then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (dados) {
+                gradeNuvens = dados;
+                nuvensStatus.classList.add('d-none');
+                if (nuvensToggle.checked) desenharCamadaNuvens();
+            })
+            .catch(function () {
+                nuvensStatus.textContent = 'Nao foi possivel buscar a previsao de nuvens agora -- tente de novo.';
+            });
+    }
+
     DIAS_NUVENS.forEach(function (rotulo, indice) {
         var btn = document.createElement('button');
         btn.type = 'button';
@@ -383,10 +427,14 @@
 
     nuvensToggle.addEventListener('change', function () {
         nuvensDiasWrap.classList.toggle('d-none', !nuvensToggle.checked);
-        if (nuvensToggle.checked) {
+        if (!nuvensToggle.checked) {
+            limparCamadaNuvens();
+            return;
+        }
+        if (gradeNuvens) {
             desenharCamadaNuvens();
         } else {
-            limparCamadaNuvens();
+            buscarGradeNuvens();
         }
     });
 

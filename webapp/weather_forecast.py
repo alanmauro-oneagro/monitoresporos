@@ -85,8 +85,37 @@ def get_weather_forecast(lat, lon):
         "previsao_5_dias": previsao[:5],
         "ultimas_24h": passadas[-24:],
         "previsao_horaria_por_dia": futuras_por_dia,
-        # indice 0 = hoje, indice 5 = daqui a 5 dias -- usado pela camada
-        # de nuvens do Mapa Interpolado (mostra a previsao de cobertura de
-        # nuvens de cada fazenda/ponto pro dia escolhido).
-        "nuvens_pct_por_dia": nuvens[:6],
     }
+
+
+def get_cloud_forecast_grid(lats, lons):
+    """Versao em lote, so' com cobertura de nuvens -- usada pela camada de
+    nuvens do Mapa Interpolado, que cobre uma grade de pontos espalhada
+    pelo Brasil inteiro. Um UNICO pedido pra Open-Meteo com todas as
+    coordenadas juntas (a API aceita listas separadas por virgula e devolve
+    uma lista de resultados, na mesma ordem), em vez de uma chamada por
+    ponto da grade -- testado com 200 pontos numa chamada so', ~1.7s."""
+    params = {
+        "latitude": ",".join(str(v) for v in lats),
+        "longitude": ",".join(str(v) for v in lons),
+        "daily": "cloud_cover_mean",
+        "forecast_days": 6,
+        "timezone": "auto",
+    }
+    url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
+    try:
+        with urllib.request.urlopen(url, timeout=45) as resp:
+            resultados = json.load(resp)
+    except Exception:
+        return []
+    if not isinstance(resultados, list):
+        resultados = [resultados]
+    saida = []
+    for r in resultados:
+        daily = r.get("daily", {})
+        saida.append({
+            "lat": r.get("latitude"),
+            "lon": r.get("longitude"),
+            "nuvens_pct_por_dia": daily.get("cloud_cover_mean", [])[:6],
+        })
+    return saida
