@@ -267,6 +267,25 @@ def _anti_horario(anel):
     return anel if soma < 0 else list(reversed(anel))
 
 
+def _resumir_erro_process_api(corpo_erro):
+    """A resposta de erro da Process API inclui o poligono inteiro em
+    "invalidValue" -- isso enchia os 300 caracteres que a mensagem de erro
+    mostrava antes, escondendo o motivo especifico (que costuma vir depois
+    das coordenadas). Aqui remove "invalidValue" de cada item de erro antes
+    de montar a mensagem, pra sobrar espaco pro que realmente importa."""
+    try:
+        dados = json.loads(corpo_erro)
+    except ValueError:
+        return corpo_erro[:500]
+    erro = dados.get("error", dados)
+    partes = [erro.get("message", "erro sem mensagem")]
+    for item in erro.get("errors", []):
+        resumo = {k: v for k, v in item.items() if k != "invalidValue"}
+        if resumo:
+            partes.append(str(resumo))
+    return " -- ".join(partes)
+
+
 def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
     """Busca a imagem NDVI (menor cobertura de nuvem nos ultimos
     `dias_historico` dias) pro poligono dado. Devolve (bytes_png, None) em
@@ -325,7 +344,7 @@ def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
         with urllib.request.urlopen(req, timeout=60) as resp:
             return resp.read(), None
     except urllib.error.HTTPError as exc:
-        detalhe = exc.read().decode(errors="replace")[:300]
+        detalhe = _resumir_erro_process_api(exc.read().decode(errors="replace"))
         return None, f"Copernicus recusou o pedido (HTTP {exc.code}): {detalhe}"
     except Exception as exc:
         return None, f"Falha ao buscar imagem NDVI: {exc}"
