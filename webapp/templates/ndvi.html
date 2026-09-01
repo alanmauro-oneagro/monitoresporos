@@ -29,7 +29,10 @@
 {% for site_group in sites_data %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
-        <div class="fw-bold mb-2">{{ site_group.site }}</div>
+        <div class="fw-bold mb-2">
+            {% if site_group.coords %}<span class="text-muted fw-normal small">{{ "%.5f"|format(site_group.coords[0]) }}, {{ "%.5f"|format(site_group.coords[1]) }}</span> -{% endif %}
+            {{ site_group.site }}
+        </div>
         <div class="row g-3">
             <div class="col-12 col-lg-6">
                 <form method="post" action="{{ url_for('save_ndvi_area') }}" enctype="multipart/form-data">

@@ -2163,10 +2163,12 @@ def ndvi():
             return render_template("ndvi.html", sites_data=[], no_access=True, credenciais_ok=True)
 
     areas = models.get_all_farm_ndvi_areas()
+    coords = _coords_all()
     sites_data = [
         {
             "site": site,
             "area": areas.get(site),
+            "coords": coords.get(site),
         }
         for site in sites
     ]
