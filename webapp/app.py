@@ -8,6 +8,7 @@ API do BioScout, chamada site a site). O clique NAO espera o fim da busca
 antes nesse projeto); a pagina volta na hora avisando que a busca comecou,
 e os dados novos aparecem quando a pessoa atualizar a pagina de novo.
 """
+import concurrent.futures
 import functools
 import io
 import os
@@ -156,6 +157,23 @@ def _get_weather_for_site(site, coords):
         data["fonte"] = "Open-Meteo"
         _weather_cache[site] = (now, data)
     return data
+
+
+def _prefetch_weather(sites, coords):
+    """Busca o clima (Open-Meteo) de varias fazendas em PARALELO, so' pra'
+    aquecer `_weather_cache` -- `_get_weather_for_site` sozinho busca uma
+    fazenda de cada vez (rede, ~1-1.5s cada); numa pagina com varias
+    fazendas (ex.: Manejo Safra, ~9 fazendas) isso somava alguns
+    segundos de espera SEQUENCIAL toda vez que o cache de 30min expirava.
+    So' preenche o cache; quem chama continua usando
+    `_get_weather_for_site` normalmente depois (ja' encontra tudo
+    pronto). Fazenda que ja' estava com cache valido nao gera chamada de
+    rede nova (o proprio `_get_weather_for_site` confere isso)."""
+    pendentes = [s for s in sites if coords.get(s)]
+    if not pendentes:
+        return
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(lambda s: _get_weather_for_site(s, coords), pendentes))
 
 def _weather_coords_all():
     """Coordenada usada pra buscar a previsao (Open-Meteo) de cada site --
@@ -1429,6 +1447,8 @@ def graficos_dados():
 
     coords_all = _coords_all()
     previsao_horaria_por_site = {}
+    if dias_previsao:
+        _prefetch_weather(sites, coords_all)
     for site in sites:
         if not dias_previsao:
             break
@@ -1809,6 +1829,7 @@ def recommendations(safra):
     )
     notes = models.get_all_recommendation_notes()
     coords = _weather_coords_all()
+    _prefetch_weather(cards_by_site.keys(), coords)
     produtos_by_site = models.get_all_farm_produtos()
     plantio_by_site = models.get_all_farm_plantio()
     aplicacoes_by_site = models.get_all_farm_aplicacoes()

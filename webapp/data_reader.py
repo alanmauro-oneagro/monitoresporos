@@ -130,25 +130,44 @@ def read_site_device_ids():
     return ids
 
 
-def read_sites():
-    path = DATA_DIR / "sites.csv"
+_csv_cache = {}  # path -> (mtime, linhas)
+
+
+def _read_csv_cached(path):
+    """Le e faz o parse do CSV, cacheado em memoria pelo mtime do arquivo
+    -- MUITAS funcoes diferentes chamam read_spore_counts/read_weather
+    (direto ou indireto, via read_site_coordinates/read_site_device_ids/
+    etc.) dentro do MESMO request; sem cache, cada chamada reabria e
+    reparseava o CSV inteiro do zero so' pra' devolver de novo o mesmo
+    resultado da chamada anterior (medido: a aba Manejo Safra sozinha
+    lia spore_counts.csv 5 vezes numa unica pagina, quase 1s so' nisso).
+    O pipeline (Fetch-BioScoutData.ps1) so' reescreve esses arquivos de
+    vez em quando -- o cache invalida sozinho assim que o mtime do
+    arquivo mudar, entao nunca fica com dado desatualizado. Os `dict` de
+    cada linha sao compartilhados entre chamadas (mesma lista, nao uma
+    copia) -- nenhum consumidor deste modulo ou de app.py altera uma
+    linha depois de ler, so' faz `.get()`/leitura, entao compartilhar e'
+    seguro e evita copiar a lista inteira a toa."""
+    mtime = path.stat().st_mtime
+    cached = _csv_cache.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
     with open(path, encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        return [row["siteName"] for row in reader]
+        linhas = list(csv.DictReader(f))
+    _csv_cache[path] = (mtime, linhas)
+    return linhas
+
+
+def read_sites():
+    return [row["siteName"] for row in _read_csv_cached(DATA_DIR / "sites.csv")]
 
 
 def read_spore_counts():
-    path = DATA_DIR / "spore_counts.csv"
-    with open(path, encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        return list(reader)
+    return _read_csv_cached(DATA_DIR / "spore_counts.csv")
 
 
 def read_weather():
-    path = DATA_DIR / "weather.csv"
-    with open(path, encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        return list(reader)
+    return _read_csv_cached(DATA_DIR / "weather.csv")
 
 
 def build_weather_lookup(weather_rows):
