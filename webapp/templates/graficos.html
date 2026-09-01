@@ -424,7 +424,18 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 layout: { padding: 28 },
-                scales: { r: { ticks: { display: false } } },
+                // Chart.js comeca o gomo do indice 0 (N) EXATAMENTE em
+                // cima (-90°) e vai 45° no sentido horario a partir
+                // dali -- ou seja, por padrao cada gomo fica com a
+                // BORDA em cima do rotulo da direcao (N/L/S/O, ver
+                // `rosaLabelsPlugin`), nao CENTRADO nele, dando a
+                // impressao de que o dado "vaza" pra fora da rosa.
+                // `startAngle: -22.5` (metade de um gomo de 45°, sentido
+                // anti-horario) recentraliza: agora o gomo de cada
+                // direcao fica centrado exatamente no rotulo dela
+                // (confirmado inspecionando startAngle/endAngle de cada
+                // elemento renderizado).
+                scales: { r: { ticks: { display: false }, startAngle: -22.5 } },
                 plugins: {
                     legend: { display: false },
                     tooltip: { callbacks: { label: function (ctx) { return ctx.label + ': ' + ctx.raw + '%'; } } },
