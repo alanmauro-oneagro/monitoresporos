@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}NDVI {{ item.data_alvo | data_br }} - {{ site_name }}{% endblock %}
+{% block content %}
+<h5 class="mb-1">{{ site_name }}</h5>
+<p class="text-muted small mb-2">
+    Imagem de {{ item.data_alvo | data_br }}
+    {% if item.cobertura_nuvens is not none %}-- {{ "%.0f"|format(item.cobertura_nuvens) }}% de nuvens{% endif %}
+</p>
+<div class="mb-2 d-flex gap-2">
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="ndviZoom(1.25)">+ Zoom</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="ndviZoom(0.8)">- Zoom</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="ndviZoomReset()">Restaurar</button>
+    <span class="small text-muted align-self-center">(ou Ctrl + roda do mouse sobre a imagem)</span>
+</div>
+<div id="ndviZoomWrap" style="overflow: auto; max-height: 78vh; border: 1px solid #dee2e6; border-radius: 0.375rem; background: #f8f9fa;">
+    <img id="ndviZoomImg"
+         src="{{ url_for('imagem_ndvi_historico', historico_id=item.id, site_name=site_name) }}"
+         alt="NDVI de {{ site_name }} em {{ item.data_alvo | data_br }}"
+         style="display: block; transform-origin: 0 0;">
+</div>
+<script>
+(function () {
+    var escala = 1;
+    var img = document.getElementById('ndviZoomImg');
+    var wrap = document.getElementById('ndviZoomWrap');
+
+    function aplicar() {
+        img.style.transform = 'scale(' + escala + ')';
+    }
+    window.ndviZoom = function (fator) {
+        escala = Math.min(8, Math.max(0.5, escala * fator));
+        aplicar();
+    };
+    window.ndviZoomReset = function () {
+        escala = 1;
+        aplicar();
+    };
+    wrap.addEventListener('wheel', function (e) {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        window.ndviZoom(e.deltaY < 0 ? 1.1 : 0.9);
+    }, { passive: false });
+})();
+</script>
+{% endblock %}

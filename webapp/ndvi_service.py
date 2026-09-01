@@ -24,14 +24,17 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 
 import shapefile
+from PIL import Image, ImageDraw, ImageFont
 from shapely.geometry import Polygon, shape
 from shapely.ops import unary_union
 from shapely.validation import make_valid
 
 TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
+CATALOG_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search"
 
 TOKEN_CACHE_MARGIN_SECONDS = 60  # renova um pouco antes do token expirar de verdade
+COBERTURA_NUVENS_MAXIMA = 70  # % -- cenas com mais nuvem que isso sao descartadas
 
 KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 
@@ -430,36 +433,117 @@ def _resumir_erro_process_api(corpo_erro):
     return " -- ".join(partes)
 
 
-def buscar_ndvi(aneis, data_alvo=None, janela_dias=15, largura_px=512):
-    """Busca a imagem NDVI (menor cobertura de nuvem numa janela de
-    +/-`janela_dias` em volta de `data_alvo`) pro poligono dado. Sem
-    `data_alvo`, usa os ultimos 30 dias ate hoje (comportamento antigo, pra
-    "imagem mais recente"). Sentinel-2 tem cobertura desde 2015-06-23, entao
-    qualquer data a partir dai funciona -- inclusive meses/anos atras, pra
-    comparar a evolucao da area ao longo do tempo. Devolve (bytes_png, None)
-    em caso de sucesso, ou (None, mensagem_de_erro) -- nunca levanta
+def _buscar_cenas(token, geometria, desde, ate):
+    """Consulta a Catalog API (STAC) por cenas Sentinel-2 L2A que tocam a
+    geometria dada, num intervalo de datas -- devolve so' data e cobertura
+    de nuvens de cada uma (metadado leve, nao baixa nenhuma imagem), pra
+    poder escolher a melhor cena ANTES de gastar uma chamada da Process API."""
+    corpo = {
+        "collections": ["sentinel-2-l2a"],
+        "datetime": f"{desde.isoformat()}T00:00:00Z/{ate.isoformat()}T23:59:59Z",
+        "intersects": geometria,
+        "limit": 100,
+        "fields": {
+            "include": ["properties.datetime", "properties.eo:cloud_cover"],
+            "exclude": ["geometry", "assets", "links", "bbox"],
+        },
+    }
+    req = urllib.request.Request(
+        CATALOG_URL,
+        data=json.dumps(corpo).encode(),
+        method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        dados = json.load(resp)
+    return dados.get("features", [])
+
+
+def _desenhar_data(imagem_bytes, data):
+    """Escreve a data da cena no canto inferior esquerdo da imagem, com uma
+    faixa escura semi-transparente atras do texto pra ficar legivel em
+    qualquer cor de fundo do NDVI (do marrom do solo exposto ao verde
+    escuro da vegetacao densa)."""
+    img = Image.open(io.BytesIO(imagem_bytes)).convert("RGBA")
+    texto = data.strftime("%d/%m/%Y")
+    try:
+        fonte = ImageFont.load_default(size=max(12, img.width // 30))
+    except TypeError:
+        fonte = ImageFont.load_default()  # Pillow < 10.1 nao aceita `size`
+
+    medidor = ImageDraw.Draw(img)
+    x0_texto, y0_texto, x1_texto, y1_texto = medidor.textbbox((0, 0), texto, font=fonte)
+    largura_texto, altura_texto = x1_texto - x0_texto, y1_texto - y0_texto
+    margem = 6
+    x0, y0 = 4, img.height - altura_texto - margem * 2 - 4
+    x1, y1 = x0 + largura_texto + margem * 2, img.height - 4
+
+    faixa = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ImageDraw.Draw(faixa).rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 170))
+    img = Image.alpha_composite(img, faixa)
+    ImageDraw.Draw(img).text((x0 + margem, y0 + margem - y0_texto), texto, fill=(255, 255, 255, 255), font=fonte)
+
+    saida = io.BytesIO()
+    img.save(saida, format="PNG")
+    return saida.getvalue()
+
+
+def buscar_ndvi(aneis, data_alvo=None, janela_dias=45, largura_px=512):
+    """Busca a cena Sentinel-2 mais proxima de `data_alvo` (ou de hoje, se
+    nao informada) dentro de uma janela de +/-`janela_dias`, descartando
+    cenas com mais de `COBERTURA_NUVENS_MAXIMA`% de nuvens -- primeiro
+    consulta a Catalog API (metadado leve) pra escolher a melhor cena, so'
+    DEPOIS pede a imagem de verdade (Process API) pra essa cena especifica,
+    em vez de so' confiar no "menor nuvem" automatico da Process API (que
+    nao garante proximidade da data pedida). A imagem final tem a data da
+    cena escrita no canto. Sentinel-2 cobre desde 2015-06-23. Devolve
+    ({"imagem": bytes_png, "data": date, "cobertura_nuvens": float|None},
+    None) em caso de sucesso, ou (None, mensagem_de_erro) -- nunca levanta
     excecao, pra rota poder mostrar uma mensagem amigavel em vez de quebrar
     a pagina."""
     token, erro = _obter_token()
     if not token:
         return None, f"Nao foi possivel autenticar na Copernicus Data Space Ecosystem: {erro}."
 
-    min_lon, min_lat, max_lon, max_lat = _bbox(aneis)
-    largura_graus = max(max_lon - min_lon, 0.0005)
-    altura_graus = max(max_lat - min_lat, 0.0005)
-    altura_px = max(1, round(largura_px * altura_graus / largura_graus))
-
-    hoje = datetime.now(timezone.utc).date()
-    if data_alvo:
-        desde = data_alvo - timedelta(days=janela_dias)
-        hoje = min(data_alvo + timedelta(days=janela_dias), hoje)
-    else:
-        desde = hoje - timedelta(days=30)
-
     try:
         geometria = _geometria_valida(aneis)
     except ValueError as exc:
         return None, f"Contorno invalido: {exc}."
+
+    hoje = datetime.now(timezone.utc).date()
+    alvo = data_alvo or hoje
+    desde = alvo - timedelta(days=janela_dias)
+    ate = min(alvo + timedelta(days=janela_dias), hoje)
+
+    try:
+        cenas = _buscar_cenas(token, geometria, desde, ate)
+    except urllib.error.HTTPError as exc:
+        detalhe = _resumir_erro_process_api(exc.read().decode(errors="replace"))
+        return None, f"Falha ao consultar cenas disponiveis (HTTP {exc.code}): {detalhe}"
+    except Exception as exc:
+        return None, f"Falha ao consultar cenas disponiveis: {exc}"
+
+    boas = [
+        c for c in cenas
+        if c.get("properties", {}).get("eo:cloud_cover", 100) <= COBERTURA_NUVENS_MAXIMA
+    ]
+    if not boas:
+        return None, (
+            f"Nenhuma imagem Sentinel-2 com {COBERTURA_NUVENS_MAXIMA}% de nuvens ou menos "
+            f"encontrada entre {desde.isoformat()} e {ate.isoformat()}. Tente uma data diferente."
+        )
+
+    def _data_da_cena(cena):
+        return datetime.fromisoformat(cena["properties"]["datetime"].replace("Z", "+00:00")).date()
+
+    melhor = min(boas, key=lambda c: abs((_data_da_cena(c) - alvo).days))
+    data_da_cena = _data_da_cena(melhor)
+    cobertura = melhor["properties"].get("eo:cloud_cover")
+
+    min_lon, min_lat, max_lon, max_lat = _bbox(aneis)
+    largura_graus = max(max_lon - min_lon, 0.0005)
+    altura_graus = max(max_lat - min_lat, 0.0005)
+    altura_px = max(1, round(largura_px * altura_graus / largura_graus))
 
     corpo = {
         "input": {
@@ -471,8 +555,8 @@ def buscar_ndvi(aneis, data_alvo=None, janela_dias=15, largura_px=512):
                 "type": "sentinel-2-l2a",
                 "dataFilter": {
                     "timeRange": {
-                        "from": f"{desde.isoformat()}T00:00:00Z",
-                        "to": f"{hoje.isoformat()}T23:59:59Z",
+                        "from": f"{data_da_cena.isoformat()}T00:00:00Z",
+                        "to": f"{data_da_cena.isoformat()}T23:59:59Z",
                     },
                     "mosaickingOrder": "leastCC",
                 },
@@ -498,9 +582,12 @@ def buscar_ndvi(aneis, data_alvo=None, janela_dias=15, largura_px=512):
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
-            return resp.read(), None
+            imagem = resp.read()
     except urllib.error.HTTPError as exc:
         detalhe = _resumir_erro_process_api(exc.read().decode(errors="replace"))
         return None, f"Copernicus recusou o pedido (HTTP {exc.code}): {detalhe}"
     except Exception as exc:
         return None, f"Falha ao buscar imagem NDVI: {exc}"
+
+    imagem = _desenhar_data(imagem, data_da_cena)
+    return {"imagem": imagem, "data": data_da_cena, "cobertura_nuvens": cobertura}, None

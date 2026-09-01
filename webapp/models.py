@@ -340,6 +340,10 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN whatsapp_apikey TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        conn.execute("ALTER TABLE farm_ndvi_historico ADD COLUMN cobertura_nuvens REAL")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
 
     # farm_culturas mudou a chave primaria de (site_name) para (site_name,
     # safra) -- se o banco foi criado antes dessa versao, a tabela existe
@@ -1062,14 +1066,17 @@ def get_farm_ndvi_image(site_name):
     return row["imagem"] if row and row["imagem"] else None
 
 
-def add_farm_ndvi_historico(site_name, data_alvo, imagem_bytes):
+def add_farm_ndvi_historico(site_name, data_alvo, imagem_bytes, cobertura_nuvens=None):
     """Guarda mais uma imagem no historico (nao sobrescreve as anteriores)
     -- cada "Gerar NDVI" vira uma entrada nova na galeria da aba NDVI,
-    permitindo comparar datas diferentes em vez de so' ver a mais recente."""
+    permitindo comparar datas diferentes em vez de so' ver a mais recente.
+    `data_alvo` e' a data REAL da cena Sentinel-2 escolhida (a mais proxima
+    da data pedida com cobertura de nuvens aceitavel), nao necessariamente
+    a data que o usuario digitou."""
     conn = get_db()
     conn.execute(
-        "INSERT INTO farm_ndvi_historico (site_name, data_alvo, imagem, gerado_em) VALUES (?, ?, ?, ?)",
-        (site_name, data_alvo, imagem_bytes, _agora_cuiaba()),
+        "INSERT INTO farm_ndvi_historico (site_name, data_alvo, imagem, gerado_em, cobertura_nuvens) VALUES (?, ?, ?, ?, ?)",
+        (site_name, data_alvo, imagem_bytes, _agora_cuiaba(), cobertura_nuvens),
     )
     conn.commit()
     conn.close()
@@ -1080,11 +1087,24 @@ def get_farm_ndvi_historico(site_name):
     recente pra mais antiga -- usada pra montar a galeria de miniaturas."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, data_alvo, gerado_em FROM farm_ndvi_historico WHERE site_name = ? ORDER BY data_alvo DESC, id DESC",
+        "SELECT id, data_alvo, gerado_em, cobertura_nuvens FROM farm_ndvi_historico "
+        "WHERE site_name = ? ORDER BY data_alvo DESC, id DESC",
         (site_name,),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_farm_ndvi_historico_item(historico_id, site_name):
+    """Metadado (sem os bytes da imagem) de UMA entrada do historico --
+    usado na pagina de visualizacao com zoom, pra mostrar data/nuvens."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, data_alvo, gerado_em, cobertura_nuvens FROM farm_ndvi_historico WHERE id = ? AND site_name = ?",
+        (historico_id, site_name),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def get_farm_ndvi_historico_imagem(historico_id, site_name):

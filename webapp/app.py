@@ -2242,12 +2242,18 @@ def gerar_ndvi():
         aneis = ndvi_service.parse_kml_poligono(area["kml"])
     except ValueError as exc:
         return _save_response(f"Contorno de '{site_name}' invalido: {exc}", "ndvi", ok=False)
-    imagem, erro = ndvi_service.buscar_ndvi(aneis, data_alvo=data_alvo)
+    resultado, erro = ndvi_service.buscar_ndvi(aneis, data_alvo=data_alvo)
     if erro:
         return _save_response(f"Nao foi possivel gerar o NDVI de '{site_name}': {erro}", "ndvi", ok=False)
-    models.add_farm_ndvi_historico(site_name, (data_alvo or datetime.now(timezone.utc).date()).isoformat(), imagem)
-    models.save_farm_ndvi_image(site_name, imagem)
-    return _save_response(f"NDVI de '{site_name}' gerado e adicionado a galeria.", "ndvi")
+    models.add_farm_ndvi_historico(
+        site_name, resultado["data"].isoformat(), resultado["imagem"], resultado["cobertura_nuvens"]
+    )
+    models.save_farm_ndvi_image(site_name, resultado["imagem"])
+    mensagem = f"NDVI de '{site_name}' gerado (cena de {resultado['data'].strftime('%d/%m/%Y')}"
+    if resultado["cobertura_nuvens"] is not None:
+        mensagem += f", {resultado['cobertura_nuvens']:.0f}% de nuvens"
+    mensagem += ") e adicionado a galeria."
+    return _save_response(mensagem, "ndvi")
 
 
 @app.route("/ndvi/imagem/<path:site_name>")
@@ -2268,6 +2274,16 @@ def imagem_ndvi_historico(historico_id, site_name):
     if not imagem:
         abort(404)
     return send_file(io.BytesIO(imagem), mimetype="image/png")
+
+
+@app.route("/ndvi/ver/<int:historico_id>/<path:site_name>")
+@login_required
+def ver_ndvi_historico(historico_id, site_name):
+    _checar_acesso_site(site_name)
+    item = models.get_farm_ndvi_historico_item(historico_id, site_name)
+    if not item:
+        abort(404)
+    return render_template("ndvi_visualizar.html", site_name=site_name, item=item)
 
 
 @app.route("/ndvi/debug/<path:site_name>")
