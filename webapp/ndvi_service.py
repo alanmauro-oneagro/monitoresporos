@@ -357,6 +357,31 @@ def _geometria_valida(aneis):
     return {"type": "MultiPolygon", "coordinates": aneis_finais}
 
 
+def resumo_geometria(geometria):
+    """So' pra diagnostico (rota /ndvi/debug) -- area total, bbox e area de
+    cada poligono/fragmento resultante, pra saber se uma correcao de
+    geometria quebrada devolveu uma area razoavel ou virou uma porcao de
+    cacos minusculos (sintoma de contorno com defeito serio demais pra
+    reconstruir automaticamente)."""
+    geom = shape(geometria)
+    poligonos = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
+    min_lon, min_lat, max_lon, max_lat = geom.bounds
+    return {
+        "tipo": geom.geom_type,
+        "n_poligonos": len(poligonos),
+        "area_total_graus2": geom.area,
+        "bbox": {"min_lon": min_lon, "min_lat": min_lat, "max_lon": max_lon, "max_lat": max_lat},
+        "poligonos": [
+            {
+                "indice": i,
+                "area_graus2": p.area,
+                "pct_da_area_total": round(p.area / geom.area * 100, 2) if geom.area else 0,
+            }
+            for i, p in enumerate(poligonos)
+        ],
+    }
+
+
 def _resumir_erro_process_api(corpo_erro):
     """A resposta de erro da Process API inclui o poligono inteiro em
     "invalidValue" -- isso enchia os 300 caracteres que a mensagem de erro

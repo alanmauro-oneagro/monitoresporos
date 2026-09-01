@@ -2259,7 +2259,7 @@ def debug_ndvi(site_name):
     if not area:
         return {"erro": "sem contorno cadastrado"}
     aneis = ndvi_service.parse_kml_poligono(area["kml"])
-    return {
+    resposta = {
         "site": site_name,
         "n_aneis": len(aneis),
         "aneis": [
@@ -2267,6 +2267,12 @@ def debug_ndvi(site_name):
             for i, anel in enumerate(aneis)
         ],
     }
+    try:
+        geometria = ndvi_service._geometria_valida(aneis)
+        resposta["apos_correcao"] = ndvi_service.resumo_geometria(geometria)
+    except ValueError as exc:
+        resposta["apos_correcao_erro"] = str(exc)
+    return resposta
 
 
 @app.route("/recommendations/cultura/save", methods=["POST"])
