@@ -340,34 +340,6 @@ def _corrigir_anel(anel):
     return [p] if p.geom_type == "Polygon" else list(p.geoms)
 
 
-def _agrupar_com_buracos(poligonos):
-    """Um poligono totalmente contido dentro de outro maior (ex. area de
-    Reserva Legal/APP demarcada dentro do contorno da propriedade) vira
-    BURACO do maior, em vez de ficar como Polygon independente dentro do
-    MultiPolygon -- MultiPolygon nao pode ter membros sobrepostos (regra
-    OGC), e um poligono aninhado dentro de outro conta como sobreposicao
-    total, rejeitado pela Copernicus como "Polygon rings are intersecting".
-    Perdemos a distincao exterior/buraco original ao achatar tudo em aneis
-    independentes (`parse_kml_poligono`/`parse_shapefile_zip`), entao aqui
-    ela e' reconstruida por contencao geometrica (shapely `.contains`)."""
-    restantes = sorted(poligonos, key=lambda p: p.area, reverse=True)
-    usados = set()
-    resultado = []
-    for i, maior in enumerate(restantes):
-        if i in usados:
-            continue
-        indices_buracos = [
-            j for j in range(i + 1, len(restantes)) if j not in usados and maior.contains(restantes[j])
-        ]
-        usados.update(indices_buracos)
-        if indices_buracos:
-            com_buraco = Polygon(maior.exterior, [restantes[j].exterior for j in indices_buracos])
-            resultado.append(com_buraco if com_buraco.is_valid else maior)
-        else:
-            resultado.append(maior)
-    return resultado
-
-
 def _geometria_valida(aneis):
     """Monta a geometria (Polygon com 1 poligono resultante, MultiPolygon
     com mais de 1) validando/corrigindo CADA ANEL DE ENTRADA
@@ -382,7 +354,14 @@ def _geometria_valida(aneis):
     Depois de corrigir anel por anel, descarta fragmentos residuais cuja
     area e' insignificante (<0.1%) comparada ao maior poligono resultante
     -- isso remove o "ruido" de um anel corrompido sem descartar partes
-    legitimas da propriedade (talhoes menores mas reais)."""
+    legitimas da propriedade (talhoes menores mas reais). Por fim, junta
+    tudo com `unary_union`: aneis diferentes as vezes se sobrepoem entre si
+    (ex. um deles e' na verdade um "buraco" tipo Reserva Legal/APP contido
+    dentro de outro, distincao que se perde ao achatar tudo em aneis
+    independentes) -- MultiPolygon nao pode ter membros sobrepostos (regra
+    OGC) e a Copernicus rejeita com "Polygon rings are intersecting" se
+    tiver. `unary_union` resolve qualquer sobreposicao (total, parcial ou
+    nenhuma) automaticamente, sempre devolvendo geometria valida."""
     poligonos = []
     for anel in aneis:
         poligonos.extend(_corrigir_anel(anel))
@@ -392,7 +371,9 @@ def _geometria_valida(aneis):
 
     maior_area = max(p.area for p in poligonos)
     poligonos = [p for p in poligonos if p.area >= maior_area * 0.001]
-    poligonos = _agrupar_com_buracos(poligonos)
+
+    unido = unary_union(poligonos)
+    poligonos = [unido] if unido.geom_type == "Polygon" else list(unido.geoms)
 
     aneis_finais = []
     for p in poligonos:
