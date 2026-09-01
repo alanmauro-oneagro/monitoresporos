@@ -215,31 +215,49 @@
     // pela area administrativa oficial de cada UF com fazenda/estacao (nao
     // uma caixa retangular -- testado que uma caixa cobrindo so' as
     // fazendas ja trazia 84 mil trechos de rodovias de estados bem
-    // distantes tambem cobertos pela caixa; por UF real ficou em ~3 mil
-    // por estado, so' das rodovias que realmente passam por ele). Filtra
-    // por ter um "ref" (numero da rodovia) pra nao trazer rua sem nome.
+    // distantes tambem cobertos pela caixa). Filtra por ter um "ref"
+    // (numero da rodovia) pra nao trazer rua sem nome.
+    //
+    // UMA CONSULTA POR ESTADO, EM SEQUENCIA (nao todas juntas nem todas em
+    // paralelo) -- testado que uma unica consulta combinando 3 estados de
+    // uma vez sobrecarregava o Overpass publico (502 Bad Gateway, sem
+    // cabecalho CORS na resposta de erro, entao o navegador mostrava isso
+    // como se fosse bloqueio de CORS). Testado tambem que disparar uma
+    // consulta por estado mas todas AO MESMO TEMPO (Promise.all/forEach)
+    // tambem sobrecarrega -- o servidor publico so aguenta poucas
+    // consultas simultaneas por IP. Uma de cada vez, esperando a anterior
+    // terminar antes de comecar a proxima, foi o que se mostrou confiavel.
     function buscarRodovias(codareas) {
         var siglas = codareas.map(function (c) { return SIGLA_POR_CODAREA[c]; }).filter(Boolean);
-        if (!siglas.length) return;
-        var areas = siglas.map(function (sigla, i) {
-            return 'area["ISO3166-2"="BR-' + sigla + '"]->.a' + i + ';';
-        }).join('');
-        var buscas = siglas.map(function (sigla, i) {
-            return 'way["highway"~"^(trunk|primary)$"]["ref"](area.a' + i + ');';
-        }).join('');
-        var query = '[out:json][timeout:90];' + areas + '(' + buscas + ');out geom;';
-        var url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
-        fetch(url)
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (data) {
-            if (!data || !data.elements) return;
-            data.elements.forEach(function (way) {
-                if (!way.geometry) return;
-                var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
-                L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
-            });
-        })
-        .catch(function () { /* Overpass fora do ar ou sem internet -- so nao mostra as rodovias */ });
+        var indice = 0;
+        function proximaSigla() {
+            if (indice >= siglas.length) return;
+            var sigla = siglas[indice];
+            indice++;
+            var query = '[out:json][timeout:60];area["ISO3166-2"="BR-' + sigla + '"]->.a;' +
+                'way["highway"~"^(trunk|primary)$"]["ref"](area.a);out geom;';
+            fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'data=' + encodeURIComponent(query),
+            })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    if (!data || !data.elements) return;
+                    data.elements.forEach(function (way) {
+                        if (!way.geometry) return;
+                        var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
+                        L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
+                    });
+                })
+                .catch(function () { /* Overpass fora do ar/sobrecarregado -- so nao mostra as rodovias dessa UF */ })
+                // Pequena pausa antes do proximo estado (nao so' esperar
+                // esse terminar) -- margem extra de cortesia com o
+                // servidor publico gratuito, que tem limite de uso justo
+                // por IP.
+                .then(function () { setTimeout(proximaSigla, 400); });
+        }
+        proximaSigla();
     }
 
     // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
