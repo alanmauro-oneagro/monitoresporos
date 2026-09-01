@@ -11,6 +11,7 @@ e os dados novos aparecem quando a pessoa atualizar a pagina de novo.
 import concurrent.futures
 import functools
 import io
+import json
 import os
 import re
 import sqlite3
@@ -1053,25 +1054,56 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     return len(sucesso) > 0, resumo
 
 
-_scheduler_last_run_date = None
+_SCHEDULER_STATE_KEY = "whatsapp_scheduler_state"
+
+
+def _load_scheduler_enviados(today):
+    """Conjunto de fazendas que ja' receberam o envio agendado HOJE --
+    persistido no banco (`models.get_setting`/`app_settings`), nao numa
+    variavel em memoria. Uma variavel em memoria zera sozinha se o
+    processo reiniciar (deploy, crash, worker reciclado) no MEIO da hora
+    de envio, fazendo o agendador reenviar o relatorio do dia inteiro de
+    novo pra fazendas que ja' tinham recebido -- por isso o estado precisa
+    sobreviver a reinicio. Reseta sozinho quando o dia muda (registro
+    salvo de um dia anterior e' ignorado)."""
+    bruto = models.get_setting(_SCHEDULER_STATE_KEY)
+    if bruto:
+        try:
+            estado = json.loads(bruto)
+        except ValueError:
+            estado = {}
+        if estado.get("date") == today.isoformat():
+            return set(estado.get("enviados", []))
+    return set()
+
+
+def _salvar_scheduler_enviados(today, enviados):
+    models.set_setting(_SCHEDULER_STATE_KEY, json.dumps({"date": today.isoformat(), "enviados": sorted(enviados)}))
 
 
 def _run_scheduled_whatsapp_sends():
-    """Roda uma vez por dia (`_whatsapp_scheduler_loop`, as
-    `WHATSAPP_SEND_HOUR`h) -- texto e PDF tem cada um sua propria agenda
-    de dias da semana (aba Fazendas), entao uma fazenda pode, por
+    """Roda a cada minuto durante a hora `WHATSAPP_SEND_HOUR`
+    (`_whatsapp_scheduler_loop`) -- texto e PDF tem cada um sua propria
+    agenda de dias da semana (aba Fazendas), entao uma fazenda pode, por
     exemplo, so mandar o PDF as segundas e so o texto as sextas. So chama
     `_send_site_whatsapp` (que de fato manda) quando pelo menos um dos
-    dois bate com o dia de hoje pra essa fazenda."""
-    global _scheduler_last_run_date
+    dois bate com o dia de hoje pra essa fazenda, E essa fazenda ainda
+    nao esta' no conjunto "ja' enviado hoje" (`_load_scheduler_enviados`)
+    -- marca e PERSISTE a fazenda como enviada logo apos cada envio (nao
+    so' no final do lote), entao um crash/reinicio no meio da lista
+    retoma so' das fazendas que faltam, nunca reenvia as que ja' foram."""
     today = datetime.now().date()
     weekday = today.weekday()
     schedule_texto = models.get_all_whatsapp_days()
     schedule_pdf = models.get_all_whatsapp_days_pdf()
+    ja_enviados = _load_scheduler_enviados(today)
     sites_do_dia = [
         site for site in set(schedule_texto) | set(schedule_pdf)
-        if weekday in schedule_texto.get(site, set()) or weekday in schedule_pdf.get(site, set())
+        if site not in ja_enviados
+        and (weekday in schedule_texto.get(site, set()) or weekday in schedule_pdf.get(site, set()))
     ]
+    if not sites_do_dia:
+        return
     # Aquece o cache de clima de todas as fazendas do dia em paralelo antes
     # de mandar -- sem isso, `_send_site_whatsapp` buscava o clima de cada
     # fazenda um de cada vez (rede, ~1-1.5s cada), somando varios segundos
@@ -1081,13 +1113,14 @@ def _run_scheduled_whatsapp_sends():
         enviar_texto = weekday in schedule_texto.get(site, set())
         enviar_pdf = weekday in schedule_pdf.get(site, set())
         _send_site_whatsapp(site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
-    _scheduler_last_run_date = today
+        ja_enviados.add(site)
+        _salvar_scheduler_enviados(today, ja_enviados)
 
 
 def _whatsapp_scheduler_loop():
     while True:
         now = datetime.now()
-        if now.hour == WHATSAPP_SEND_HOUR and _scheduler_last_run_date != now.date():
+        if now.hour == WHATSAPP_SEND_HOUR:
             try:
                 _run_scheduled_whatsapp_sends()
             except Exception:
@@ -2150,6 +2183,10 @@ def save_weather_station_override():
             abort(403)
     estacao_codigo = request.form.get("estacao_codigo", "")
     models.set_weather_station_override(site_name, estacao_codigo)
+    # Sem isso, `_weather_cache` continuava com o clima da coordenada
+    # ANTIGA por ate' `WEATHER_CACHE_TTL_SECONDS` (30min) -- a troca so'
+    # valia na proxima vez que o cache expirasse sozinho.
+    _weather_cache.pop(site_name, None)
     if estacao_codigo:
         message = f"Previsao de '{site_name}' agora usa a estacao {estacao_codigo} como referencia."
     else:
@@ -2375,11 +2412,22 @@ def admin_fungicidas():
                 default_item is not None
                 and ingrediente == default_item["ingrediente"] and classe == (default_item["classe"] or "")
             )
-            if is_default or not ingrediente:
-                # Sem edicao real (ou linha extra de biologico deixada em
-                # branco) -- nao grava override/lixo vazio, assim a linha
+            if is_default:
+                # Sem edicao real -- nao grava override, assim a linha
                 # continua acompanhando fungicida_data.py se ele mudar depois.
                 models.delete_fungicida_override(doenca, tipo, idx)
+            elif not ingrediente:
+                if default_item is not None:
+                    # Item padrao apagado de proposito -- marca como
+                    # removido (fica vazio de vez, ver `removido` em
+                    # `_apply_fungicida_overrides`) em vez de simplesmente
+                    # descartar o override e deixar o padrao original
+                    # reaparecer sozinho no proximo carregamento.
+                    models.save_fungicida_override(doenca, tipo, idx, "", "", True)
+                else:
+                    # Linha extra de biologico nunca preenchida -- nada a
+                    # gravar.
+                    models.delete_fungicida_override(doenca, tipo, idx)
             else:
                 models.save_fungicida_override(doenca, tipo, idx, ingrediente, classe, False)
             if tipo == "quimico":
