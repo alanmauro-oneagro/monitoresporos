@@ -24,6 +24,9 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 
 import shapefile
+from shapely.geometry import mapping, shape
+from shapely.ops import unary_union
+from shapely.validation import make_valid
 
 TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
@@ -298,6 +301,11 @@ def anel_auto_intersecta(anel):
     return False
 
 
+def _eh_horario(anel):
+    soma = sum((anel[i + 1][0] - anel[i][0]) * (anel[i + 1][1] + anel[i][1]) for i in range(len(anel) - 1))
+    return soma > 0
+
+
 def _anti_horario(anel):
     """GeoJSON (RFC 7946) exige o anel externo no sentido anti-horario --
     shapefile (ESRI) usa o sentido horario por convencao, entao um contorno
@@ -305,8 +313,48 @@ def _anti_horario(anel):
     poligono como invalido (COMMON_BAD_PAYLOAD) sem essa correcao. KML ja
     costuma vir no sentido certo, mas normalizar sempre e' inofensivo (so'
     inverte a ordem dos pontos, nao muda a forma)."""
-    soma = sum((anel[i + 1][0] - anel[i][0]) * (anel[i + 1][1] + anel[i][1]) for i in range(len(anel) - 1))
-    return anel if soma < 0 else list(reversed(anel))
+    return list(reversed(anel)) if _eh_horario(anel) else anel
+
+
+def _horario(anel):
+    """Complemento de `_anti_horario`, pros aneis internos (buracos) --
+    RFC 7946 exige o sentido oposto ao do anel externo."""
+    return anel if _eh_horario(anel) else list(reversed(anel))
+
+
+def _geometria_valida(aneis):
+    """Monta a geometria (Polygon com 1 anel, MultiPolygon com mais de 1) e
+    corrige automaticamente se vier invalida/auto-intersectante -- problema
+    real e conhecido em shapefiles do CAR/SICAR (digitalizacao manual gera
+    poligono "bowtie" as vezes). Usa shapely/GEOS `make_valid` (mesmo truque
+    de correcao que QGIS/PostGIS usam) em vez de simplesmente rejeitar --
+    confirmado com um caso real (fazenda com 5 aneis, um deles com 111
+    pontos se auto-intersectando) onde sem isso a Copernicus recusava o
+    pedido inteiro."""
+    geom_ingenua = (
+        {"type": "Polygon", "coordinates": [aneis[0]]}
+        if len(aneis) == 1
+        else {"type": "MultiPolygon", "coordinates": [[anel] for anel in aneis]}
+    )
+    geom = shape(geom_ingenua)
+    if not geom.is_valid:
+        geom = make_valid(geom)
+        if geom.geom_type == "GeometryCollection":
+            partes = [g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")]
+            if not partes:
+                raise ValueError("contorno com geometria invalida demais pra corrigir automaticamente")
+            geom = unary_union(partes)
+
+    poligonos = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
+    aneis_finais = []
+    for p in poligonos:
+        exterior = _anti_horario([list(pt) for pt in p.exterior.coords])
+        buracos = [_horario([list(pt) for pt in interior.coords]) for interior in p.interiors]
+        aneis_finais.append([exterior] + buracos)
+
+    if len(aneis_finais) == 1:
+        return {"type": "Polygon", "coordinates": aneis_finais[0]}
+    return {"type": "MultiPolygon", "coordinates": aneis_finais}
 
 
 def _resumir_erro_process_api(corpo_erro):
@@ -338,7 +386,6 @@ def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
     if not token:
         return None, f"Nao foi possivel autenticar na Copernicus Data Space Ecosystem: {erro}."
 
-    aneis = [_anti_horario(anel) for anel in aneis]
     min_lon, min_lat, max_lon, max_lat = _bbox(aneis)
     largura_graus = max(max_lon - min_lon, 0.0005)
     altura_graus = max(max_lat - min_lat, 0.0005)
@@ -347,18 +394,10 @@ def buscar_ndvi(aneis, dias_historico=30, largura_px=512):
     hoje = datetime.now(timezone.utc).date()
     desde = hoje - timedelta(days=dias_historico)
 
-    if len(aneis) == 1:
-        # GeoJSON Polygon: 1 anel externo (buracos exigiriam aneis
-        # aninhados DENTRO dele, o que nao suportamos).
-        geometria = {"type": "Polygon", "coordinates": [aneis[0]]}
-    else:
-        # Mais de 1 anel = propriedade com partes separadas (ex. talhoes
-        # nao contiguos no mesmo registro CAR) -- cada anel vira um Polygon
-        # independente dentro de um MultiPolygon. Empilhar todos como se
-        # fossem "buracos" de um unico Polygon (como era antes) e' invalido
-        # quando os aneis nao estao aninhados um dentro do outro, e a
-        # Copernicus rejeitava com "Polygon rings are intersecting".
-        geometria = {"type": "MultiPolygon", "coordinates": [[anel] for anel in aneis]}
+    try:
+        geometria = _geometria_valida(aneis)
+    except ValueError as exc:
+        return None, f"Contorno invalido: {exc}."
 
     corpo = {
         "input": {
