@@ -376,15 +376,42 @@
 
     var NUVEM_COBERTURA_MINIMA = 10; // % -- abaixo disso nem desenha (ceu praticamente limpo, so' teria poluido a tela sem informar nada util)
 
-    function iconeNuvem(pct, espelhada) {
-        // Mais nuvem = icone maior e mais opaco -- transmite intensidade
-        // visual da cobertura, nao so' presenca/ausencia. Faixa de
-        // opacidade mais baixa (max 0.5) do que a versao original (que
-        // ia ate 0.9) porque com centenas de pontos cobrindo o Brasil
+    // Pane proprio, ABAIXO do overlayPane (400) onde ficam as rodovias e
+    // as divisas -- senao os icones de nuvem (que sao markers, e markerPane
+    // fica ACIMA do overlayPane por padrao no Leaflet) tampavam tudo o
+    // que tem embaixo.
+    map.createPane('nuvensPane');
+    map.getPane('nuvensPane').style.zIndex = 350;
+    map.getPane('nuvensPane').style.pointerEvents = 'none';
+
+    // Tamanho do icone precisa acompanhar o zoom -- um icone com tamanho
+    // fixo em pixel (jeito padrao de um L.divIcon) cobria o Brasil inteiro
+    // quando visto de longe (o pais inteiro cabe em poucas centenas de
+    // pixels de tela, mas cada icone continuava com ate 145px). Calcula
+    // quantos pixels de tela equivalem ao passo da grade (~1.5 grau) no
+    // zoom/latitude atual, e usa isso como base do tamanho do icone.
+    function tamanhoBaseEmPixels() {
+        var zoom = map.getZoom();
+        var lat = map.getCenter().lat;
+        var metrosPorPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+        var passoMetros = GRADE_PASSO_GRAUS * 111320;
+        // Teto de seguranca -- se o mapa estiver com zoom bem alto (ex.
+        // fitBounds com so' 1 fazenda de verdade, bounds vira um ponto so'
+        // e o Leaflet zoom no maximo), sem o teto o icone ficaria do
+        // tamanho da tela inteira em vez de so' nao aparecer proporcional.
+        return Math.min(passoMetros / metrosPorPixel, 220);
+    }
+
+    function iconeNuvem(pct, espelhada, tamanhoBase) {
+        // Mais nuvem = icone maior (dentro da faixa de 35% a 85% do passo
+        // da grade, pra vizinhos se tocarem um pouco sem virar um borrao
+        // solido) e mais opaco -- transmite intensidade visual da
+        // cobertura, nao so' presenca/ausencia. Opacidade maxima de 0.5
+        // (nao 0.9) porque com centenas de pontos cobrindo o Brasil
         // inteiro, icones muito solidos deixavam o mapa poluido/dificil
-        // de enxergar o satelite por baixo.
+        // de enxergar o que tem embaixo.
         var p = Math.max(0, Math.min(100, pct));
-        var largura = 55 + (p / 100) * 90;   // 55px a 145px
+        var largura = tamanhoBase * (0.35 + (p / 100) * 0.5);
         var altura = largura * 0.6;
         var opacidade = 0.08 + (p / 100) * 0.42; // 0.08 a 0.5
         var miolo = espelhada ? NUVEM_SVG_ESPELHADA : NUVEM_SVG_NORMAL;
@@ -404,16 +431,24 @@
     function desenharCamadaNuvens() {
         limparCamadaNuvens();
         if (!gradeNuvens) return;
+        var tamanhoBase = tamanhoBaseEmPixels();
         gradeNuvens.forEach(function (ponto, indice) {
             var pct = (ponto.nuvens_pct_por_dia || [])[diaSelecionado];
             if (pct === null || pct === undefined || pct < NUVEM_COBERTURA_MINIMA) return;
             var marcador = L.marker([ponto.lat, ponto.lon], {
-                icon: iconeNuvem(pct, indice % 2 === 1),
-                interactive: false, keyboard: false,
+                icon: iconeNuvem(pct, indice % 2 === 1, tamanhoBase),
+                pane: 'nuvensPane', interactive: false, keyboard: false,
             }).addTo(map);
             circulosNuvens.push(marcador);
         });
     }
+
+    // Reescala/reposiciona os icones quando o zoom muda -- senao ficariam
+    // do tamanho calculado pro zoom em que a camada foi ligada, errado
+    // pra qualquer outro zoom.
+    map.on('zoomend', function () {
+        if (nuvensToggle.checked && gradeNuvens) desenharCamadaNuvens();
+    });
 
     function gerarGradeBrasil(paisGeojson) {
         var pontos = [];
