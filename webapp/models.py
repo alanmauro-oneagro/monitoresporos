@@ -75,9 +75,14 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL deixa leitura (paineis, mapa, etc) rolar junto com escrita
+    # (autosave, agendador de WhatsApp) sem uma travar a outra -- sem isso,
+    # duas conexoes gravando quase ao mesmo tempo podem colidir com
+    # "database is locked" e a edicao do usuario se perde sem retry.
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 
@@ -1290,16 +1295,18 @@ def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None):
     nome = nome.strip().replace('"', "")
     site_name = f'"{nome}" - OneAgro'
     conn = get_db()
-    conn.execute(
-        """
-        INSERT INTO virtual_farms (site_name, nome, lat, lon, raio_km, criado_em, criado_por)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (site_name, nome, lat, lon, raio_km, _agora_cuiaba(), criado_por),
-    )
-    conn.execute("INSERT OR IGNORE INTO sites (site_name) VALUES (?)", (site_name,))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            """
+            INSERT INTO virtual_farms (site_name, nome, lat, lon, raio_km, criado_em, criado_por)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (site_name, nome, lat, lon, raio_km, _agora_cuiaba(), criado_por),
+        )
+        conn.execute("INSERT OR IGNORE INTO sites (site_name) VALUES (?)", (site_name,))
+        conn.commit()
+    finally:
+        conn.close()
     seed_default_whatsapp_schedule(site_name)
     return site_name
 
@@ -1392,12 +1399,14 @@ DEFAULT_PASSWORD = "Oneagro01!"  # senha de todo usuario novo, e pra onde o bota
 
 def create_user(username, password, is_admin=False, email="", telefone=""):
     conn = get_db()
-    conn.execute(
-        "INSERT INTO users (username, password_hash, is_admin, email, telefone) VALUES (?, ?, ?, ?, ?)",
-        (username, generate_password_hash(password), 1 if is_admin else 0, email, telefone),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, is_admin, email, telefone) VALUES (?, ?, ?, ?, ?)",
+            (username, generate_password_hash(password), 1 if is_admin else 0, email, telefone),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def set_user_whatsapp(user_id, telefone):
@@ -1448,6 +1457,37 @@ def get_site_whatsapp_recipients(site_name):
     ).fetchall()
     conn.close()
     return rows
+
+
+def get_all_sites_whatsapp_recipients():
+    """Versao em lote de `get_site_whatsapp_recipients`, pra telas que
+    precisam do destinatario de TODAS as fazendas (Recomendacoes, relatorio
+    admin de WhatsApp) -- uma unica consulta em vez de uma por fazenda.
+    Retorna {site_name: [sqlite3.Row(username, telefone), ...]}."""
+    conn = get_db()
+    rows = conn.execute(
+        """
+        SELECT site_name, username, telefone FROM (
+            SELECT DISTINCT s.site_name AS site_name, u.username AS username, u.telefone AS telefone
+            FROM users u
+            JOIN user_report_permissions r ON r.user_id = u.id
+            JOIN sites s ON s.id = r.site_id
+            WHERE u.telefone IS NOT NULL AND u.telefone != ''
+            UNION
+            SELECT DISTINCT s.site_name AS site_name, sub.nome AS username, sub.telefone AS telefone
+            FROM subordinados sub
+            JOIN subordinado_report_permissions sr ON sr.subordinado_id = sub.id
+            JOIN sites s ON s.id = sr.site_id
+            WHERE sub.telefone IS NOT NULL AND sub.telefone != ''
+        )
+        ORDER BY site_name, username
+        """
+    ).fetchall()
+    conn.close()
+    por_site = {}
+    for r in rows:
+        por_site.setdefault(r["site_name"], []).append(r)
+    return por_site
 
 
 def delete_user(user_id):

@@ -222,11 +222,33 @@ app.jinja_env.filters["telefone_br"] = models.fmt_telefone_br
 # classe de request.
 app.request_class.max_form_parts = 20_000
 
+# Sem limite, um upload de KML/shapefile grande (ou malicioso) e' lido
+# inteiro em memoria (ver save_ndvi_area / parse_shapefile_zip) -- no
+# Railway isso pode derrubar o processo inteiro. 25MB cobre folgado um
+# shapefile de contorno de fazenda real (que normalmente fica na casa dos
+# KB/poucos MB).
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
+
+# Sem isso, arquivo estatico (logo, icones, rodovias_br.json) so' ganha
+# Cache-Control condicional (ETag/Last-Modified) -- ainda precisa de uma
+# ida-e-volta ao servidor toda vez pra confirmar que nao mudou. Com
+# max-age, o navegador usa a copia local direto por 12h sem nem perguntar.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 43200
+
 
 @app.after_request
 def _no_cache(response):
     """Sem isso, o botao 'voltar' do navegador depois de 'Sair' mostra a
-    pagina anterior direto do cache local, sem pedir login de novo."""
+    pagina anterior direto do cache local, sem pedir login de novo. So se
+    aplica as paginas/rotas dinamicas -- arquivos estaticos (JS, CSS,
+    rodovias_br.json etc, servidos por send_static_file) nao tem dado de
+    sessao e ficam de fora, senao o navegador tem que rebaixar tudo de novo
+    a cada carregamento de pagina (pesava bastante no Mapa/Mapa Interpolado,
+    que carregam ~2MB de rodovias). Tambem fica de fora qualquer rota que ja
+    tenha definido seu proprio Cache-Control (ex. imagem_ndvi_historico,
+    imutavel por id -- ver a rota)."""
+    if request.endpoint == "static" or "Cache-Control" in response.headers:
+        return response
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     return response
@@ -1904,6 +1926,7 @@ def recommendations(safra):
     plantio_by_site = models.get_all_farm_plantio()
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
     virtual_names = models.virtual_farm_site_names()
+    whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
 
     sites_data = []
     for site, cards in cards_by_site.items():
@@ -1962,7 +1985,7 @@ def recommendations(safra):
             "dias_desde_atualizacao": dias_desde_atualizacao,
             "dias_sem_leitura": dias_sem_leitura,
             "nivel_dados": nivel_dados,
-            "whatsapp_destinos": len(_site_whatsapp_destinations(site)),
+            "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
             "whatsapp_text": whatsapp_text,
             "plantio_linhas": plantio_linhas,
             "aplicacoes_linhas": aplicacoes_linhas,
@@ -2338,11 +2361,16 @@ def imagem_ndvi(site_name):
 @app.route("/ndvi/imagem_historico/<int:historico_id>/<path:site_name>")
 @login_required
 def imagem_ndvi_historico(historico_id, site_name):
+    """Imagem de um item do historico -- unico por historico_id e nunca
+    muda depois de salva, entao pode ficar em cache local por muito tempo
+    (evita rebaixar tudo de novo so' de reabrir a galeria)."""
     _checar_acesso_site(site_name)
     imagem = models.get_farm_ndvi_historico_imagem(historico_id, site_name)
     if not imagem:
         abort(404)
-    return send_file(io.BytesIO(imagem), mimetype="image/png")
+    resp = send_file(io.BytesIO(imagem), mimetype="image/png")
+    resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    return resp
 
 
 @app.route("/ndvi/ver/<int:historico_id>/<path:site_name>")
@@ -3159,9 +3187,10 @@ def admin_relatorio_whatsapp():
     apenas_falhas = request.args.get("falhas") == "1"
     logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas)
     sites = sorted(set(read_sites()) | models.virtual_farm_site_names())
+    todos_destinos = models.get_all_sites_whatsapp_recipients()
     cadastro = []
     for site in ([site_name] if site_name else sites):
-        for r in models.get_site_whatsapp_recipients(site):
+        for r in todos_destinos.get(site, []):
             cadastro.append({"site": site, "destinatario": r["username"], "telefone": r["telefone"]})
     return render_template(
         "admin_relatorio_whatsapp.html", logs=logs, sites=sites, cadastro=cadastro,

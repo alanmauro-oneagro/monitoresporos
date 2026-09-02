@@ -48,7 +48,7 @@ html { font-size: 14px; }
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-            <input class="form-check-input farm-select-checkbox mt-0" type="checkbox" name="site_name" value="{{ site_group.site }}" form="whatsappBulkForm" title="Selecionar para envio em lote">
+            <input class="form-check-input farm-select-checkbox mt-0" type="checkbox" name="site_name" value="{{ site_group.site }}" form="whatsappBulkForm" title="Selecionar para envio em lote" style="width: 1.25em; height: 1.25em;">
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
                 <span class="toggle-icon">▶</span> {{ site_group.site }}
             </button>
@@ -74,7 +74,8 @@ html { font-size: 14px; }
             <div class="ms-auto d-flex align-items-center gap-2">
                 {% set whatsapp_form_id = "whatsapp_form_" ~ safra ~ "_" ~ outer_loop.index0 %}
                 <div class="form-check mb-0" title="Incluir o PDF no envio por WhatsApp">
-                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}">
+                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}" id="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">
+                    <label class="form-check-label small" for="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">PDF</label>
                 </div>
                 {% if site_group.whatsapp_text %}
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
@@ -88,7 +89,8 @@ html { font-size: 14px; }
                 </button>
                 {% endif %}
                 <div class="form-check mb-0" title="Incluir o texto no envio por WhatsApp">
-                    <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}">
+                    <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}" id="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">
+                    <label class="form-check-label small" for="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">Texto</label>
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn" {% if not site_group.whatsapp_text %}disabled{% endif %}
                         data-text="{{ site_group.whatsapp_text }}"

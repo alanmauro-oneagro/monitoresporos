@@ -484,7 +484,7 @@ def _desenhar_data(imagem_bytes, data):
     ImageDraw.Draw(img).text((x0 + margem, y0 + margem - y0_texto), texto, fill=(255, 255, 255, 255), font=fonte)
 
     saida = io.BytesIO()
-    img.save(saida, format="PNG")
+    img.save(saida, format="PNG", optimize=True)
     return saida.getvalue()
 
 
@@ -545,7 +545,11 @@ def buscar_ndvi(aneis, data_alvo=None, janela_dias=90, largura_px=512):
     min_lon, min_lat, max_lon, max_lat = _bbox(aneis)
     largura_graus = max(max_lon - min_lon, 0.0005)
     altura_graus = max(max_lat - min_lat, 0.0005)
-    altura_px = max(1, round(largura_px * altura_graus / largura_graus))
+    # Sem teto, um contorno muito alongado (faixa estreita ao longo de um
+    # rio/estrada, comum em CAR) gera altura_px enorme pra largura_px fixo,
+    # inflando processamento/memoria do Pillow e o tamanho do PNG salvo.
+    # 2500px e' o limite por lado da propria Process API da Copernicus.
+    altura_px = min(2500, max(1, round(largura_px * altura_graus / largura_graus)))
 
     corpo = {
         "input": {

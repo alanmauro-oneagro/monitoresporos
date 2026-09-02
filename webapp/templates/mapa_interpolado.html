@@ -218,18 +218,41 @@
     var MUNICIPIO_COLOR = '#ffffff';
     var IBGE_BASE = 'https://servicodados.ibge.gov.br/api/v3/malhas';
 
+    // Divisas do IBGE quase nunca mudam -- guarda no localStorage por 30
+    // dias pra nao rebaixar o mesmo geojson (pais/estados/municipios) toda
+    // vez que a pagina abre.
+    var BOUNDARY_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    function boundaryFromCache(url) {
+        try {
+            var raw = localStorage.getItem('ibge_boundary:' + url);
+            if (!raw) return null;
+            var entry = JSON.parse(raw);
+            if (!entry || (Date.now() - entry.t) > BOUNDARY_CACHE_TTL_MS) return null;
+            return entry.g;
+        } catch (e) { return null; }
+    }
+    function boundaryToCache(url, geojson) {
+        try {
+            localStorage.setItem('ibge_boundary:' + url, JSON.stringify({ t: Date.now(), g: geojson }));
+        } catch (e) { /* quota cheia ou localStorage indisponivel -- so perde o cache, sem quebrar nada */ }
+    }
     function addBoundaryLayer(url, weight, color) {
-        return fetch(url)
+        var cached = boundaryFromCache(url);
+        var promise = cached ? Promise.resolve(cached) : fetch(url)
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (geojson) {
-                if (!geojson) return null;
-                L.geoJSON(geojson, {
-                    style: { color: color || BOUNDARY_COLOR, weight: weight, fill: false, opacity: 0.9 },
-                    interactive: false,
-                }).addTo(map);
+                if (geojson) boundaryToCache(url, geojson);
                 return geojson;
             })
             .catch(function () { return null; /* IBGE fora do ar ou sem internet -- so nao mostra essa camada */ });
+        return promise.then(function (geojson) {
+            if (!geojson) return null;
+            L.geoJSON(geojson, {
+                style: { color: color || BOUNDARY_COLOR, weight: weight, fill: false, opacity: 0.9 },
+                interactive: false,
+            }).addTo(map);
+            return geojson;
+        });
     }
 
     // Ray casting simples (Polygon/MultiPolygon), igual o Mapa normal --
