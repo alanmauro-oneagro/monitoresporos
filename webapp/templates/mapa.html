@@ -270,7 +270,22 @@
     // zoom, pane proprio abaixo das rodovias/divisas), so' que aqui o dia
     // mostrado avanca sozinho a cada 2s em vez de ter botao de dia --
     // pedido explicito pra essa tela ser "so olhar", sem interacao manual.
-    var DIAS_NUVENS = ['Hoje', '+1', '+2', '+3', '+4', '+5'];
+    // Rotulo de cada dia como data real (dd/mm), calculada a partir de
+    // hoje -- em vez de "Hoje"/"+1"/"+2".../"+5" -- so' nessa tela (pedido
+    // explicito), o Mapa Interpolado continua com os rotulos relativos nos
+    // botoes de dia.
+    var DIAS_NUVENS = (function () {
+        var hoje = new Date();
+        var rotulos = [];
+        for (var i = 0; i <= 5; i++) {
+            var d = new Date(hoje);
+            d.setDate(d.getDate() + i);
+            var dia = String(d.getDate()).padStart(2, '0');
+            var mes = String(d.getMonth() + 1).padStart(2, '0');
+            rotulos.push(dia + '/' + mes);
+        }
+        return rotulos;
+    })();
     var GRADE_PASSO_GRAUS = 1.5;
     var NUVEM_COBERTURA_MINIMA = 10; // % -- abaixo disso nem desenha
     var circulosNuvens = [];
