@@ -207,48 +207,24 @@
         return Object.keys(codes);
     }
 
-    // So' as rodovias federais PRINCIPAIS escolhidas (nao todas as BRs, nem
-    // as estaduais) -- pedido explicito pra reduzir ao minimo, ja que
-    // tentar cobrir todo estado (mesmo so' as BRs de um estado) vinha
-    // dando "502 Bad Gateway" no Overpass publico com frequencia demais
-    // pra confiar. Uma consulta global (sem recorte por UF) por essas
-    // referencias exatas e' pequena e rapida -- mesmo padrao da BR-163
-    // sozinha, que sempre funcionou bem antes de tentar cobrir mais.
-    var BRS_PRINCIPAIS = ['163', '364', '070', '158'];
-
-    // O servico publico do Overpass e' instavel -- confirmado repetidas
-    // vezes que a MESMA consulta, sem mudar nada, ora funciona ora da
-    // 502/504 (sobrecarga do lado deles, sem relacao com o tamanho/
-    // conteudo da consulta). Tenta o servidor principal 2x, e se
-    // continuar falhando cai pro espelho (outro operador, infra
-    // independente) mais 2x antes de desistir de vez.
-    var OVERPASS_SERVIDORES = [
-        'https://overpass-api.de/api/interpreter',
-        'https://overpass.kumi.systems/api/interpreter',
-    ];
-
-    function buscarRodovias(indiceServidor, tentativa) {
-        indiceServidor = indiceServidor || 0;
-        tentativa = tentativa || 0;
-        if (indiceServidor >= OVERPASS_SERVIDORES.length) return;
-        var query = '[out:json][timeout:60];way["ref"~"^BR-(' + BRS_PRINCIPAIS.join('|') + ')$"];out geom;';
-        fetch(OVERPASS_SERVIDORES[indiceServidor] + '?data=' + encodeURIComponent(query))
-            .then(function (r) { return r.ok ? r.json() : Promise.reject('status ' + r.status); })
-            .then(function (data) {
-                if (!data || !data.elements) return;
-                data.elements.forEach(function (way) {
-                    if (!way.geometry) return;
-                    var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
-                    L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
+    // Rodovias federais (BR-163/364/070/158) -- lidas de um arquivo
+    // estatico proprio (webapp/static/rodovias_br.json), NAO mais buscadas
+    // ao vivo no Overpass a cada carregamento da pagina. O Overpass publico
+    // se mostrou instavel demais pra depender dele em tempo real (mesma
+    // consulta ora funcionava, ora dava 502/504/timeout, inclusive em mais
+    // de um servidor espelho) -- os dados foram baixados uma unica vez e
+    // salvos localmente, entao a pagina sempre mostra as rodovias na hora,
+    // sem depender de nenhum servico externo estar de pe.
+    function buscarRodovias() {
+        fetch('{{ url_for("static", filename="rodovias_br.json") }}')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (dados) {
+                if (!dados || !dados.trechos) return;
+                dados.trechos.forEach(function (trecho) {
+                    L.polyline(trecho.pontos, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
                 });
             })
-            .catch(function () {
-                if (tentativa < 1) {
-                    setTimeout(function () { buscarRodovias(indiceServidor, tentativa + 1); }, 3000);
-                } else {
-                    setTimeout(function () { buscarRodovias(indiceServidor + 1, 0); }, 500);
-                }
-            });
+            .catch(function () { /* arquivo estatico local -- so' falha se o proprio site estiver fora do ar */ });
     }
     buscarRodovias();
 
