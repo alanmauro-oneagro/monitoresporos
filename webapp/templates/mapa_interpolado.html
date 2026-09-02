@@ -274,10 +274,24 @@
     // sozinha, que sempre funcionou bem antes de tentar cobrir mais.
     var BRS_PRINCIPAIS = ['163', '364', '070', '158'];
 
-    function buscarRodovias() {
+    // O servico publico do Overpass e' instavel -- confirmado repetidas
+    // vezes que a MESMA consulta, sem mudar nada, ora funciona ora da
+    // 502/504 (sobrecarga do lado deles, sem relacao com o tamanho/
+    // conteudo da consulta). Tenta o servidor principal 2x, e se
+    // continuar falhando cai pro espelho (outro operador, infra
+    // independente) mais 2x antes de desistir de vez.
+    var OVERPASS_SERVIDORES = [
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.kumi.systems/api/interpreter',
+    ];
+
+    function buscarRodovias(indiceServidor, tentativa) {
+        indiceServidor = indiceServidor || 0;
+        tentativa = tentativa || 0;
+        if (indiceServidor >= OVERPASS_SERVIDORES.length) return;
         var query = '[out:json][timeout:60];way["ref"~"^BR-(' + BRS_PRINCIPAIS.join('|') + ')$"];out geom;';
-        fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query))
-            .then(function (r) { return r.ok ? r.json() : null; })
+        fetch(OVERPASS_SERVIDORES[indiceServidor] + '?data=' + encodeURIComponent(query))
+            .then(function (r) { return r.ok ? r.json() : Promise.reject('status ' + r.status); })
             .then(function (data) {
                 if (!data || !data.elements) return;
                 data.elements.forEach(function (way) {
@@ -286,7 +300,13 @@
                     L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
                 });
             })
-            .catch(function () { /* Overpass fora do ar ou sem internet -- so nao mostra as rodovias */ });
+            .catch(function () {
+                if (tentativa < 1) {
+                    setTimeout(function () { buscarRodovias(indiceServidor, tentativa + 1); }, 3000);
+                } else {
+                    setTimeout(function () { buscarRodovias(indiceServidor + 1, 0); }, 500);
+                }
+            });
     }
     buscarRodovias();
 
