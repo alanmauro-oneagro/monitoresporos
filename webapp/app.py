@@ -1786,15 +1786,17 @@ def mapa_interpolado():
 
 
 @app.route("/mapa-interpolado/nuvens-grade", methods=["POST"])
-@admin_required
+@login_required
 def nuvens_grade():
     """Devolve a previsao de nuvens (6 dias) pra uma grade de coordenadas
-    -- usado pela camada de nuvens do Mapa Interpolado, que cobre o Brasil
-    inteiro (mesma logica de "cobrir o pais todo" ja usada pras divisas de
-    municipio: o frontend recorta a grade pelo contorno oficial do Brasil,
-    aqui so' busca o clima dos pontos que sobraram). Um unico pedido em
-    lote pra Open-Meteo (aceita varias coordenadas separadas por virgula
-    numa chamada so'), em vez de uma chamada por ponto da grade."""
+    -- usado pela camada de nuvens do Mapa e do Mapa Interpolado, que cobre
+    o Brasil inteiro (mesma logica de "cobrir o pais todo" ja usada pras
+    divisas de municipio: o frontend recorta a grade pelo contorno oficial
+    do Brasil, aqui so' busca o clima dos pontos que sobraram). Um unico
+    pedido em lote pra Open-Meteo (aceita varias coordenadas separadas por
+    virgula numa chamada so'), em vez de uma chamada por ponto da grade.
+    So' login (nao precisa ser admin) -- o Mapa normal, usado por qualquer
+    usuario, tambem tem essa camada."""
     corpo = request.get_json(silent=True) or {}
     lats = corpo.get("lats") or []
     lons = corpo.get("lons") or []

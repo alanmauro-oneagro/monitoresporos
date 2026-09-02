@@ -265,69 +265,30 @@
         return Object.keys(codes);
     }
 
-    // Sigla de cada UF a partir do codigo IBGE (codarea) -- tabela fixa
-    // oficial (nunca muda), usada so' pra montar o filtro de area da
-    // consulta de rodovias no Overpass (precisa da sigla, o IBGE so'
-    // devolve o codigo numerico).
-    var SIGLA_POR_CODAREA = {
-        '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
-        '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL',
-        '28': 'SE', '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP', '41': 'PR',
-        '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF',
-    };
+    // So' as rodovias federais PRINCIPAIS escolhidas (nao todas as BRs, nem
+    // as estaduais) -- pedido explicito pra reduzir ao minimo, ja que
+    // tentar cobrir todo estado (mesmo so' as BRs de um estado) vinha
+    // dando "502 Bad Gateway" no Overpass publico com frequencia demais
+    // pra confiar. Uma consulta global (sem recorte por UF) por essas
+    // referencias exatas e' pequena e rapida -- mesmo padrao da BR-163
+    // sozinha, que sempre funcionou bem antes de tentar cobrir mais.
+    var BRS_PRINCIPAIS = ['163', '364', '070', '158'];
 
-    // So' as rodovias FEDERAIS principais (BR-xxx) via Overpass -- nao
-    // estaduais, pra manter a consulta pequena e confiavel (ver historico
-    // abaixo). Filtra direto pelo prefixo "BR-" na referencia (em vez de
-    // por tipo highway=trunk/primary), que sozinho ja garante que so'
-    // vem rodovia federal, seja qual for a tag usada no OpenStreetMap.
-    // Recortada pela area administrativa oficial de cada UF com fazenda/
-    // ponto (mesma UF usada pras divisas de municipio -- ver
-    // ufReferencePoints/findUfCodes acima) -- nao uma caixa retangular
-    // (uma caixa cobrindo so' as fazendas ja trouxe 84 mil trechos de
-    // rodovias de estados bem distantes tambem cobertos pela caixa).
-    //
-    // UMA CONSULTA POR ESTADO, EM SEQUENCIA (nao todas juntas nem todas em
-    // paralelo) -- testado que uma unica consulta combinando 3 estados de
-    // uma vez sobrecarregava o Overpass publico (502 Bad Gateway, sem
-    // cabecalho CORS na resposta de erro, entao o navegador mostrava isso
-    // como se fosse bloqueio de CORS). Testado tambem que disparar uma
-    // consulta por estado mas todas AO MESMO TEMPO (Promise.all/forEach)
-    // tambem sobrecarrega -- o servidor publico so aguenta poucas
-    // consultas simultaneas por IP. Uma de cada vez, esperando a anterior
-    // terminar antes de comecar a proxima, foi o que se mostrou confiavel.
-    function buscarRodovias(codareas) {
-        var siglas = codareas.map(function (c) { return SIGLA_POR_CODAREA[c]; }).filter(Boolean);
-        var indice = 0;
-        function proximaSigla() {
-            if (indice >= siglas.length) return;
-            var sigla = siglas[indice];
-            indice++;
-            var query = '[out:json][timeout:60];area["ISO3166-2"="BR-' + sigla + '"]->.a;' +
-                'way["ref"~"^BR-"](area.a);out geom;';
-            fetch('https://overpass-api.de/api/interpreter', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'data=' + encodeURIComponent(query),
+    function buscarRodovias() {
+        var query = '[out:json][timeout:60];way["ref"~"^BR-(' + BRS_PRINCIPAIS.join('|') + ')$"];out geom;';
+        fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query))
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || !data.elements) return;
+                data.elements.forEach(function (way) {
+                    if (!way.geometry) return;
+                    var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
+                    L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
+                });
             })
-                .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (data) {
-                    if (!data || !data.elements) return;
-                    data.elements.forEach(function (way) {
-                        if (!way.geometry) return;
-                        var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
-                        L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
-                    });
-                })
-                .catch(function () { /* Overpass fora do ar/sobrecarregado -- so nao mostra as rodovias dessa UF */ })
-                // Pequena pausa antes do proximo estado (nao so' esperar
-                // esse terminar) -- margem extra de cortesia com o
-                // servidor publico gratuito, que tem limite de uso justo
-                // por IP.
-                .then(function () { setTimeout(proximaSigla, 400); });
-        }
-        proximaSigla();
+            .catch(function () { /* Overpass fora do ar ou sem internet -- so nao mostra as rodovias */ });
     }
+    buscarRodovias();
 
     // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
     // (leve, um pedido so) e municipios (pesado -- so busca dos estados
@@ -335,17 +296,15 @@
     // agora elas sao a rede inteira do Brasil -- senao seria sempre
     // linha de municipio em todo estado do pais). Assim que uma fazenda
     // ou ponto entrar num estado novo, ele ja ganha as mesmas linhas de
-    // municipio e as mesmas rodovias automaticamente.
+    // municipio automaticamente.
     var ufReferencePoints = sites.map(function (s) { return [s.lon, s.lat]; });
     var paisGeojsonPromise = addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
         .then(function (ufGeojson) {
             if (!ufGeojson) return;
-            var codareas = findUfCodes(ufGeojson, ufReferencePoints);
-            codareas.forEach(function (codarea) {
+            findUfCodes(ufGeojson, ufReferencePoints).forEach(function (codarea) {
                 addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
             });
-            buscarRodovias(codareas);
         });
 
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';

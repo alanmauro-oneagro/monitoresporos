@@ -15,6 +15,7 @@
     .mapa-tt-normal .mapa-tt-dot { background: #51cf66; }
     .mapa-tt-doenca { flex: 1 1 auto; }
     .mapa-tt-valor { font-weight: 700; margin-left: 0.5rem; }
+    .mapa-nuvem-icon { background: transparent; border: none; pointer-events: none; }
 </style>
 {% endblock %}
 {% block content %}
@@ -28,14 +29,21 @@
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda com coordenada cadastrada ainda.</div>
 {% else %}
+<div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+    <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="nuvens-toggle">
+        <label class="form-check-label small fw-bold" for="nuvens-toggle">☁️ Previsao de nuvens (troca de dia automatica)</label>
+    </div>
+    <span id="nuvens-status" class="small text-muted d-none"></span>
+</div>
 <div id="farm-map"></div>
 <p class="text-muted small mt-3 pt-3 border-top">
     Passe o mouse sobre um pino para ver os alertas daquela estacao, ou
     clique para abrir direto aquela fazenda na aba Fazendas. As
     linhas amarelas mostram as divisas de pais e estado, as linhas brancas
     mostram as divisas de municipio (fonte: IBGE -- pode levar alguns
-    segundos para carregar) e as linhas laranjas sao as rodovias federais
-    (BR-xxx) da regiao (fonte: OpenStreetMap). Os pinos azuis 📡 sao so as estacoes do
+    segundos para carregar) e as linhas laranjas sao as rodovias BR-163,
+    BR-364, BR-070 e BR-158 (fonte: OpenStreetMap). Os pinos azuis 📡 sao so as estacoes do
     INMET que estao realmente sendo usadas como base pra alguma fazenda
     (a mais proxima de cada uma, ou a escolhida manualmente na aba
     Fazendas) -- so como referencia de localizacao/cidade, os dados de
@@ -199,85 +207,193 @@
         return Object.keys(codes);
     }
 
-    // Sigla de cada UF a partir do codigo IBGE (codarea) -- tabela fixa
-    // oficial (nunca muda), usada so' pra montar o filtro de area da
-    // consulta de rodovias no Overpass (precisa da sigla, o IBGE so'
-    // devolve o codigo numerico).
-    var SIGLA_POR_CODAREA = {
-        '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
-        '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL',
-        '28': 'SE', '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP', '41': 'PR',
-        '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF',
-    };
+    // So' as rodovias federais PRINCIPAIS escolhidas (nao todas as BRs, nem
+    // as estaduais) -- pedido explicito pra reduzir ao minimo, ja que
+    // tentar cobrir todo estado (mesmo so' as BRs de um estado) vinha
+    // dando "502 Bad Gateway" no Overpass publico com frequencia demais
+    // pra confiar. Uma consulta global (sem recorte por UF) por essas
+    // referencias exatas e' pequena e rapida -- mesmo padrao da BR-163
+    // sozinha, que sempre funcionou bem antes de tentar cobrir mais.
+    var BRS_PRINCIPAIS = ['163', '364', '070', '158'];
 
-    // So' as rodovias FEDERAIS principais (BR-xxx) via Overpass -- nao
-    // estaduais, pra manter a consulta pequena e confiavel (ver historico
-    // abaixo). Filtra direto pelo prefixo "BR-" na referencia (em vez de
-    // por tipo highway=trunk/primary), que sozinho ja garante que so'
-    // vem rodovia federal, seja qual for a tag usada no OpenStreetMap.
-    // Recortada pela area administrativa oficial de cada UF com fazenda/
-    // estacao (mesma UF usada pras divisas de municipio -- ver
-    // ufReferencePoints/findUfCodes acima) -- nao uma caixa retangular
-    // (uma caixa cobrindo so' as fazendas ja trouxe 84 mil trechos de
-    // rodovias de estados bem distantes tambem cobertos pela caixa).
-    //
-    // UMA CONSULTA POR ESTADO, EM SEQUENCIA (nao todas juntas nem todas em
-    // paralelo) -- testado que uma unica consulta combinando 3 estados de
-    // uma vez sobrecarregava o Overpass publico (502 Bad Gateway, sem
-    // cabecalho CORS na resposta de erro, entao o navegador mostrava isso
-    // como se fosse bloqueio de CORS). Testado tambem que disparar uma
-    // consulta por estado mas todas AO MESMO TEMPO (Promise.all/forEach)
-    // tambem sobrecarrega -- o servidor publico so aguenta poucas
-    // consultas simultaneas por IP. Uma de cada vez, esperando a anterior
-    // terminar antes de comecar a proxima, foi o que se mostrou confiavel.
-    function buscarRodovias(codareas) {
-        var siglas = codareas.map(function (c) { return SIGLA_POR_CODAREA[c]; }).filter(Boolean);
-        var indice = 0;
-        function proximaSigla() {
-            if (indice >= siglas.length) return;
-            var sigla = siglas[indice];
-            indice++;
-            var query = '[out:json][timeout:60];area["ISO3166-2"="BR-' + sigla + '"]->.a;' +
-                'way["ref"~"^BR-"](area.a);out geom;';
-            fetch('https://overpass-api.de/api/interpreter', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'data=' + encodeURIComponent(query),
+    function buscarRodovias() {
+        var query = '[out:json][timeout:60];way["ref"~"^BR-(' + BRS_PRINCIPAIS.join('|') + ')$"];out geom;';
+        fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query))
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || !data.elements) return;
+                data.elements.forEach(function (way) {
+                    if (!way.geometry) return;
+                    var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
+                    L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
+                });
             })
-                .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (data) {
-                    if (!data || !data.elements) return;
-                    data.elements.forEach(function (way) {
-                        if (!way.geometry) return;
-                        var latlngs = way.geometry.map(function (pt) { return [pt.lat, pt.lon]; });
-                        L.polyline(latlngs, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
-                    });
-                })
-                .catch(function () { /* Overpass fora do ar/sobrecarregado -- so nao mostra as rodovias dessa UF */ })
-                // Pequena pausa antes do proximo estado (nao so' esperar
-                // esse terminar) -- margem extra de cortesia com o
-                // servidor publico gratuito, que tem limite de uso justo
-                // por IP.
-                .then(function () { setTimeout(proximaSigla, 400); });
-        }
-        proximaSigla();
+            .catch(function () { /* Overpass fora do ar ou sem internet -- so nao mostra as rodovias */ });
     }
+    buscarRodovias();
 
     // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
     // (leve, um pedido so) e municipios (pesado -- so busca dos estados
     // onde realmente tem fazenda ou estacao, senao seria o Brasil inteiro).
-    // As rodovias (laranja) seguem a mesma regra: so' dos estados com
-    // fazenda/estacao.
-    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
+    var paisGeojsonPromise = addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
         .then(function (ufGeojson) {
             if (!ufGeojson) return;
-            var codareas = findUfCodes(ufGeojson, ufReferencePoints);
-            codareas.forEach(function (codarea) {
+            findUfCodes(ufGeojson, ufReferencePoints).forEach(function (codarea) {
                 addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
             });
-            buscarRodovias(codareas);
         });
+
+    // Camada de nuvens cobrindo o Brasil inteiro -- mesma logica do Mapa
+    // Interpolado (grade de pontos recortada pelo contorno do IBGE,
+    // consulta em lote na Open-Meteo, icone de nuvem que acompanha o
+    // zoom, pane proprio abaixo das rodovias/divisas), so' que aqui o dia
+    // mostrado avanca sozinho a cada 2s em vez de ter botao de dia --
+    // pedido explicito pra essa tela ser "so olhar", sem interacao manual.
+    var DIAS_NUVENS = ['Hoje', '+1', '+2', '+3', '+4', '+5'];
+    var GRADE_PASSO_GRAUS = 1.5;
+    var NUVEM_COBERTURA_MINIMA = 10; // % -- abaixo disso nem desenha
+    var circulosNuvens = [];
+    var diaSelecionado = 0;
+    var gradeNuvens = null;
+    var cicloAutomatico = null;
+
+    map.createPane('nuvensPane');
+    map.getPane('nuvensPane').style.zIndex = 350;
+    map.getPane('nuvensPane').style.pointerEvents = 'none';
+
+    var NUVEM_SVG_NORMAL =
+        '<ellipse cx="30" cy="38" rx="22" ry="18" fill="#ffffff"/>' +
+        '<ellipse cx="58" cy="24" rx="27" ry="24" fill="#ffffff"/>' +
+        '<ellipse cx="78" cy="37" rx="20" ry="17" fill="#ffffff"/>' +
+        '<ellipse cx="50" cy="45" rx="38" ry="17" fill="#ffffff"/>';
+    var NUVEM_SVG_ESPELHADA =
+        '<ellipse cx="70" cy="38" rx="22" ry="18" fill="#ffffff"/>' +
+        '<ellipse cx="42" cy="24" rx="27" ry="24" fill="#ffffff"/>' +
+        '<ellipse cx="22" cy="37" rx="20" ry="17" fill="#ffffff"/>' +
+        '<ellipse cx="50" cy="45" rx="38" ry="17" fill="#ffffff"/>';
+
+    function tamanhoBaseEmPixels() {
+        var zoom = map.getZoom();
+        var lat = map.getCenter().lat;
+        var metrosPorPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+        var passoMetros = GRADE_PASSO_GRAUS * 111320;
+        return Math.min(passoMetros / metrosPorPixel, 220);
+    }
+
+    function iconeNuvem(pct, espelhada, tamanhoBase) {
+        var p = Math.max(0, Math.min(100, pct));
+        var largura = tamanhoBase * (0.7 + (p / 100) * 0.8);
+        var altura = largura * 0.6;
+        var opacidade = 0.08 + (p / 100) * 0.42;
+        var miolo = espelhada ? NUVEM_SVG_ESPELHADA : NUVEM_SVG_NORMAL;
+        var html = '<svg viewBox="0 0 100 60" width="' + largura + '" height="' + altura +
+            '" style="opacity:' + opacidade + ';">' + miolo + '</svg>';
+        return L.divIcon({
+            html: html, className: 'mapa-nuvem-icon',
+            iconSize: [largura, altura], iconAnchor: [largura / 2, altura / 2],
+        });
+    }
+
+    function limparCamadaNuvens() {
+        circulosNuvens.forEach(function (c) { map.removeLayer(c); });
+        circulosNuvens = [];
+    }
+
+    function desenharCamadaNuvens() {
+        limparCamadaNuvens();
+        if (!gradeNuvens) return;
+        var tamanhoBase = tamanhoBaseEmPixels();
+        gradeNuvens.forEach(function (ponto, indice) {
+            var pct = (ponto.nuvens_pct_por_dia || [])[diaSelecionado];
+            if (pct === null || pct === undefined || pct < NUVEM_COBERTURA_MINIMA) return;
+            var marcador = L.marker([ponto.lat, ponto.lon], {
+                icon: iconeNuvem(pct, indice % 2 === 1, tamanhoBase),
+                pane: 'nuvensPane', interactive: false, keyboard: false,
+            }).addTo(map);
+            circulosNuvens.push(marcador);
+        });
+    }
+
+    function gerarGradeBrasil(paisGeojson) {
+        var pontos = [];
+        for (var lat = -34; lat <= 6; lat += GRADE_PASSO_GRAUS) {
+            for (var lon = -74; lon <= -34; lon += GRADE_PASSO_GRAUS) {
+                if (pointInGeometry([lon, lat], paisGeojson.features[0].geometry)) {
+                    pontos.push([lat, lon]);
+                }
+            }
+        }
+        return pontos;
+    }
+
+    var nuvensToggle = document.getElementById('nuvens-toggle');
+    var nuvensStatus = document.getElementById('nuvens-status');
+
+    function pararCicloAutomatico() {
+        if (cicloAutomatico) { clearInterval(cicloAutomatico); cicloAutomatico = null; }
+    }
+
+    function iniciarCicloAutomatico() {
+        pararCicloAutomatico();
+        cicloAutomatico = setInterval(function () {
+            diaSelecionado = (diaSelecionado + 1) % DIAS_NUVENS.length;
+            nuvensStatus.textContent = 'Mostrando: ' + DIAS_NUVENS[diaSelecionado];
+            nuvensStatus.classList.remove('d-none');
+            desenharCamadaNuvens();
+        }, 2000);
+    }
+
+    function buscarGradeNuvens() {
+        nuvensStatus.textContent = 'Carregando previsao de nuvens do Brasil todo...';
+        nuvensStatus.classList.remove('d-none');
+        paisGeojsonPromise.then(function (paisGeojson) {
+            if (!paisGeojson) throw new Error('sem contorno do Brasil (IBGE fora do ar?)');
+            var pontosGrade = gerarGradeBrasil(paisGeojson);
+            return fetch('{{ url_for("nuvens_grade") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lats: pontosGrade.map(function (p) { return p[0]; }),
+                    lons: pontosGrade.map(function (p) { return p[1]; }),
+                }),
+            });
+        }).then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (dados) {
+                gradeNuvens = dados;
+                if (nuvensToggle.checked) {
+                    desenharCamadaNuvens();
+                    nuvensStatus.textContent = 'Mostrando: ' + DIAS_NUVENS[diaSelecionado];
+                    iniciarCicloAutomatico();
+                }
+            })
+            .catch(function () {
+                nuvensStatus.textContent = 'Nao foi possivel buscar a previsao de nuvens agora -- tente de novo.';
+            });
+    }
+
+    // Reescala os icones quando o zoom muda, sem esperar o proximo passo
+    // do ciclo automatico.
+    map.on('zoomend', function () {
+        if (nuvensToggle.checked && gradeNuvens) desenharCamadaNuvens();
+    });
+
+    nuvensToggle.addEventListener('change', function () {
+        if (!nuvensToggle.checked) {
+            pararCicloAutomatico();
+            limparCamadaNuvens();
+            nuvensStatus.classList.add('d-none');
+            return;
+        }
+        if (gradeNuvens) {
+            desenharCamadaNuvens();
+            nuvensStatus.textContent = 'Mostrando: ' + DIAS_NUVENS[diaSelecionado];
+            nuvensStatus.classList.remove('d-none');
+            iniciarCicloAutomatico();
+        } else {
+            buscarGradeNuvens();
+        }
+    });
 
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
     var latlngs = sites.map(function (s) { return [s.lat, s.lon]; });
