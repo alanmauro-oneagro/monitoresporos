@@ -96,7 +96,7 @@
                     <div class="text-center flex-shrink-0" style="width: 90px;">
                         <a href="{{ url_for('ver_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
                            target="_blank" rel="noopener" class="text-decoration-none d-block" title="Abrir em nova aba (com zoom)">
-                            <img src="{{ url_for('imagem_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
+                            <img src="{{ url_for('imagem_ndvi_historico_thumb', historico_id=item.id, site_name=site_group.site) }}"
                                  style="width: 90px; height: 90px; object-fit: cover;" class="border rounded d-block mb-1"
                                  alt="NDVI de {{ site_group.site }} em {{ item.data_alvo | data_br }}" loading="lazy">
                             <span class="small text-muted d-block">{{ item.data_alvo | data_br }}</span>

@@ -488,6 +488,24 @@ def _desenhar_data(imagem_bytes, data):
     return saida.getvalue()
 
 
+def gerar_thumbnail(imagem_bytes, tamanho=200):
+    """Miniatura pra galeria do historico NDVI (ver ndvi.html) -- a imagem
+    original vem em ate' 2500px de lado (ver `buscar_ndvi`), mas a galeria
+    so' mostra 90x90 CSS px; sem isso, cada miniatura baixava a imagem
+    inteira so' pra exibir um quadradinho. Corta um quadrado central
+    (mesmo enquadramento do `object-fit: cover` do CSS) antes de
+    redimensionar, pra miniatura bater com o que a galeria mostra."""
+    img = Image.open(io.BytesIO(imagem_bytes)).convert("RGB")
+    lado = min(img.width, img.height)
+    esquerda = (img.width - lado) // 2
+    topo = (img.height - lado) // 2
+    img = img.crop((esquerda, topo, esquerda + lado, topo + lado))
+    img = img.resize((tamanho, tamanho), Image.LANCZOS)
+    saida = io.BytesIO()
+    img.save(saida, format="JPEG", quality=80, optimize=True)
+    return saida.getvalue()
+
+
 def buscar_ndvi(aneis, data_alvo=None, janela_dias=90, largura_px=512):
     """Busca a cena Sentinel-2 mais proxima de `data_alvo` (ou de hoje, se
     nao informada) dentro de uma janela de +/-`janela_dias`, descartando

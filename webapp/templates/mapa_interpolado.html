@@ -72,7 +72,10 @@
                         <input type="text" name="lon" id="novo-lon" class="form-control form-control-sm" required>
                     </div>
 
-                    <button type="submit" class="btn btn-sm btn-outline-primary">💾 Salvar Ponto</button>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">💾 Salvar Ponto</button>
+                        <button type="button" id="limpar-ponto-btn" class="btn btn-sm btn-outline-secondary" title="Remove o pino e o circulo de previa do mapa e limpa latitude/longitude -- nada e' salvo ate clicar em Salvar Ponto, entao um clique sem querer no mapa pode ser desfeito por aqui">🧹 Limpar ponto</button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -99,7 +102,8 @@
     </div>
 
     <div class="d-none border rounded p-2 mb-2" id="editar-ponto-{{ loop.index0 }}" style="background:#fff;">
-        <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end">
+        <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end"
+              onsubmit="return confirm('Salvar essas alteracoes no ponto estimado \'{{ ponto.nome }}\'? Os dados atuais (nome, coordenada, raio) serao substituidos e nao da pra desfazer depois.');">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
             <div class="col-12 col-md-4">
                 <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
@@ -616,6 +620,20 @@
     }
 
     map.on('click', function (e) { atualizarPreview(e.latlng); });
+
+    // Um clique sem querer no mapa (rolando/dando zoom, por exemplo) larga
+    // um pino de previa e preenche latitude/longitude -- nada e' salvo de
+    // verdade ainda (so acontece ao clicar em "Salvar Ponto", que exige
+    // Nome preenchido), mas o pino ficava no mapa sem nenhum jeito de
+    // tirar de la' a nao ser recarregando a pagina. Esse botao remove o
+    // pino/circulo e limpa os campos, deixando o formulario como se
+    // nenhum clique tivesse acontecido.
+    document.getElementById('limpar-ponto-btn').addEventListener('click', function () {
+        if (novoMarker) { map.removeLayer(novoMarker); novoMarker = null; }
+        if (novoCirculo) { map.removeLayer(novoCirculo); novoCirculo = null; }
+        latInput.value = '';
+        lonInput.value = '';
+    });
 
     // Busca de cidade/localidade (Nominatim/OpenStreetMap, geocodificacao
     // gratuita, sem API key) -- so busca ao clicar/apertar Enter (nao a

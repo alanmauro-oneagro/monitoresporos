@@ -2333,7 +2333,10 @@ def confirmar_ndvi_preview():
     preview = _get_ndvi_preview(site_name)
     if not preview:
         return _save_response("Essa pre-visualizacao expirou -- gere de novo.", "ndvi", ok=False)
-    models.add_farm_ndvi_historico(site_name, preview["data"].isoformat(), preview["imagem"], preview["cobertura_nuvens"])
+    thumbnail = ndvi_service.gerar_thumbnail(preview["imagem"])
+    models.add_farm_ndvi_historico(
+        site_name, preview["data"].isoformat(), preview["imagem"], preview["cobertura_nuvens"], thumbnail
+    )
     models.save_farm_ndvi_image(site_name, preview["imagem"])
     _ndvi_preview_cache.pop(site_name, None)
     return _save_response(f"NDVI de '{site_name}' salvo na galeria.", "ndvi")
@@ -2369,6 +2372,21 @@ def imagem_ndvi_historico(historico_id, site_name):
     if not imagem:
         abort(404)
     resp = send_file(io.BytesIO(imagem), mimetype="image/png")
+    resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    return resp
+
+
+@app.route("/ndvi/imagem_historico_thumb/<int:historico_id>/<path:site_name>")
+@login_required
+def imagem_ndvi_historico_thumb(historico_id, site_name):
+    """Miniatura (ver `ndvi_service.gerar_thumbnail`) usada na galeria --
+    bem mais leve que a imagem completa (que so' e' baixada quando o
+    usuario abre `ver_ndvi_historico` pra dar zoom)."""
+    _checar_acesso_site(site_name)
+    thumbnail, mimetype = models.get_farm_ndvi_historico_thumbnail(historico_id, site_name)
+    if not thumbnail:
+        abort(404)
+    resp = send_file(io.BytesIO(thumbnail), mimetype=mimetype)
     resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
     return resp
 
