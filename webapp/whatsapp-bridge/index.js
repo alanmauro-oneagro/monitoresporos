@@ -35,7 +35,21 @@ const PORT = process.env.PORT || 3001;
 // local continua isolado em 127.0.0.1 por padrao, sem precisar mudar nada.
 const HOST = process.env.HOST || "127.0.0.1";
 const AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || "./auth_info";
-const MIN_DELAY_MS = 2000; // espaco minimo entre envios, pra nao parecer bot
+// Espaco minimo entre envios (+ variacao aleatoria por cima) -- 2s fixo
+// era rapido e regular demais pra ser um envio manual de verdade; o
+// WhatsApp trata rajadas de mensagens vindas de um "aparelho conectado"
+// (que e' o que o Baileys e', tecnicamente) nesse ritmo como
+// comportamento de bot e passa a segurar a ENTREGA pro destinatario --
+// a mensagem fica "enviada" pro remetente, mas o destinatario so' ve'
+// "Aguardando mensagem. Essa acao pode levar alguns instantes." sem
+// nunca abrir (o texto some quando o WhatsApp decide liberar, minutos
+// ou horas depois -- ou nunca). Mandar pelo proprio celular nao sofre
+// disso porque nao passa por esse mecanismo de "linked device". Isso e'
+// o que estava acontecendo no envio automatico dos relatorios (varias
+// fazendas seguidas, mensagens parecidas, ritmo constante de 2s) mas
+// nao no envio manual pelo app do WhatsApp do administrador.
+const MIN_DELAY_MS = 8000;
+const JITTER_MS = 5000;
 
 let sock = null;
 let lastQrDataUrl = null;
@@ -166,9 +180,10 @@ app.post("/send", (req, res) => {
     if (!connected || !sock) {
         return res.status(503).json({ ok: false, error: "WhatsApp nao conectado -- escaneie o QR code em /qr" });
     }
-    // fila sequencial simples com um espacamento minimo entre mensagens
+    // fila sequencial simples com um espacamento minimo (+ variacao) entre
+    // mensagens -- ver comentario de MIN_DELAY_MS acima.
     sendQueue = sendQueue
-        .then(() => new Promise((resolve) => setTimeout(resolve, MIN_DELAY_MS)))
+        .then(() => new Promise((resolve) => setTimeout(resolve, MIN_DELAY_MS + Math.random() * JITTER_MS)))
         .then(async () => {
             // O numero "oficial" (com o 9o digito, padrao brasileiro atual)
             // nem sempre bate com o JID de verdade que o WhatsApp usa por
@@ -179,6 +194,16 @@ app.post("/send", (req, res) => {
             const digits = String(phone).replace(/\D/g, "");
             const [info] = await sock.onWhatsApp(digits).catch(() => []);
             const jid = (info && info.exists) ? info.jid : normalizePhone(digits);
+            // "Digitando..." antes de mandar de verdade -- outro sinal de
+            // envio humano (ver comentario de MIN_DELAY_MS). So' cosmetico:
+            // se falhar (numero sem presenca disponivel, etc.) nao impede
+            // o envio, so' pula direto pra mensagem.
+            try {
+                await sock.presenceSubscribe(jid);
+                await sock.sendPresenceUpdate("composing", jid);
+                await new Promise((resolve) => setTimeout(resolve, 1200 + Math.random() * 1200));
+                await sock.sendPresenceUpdate("paused", jid);
+            } catch (err) { /* presenca e' so' cosmetica -- nunca bloqueia o envio */ }
             if (documentBase64) {
                 // Relatorio em PDF (mesmo conteudo do texto, mais o grafico
                 // de concentracao) mandado como documento anexado -- ver
