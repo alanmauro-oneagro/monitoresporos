@@ -11,11 +11,20 @@ lista vazia sem nem tentar a rede (mesmo padrao do Copernicus em
 ndvi_service.py: a funcionalidade so' fica indisponivel, o resto do app
 continua funcionando normal).
 
-IMPORTANTE: o mapeamento de campos abaixo (nomes das chaves no JSON de
-resposta) ainda nao foi confirmado contra uma chamada real -- foi escrito
-com base na documentacao publica da API, nao testado. Confirmar assim
-que houver credencial de verdade e ajustar `_fetch_estacoes`/`get_estacoes`
-conforme o formato real."""
+Mapeamento de campos abaixo CONFIRMADO contra a documentacao publica e
+real do servico (nao contra uma chamada de verdade ainda -- precisa de
+credencial pra isso, mas o formato da resposta e' documentado e
+exemplificado pela propria DMC em
+https://climatologia.meteochile.gob.cl/application/documentacion/getDocumento/6,
+"Catastro Estaciones Meteorologicas de la DMC" -- servico
+getCatastroEstacionesGeo): devolve um GeoJSON FeatureCollection, cada
+"feature" com geometry.coordinates=[longitude, latitude] e um
+"properties" com codigoNacional/nombreEstacion/region/comuna etc. O
+exemplo da propria documentacao mostra cada objeto de `features` com um
+segundo nivel aninhado (`feature["features"]["geometry"/"properties"]`)
+em vez do GeoJSON padrao (`feature["geometry"/"properties"]`) -- por
+seguranca, `_propriedades_de` abaixo aceita os dois formatos, testando
+o padrao primeiro."""
 import json
 import os
 import time
@@ -24,7 +33,7 @@ import urllib.request
 
 import inmet_stations  # reaproveita a mesma matemática de distância (_haversine_km)
 
-ESTACOES_URL = "https://climatologia.meteochile.gob.cl/application/productos/estacionesRedEma"
+ESTACOES_URL = "https://climatologia.meteochile.gob.cl/application/geoservicios/getCatastroEstacionesGeo"
 CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
 
 _cache = {"timestamp": 0, "estacoes": []}
@@ -44,12 +53,24 @@ def _fetch_estacoes():
         return json.load(resp)
 
 
+def _propriedades_de(feature):
+    """Ver nota no docstring do modulo sobre o aninhamento estranho do
+    exemplo oficial -- tenta o GeoJSON padrao primeiro, cai pro aninhado
+    se as chaves esperadas nao estiverem la'."""
+    props = feature.get("properties") or {}
+    if "codigoNacional" in props:
+        return props
+    return (feature.get("features") or {}).get("properties") or {}
+
+
 def get_estacoes():
-    """Lista de estacoes automaticas da DMC (codigo, cidade, uf, lat, lon
-    -- mesmo formato do INMET; "uf" guarda o nome da regiao chilena,
-    reaproveitando a chave pra nao precisar mudar os templates que ja
-    leem `estacao.uf`). Cache em memoria por 24h. Sem credencial
-    configurada, devolve [] direto, sem tentar rede."""
+    """Lista de estacoes da DMC (codigo, cidade, uf, lat, lon -- mesmo
+    formato do INMET; "cidade" guarda o nome da propria estacao
+    (nombreEstacion, ex. "Quinta Normal, Santiago") e "uf" guarda o nome
+    da regiao chilena, reaproveitando as chaves do INMET pra nao precisar
+    mudar os templates que ja leem `estacao.cidade`/`estacao.uf`). Cache
+    em memoria por 24h. Sem credencial configurada, devolve [] direto,
+    sem tentar rede."""
     if not credenciais_configuradas():
         return []
     now = time.time()
@@ -60,16 +81,17 @@ def get_estacoes():
     except Exception:
         return _cache["estacoes"]
     estacoes = []
-    for item in raw.get("datos", raw) if isinstance(raw, dict) else raw:
+    for feature in raw.get("features", []):
+        props = _propriedades_de(feature)
         try:
-            lat = float(item.get("latitud"))
-            lon = float(item.get("longitud"))
-        except (TypeError, ValueError):
+            lat = float(props["latitud"])
+            lon = float(props["longitud"])
+        except (TypeError, ValueError, KeyError):
             continue
         estacoes.append({
-            "codigo": item.get("codigoNacional") or item.get("codigo"),
-            "cidade": item.get("nombre"),
-            "uf": item.get("nombreRegion") or item.get("region"),
+            "codigo": props.get("codigoNacional"),
+            "cidade": props.get("nombreEstacion"),
+            "uf": props.get("region"),
             "lat": lat,
             "lon": lon,
         })
