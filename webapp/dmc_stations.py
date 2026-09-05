@@ -11,20 +11,27 @@ lista vazia sem nem tentar a rede (mesmo padrao do Copernicus em
 ndvi_service.py: a funcionalidade so' fica indisponivel, o resto do app
 continua funcionando normal).
 
-Mapeamento de campos abaixo CONFIRMADO contra a documentacao publica e
-real do servico (nao contra uma chamada de verdade ainda -- precisa de
-credencial pra isso, mas o formato da resposta e' documentado e
-exemplificado pela propria DMC em
-https://climatologia.meteochile.gob.cl/application/documentacion/getDocumento/6,
-"Catastro Estaciones Meteorologicas de la DMC" -- servico
-getCatastroEstacionesGeo): devolve um GeoJSON FeatureCollection, cada
-"feature" com geometry.coordinates=[longitude, latitude] e um
-"properties" com codigoNacional/nombreEstacion/region/comuna etc. O
-exemplo da propria documentacao mostra cada objeto de `features` com um
-segundo nivel aninhado (`feature["features"]["geometry"/"properties"]`)
-em vez do GeoJSON padrao (`feature["geometry"/"properties"]`) -- por
-seguranca, `_propriedades_de` abaixo aceita os dois formatos, testando
-o padrao primeiro."""
+Mapeamento de campos abaixo CONFIRMADO contra uma chamada de verdade
+(705 estacoes, testado em 2026-09) ao servico getCatastroEstacionesGeo
+(https://climatologia.meteochile.gob.cl/application/documentacion/getDocumento/6,
+"Catastro Estaciones Meteorologicas de la DMC"): devolve um GeoJSON
+FeatureCollection, cada "feature" com geometry.coordinates=[longitude,
+latitude] e um "properties". O aninhamento estranho do exemplo da
+propria documentacao (`feature["features"]["geometry"/"properties"]`
+em vez do GeoJSON padrao `feature["geometry"/"properties"]`) e' real,
+nao erro de digitacao do exemplo -- `_propriedades_de` abaixo aceita os
+dois formatos, testando o padrao primeiro. Duas diferencas encontradas
+entre a documentacao (que usa camelCase minusculo) e a resposta real:
+- As chaves "codigoNacional" e "numeroRegion" vem capitalizadas
+  ("CodigoNacional", "NumeroRegion") na resposta de verdade -- so essas
+  duas, as outras (nombreEstacion, latitud, longitud, comuna, provincia)
+  batem com a documentacao.
+- O campo "region" (nome da regiao) vem SEMPRE vazio ("") nas 705
+  estacoes testadas -- inutilizavel. Uso "NumeroRegion" (sempre
+  presente, 1-16) com uma tabela fixa (`_NOME_REGIAO`) em vez disso,
+  ja que o numero-pro-nome das 16 regioes oficiais do Chile e' estavel
+  (a doc do proprio servico usa exatamente esse par -- regiao 13 =
+  "Metropolitana de Santiago" -- no unico exemplo que ela mostra)."""
 import json
 import os
 import time
@@ -35,6 +42,17 @@ import inmet_stations  # reaproveita a mesma matemática de distância (_haversi
 
 ESTACOES_URL = "https://climatologia.meteochile.gob.cl/application/geoservicios/getCatastroEstacionesGeo"
 CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
+
+# As 16 regioes oficiais do Chile, por numero -- ver nota no docstring
+# do modulo sobre o campo "region" da API vir sempre vazio.
+_NOME_REGIAO = {
+    1: "Tarapacá", 2: "Antofagasta", 3: "Atacama", 4: "Coquimbo",
+    5: "Valparaíso", 6: "Libertador General Bernardo O'Higgins", 7: "Maule",
+    8: "Biobío", 9: "La Araucanía", 10: "Los Lagos",
+    11: "Aysén del General Carlos Ibáñez del Campo",
+    12: "Magallanes y de la Antártica Chilena", 13: "Metropolitana de Santiago",
+    14: "Los Ríos", 15: "Arica y Parinacota", 16: "Ñuble",
+}
 
 _cache = {"timestamp": 0, "estacoes": []}
 
@@ -58,7 +76,7 @@ def _propriedades_de(feature):
     exemplo oficial -- tenta o GeoJSON padrao primeiro, cai pro aninhado
     se as chaves esperadas nao estiverem la'."""
     props = feature.get("properties") or {}
-    if "codigoNacional" in props:
+    if "CodigoNacional" in props:
         return props
     return (feature.get("features") or {}).get("properties") or {}
 
@@ -89,9 +107,9 @@ def get_estacoes():
         except (TypeError, ValueError, KeyError):
             continue
         estacoes.append({
-            "codigo": props.get("codigoNacional"),
+            "codigo": props.get("CodigoNacional"),
             "cidade": props.get("nombreEstacion"),
-            "uf": props.get("region"),
+            "uf": _NOME_REGIAO.get(props.get("NumeroRegion"), ""),
             "lat": lat,
             "lon": lon,
         })
