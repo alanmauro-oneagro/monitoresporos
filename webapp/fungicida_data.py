@@ -11,6 +11,15 @@ Soja" para "Ferrugem Asiatica" e "Septoria" de "Septoriose" para "DFC").
 O nome exibido na tela sempre vem da traducao atual (aba Doencas), nunca
 daqui.
 
+Registro regulatorio e' sempre o brasileiro (MAPA/Adapar, Agrofit) --
+inclusive pra fazenda de outro pais (Chile, etc). Decisao consciente, nao
+lacuna: o pedido explicito da expansao pra America do Sul foi reusar
+todos os parametros ja aplicados no Brasil pros paises novos, e essa
+biblioteca de fungicidas e' um desses parametros. Se algum dia precisar
+de registro proprio por pais (ex. SAG no Chile), isso vira uma dimensao
+nova aqui (hoje as chaves sao so' doenca -- precisaria virar
+doenca+pais), nao uma mudanca no que ja existe.
+
 Fontes variam por doenca (ver campo "fonte"/"fonte_url" de cada grupo):
 - Soybean Rust, Target Spot, Powdery Mildew e Septoria vem da ferramenta
   'Classificacao de eficacia de fungicidas quimicos e biologicos: modulo

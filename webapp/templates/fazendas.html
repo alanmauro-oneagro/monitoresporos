@@ -111,6 +111,19 @@
             </div>
             {% endfor %}
 
+            <div class="mt-3 pt-3 border-top">
+                <form method="post" action="{{ url_for('save_site_country') }}" class="d-flex align-items-center gap-2" data-autosave>
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="form-label small text-muted mb-0" for="pais_{{ farm_idx }}">País:</label>
+                    <select name="country_code" id="pais_{{ farm_idx }}" class="form-select form-select-sm" style="width: auto;">
+                        {% for code, pais in countries.items() %}
+                        <option value="{{ code }}" {% if site_group.country_code == code %}selected{% endif %}>{{ pais.nome }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="autosave-status small"></span>
+                </form>
+            </div>
+
             {% if site_group.estacoes_proximas %}
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>

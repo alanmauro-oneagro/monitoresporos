@@ -46,7 +46,7 @@
                     <div id="boxEstado" class="filtro-box-menu d-none bg-white shadow rounded p-2">
                         {% for uf in estados_disponiveis %}
                         <div class="form-check">
-                            <input class="form-check-input filtro-estado" type="checkbox" value="{{ uf }}" id="estado_{{ uf }}" {% if uf == 'MT' %}checked{% endif %}>
+                            <input class="form-check-input filtro-estado" type="checkbox" value="{{ uf }}" id="estado_{{ uf }}">
                             <label class="form-check-label small" for="estado_{{ uf }}">{{ uf }}</label>
                         </div>
                         {% endfor %}

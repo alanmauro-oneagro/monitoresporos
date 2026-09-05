@@ -40,6 +40,7 @@ import weather_forecast
 import inmet_stations
 import virtual_farms
 import ndvi_service
+import countries
 from data_reader import read_sites, get_dashboard_data
 
 # Fuso horario do site: Cuiaba-MT (America/Cuiaba, UTC-4 o ano todo -- Brasil
@@ -53,6 +54,18 @@ from data_reader import read_sites, get_dashboard_data
 os.environ["TZ"] = "America/Cuiaba"
 if hasattr(time, "tzset"):
     time.tzset()
+
+# Fica America/Cuiaba pra TODAS as fazendas, mesmo as do Chile
+# (America/Santiago) -- decisao consciente, nao esquecimento: a
+# diferenca real e' so' ~0-1h (Chile tem horario de verao, o Brasil nao
+# desde 2019), entao o impacto pratico e' pequeno. Afeta hora do envio
+# agendado de WhatsApp (`WHATSAPP_SEND_HOUR`), timestamps de log e
+# rodape de relatorio pra TODOS os paises igual -- nao (ainda) por
+# fazenda/pais. Um ajuste fino por pais e' possivel depois se isso vier
+# a importar de verdade; ver `data_reader._offset_america_santiago` pro
+# unico lugar onde o fuso do Chile ja e' tratado com mais precisao (o
+# calculo de risco de doenca por hora, mais sensivel a isso que so'
+# timestamp).
 
 WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda ... 6=Domingo (Python date.weekday())
 WHATSAPP_SEND_HOUR = 7  # hora do dia (0-23) em que o envio automatico roda
@@ -182,17 +195,22 @@ def _prefetch_weather(sites, coords):
 def _weather_coords_all():
     """Coordenada usada pra buscar a previsao (Open-Meteo) de cada site --
     normalmente a mesma da fazenda (`_coords_all`), mas usa a estacao
-    INMET escolhida manualmente na aba Fazendas quando houver
-    (`weather_station_overrides`), pra deixar a pessoa optar por uma
-    referencia mais representativa do clima da regiao dela."""
+    oficial (INMET ou DMC, conforme o pais da escolha) escolhida
+    manualmente na aba Fazendas quando houver (`weather_station_overrides`),
+    pra deixar a pessoa optar por uma referencia mais representativa do
+    clima da regiao dela."""
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
     if not overrides:
         return coords
-    estacoes_by_codigo = {e["codigo"]: e for e in inmet_stations.get_estacoes()}
+    catalogos = {}
     resultado = dict(coords)
-    for site, codigo in overrides.items():
-        estacao = estacoes_by_codigo.get(codigo)
+    for site, escolha in overrides.items():
+        code = escolha["country_code"]
+        if code not in catalogos:
+            provider = countries.get_country(code)["station_provider"]
+            catalogos[code] = {e["codigo"]: e for e in provider.get_estacoes()}
+        estacao = catalogos[code].get(escolha["codigo"])
         if estacao and site in resultado:
             resultado[site] = (estacao["lat"], estacao["lon"])
     return resultado
@@ -1332,26 +1350,31 @@ def dashboard():
 
 
 def _uf_por_site():
-    """site_name -> UF (sigla do estado), pela estacao INMET mais proxima
-    da coordenada da fazenda (mesmo catalogo usado em
-    `_get_weather_for_site`) -- usado pro filtro de estado na aba
-    Graficos. Inclui fazenda real (`data_reader.read_site_coordinates`,
-    direto do CSV, sem cache -- uma fazenda cadastrada agora ja aparece
-    no proximo carregamento da pagina) e fazenda virtual/estimada
-    (`models.get_all_virtual_farms`, ver `_graficos_dados` pra como a
-    serie dela e' interpolada das fazendas reais na vizinhanca). NAO
-    precisa de cache proprio aqui -- o catalogo de estacoes do INMET
-    (`inmet_stations.get_estacoes`, a parte cara disso, um fetch de
-    rede) ja tem seu proprio cache de 24h; com ele pronto, calcular a UF
-    de cada fazenda e' so' um haversine contra uma lista ja em memoria
-    (barato mesmo pra' dezenas de fazendas). Fazenda sem coordenada, ou
-    sem estacao INMET proxima resolvida (catalogo do INMET fora do ar),
-    fica com UF None -- nunca quebra a pagina por causa disso, so' nao
-    aparece nos filtros de estado."""
+    """site_name -> UF/regiao (sigla do estado, ou nome da regiao pra
+    fazenda de outro pais), pela estacao oficial mais proxima da
+    coordenada da fazenda -- INMET pro Brasil, DMC pro Chile (ver
+    `countries.py`; cada fazenda usa o pais marcado na aba Fazendas,
+    `models.get_all_site_countries`, default 'BR'). Usado pro filtro de
+    estado/regiao na aba Graficos. Inclui fazenda real
+    (`data_reader.read_site_coordinates`, direto do CSV, sem cache -- uma
+    fazenda cadastrada agora ja aparece no proximo carregamento da
+    pagina) e fazenda virtual/estimada (`models.get_all_virtual_farms`,
+    ver `_graficos_dados` pra como a serie dela e' interpolada das
+    fazendas reais na vizinhanca). NAO precisa de cache proprio aqui -- o
+    catalogo de estacoes de cada provedor (a parte cara disso, um fetch
+    de rede) ja tem seu proprio cache de 24h; com ele pronto, calcular a
+    UF/regiao de cada fazenda e' so' um haversine contra uma lista ja em
+    memoria (barato mesmo pra' dezenas de fazendas). Fazenda sem
+    coordenada, ou sem estacao proxima resolvida (catalogo fora do ar, ou
+    sem credencial configurada pro provedor daquele pais), fica com UF
+    None -- nunca quebra a pagina por causa disso, so' nao aparece nos
+    filtros de estado."""
     coords = _coords_all()
+    site_countries = models.get_all_site_countries()
     por_site = {}
     for site, latlon in coords.items():
-        estacao = inmet_stations.estacao_mais_proxima(*latlon)
+        provider = countries.get_country(site_countries.get(site, countries.DEFAULT_COUNTRY))["station_provider"]
+        estacao = provider.estacao_mais_proxima(*latlon)
         por_site[site] = estacao["uf"] if estacao else None
     return por_site
 
@@ -1486,9 +1509,13 @@ def graficos_dados():
     elif estados_sel:
         sites = [s for s in todos_sites if uf_por_site.get(s) in estados_sel]
     else:
-        sites = [s for s in todos_sites if uf_por_site.get(s) == "MT"]
+        # Sem filtro escolhido -- mostra tudo. Antes tinha um default
+        # fixo pro estado "MT" (Mato Grosso), mas com fazendas em mais de
+        # um pais nao ha' mais um estado/regiao obviamente "principal" pra
+        # supor sozinho.
+        sites = todos_sites
     if not sites:
-        # Filtro nao bateu com nenhuma fazenda (ex.: catalogo do INMET
+        # Filtro nao bateu com nenhuma fazenda (ex.: catalogo de estacoes
         # fora do ar na primeira chamada, ou filtro de estado sem
         # fazenda cadastrada) -- mostra tudo em vez de pagina vazia.
         sites = todos_sites
@@ -1700,6 +1727,27 @@ def graficos_dados():
     })
 
 
+def _country_map_context():
+    """Variaveis compartilhadas por /mapa e /mapa-interpolado pra desenhar
+    fronteira/grade de nuvens dos paises alem do Brasil -- ver
+    templates/mapa.html e mapa_interpolado.html (mesmo mecanismo
+    duplicado nos dois, como o resto da logica de fronteira ja era)."""
+    country_boundary_urls = {}
+    for code, info in countries.COUNTRIES.items():
+        if info.get("boundary_mode") != "static_geoboundaries":
+            continue
+        country_boundary_urls[code] = {
+            nivel: url_for("static", filename=caminho)
+            for nivel, caminho in info["boundary_files"].items()
+        }
+    cloud_bboxes = {code: info["cloud_grid_bbox"] for code, info in countries.COUNTRIES.items()}
+    return {
+        "country_by_site": models.get_all_site_countries(),
+        "country_boundary_urls": country_boundary_urls,
+        "cloud_bboxes": cloud_bboxes,
+    }
+
+
 @app.route("/mapa")
 @login_required
 def mapa():
@@ -1714,14 +1762,24 @@ def mapa():
     coords = _coords_all()
     virtual_names = models.virtual_farm_site_names()
     overrides = models.get_all_weather_station_overrides()
-    estacoes_catalogo = {e["codigo"]: e for e in inmet_stations.get_estacoes()}
+    site_countries = models.get_all_site_countries()
+    # Catalogo de estacoes de todos os paises com pelo menos uma fazenda
+    # (ou ponto virtual) marcada -- 'BR' sempre entra. So chama o provedor
+    # de um pais (ex. DMC) se realmente tiver fazenda la', pra nao gastar
+    # a chamada (e exigir credencial) sem necessidade.
+    active_countries = countries.active_country_codes(site_countries)
+    estacoes_catalogo = {}
+    for code in active_countries:
+        estacoes_catalogo.update({e["codigo"]: e for e in countries.get_country(code)["station_provider"].get_estacoes()})
     sites_data = []
     estacoes_by_codigo = {}
     for site, cards in cards_by_site.items():
         if site not in coords or not cards:
             continue  # fazenda sem coordenada, ou fazenda virtual sem estacao real no raio -- nao da pra plotar
         lat, lon = coords[site]
-        codigo_escolhido = overrides.get(site)
+        provider = countries.get_country(site_countries.get(site, countries.DEFAULT_COUNTRY))["station_provider"]
+        escolha = overrides.get(site)
+        codigo_escolhido = escolha["codigo"] if escolha else None
         if codigo_escolhido and codigo_escolhido in estacoes_catalogo:
             # Estacao escolhida na aba Fazendas como referencia de previsao --
             # essa, e nao a mais proxima, e' quem realmente alimenta o clima
@@ -1730,7 +1788,7 @@ def mapa():
             distancia = inmet_stations._haversine_km(lat, lon, base["lat"], base["lon"])
             estacao = {**base, "distancia_km": round(distancia, 1)}
         else:
-            estacao = inmet_stations.estacao_mais_proxima(lat, lon)
+            estacao = provider.estacao_mais_proxima(lat, lon)
         sites_data.append({
             "site": site,
             "lat": lat,
@@ -1747,7 +1805,8 @@ def mapa():
             entry["fazendas"].append({"site": site, "distancia_km": estacao["distancia_km"]})
     sites_data.sort(key=lambda s: s["site"])
     return render_template(
-        "mapa.html", sites_data=sites_data, estacoes=list(estacoes_by_codigo.values()), no_access=False
+        "mapa.html", sites_data=sites_data, estacoes=list(estacoes_by_codigo.values()), no_access=False,
+        **_country_map_context(),
     )
 
 
@@ -1797,13 +1856,19 @@ def mapa_interpolado():
     sites_data.sort(key=lambda s: s["site"])
     pontos_virtuais.sort(key=lambda p: p["nome"])
 
-    # Todas as estacoes do Brasil aqui (nao so as dos estados com fazenda/
-    # ponto, como no Mapa normal) -- essa tela e' justamente pra escolher
-    # onde criar um ponto novo, em qualquer lugar do pais.
-    estacoes = inmet_stations.get_estacoes()
+    # Todas as estacoes de cada pais ativo aqui (nao so as dos estados com
+    # fazenda/ponto, como no Mapa normal) -- essa tela e' justamente pra
+    # escolher onde criar um ponto novo, em qualquer lugar do pais. So
+    # inclui um pais alem do Brasil se ja tiver fazenda/ponto marcado la',
+    # mesmo criterio do Mapa (evita chamar um provedor sem necessidade).
+    active_countries = countries.active_country_codes(models.get_all_site_countries())
+    estacoes = []
+    for code in active_countries:
+        estacoes.extend(countries.get_country(code)["station_provider"].get_estacoes())
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, estacoes=estacoes,
+        **_country_map_context(),
     )
 
 
@@ -2142,6 +2207,7 @@ def fazendas():
     all_days_pdf = models.get_all_whatsapp_days_pdf()
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
+    site_countries = models.get_all_site_countries()
     grades = [
         ("ts", "TS (Tratamento de Sementes)"),
         ("sulco", "Sulco (aplicacao no sulco de plantio)"),
@@ -2183,18 +2249,23 @@ def fazendas():
                 "espacamento": espacamento_by_site.get((site, safra)) or "",
             })
         latlon = coords.get(site)
-        estacoes_proximas = inmet_stations.estacoes_mais_proximas(*latlon, n=2) if latlon else []
+        country_code = site_countries.get(site, countries.DEFAULT_COUNTRY)
+        provider = countries.get_country(country_code)["station_provider"]
+        estacoes_proximas = provider.estacoes_mais_proximas(*latlon, n=2) if latlon else []
+        escolha = overrides.get(site)
         sites_data.append({
             "site": site, "safras": safras_data, "selected_days": all_days.get(site, set()),
             "selected_days_pdf": all_days_pdf.get(site, set()),
             "virtual": site in virtual_names,
             "estacoes_proximas": estacoes_proximas,
-            "estacao_selecionada": overrides.get(site, ""),
+            "estacao_selecionada": escolha["codigo"] if escolha else "",
+            "country_code": country_code,
         })
 
     return render_template(
         "fazendas.html", sites_data=sites_data, no_access=False,
         weekday_labels=list(enumerate(WEEKDAY_LABELS)),
+        countries=countries.COUNTRIES,
     )
 
 
@@ -2474,7 +2545,8 @@ def save_weather_station_override():
         if site_name not in allowed:
             abort(403)
     estacao_codigo = request.form.get("estacao_codigo", "")
-    models.set_weather_station_override(site_name, estacao_codigo)
+    country_code = models.get_site_country(site_name)
+    models.set_weather_station_override(site_name, estacao_codigo, country_code)
     # Sem isso, `_weather_cache` continuava com o clima da coordenada
     # ANTIGA por ate' `WEATHER_CACHE_TTL_SECONDS` (30min) -- a troca so'
     # valia na proxima vez que o cache expirasse sozinho.
@@ -2484,6 +2556,22 @@ def save_weather_station_override():
     else:
         message = f"Previsao de '{site_name}' volta a usar a coordenada da propria fazenda."
     return _save_response(message, "fazendas")
+
+
+@app.route("/fazendas/pais/save", methods=["POST"])
+@login_required
+def save_site_country():
+    site_name = request.form.get("site_name")
+    if not current_user.is_admin:
+        allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
+        if site_name not in allowed:
+            abort(403)
+    country_code = request.form.get("country_code", "")
+    if country_code not in countries.COUNTRIES:
+        return _save_response(f"Pais invalido: '{country_code}'.", "fazendas", ok=False)
+    models.set_site_country(site_name, country_code)
+    nome_pais = countries.get_country(country_code)["nome"]
+    return _save_response(f"'{site_name}' marcada como {nome_pais}.", "fazendas")
 
 
 @app.route("/fazendas/save", methods=["POST"])
@@ -2948,14 +3036,21 @@ def _telefone_from_form(form):
     return codigo + numero
 
 
+# DDIs dos paises atendidos, pra `_split_phone` reconhecer o prefixo
+# certo ao reabrir um telefone ja salvo -- ampliar conforme novos paises
+# da America do Sul entrarem (ver `countries.py`).
+_DDI_CONHECIDOS = ["55", "56"]  # Brasil, Chile
+
+
 def _split_phone(telefone):
     """Separa um telefone ja salvo (so digitos) em (codigo_pais, numero)
-    pra preencher as duas caixas ao reabrir o formulario -- assume Brasil
-    (55) como padrao, que e' o caso de praticamente todo cadastro atual;
-    numero de outro pais ainda funciona, so aparece inteiro na caixa do
-    numero pra conferir/ajustar manualmente."""
-    if telefone.startswith("55") and len(telefone) > 10:
-        return "55", telefone[2:]
+    pra preencher as duas caixas ao reabrir o formulario -- tenta cada
+    DDI conhecido (mais longo primeiro), Brasil (55) como ultimo recurso
+    se nenhum bater. Numero de um pais nao listado ainda funciona, so
+    aparece inteiro na caixa do numero pra conferir/ajustar manualmente."""
+    for ddi in sorted(_DDI_CONHECIDOS, key=len, reverse=True):
+        if telefone.startswith(ddi) and len(telefone) > 10:
+            return ddi, telefone[len(ddi):]
     return "55", telefone
 
 
@@ -3305,10 +3400,11 @@ def admin_user_subordinados(user_id):
         if form_id == "add":
             nome = request.form.get("nome", "").strip()
             numero = re.sub(r"\D", "", request.form.get("numero_telefone", ""))
+            codigo = re.sub(r"\D", "", request.form.get("codigo_pais", "")) or "55"
             if not nome or not numero:
                 flash("Nome e telefone sao obrigatorios pra adicionar um subordinado.", "error")
             else:
-                models.create_subordinado(user_id, nome, "55" + numero)
+                models.create_subordinado(user_id, nome, codigo + numero)
                 flash(f"Subordinado '{nome}' adicionado.", "success")
             return redirect(url_for("admin_user_subordinados", user_id=user_id))
 
@@ -3319,16 +3415,16 @@ def admin_user_subordinados(user_id):
 
         # form_id == "save" (padrao) -- salva nome/telefone/fazendas de
         # todos os subordinados listados na tela de uma vez (autosave).
-        # DDI vem sempre fixo em "55" (caixa readonly na tela) -- so' o
-        # numero (DDD + numero) e' de fato lido do formulario, por linha.
+        # DDI e numero (DDD + numero) sao lidos do formulario, por linha.
         ids = [int(v) for v in request.form.getlist("subordinado_id")]
         nomes = request.form.getlist("nome")
         for idx, sub_id in enumerate(ids):
             nome = nomes[idx].strip() if idx < len(nomes) else ""
             numero = re.sub(r"\D", "", request.form.get(f"numero_telefone__{sub_id}", ""))
+            codigo = re.sub(r"\D", "", request.form.get(f"codigo_pais__{sub_id}", "")) or "55"
             if not nome or not numero:
                 continue
-            models.update_subordinado(sub_id, nome, "55" + numero)
+            models.update_subordinado(sub_id, nome, codigo + numero)
             site_ids = {int(v) for v in request.form.getlist(f"site_ids__{sub_id}")}
             models.set_subordinado_report_sites(sub_id, site_ids)
         return _save_response("Subordinados atualizados.", "admin_user_subordinados", user_id=user_id)
@@ -3338,7 +3434,7 @@ def admin_user_subordinados(user_id):
     owner_sites = [s for s in all_sites if s["id"] in owner_report_ids]
     subordinados = models.get_owner_subordinados(user_id)
     for sub in subordinados:
-        _, sub["numero_telefone"] = _split_phone(sub["telefone"])
+        sub["codigo_pais"], sub["numero_telefone"] = _split_phone(sub["telefone"])
     return render_template(
         "admin_subordinados.html", user=user_row, owner_sites=owner_sites, subordinados=subordinados,
     )

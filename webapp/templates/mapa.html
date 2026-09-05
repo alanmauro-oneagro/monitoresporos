@@ -230,6 +230,16 @@
         return Object.keys(codes);
     }
 
+    // Pais de cada fazenda (aba Fazendas > Pais -- ver models.get_all_site_countries),
+    // sem entrada = 'BR' (padrao). Decide quais paises alem do Brasil tem
+    // fronteira/grade de nuvens desenhada -- 'BR' sempre entra, mesmo sem
+    // fazenda nenhuma, pra manter o comportamento de sempre.
+    var siteCountries = {{ country_by_site | tojson }};
+    var COUNTRY_BOUNDARIES = {{ country_boundary_urls | tojson }};  // {"CL": {adm0, adm1, adm2}, ...}
+    var CLOUD_BBOXES = {{ cloud_bboxes | tojson }};  // {"BR": {...}, "CL": {...}}
+    var activeCountries = { BR: true };
+    sites.forEach(function (s) { activeCountries[siteCountries[s.site] || 'BR'] = true; });
+
     // Rodovias federais (BR-163/364/070/158) -- lidas de um arquivo
     // estatico proprio (webapp/static/rodovias_br.json), NAO mais buscadas
     // ao vivo no Overpass a cada carregamento da pagina. O Overpass publico
@@ -254,7 +264,8 @@
     // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
     // (leve, um pedido so) e municipios (pesado -- so busca dos estados
     // onde realmente tem fazenda ou estacao, senao seria o Brasil inteiro).
-    var paisGeojsonPromise = addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
+    var paisGeojsonPromises = {};
+    paisGeojsonPromises.BR = addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
     addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
         .then(function (ufGeojson) {
             if (!ufGeojson) return;
@@ -262,6 +273,22 @@
                 addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
             });
         });
+
+    // Fronteiras dos demais paises ativos -- arquivos estaticos proprios
+    // (webapp/static/boundaries/, gerados uma unica vez a partir do
+    // geoBoundaries.org, mesmo motivo do rodovias_br.json: nao depender de
+    // nenhuma API ao vivo pra desenhar um contorno que praticamente nunca
+    // muda). Como e' um arquivo ja baixado (sem custo por request), pais +
+    // regiao + comuna sao carregados juntos, sem a logica de "so busca
+    // onde tem fazenda" que o municipio do IBGE precisa (essa existe so
+    // pra poupar a API ao vivo do IBGE).
+    Object.keys(COUNTRY_BOUNDARIES).forEach(function (code) {
+        if (!activeCountries[code]) return;
+        var urls = COUNTRY_BOUNDARIES[code];
+        paisGeojsonPromises[code] = addBoundaryLayer(urls.adm0, 3);
+        addBoundaryLayer(urls.adm1, 2);
+        addBoundaryLayer(urls.adm2, 1, MUNICIPIO_COLOR);
+    });
 
     // Camada de nuvens cobrindo o Brasil inteiro -- mesma logica do Mapa
     // Interpolado (grade de pontos recortada pelo contorno do IBGE,
@@ -349,10 +376,10 @@
         });
     }
 
-    function gerarGradeBrasil(paisGeojson) {
+    function gerarGradePais(bbox, paisGeojson) {
         var pontos = [];
-        for (var lat = -34; lat <= 6; lat += GRADE_PASSO_GRAUS) {
-            for (var lon = -74; lon <= -34; lon += GRADE_PASSO_GRAUS) {
+        for (var lat = bbox.lat_min; lat <= bbox.lat_max; lat += GRADE_PASSO_GRAUS) {
+            for (var lon = bbox.lon_min; lon <= bbox.lon_max; lon += GRADE_PASSO_GRAUS) {
                 if (pointInGeometry([lon, lat], paisGeojson.features[0].geometry)) {
                     pontos.push([lat, lon]);
                 }
@@ -379,11 +406,16 @@
     }
 
     function buscarGradeNuvens() {
-        nuvensStatus.textContent = 'Carregando previsao de nuvens do Brasil todo...';
+        nuvensStatus.textContent = 'Carregando previsao de nuvens...';
         nuvensStatus.classList.remove('d-none');
-        paisGeojsonPromise.then(function (paisGeojson) {
-            if (!paisGeojson) throw new Error('sem contorno do Brasil (IBGE fora do ar?)');
-            var pontosGrade = gerarGradeBrasil(paisGeojson);
+        var codigosAtivos = Object.keys(activeCountries);
+        Promise.all(codigosAtivos.map(function (code) { return paisGeojsonPromises[code]; })).then(function (geojsons) {
+            var pontosGrade = [];
+            codigosAtivos.forEach(function (code, i) {
+                var bbox = CLOUD_BBOXES[code];
+                if (bbox && geojsons[i]) pontosGrade = pontosGrade.concat(gerarGradePais(bbox, geojsons[i]));
+            });
+            if (!pontosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
             return fetch('{{ url_for("nuvens_grade") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

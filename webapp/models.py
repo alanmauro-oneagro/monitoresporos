@@ -279,6 +279,11 @@ def init_db():
             estacao_codigo TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS site_country_overrides (
+            site_name TEXT PRIMARY KEY,
+            country_code TEXT NOT NULL DEFAULT 'BR'
+        );
+
         CREATE TABLE IF NOT EXISTS farm_ndvi_area (
             site_name TEXT PRIMARY KEY,
             kml TEXT NOT NULL,
@@ -351,6 +356,14 @@ def init_db():
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
         conn.execute("ALTER TABLE farm_ndvi_historico ADD COLUMN thumbnail BLOB")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        # Estacao escolhida pode ser do INMET (Brasil) ou da DMC (Chile) --
+        # sem essa coluna, um codigo de estacao chileno colidiria com a
+        # numeracao do INMET. Default 'BR' preserva o comportamento de
+        # sempre pras escolhas ja feitas antes dessa coluna existir.
+        conn.execute("ALTER TABLE weather_station_overrides ADD COLUMN country_code TEXT NOT NULL DEFAULT 'BR'")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
 
@@ -980,31 +993,68 @@ def set_farm_cultura(site_name, safra, cultura):
 
 
 def get_all_weather_station_overrides():
-    """site_name -> codigo da estacao INMET escolhida na aba Fazendas pra
-    alimentar a previsao (Open-Meteo passa a usar a coordenada dessa
-    estacao em vez da coordenada da propria fazenda). So os sites com
-    escolha manual aparecem aqui -- sem entrada, o padrao e' usar a
-    coordenada da fazenda."""
+    """site_name -> {"codigo": ..., "country_code": ...} da estacao
+    escolhida na aba Fazendas pra alimentar a previsao (Open-Meteo passa a
+    usar a coordenada dessa estacao em vez da coordenada da propria
+    fazenda) -- `country_code` diz qual catalogo o codigo pertence
+    ('BR'=INMET, 'CL'=DMC, ver countries.py). So os sites com escolha
+    manual aparecem aqui -- sem entrada, o padrao e' usar a coordenada da
+    fazenda."""
     conn = get_db()
-    rows = conn.execute("SELECT site_name, estacao_codigo FROM weather_station_overrides").fetchall()
+    rows = conn.execute("SELECT site_name, estacao_codigo, country_code FROM weather_station_overrides").fetchall()
     conn.close()
-    return {r["site_name"]: r["estacao_codigo"] for r in rows}
+    return {r["site_name"]: {"codigo": r["estacao_codigo"], "country_code": r["country_code"]} for r in rows}
 
 
-def set_weather_station_override(site_name, estacao_codigo):
+def set_weather_station_override(site_name, estacao_codigo, country_code="BR"):
     """estacao_codigo = "" (ou None) remove a escolha manual -- volta a
     usar a coordenada da propria fazenda pra previsao."""
     conn = get_db()
     if estacao_codigo:
         conn.execute(
             """
-            INSERT INTO weather_station_overrides (site_name, estacao_codigo) VALUES (?, ?)
-            ON CONFLICT(site_name) DO UPDATE SET estacao_codigo = excluded.estacao_codigo
+            INSERT INTO weather_station_overrides (site_name, estacao_codigo, country_code) VALUES (?, ?, ?)
+            ON CONFLICT(site_name) DO UPDATE SET estacao_codigo = excluded.estacao_codigo, country_code = excluded.country_code
             """,
-            (site_name, estacao_codigo),
+            (site_name, estacao_codigo, country_code),
         )
     else:
         conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (site_name,))
+    conn.commit()
+    conn.close()
+
+
+def get_all_site_countries():
+    """site_name -> codigo do pais (ISO 3166-1 alpha-2, ex. 'BR'/'CL')
+    escolhido na aba Fazendas -- decide qual fronteira/estacoes aparecem
+    pra essa fazenda no Mapa/Mapa Interpolado. So os sites com escolha
+    manual aparecem aqui -- sem entrada, o padrao e' 'BR' (ver
+    `countries.DEFAULT_COUNTRY`), preservando o comportamento de sempre
+    pras fazendas ja cadastradas antes dessa coluna existir."""
+    conn = get_db()
+    rows = conn.execute("SELECT site_name, country_code FROM site_country_overrides").fetchall()
+    conn.close()
+    return {r["site_name"]: r["country_code"] for r in rows}
+
+
+def get_site_country(site_name):
+    return get_all_site_countries().get(site_name, "BR")
+
+
+def set_site_country(site_name, country_code):
+    """country_code = "" (ou None) remove a escolha manual -- volta pro
+    padrao 'BR'."""
+    conn = get_db()
+    if country_code:
+        conn.execute(
+            """
+            INSERT INTO site_country_overrides (site_name, country_code) VALUES (?, ?)
+            ON CONFLICT(site_name) DO UPDATE SET country_code = excluded.country_code
+            """,
+            (site_name, country_code),
+        )
+    else:
+        conn.execute("DELETE FROM site_country_overrides WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 
@@ -1377,6 +1427,7 @@ def update_virtual_farm(site_name, nome, lat, lon, raio_km):
             "sites", "recommendation_notes", "whatsapp_schedule", "whatsapp_schedule_pdf",
             "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
             "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_historico",
+            "site_country_overrides",
         ):
             conn.execute(f"UPDATE {tabela} SET site_name=? WHERE site_name=?", (novo_site_name, site_name))
     conn.commit()
@@ -1404,6 +1455,7 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_ndvi_area WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_ndvi_historico WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM site_country_overrides WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 

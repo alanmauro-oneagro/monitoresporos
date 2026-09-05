@@ -238,6 +238,17 @@ _TZ_OFFSET_HOURS = {
     "America/Sao_Paulo": -3,
 }
 
+
+def _offset_america_santiago(dt_utc):
+    """Chile (America/Santiago) AINDA tem horario de verao (diferente do
+    Brasil, que aboliu em 2019) -- um offset fixo erraria por boa parte
+    do ano. Aproximacao por mes (verao set-abr = UTC-3, inverno mai-ago =
+    UTC-4) em vez da data exata de transicao (que muda de ano a ano) --
+    suficiente aqui, ja que isso alimenta o calculo de risco por hora
+    (`build_hourly_weather_lookup`), nao um horario exibido pra alguem
+    conferir o minuto exato."""
+    return -3 if dt_utc.month in (9, 10, 11, 12, 1, 2, 3, 4) else -4
+
 _DIRECOES_VENTO = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
 
@@ -264,7 +275,8 @@ def build_hourly_weather_lookup(weather_rows):
             dt_utc = _parse_dt(row["dateMeasured"])
         except (KeyError, ValueError):
             continue
-        offset = _TZ_OFFSET_HOURS.get(row.get("deviceTimeZoneId"), -4)
+        tz_id = row.get("deviceTimeZoneId")
+        offset = _offset_america_santiago(dt_utc) if tz_id == "America/Santiago" else _TZ_OFFSET_HOURS.get(tz_id, -4)
         dt_local = dt_utc + timedelta(hours=offset)
         device = row.get("deviceUserFriendlyId")
         key = (device, dt_local.date().isoformat())
@@ -348,7 +360,8 @@ def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_mo
             dt_utc = _parse_dt(row["dateMeasured"])
         except (KeyError, ValueError):
             continue
-        offset = _TZ_OFFSET_HOURS.get(row.get("deviceTimeZoneId"), -4)
+        tz_id = row.get("deviceTimeZoneId")
+        offset = _offset_america_santiago(dt_utc) if tz_id == "America/Santiago" else _TZ_OFFSET_HOURS.get(tz_id, -4)
         dt_local = dt_utc + timedelta(hours=offset)
         device = row.get("deviceUserFriendlyId")
         key = (device, dt_local.date().isoformat())
