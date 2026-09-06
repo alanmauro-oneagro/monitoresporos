@@ -5,14 +5,17 @@ locais usam) que roda em qualquer lugar, sem precisar de Windows/PowerShell.
 Usado pelo site hospedado (Railway/Linux), onde o script original nao pode
 rodar -- ver `_run_fetch_in_background` em `app.py`.
 
-So busca uma janela deslizante dos ultimos `LOOKBACK_DAYS` dias (nao o
-historico completo desde 2025-10-01 -- o dashboard web so olha a leitura
-mais recente por doenca/fazenda, nao precisa de mais que isso, e assim cada
-clique em "Forcar atualizacao" e' rapido, uma chamada por site em vez de
-meses de historico). O merge por chave (`_merge_csv`) so atualiza ou
-adiciona linha, nunca remove -- se uma estacao nao aparecer na janela (sem
-leitura nova), a ultima leitura que ja tinha no CSV fica exatamente como
-estava, nunca "some".
+Fazenda ja conhecida (pelo menos uma leitura salva antes) busca so' uma
+janela deslizante dos ultimos `LOOKBACK_DAYS` dias -- rapido, uma chamada
+por site em vez de meses de historico, suficiente pra manter o Painel/
+Graficos em dia. Fazenda NUNCA sincronizada antes busca o HISTORICO
+COMPLETO desde `FULL_HISTORY_SINCE` (ver `_known_site_ids`/`fetch_recent`),
+senao ela ficaria com buraco permanente nos graficos pra qualquer data
+anterior a' primeira sincronizacao (bug real, ja visto com fazenda do
+Chile -- ver conversa de 2026-09-06). O merge por chave (`_merge_csv`) so
+atualiza ou adiciona linha, nunca remove -- se uma estacao nao aparecer na
+janela (sem leitura nova), a ultima leitura que ja tinha no CSV fica
+exatamente como estava, nunca "some".
 
 So usa `urllib` (biblioteca padrao), sem dependencia nova."""
 import csv
@@ -23,7 +26,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 API_BASE = "https://rest.bioscout.com.au"
-LOOKBACK_DAYS = 16
+# Pedido explicito do usuario (06/09/2026): garantir pelo menos 30 dias
+# de janela mesmo pra fazenda ja' conhecida -- 16 dias era curto demais
+# pra dar margem de sobra em caso de atraso na sincronizacao (o site
+# hospedado so' busca quando alguem visita o Painel/Manejo com dado
+# velho, ver `_maybe_auto_refresh` em app.py; ninguem visitando por mais
+# de 16 dias corridos criava risco de buraco permanente de novo).
+LOOKBACK_DAYS = 30
 # Mesmo `-SinceDate` padrao do Fetch-BioScoutData.ps1 -- usado so' pra
 # fazenda NUNCA sincronizada antes (ver `_known_site_ids`/`fetch_recent`),
 # pra backfill de historico completo dela.
