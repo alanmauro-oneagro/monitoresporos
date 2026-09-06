@@ -239,6 +239,10 @@
     var CLOUD_BBOXES = {{ cloud_bboxes | tojson }};  // {"BR": {...}, "CL": {...}}
     var activeCountries = { BR: true };
     sites.forEach(function (s) { activeCountries[siteCountries[s.site] || 'BR'] = true; });
+    // Pais com integracao de estacao oficial de verdade funcionando (hoje
+    // Chile via DMC) aparece com fronteira mesmo sem fazenda ainda la' --
+    // ver `active_country_codes_mapa` na rota /mapa.
+    {{ active_country_codes_mapa | tojson }}.forEach(function (code) { activeCountries[code] = true; });
 
     // Rodovias federais (BR-163/364/070/158) -- lidas de um arquivo
     // estatico proprio (webapp/static/rodovias_br.json), NAO mais buscadas

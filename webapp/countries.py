@@ -54,15 +54,6 @@ COUNTRIES = {
         },
         "station_provider": dmc_stations,
         "cloud_grid_bbox": {"lat_min": -56, "lat_max": -17, "lon_min": -76, "lon_max": -66},
-        # Unico pais (alem do Brasil) que aparece no Mapa Interpolado
-        # MESMO sem nenhuma fazenda/ponto marcado la' ainda (proxima
-        # expansao de verdade, pedido explicito) -- ver
-        # `mostrar_sempre_interpolado`. Os outros paises abaixo tem
-        # fronteira pronta mas so' aparecem quando uma fazenda de
-        # verdade for marcada nesse pais (senao o Mapa Interpolado
-        # baixaria a fronteira de todo pais da America do Sul (~14MB)
-        # em toda visita, so' pra' cobrir paises sem nenhum uso ainda).
-        "mostrar_sempre_interpolado": True,
     },
     # Resto da America do Sul -- fronteira (pais + regiao/provincia) ja'
     # pronta (geoBoundaries, mesmo processo do Chile), mas SEM estacao
@@ -165,8 +156,16 @@ def active_country_codes(site_country_map):
     return codes
 
 
-def paises_prioritarios():
-    """Pais (alem do Brasil) marcado `mostrar_sempre_interpolado` -- ver
-    nota no registro do Chile. So' usado pelo Mapa Interpolado (mostrar
-    ANTES de existir fazenda de verdade la'), nao pelo Mapa normal."""
-    return {code for code, info in COUNTRIES.items() if info.get("mostrar_sempre_interpolado")}
+def paises_com_estacoes():
+    """Codigos de pais cujo provedor de estacoes ja' devolve pelo menos
+    uma estacao de verdade -- ou seja, ja tem integracao funcionando
+    (INMET, e agora DMC do Chile com credencial configurada), nao so'
+    fronteira cadastrada. Pais com `sem_estacoes.py` como provedor nunca
+    entra aqui (devolve [] sempre), entao um pais "so com fronteira
+    pronta" (a maioria da America do Sul agora) nunca aparece no
+    Mapa/Mapa Interpolado incondicionalmente -- so' quando tiver fazenda
+    de verdade la (`active_country_codes`). Usado junto com
+    `active_country_codes` pra decidir quais paises mostrar mesmo sem
+    fazenda ainda: "mostra se ja tem estacao oficial de verdade pra
+    referenciar", pedido explicito do usuario."""
+    return {code for code, info in COUNTRIES.items() if info["station_provider"].get_estacoes()}

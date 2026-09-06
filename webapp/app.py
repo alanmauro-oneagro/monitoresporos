@@ -1841,8 +1841,16 @@ def mapa():
             })
             entry["fazendas"].append({"site": site, "distancia_km": estacao["distancia_km"]})
     sites_data.sort(key=lambda s: s["site"])
+    # Fronteira desenhada mesmo sem fazenda no pais, desde que o pais ja'
+    # tenha integracao de estacao oficial de verdade funcionando (Chile
+    # via DMC) -- pedido explicito ("aplicar somente se tiver estacao no
+    # pais"). Os PINOS de estacao continuam so' aparecendo quando alguma
+    # fazenda de verdade usa aquela estacao como referencia (estacoes_by_codigo
+    # acima) -- isso e' literalmente "estacao utilizada", nao muda.
+    active_country_codes_mapa = sorted(active_countries | countries.paises_com_estacoes())
     return render_template(
         "mapa.html", sites_data=sites_data, estacoes=list(estacoes_by_codigo.values()), no_access=False,
+        active_country_codes_mapa=active_country_codes_mapa,
         **_country_map_context(),
     )
 
@@ -1896,14 +1904,15 @@ def mapa_interpolado():
     pontos_virtuais.sort(key=lambda p: p["nome"])
 
     # Estacoes de todo pais ativo (com fazenda/ponto marcado, igual o
-    # Mapa normal) MAIS os paises "prioritarios" (hoje so' o Chile,
-    # `mostrar_sempre_interpolado`) -- essa tela e' pra escolher onde
-    # criar o PRIMEIRO ponto de um pais novo, entao o Chile precisa
-    # aparecer mesmo sem fazenda la' ainda. NAO inclui todo pais do
-    # registro incondicionalmente -- com 10+ paises cadastrados so' com
-    # fronteira pronta (sem uso ainda), isso baixaria ~14MB de contorno
-    # por visita a toa.
-    active_interpolado = countries.active_country_codes(site_countries) | countries.paises_prioritarios()
+    # Mapa normal) MAIS todo pais que ja' tem integracao de estacao oficial
+    # de verdade funcionando (hoje Brasil e Chile, ver `paises_com_estacoes`)
+    # -- essa tela e' pra escolher onde criar o PRIMEIRO ponto de um pais
+    # novo, entao o Chile precisa aparecer mesmo sem fazenda la' ainda
+    # ("aplicar somente se tiver estacao no pais", pedido explicito). NAO
+    # inclui todo pais do registro incondicionalmente -- com 10+ paises
+    # cadastrados so' com fronteira pronta (sem estacao/uso ainda), isso
+    # baixaria ~14MB de contorno por visita a toa.
+    active_interpolado = countries.active_country_codes(site_countries) | countries.paises_com_estacoes()
     estacoes = []
     for code in active_interpolado:
         estacoes.extend(countries.get_country(code)["station_provider"].get_estacoes())
