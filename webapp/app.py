@@ -560,6 +560,45 @@ def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=N
     return diseases
 
 
+def _build_riscos_climaticos_sem_leitura(cards):
+    """Uma linha por doenca ja monitorada nessa fazenda (a partir de
+    TODOS os cards, sem exigir status Atencao/Perigo -- ao contrario de
+    `_build_site_diseases`), com nome cientifico + condicoes de
+    germinacao, mas SEM status/concentracao/recomendacao de fungicida.
+    Usado quando a estacao esta ha muito tempo sem leitura nova
+    (`bloqueado`, ver `_nivel_dados_defasados`) -- nesse caso nao da'
+    mais pra confiar no ultimo status conhecido (pode estar bem
+    desatualizado), mas o RISCO CLIMATICO (`_calc_risco_germinacao`,
+    100% baseado no clima da Open-Meteo, nunca depende do sensor
+    BioScout) continua valido e pode avisar a fazenda de uma condicao
+    favoravel a' germinacao mesmo sem confirmar a presenca do fungo --
+    pedido explicito do usuario. NAO inclui recomendacao de
+    fungicida/observacao (isso pressupoe deteccao confirmada, que aqui
+    nao existe) -- so' o alerta climatico. O chamador ainda precisa
+    calcular `risco`/`previsao_risco` (mesma `_calc_risco_germinacao`/
+    `_calc_previsao_risco_germinacao` usada pra `diseases`) e filtrar
+    pra quem esta em risco medio/alto, senao a lista sai cheia de
+    doenca com risco baixo (nao acionavel)."""
+    disease_info = models.get_all_disease_info()
+    vistos = {}
+    for card in cards:
+        doenca_en = card["doenca_en"]
+        if doenca_en in vistos:
+            continue
+        info = disease_info.get(doenca_en, {})
+        if info.get("germ_temp_min") is None or info.get("germ_temp_max") is None:
+            continue  # sem germinacao cadastrada -- risco climatico nunca calcula, nao vale colocar na lista
+        vistos[doenca_en] = {
+            "doenca": card["doenca"], "doenca_en": doenca_en, "rotulo": card["doenca"],
+            "cientifico": info.get("nome_cientifico", ""),
+            "germinacao": _formatar_condicoes_germinacao(info),
+            "germ_temp_min": info.get("germ_temp_min"), "germ_temp_max": info.get("germ_temp_max"),
+            "germ_ur_min": info.get("germ_ur_min"), "germ_agua_livre_inibe": info.get("germ_agua_livre_inibe", False),
+            "germ_molhamento_horas": info.get("germ_molhamento_horas"),
+        }
+    return list(vistos.values())
+
+
 _MOLHAMENTO_PADRAO_HORAS = 6  # usado quando a doenca nao tem um numero de horas proprio cadastrado
 
 
@@ -713,6 +752,23 @@ def _calc_previsao_risco_germinacao(disease, weather):
     return resultado
 
 
+def _riscos_climaticos_relevantes(cards, weather):
+    """`_build_riscos_climaticos_sem_leitura` ja' com `risco`/`previsao_risco`
+    calculados (mesma `_calc_risco_germinacao`/`_calc_previsao_risco_germinacao`
+    de `diseases`), filtrado pra quem esta em risco medio/alto agora OU
+    em algum dia da previsao dos proximos 5 dias -- risco baixo o tempo
+    todo nao e' acionavel, so' vira ruido no relatorio."""
+    riscos = _build_riscos_climaticos_sem_leitura(cards)
+    for d in riscos:
+        d["risco"] = _calc_risco_germinacao(d, weather)
+        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    return [
+        d for d in riscos
+        if d["risco"] in ("amarelo", "vermelho")
+        or any(p["risco"] in ("amarelo", "vermelho") for p in (d.get("previsao_risco") or []))
+    ]
+
+
 _STATUS_LABELS = {"Perigo": "Alta concentração de esporos", "Atencao": "Moderada concentração de esporos"}
 # Mesma cor da bolinha do PDF (Perigo #ff6b6b -> vermelho, Atencao
 # #e6ac00 -> laranja/amarelo), so' que em emoji pro WhatsApp (texto puro
@@ -769,7 +825,7 @@ def _whatsapp_titulo(site):
 def _format_whatsapp_message(
     site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None,
     safra_label=None, plantio_linhas=None, aplicacoes_linhas=None, leitura_bioscout=None,
-    mostrar_secao_doencas=True, anotacao=None,
+    mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
 ):
     """Monta o relatorio inteiro de uma fazenda numa unica mensagem de
     texto -- MESMO conteudo e ordem do PDF (`export_pdf.build_recommendation_pdf`),
@@ -820,7 +876,13 @@ def _format_whatsapp_message(
     risco, germinacao, recomendacao, sugestao) -> Produtos ja
     disponiveis -> Datas de Plantio -> Datas de Pulverizacao -> rodape
     (fonte do clima, atualizado em, instituicoes consultadas, aviso de
-    nao substituir agronomo, "Powered by BioScout" sempre por ultimo)."""
+    nao substituir agronomo, "Powered by BioScout" sempre por ultimo).
+    `riscos_climaticos` (ver `app._riscos_climaticos_relevantes`) e' um
+    aviso a parte, so' de risco climatico (sem status/concentracao
+    confirmados) -- aparece mesmo com `mostrar_secao_doencas=False`
+    (diferente do aviso "esta tudo tranquilo", que fica escondido nesse
+    caso), pois nao afirma deteccao nenhuma, so' que o clima favorece a
+    germinacao de uma doenca ja monitorada nessa fazenda."""
     rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
     if weather and weather.get("cidade"):
         rodape_data += f" · {weather['cidade']}/{weather['uf']}"
@@ -872,6 +934,38 @@ def _format_whatsapp_message(
             linhas.append("Previsao: " + " | ".join(partes_prev))
         return linhas
 
+    def _linhas_risco_climatico():
+        """Aviso "Risco Climatico" -- so' clima comparado com a
+        germinacao de cada doenca ja monitorada nessa fazenda
+        (`riscos_climaticos`, ver `app._riscos_climaticos_relevantes`),
+        SEM depender de leitura confirmada do sensor. Titulo e formato
+        diferentes do bloco "Doencas em Atencao/Perigo" de proposito --
+        deixa claro que isso e' uma previsao baseada em clima, nao uma
+        deteccao confirmada."""
+        if not riscos_climaticos:
+            return []
+        linhas = ["", _WHATSAPP_SEPARADOR, "*🌡️ Risco Climático (sem leitura recente do sensor)*"]
+        for d in riscos_climaticos:
+            linhas.append("")
+            previsao_risco = d.get("previsao_risco")
+            cabecalho = f"*{d['rotulo'].upper()}*"
+            if not previsao_risco:
+                risco_label = _risco_label(d.get("risco"))
+                if risco_label:
+                    cabecalho += f" — Risco de infecção: {risco_label}"
+            linhas.append(cabecalho)
+            if previsao_risco:
+                dias_txt = " · ".join(
+                    f"{_RISCO_EMOJI.get(p['risco'], '')} *{p['data_fmt']}*: {_risco_label(p['risco'])}"
+                    for p in previsao_risco
+                )
+                linhas.append(f"Risco de infecção: {dias_txt}")
+            if d.get("germinacao"):
+                linhas.append(f"({d['cientifico']} — germinação: {d['germinacao']})")
+            elif d.get("cientifico"):
+                linhas.append(f"({d['cientifico']})")
+        return linhas
+
     if not diseases:
         partes = [_whatsapp_titulo(site), ""]
         if safra_label:
@@ -881,6 +975,7 @@ def _format_whatsapp_message(
         if safra_label or cultura:
             partes.append("")
         partes.extend(_linhas_clima())
+        partes.extend(_linhas_risco_climatico())
         if mostrar_secao_doencas:
             partes.append("")
             partes.append("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.")
@@ -1051,7 +1146,7 @@ def _farm_plantio_aplicacoes_estoque(site, safra):
 
 def _build_site_pdf(
     site, diseases, weather, produtos, cultura, safra, leitura_bioscout=None,
-    mostrar_secao_doencas=True, anotacao=None,
+    mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
 ):
     """Gera o mesmo PDF do botao "Recomendacao (PDF)" -- usado tanto pelo
     download manual (`recommendation_pdf`) quanto pelo envio automatico
@@ -1064,7 +1159,9 @@ def _build_site_pdf(
     `mostrar_secao_doencas=False` omite a secao "Doencas em Atencao/
     Perigo" do PDF -- ver `export_pdf.build_recommendation_pdf`.
     `anotacao` (texto livre, ver `models.get_site_climate_note`) aparece
-    logo apos o clima."""
+    logo apos o clima. `riscos_climaticos` (ver
+    `app._riscos_climaticos_relevantes`) e' o aviso de risco climatico
+    sem leitura confirmada, independente de `mostrar_secao_doencas`."""
     for d in diseases:
         d["historico"] = data_reader.get_site_disease_history(site, d["doenca_en"], dias=30)
     plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
@@ -1076,6 +1173,7 @@ def _build_site_pdf(
         cultura=cultura, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
         rodape_data=rodape_data, leitura_bioscout=leitura_bioscout,
         mostrar_secao_doencas=mostrar_secao_doencas, anotacao=anotacao,
+        riscos_climaticos=riscos_climaticos,
     )
     filename = f"Recomendacao_{nome_fazenda}_{datetime.now().strftime('%Y%m%d')}.pdf".replace(" ", "_")
     return nome_fazenda, filename, buffer.getvalue()
@@ -1130,8 +1228,16 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     # tempo (dado velho demais pra confiar) -- senao o relatorio parece
     # dizer "tudo tranquilo" quando na verdade a fazenda nao foi checada.
     mostrar_secao_doencas = not is_clima_point and not bloqueado
+    coords = _weather_coords_all()
+    weather = _get_weather_for_site(site, coords)
+    riscos_climaticos = []
     if bloqueado:
         diseases = []
+        # Sem leitura confirmada pra montar "Doencas em Atencao/Perigo",
+        # mas o risco CLIMATICO (so' clima x germinacao, nunca depende
+        # do sensor) continua valido -- avisa mesmo sem confirmar a
+        # doenca, pedido explicito do usuario.
+        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather)
     else:
         cards_by_site = _filter_cards_by_cultura(
             {site: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
@@ -1140,8 +1246,6 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
         notes = models.get_all_recommendation_notes()
         diseases = _build_site_diseases(site, cards, notes, cultura=cultura)
 
-    coords = _weather_coords_all()
-    weather = _get_weather_for_site(site, coords)
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
@@ -1161,7 +1265,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
             site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura,
             safra_label=safra_label, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
             leitura_bioscout=leitura_bioscout, mostrar_secao_doencas=mostrar_secao_doencas,
-            anotacao=anotacao,
+            anotacao=anotacao, riscos_climaticos=riscos_climaticos,
         )
 
     # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
@@ -1174,6 +1278,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
             pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(
                 site, diseases, weather, produtos, cultura, safra, leitura_bioscout=leitura_bioscout,
                 mostrar_secao_doencas=mostrar_secao_doencas, anotacao=anotacao,
+                riscos_climaticos=riscos_climaticos,
             )
         except Exception as exc:
             models.log_whatsapp_envio(site, None, None, False, f"Falha ao gerar PDF pra WhatsApp: {exc}")
@@ -2446,6 +2551,10 @@ def recommendations(safra):
         # de clima (diseases=[]), igual ao dos pontos da aba Alertas
         # Clima -- os cards de doenca na TELA continuam mostrando a
         # ultima leitura conhecida normalmente, so o WhatsApp que muda.
+        # O risco CLIMATICO (so' clima x germinacao, nao depende do
+        # sensor) ainda entra, mesmo bloqueado -- ver
+        # `_riscos_climaticos_relevantes`.
+        riscos_climaticos = _riscos_climaticos_relevantes(cards, weather) if nivel_dados == "bloqueado" else []
         whatsapp_text = _format_whatsapp_message(
             site, [] if nivel_dados == "bloqueado" else diseases, weather=weather,
             produtos=_farm_produtos_estoque(site, safra),
@@ -2455,6 +2564,7 @@ def recommendations(safra):
             aplicacoes_linhas=aplicacoes_by_site.get(site, {}).get(safra, []),
             leitura_bioscout=models.fmt_data_br(leitura_data),
             mostrar_secao_doencas=nivel_dados != "bloqueado",
+            riscos_climaticos=riscos_climaticos,
         )
         plantio_linhas = [l for l in plantio_by_site.get(site, {}).get(safra, []) if any(l.values())]
         aplicacoes_linhas = [l for l in aplicacoes_by_site.get(site, {}).get(safra, []) if any(l.values())]
@@ -2541,16 +2651,18 @@ def recommendation_pdf(site_name):
     culturas_by_site = models.get_all_farm_culturas()
     cultura = _cultura_label(site_name, safra, culturas_by_site)
     bloqueado = _nivel_dados_defasados(_dias_sem_leitura(raw_cards)) == "bloqueado"
+    coords = _weather_coords_all()
+    weather = _get_weather_for_site(site_name, coords)
+    riscos_climaticos = []
     if bloqueado:
         diseases = []
+        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather)
     else:
         cards_by_site = _filter_cards_by_cultura(
             {site_name: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
         )
         notes = models.get_all_recommendation_notes()
         diseases = _build_site_diseases(site_name, cards_by_site.get(site_name, []), notes, cultura=cultura)
-    coords = _weather_coords_all()
-    weather = _get_weather_for_site(site_name, coords)
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
@@ -2558,7 +2670,7 @@ def recommendation_pdf(site_name):
     leitura_bioscout = models.fmt_data_br(max((c["data"] for c in raw_cards), default=None))
     _, filename, pdf_bytes = _build_site_pdf(
         site_name, diseases, weather, produtos, cultura, safra, leitura_bioscout=leitura_bioscout,
-        mostrar_secao_doencas=not bloqueado,
+        mostrar_secao_doencas=not bloqueado, riscos_climaticos=riscos_climaticos,
     )
     return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=filename)
 

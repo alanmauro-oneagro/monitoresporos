@@ -198,7 +198,7 @@ def _tabela_padrao(headers, rows, col_widths):
 def build_recommendation_pdf(
     nome_fazenda, safra_label, diseases, weather=None, produtos=None,
     cultura=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
-    leitura_bioscout=None, mostrar_secao_doencas=True, anotacao=None,
+    leitura_bioscout=None, mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
 ):
     """`diseases`/`weather`/`produtos`/`cultura` tem o mesmo formato usado
     em `_format_whatsapp_message` (ver app.py); `plantio_linhas` e
@@ -215,7 +215,12 @@ def build_recommendation_pdf(
     `app._send_site_whatsapp`), pra nao sugerir que a fazenda foi
     checada e esta tudo bem quando na verdade nao foi checada.
     `anotacao` (texto livre, ver `models.get_site_climate_note`) aparece
-    logo apos o clima, quando preenchida. Retorna
+    logo apos o clima, quando preenchida. `riscos_climaticos` (ver
+    `app._riscos_climaticos_relevantes`) e' um aviso a parte, so' de
+    risco climatico (sem status/concentracao confirmados) -- aparece
+    mesmo com `mostrar_secao_doencas=False`, pois nao afirma deteccao
+    nenhuma, so' que o clima favorece a germinacao de uma doenca ja
+    monitorada nessa fazenda. Retorna
     um `io.BytesIO` com o PDF
     pronto."""
     buffer = io.BytesIO()
@@ -320,6 +325,38 @@ def build_recommendation_pdf(
                 [Paragraph(f"Sugestão: {d.get('nota') or '-'}", _ESTILO_NORMAL)],
                 fundo=CINZA_CLARO,
             ))
+
+    if riscos_climaticos:
+        # Bloco a parte de "Doencas em Atencao/Perigo" -- so' clima
+        # comparado com a germinacao, sem status/concentracao
+        # confirmados (ver docstring). Aparece mesmo com
+        # mostrar_secao_doencas=False, de proposito.
+        story.append(Paragraph("Risco Climático (sem leitura recente do sensor)", _ESTILO_SECAO))
+        for d in riscos_climaticos:
+            cabecalho = []
+            previsao_risco = d.get("previsao_risco")
+            risco_label = _RISCO_LABELS.get(d.get("risco"))
+            titulo_txt = f'<b>{d["rotulo"].upper()}</b>'
+            if previsao_risco:
+                cabecalho.append(Paragraph(titulo_txt, _ESTILO_DOENCA))
+                dias_txt = " &nbsp;·&nbsp; ".join(
+                    f'<font color="{_RISCO_CORES.get(p["risco"], "#666666")}">●</font> '
+                    f'<b>{p["data_fmt"]}</b>: {_RISCO_LABELS.get(p["risco"], "")}'
+                    for p in previsao_risco
+                )
+                cabecalho.append(Paragraph(f"Risco de infecção: {dias_txt}", _ESTILO_PREVISAO_RISCO))
+            elif risco_label:
+                cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
+                cabecalho.append(Paragraph(
+                    f'{titulo_txt} — <font color="{cor_risco}">●</font> Risco de infecção: <b>{risco_label}</b>',
+                    _ESTILO_RISCO_CLIMATICO,
+                ))
+            if d.get("germinacao"):
+                cabecalho.append(Paragraph(f'{d.get("cientifico", "")} — germinação: {d["germinacao"]}', _ESTILO_GERMINACAO))
+            elif d.get("cientifico"):
+                cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
+            story.append(KeepTogether(cabecalho))
+            story.append(Spacer(1, 3))
 
     produtos = produtos or {}
     story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
