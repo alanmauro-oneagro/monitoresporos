@@ -73,6 +73,7 @@ WEATHER_CACHE_TTL_SECONDS = 30 * 60  # nao busca de novo na Open-Meteo antes dis
 NDVI_PREVIEW_TTL_SECONDS = 30 * 60  # pre-visualizacao de NDVI expira sozinha se ninguem confirmar/descartar
 DADOS_AVISO_DIAS = 7  # ate isso = verde (ok); acima = aviso (amarelo)
 DADOS_BLOQUEIO_DIAS = 15  # acima disso (16+ dias) = vermelho, WhatsApp/PDF/copia da recomendacao viram so' clima (sem doenca)
+CULTURA_TODOS = "Todos"  # valor especial do seletor "Cultura atual" -- mostra toda doenca, sem filtrar pela matriz (ver _filter_cards_by_cultura)
 
 
 def _dias_sem_leitura(cards):
@@ -387,24 +388,33 @@ def _filter_cards_by_cultura(cards_by_site, culturas_by_site, doenca_culturas, s
     Fazendas/Recomendacoes), mostra so os cartoes de doencas marcadas para
     essa cultura na matriz da aba Doencas (`doenca_culturas`) -- doenca sem
     nenhuma marcacao na matriz ainda NUNCA e' escondida, pra nao sumir um
-    alerta novo/desconhecido por engano.
+    alerta novo/desconhecido por engano (segue a hierarquia da aba
+    Doencas). Cultura "" (vazio, ainda nao decidida) NAO mostra doenca
+    nenhuma -- forca decidir "Todos" (mostra tudo, sem filtro nenhum,
+    equivalente ao comportamento antigo do vazio) ou uma cultura
+    especifica, de proposito, pedido explicito do usuario.
 
     Com `safra` definido (Recomendacoes Safra / 2a Safra), usa so a
-    cultura daquela safra. Sem `safra` (Painel, que nao e' por safra),
-    usa a uniao das culturas de todas as safras da fazenda -- fazenda com
-    Soja na Safra e Milho na 2a Safra mostra as doencas das duas."""
+    cultura daquela safra. Sem `safra` (envio agendado, sem uma safra
+    especifica escolhida), usa a uniao das culturas de todas as safras da
+    fazenda -- fazenda com Soja na Safra e Milho na 2a Safra mostra as
+    doencas das duas; se qualquer uma das safras estiver em "Todos", vale
+    "Todos" pra fazenda inteira nesse caso."""
     filtered = {}
     for site, cards in cards_by_site.items():
         if safra:
-            culturas_ativas = {culturas_by_site.get((site, safra), {}).get("cultura")}
+            valores = {culturas_by_site.get((site, safra), {}).get("cultura")}
         else:
-            culturas_ativas = {
+            valores = {
                 culturas_by_site.get((site, s), {}).get("cultura") for s, _ in models.SAFRAS
             }
-        culturas_ativas.discard(None)
-        culturas_ativas.discard("")
-        if not culturas_ativas:
+        valores.discard(None)
+        if CULTURA_TODOS in valores:
             filtered[site] = cards
+            continue
+        culturas_ativas = {v for v in valores if v}
+        if not culturas_ativas:
+            filtered[site] = []  # "(vazio)" em todas as safras consideradas -- ainda nao decidiram, nao mostra nada
             continue
         filtered[site] = [
             c for c in cards
@@ -1703,7 +1713,14 @@ def graficos_dados():
         previsao_horaria_por_site[site] = (clima or {}).get("previsao_horaria_por_dia", {})
 
     translations = models.get_all_disease_translations()
-    doencas_en = data_reader.read_unique_display_names()
+    # Mesma ordem (nome cientifico) ja usada na aba Doencas -- os graficos
+    # aparecem na mesma hierarquia, em vez da ordem crua de
+    # `read_unique_display_names` (aparicao no CSV/BioScout). Pedido
+    # explicito do usuario.
+    doencas_en = sorted(
+        data_reader.read_unique_display_names(),
+        key=lambda en: (translations.get(en, {}).get("nome_cientifico") or "").lower(),
+    )
     spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
     hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
     device_by_site = data_reader.read_site_device_ids()
@@ -1852,7 +1869,13 @@ def graficos_dados():
                 "risco_pct": risco_medio,
                 "vento_predominante": vento_medio,
             })
-    doencas_payload.sort(key=lambda d: d["doenca_pt"])
+    # NAO reordena por doenca_pt aqui -- doencas_payload ja' sai na ordem
+    # certa (hierarquia da aba Doencas, nome cientifico) porque foi
+    # construido iterando `doencas_en` (ja' ordenado la em cima); um sort
+    # por doenca_pt aqui reordenava tudo de novo, alfabetico por nome em
+    # portugues, desfazendo a hierarquia -- bug que fazia os graficos
+    # nao respeitarem a ordem da aba Doencas mesmo com `doencas_en`
+    # ordenado certo.
 
     devices = [device_by_site.get(s) for s in sites if device_by_site.get(s)]
     vento_contagem = data_reader.contar_direcoes_vento(hourly_lookup, devices, dias)
@@ -2854,16 +2877,18 @@ def save_farm_cultura():
             abort(403)
     safra = _safra_or_default(request.form)
     cultura = request.form.get("cultura", "")
-    if cultura and cultura not in models.get_culturas_ativas():
+    if cultura and cultura != CULTURA_TODOS and cultura not in models.get_culturas_ativas():
         abort(400)
     models.set_farm_cultura(site_name, safra, cultura)
-    if cultura:
+    if cultura == CULTURA_TODOS:
+        message = f"'{site_name}' na {SAFRA_LABELS[safra]} passa a mostrar todas as doencas cadastradas, sem filtro de cultura."
+    elif cultura:
         message = (
             f"Cultura de '{site_name}' na {SAFRA_LABELS[safra]} definida como {cultura} -- "
             "essa aba passa a mostrar so doencas dessa cultura."
         )
     else:
-        message = f"Filtro de cultura removido de '{site_name}' na {SAFRA_LABELS[safra]}."
+        message = f"'{site_name}' na {SAFRA_LABELS[safra]} sem cultura definida -- nenhuma doenca aparece ate escolher uma cultura ou 'Todos'."
     return _save_response(message, "recommendations", safra=safra)
 
 

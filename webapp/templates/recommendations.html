@@ -40,8 +40,10 @@ html { font-size: 14px; }
             <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center gap-1 mb-0" data-autosave data-autosave-reload>
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <input type="hidden" name="safra" value="{{ safra }}">
-                <select name="cultura" class="form-select form-select-sm" style="width: auto;">
+                <select name="cultura" class="form-select form-select-sm" style="width: auto;"
+                        title="(vazio) = nao mostra nenhuma doenca ainda; Todos = mostra toda doenca cadastrada, sem filtro; cultura especifica = so as doencas marcadas pra ela na aba Doencas">
                     <option value="" {% if not site_group.cultura %}selected{% endif %}>(vazio)</option>
+                    <option value="Todos" {% if site_group.cultura == "Todos" %}selected{% endif %}>Todos</option>
                     {% for c in culturas_ativas %}
                     <option value="{{ c }}" {% if c == site_group.cultura %}selected{% endif %}>{{ c }}</option>
                     {% endfor %}
