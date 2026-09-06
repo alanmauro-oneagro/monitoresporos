@@ -427,6 +427,11 @@ def init_db():
     if conn.execute("SELECT COUNT(*) c FROM culturas").fetchone()[0] == 0:
         for slot, nome in enumerate(data_reader.DEFAULT_CULTURAS):
             conn.execute("INSERT INTO culturas (slot, nome) VALUES (?, ?)", (slot, nome))
+    # Slots 10/11 (12 culturas no total, eram 10) -- banco ja existente
+    # (que ja tinha as 10 posicoes preenchidas antes, entao o bloco acima
+    # nao roda de novo) so ganha as 2 posicoes novas, vazias, aqui.
+    for slot in (10, 11):
+        conn.execute("INSERT OR IGNORE INTO culturas (slot, nome) VALUES (?, '')", (slot,))
 
     if conn.execute("SELECT COUNT(*) c FROM doenca_cultura").fetchone()[0] == 0:
         for doenca_en, cultura in data_reader.DEFAULT_DOENCA_CULTURA.items():
@@ -1304,7 +1309,7 @@ def delete_farm_ndvi_historico_de_site(site_name):
 
 
 def get_culturas():
-    """Lista de 10 nomes na ordem dos slots (com "" nos ainda nao
+    """Lista de 12 nomes na ordem dos slots (com "" nos ainda nao
     preenchidos) -- menu Opcoes > Nome Culturas."""
     conn = get_db()
     rows = conn.execute("SELECT slot, nome FROM culturas ORDER BY slot").fetchall()
@@ -1319,9 +1324,9 @@ def get_culturas_ativas():
 
 
 def set_culturas(nomes):
-    """Substitui os 10 nomes (na ordem dos slots)."""
+    """Substitui os 12 nomes (na ordem dos slots)."""
     conn = get_db()
-    for slot, nome in enumerate(nomes[:10]):
+    for slot, nome in enumerate(nomes[:12]):
         conn.execute(
             """
             INSERT INTO culturas (slot, nome) VALUES (?, ?)

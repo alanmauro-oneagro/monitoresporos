@@ -95,6 +95,7 @@
             <thead>
                 <tr>
                     <th>Doenca</th>
+                    <th>Nome cientifico</th>
                     {% for cultura in culturas_ativas %}
                     <th class="text-center">{{ cultura }}</th>
                     {% endfor %}
@@ -108,6 +109,7 @@
                         {{ d.pt }}
                         <input type="hidden" name="doenca_en" value="{{ d.en }}">
                     </td>
+                    <td><em class="text-muted">{{ d.cientifico }}</em></td>
                     {% for cultura in culturas_ativas %}
                     <td class="text-center">
                         <input type="checkbox" class="form-check-input" name="culturas__{{ doenca_loop.index0 }}" value="{{ cultura }}" {% if cultura in d.marcadas %}checked{% endif %}>

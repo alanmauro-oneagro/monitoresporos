@@ -14,8 +14,28 @@ from shapely.geometry import Point, shape
 
 import inmet_stations
 import dmc_stations
+import sem_estacoes
 
 DEFAULT_COUNTRY = "BR"
+
+
+def _pais_sem_estacoes(nome, sigla, bbox):
+    """Pais com fronteira estatica pronta mas SEM integracao de estacoes
+    ainda (ver `sem_estacoes.py`) -- so' falta a API de estacoes daquele
+    pais especifico pra ficar igual ao Chile. Sigla em minusculo porque
+    e' assim que o script de fetch salvou os arquivos
+    (webapp/static/boundaries/<sigla>_adm0.geojson etc)."""
+    return {
+        "nome": nome,
+        "boundary_mode": "static_geoboundaries",
+        "boundary_files": {
+            "adm0": f"boundaries/{sigla}_adm0.geojson",
+            "adm1": f"boundaries/{sigla}_adm1.geojson",
+        },
+        "station_provider": sem_estacoes,
+        "cloud_grid_bbox": bbox,
+    }
+
 
 COUNTRIES = {
     "BR": {
@@ -34,7 +54,32 @@ COUNTRIES = {
         },
         "station_provider": dmc_stations,
         "cloud_grid_bbox": {"lat_min": -56, "lat_max": -17, "lon_min": -76, "lon_max": -66},
+        # Unico pais (alem do Brasil) que aparece no Mapa Interpolado
+        # MESMO sem nenhuma fazenda/ponto marcado la' ainda (proxima
+        # expansao de verdade, pedido explicito) -- ver
+        # `mostrar_sempre_interpolado`. Os outros paises abaixo tem
+        # fronteira pronta mas so' aparecem quando uma fazenda de
+        # verdade for marcada nesse pais (senao o Mapa Interpolado
+        # baixaria a fronteira de todo pais da America do Sul (~14MB)
+        # em toda visita, so' pra' cobrir paises sem nenhum uso ainda).
+        "mostrar_sempre_interpolado": True,
     },
+    # Resto da America do Sul -- fronteira (pais + regiao/provincia) ja'
+    # pronta (geoBoundaries, mesmo processo do Chile), mas SEM estacao
+    # oficial integrada ainda (ver `_pais_sem_estacoes`/`sem_estacoes.py`)
+    # -- cada uma precisa de uma API de agencia meteorologica nacional
+    # propria, um trabalho por pais que so' acontece quando/se uma fazenda
+    # de verdade aparecer la'.
+    "AR": _pais_sem_estacoes("Argentina", "ar", {"lat_min": -55, "lat_max": -21, "lon_min": -73, "lon_max": -53}),
+    "BO": _pais_sem_estacoes("Bolivia", "bo", {"lat_min": -23, "lat_max": -9, "lon_min": -69, "lon_max": -57}),
+    "CO": _pais_sem_estacoes("Colombia", "co", {"lat_min": -4, "lat_max": 13, "lon_min": -79, "lon_max": -66}),
+    "EC": _pais_sem_estacoes("Equador", "ec", {"lat_min": -5, "lat_max": 1.5, "lon_min": -81, "lon_max": -75}),
+    "GY": _pais_sem_estacoes("Guiana", "gy", {"lat_min": 1, "lat_max": 9, "lon_min": -61, "lon_max": -56}),
+    "PY": _pais_sem_estacoes("Paraguai", "py", {"lat_min": -27.5, "lat_max": -19, "lon_min": -63, "lon_max": -54}),
+    "PE": _pais_sem_estacoes("Peru", "pe", {"lat_min": -18.5, "lat_max": 0, "lon_min": -81.5, "lon_max": -68.5}),
+    "SR": _pais_sem_estacoes("Suriname", "sr", {"lat_min": 1.8, "lat_max": 6, "lon_min": -58, "lon_max": -54}),
+    "UY": _pais_sem_estacoes("Uruguai", "uy", {"lat_min": -35, "lat_max": -30, "lon_min": -58.5, "lon_max": -53}),
+    "VE": _pais_sem_estacoes("Venezuela", "ve", {"lat_min": 0.5, "lat_max": 12.5, "lon_min": -73.5, "lon_max": -59.5}),
 }
 
 
@@ -118,3 +163,10 @@ def active_country_codes(site_country_map):
         if code in COUNTRIES:
             codes.add(code)
     return codes
+
+
+def paises_prioritarios():
+    """Pais (alem do Brasil) marcado `mostrar_sempre_interpolado` -- ver
+    nota no registro do Chile. So' usado pelo Mapa Interpolado (mostrar
+    ANTES de existir fazenda de verdade la'), nao pelo Mapa normal."""
+    return {code for code, info in COUNTRIES.items() if info.get("mostrar_sempre_interpolado")}

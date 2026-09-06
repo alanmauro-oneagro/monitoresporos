@@ -25,7 +25,7 @@ DOENCA_MAP = {
 # Valores iniciais (semente) das 10 caixas de "Nome Culturas" (menu Opcoes)
 # -- so usado na primeira vez que o banco e' criado; depois disso e'
 # 100% editavel pelo admin e vive na tabela `culturas`.
-DEFAULT_CULTURAS = ["Soja", "Milho", "Algodao", "Feijao", "Citrus", "Cana", "Batata", "", "", ""]
+DEFAULT_CULTURAS = ["Soja", "Milho", "Algodao", "Feijao", "Citrus", "Cana", "Batata", "", "", "", "", ""]
 
 # Semente inicial da matriz doenca x cultura (aba Doencas) -- chave = nome
 # original em ingles (mesmo de DOENCA_MAP), valor = uma cultura de

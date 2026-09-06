@@ -310,15 +310,18 @@
     }
 
     // Pais de cada fazenda/ponto (aba Fazendas > Pais), sem entrada = 'BR'
-    // (padrao). Diferente do Mapa normal, aqui `activeCountries` sempre
-    // inclui TODO pais do registro (nao so os com fazenda/ponto marcado)
-    // -- essa tela e' justamente pra escolher onde criar o PRIMEIRO ponto
-    // de um pais novo, entao a fronteira e as estacoes do Chile (por
-    // exemplo) precisam aparecer mesmo sem nenhum ponto la' ainda.
+    // (padrao). Diferente do Mapa normal, aqui `activeCountries` inclui
+    // tambem os paises "prioritarios" mesmo sem fazenda/ponto marcado
+    // ainda (hoje so' o Chile -- `active_country_codes_interpolado`,
+    // calculado no servidor em `countries.paises_prioritarios()`) --
+    // essa tela e' pra escolher onde criar o PRIMEIRO ponto de um pais
+    // novo. NAO inclui todo pais do registro (com 10+ paises so' com
+    // fronteira pronta, sem fazenda nenhuma, isso baixaria uns 14MB de
+    // contorno a toa em toda visita).
     var COUNTRY_BOUNDARIES = {{ country_boundary_urls | tojson }};
     var CLOUD_BBOXES = {{ cloud_bboxes | tojson }};
     var activeCountries = { BR: true };
-    Object.keys(COUNTRY_BOUNDARIES).forEach(function (code) { activeCountries[code] = true; });
+    {{ active_country_codes_interpolado | tojson }}.forEach(function (code) { activeCountries[code] = true; });
 
     // Rodovias federais (BR-163/364/070/158) -- lidas de um arquivo
     // estatico proprio (webapp/static/rodovias_br.json), NAO mais buscadas

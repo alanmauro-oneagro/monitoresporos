@@ -1895,18 +1895,22 @@ def mapa_interpolado():
     sites_data.sort(key=lambda s: s["site"])
     pontos_virtuais.sort(key=lambda p: p["nome"])
 
-    # Todas as estacoes de TODO pais do registro aqui (nao so os que ja
-    # tem fazenda/ponto marcado, diferente do Mapa normal) -- essa tela e'
-    # justamente pra escolher onde criar o PRIMEIRO ponto de um pais novo,
-    # entao precisa mostrar o Chile (fronteira + estacoes da DMC) mesmo
-    # sem nenhuma fazenda la' ainda.
+    # Estacoes de todo pais ativo (com fazenda/ponto marcado, igual o
+    # Mapa normal) MAIS os paises "prioritarios" (hoje so' o Chile,
+    # `mostrar_sempre_interpolado`) -- essa tela e' pra escolher onde
+    # criar o PRIMEIRO ponto de um pais novo, entao o Chile precisa
+    # aparecer mesmo sem fazenda la' ainda. NAO inclui todo pais do
+    # registro incondicionalmente -- com 10+ paises cadastrados so' com
+    # fronteira pronta (sem uso ainda), isso baixaria ~14MB de contorno
+    # por visita a toa.
+    active_interpolado = countries.active_country_codes(site_countries) | countries.paises_prioritarios()
     estacoes = []
-    for code in countries.COUNTRIES:
+    for code in active_interpolado:
         estacoes.extend(countries.get_country(code)["station_provider"].get_estacoes())
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, estacoes=estacoes,
-        countries=countries.COUNTRIES,
+        countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
         **_country_map_context(),
     )
 
@@ -2802,7 +2806,7 @@ def admin_doencas():
     culturas_ativas = models.get_culturas_ativas()
     doenca_culturas = models.get_doenca_culturas()
     matriz = [
-        {"en": d["en"], "pt": d["pt"], "marcadas": doenca_culturas.get(d["en"], set())}
+        {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_culturas.get(d["en"], set())}
         for d in doencas
     ]
     return render_template(
@@ -2815,7 +2819,7 @@ def admin_doencas():
 def admin_culturas():
     if request.method == "POST":
         culturas_antigas = set(models.get_culturas_ativas())
-        nomes = [request.form.get(f"nome_{i}", "").strip() for i in range(10)]
+        nomes = [request.form.get(f"nome_{i}", "").strip() for i in range(12)]
         models.set_culturas(nomes)
         # Cultura nova (nao existia antes): bloqueia ela de saida em todo
         # quimico ja cadastrado na biblioteca de Fungicidas -- ninguem
