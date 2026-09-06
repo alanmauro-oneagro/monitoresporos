@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Alertas Clima - OneAgro{% endblock %}
+{% block extra_head %}
+<style>
+    .clima-card { border: 1px solid #d0ebff; border-radius: 0.5rem; padding: 0.9rem; margin-bottom: 0.9rem; background: #f4faff; }
+</style>
+{% endblock %}
+{% block content %}
+<h4 class="mb-2">Alertas Clima</h4>
+<p class="text-muted small">
+    Estacao meteorologica de referencia, frequencia de envio automatico por WhatsApp (texto/PDF) e envio manual
+    dos pontos <strong>☁️ so' clima</strong> (criados na aba <strong>Mapa Interpolado</strong> > Pontos Criados).
+    Esses pontos nao monitoram doenca -- o relatorio traz so' o clima atual e a previsao.
+</p>
+
+{% if not pontos %}
+<div class="alert alert-info small">Nenhum ponto "so clima" criado ainda -- crie um em Mapa Interpolado > Pontos Criados (Tipo de ponto = "Somente clima").</div>
+{% endif %}
+
+{% for ponto in pontos %}
+{% set ponto_idx = loop.index0 %}
+<div class="clima-card">
+    <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+        <strong>{{ ponto.nome }}</strong>
+        <span class="badge bg-secondary">{{ countries[ponto.country_code].nome if ponto.country_code in countries else ponto.country_code }}</span>
+        {% if ponto.weather %}
+        <span class="text-muted small">
+            {% if ponto.weather.temperatura_atual is not none %}🌡️ {{ ponto.weather.temperatura_atual }}°C{% endif %}
+            {% if ponto.weather.umidade_atual is not none %} · 💧 {{ ponto.weather.umidade_atual }}%{% endif %}
+        </span>
+        {% endif %}
+    </div>
+
+    {% if ponto.estacoes_proximas %}
+    <div class="mb-2">
+        <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <label class="form-label small text-muted d-block mb-1">Estacao meteorologica de referencia para a previsao (clima do ponto vem da Open-Meteo, na coordenada escolhida aqui):</label>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="estacao_codigo" value=""
+                    id="ac_est_{{ ponto_idx }}_ponto" {% if not ponto.estacao_selecionada %}checked{% endif %}>
+                <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_ponto">Coordenada do proprio ponto (padrao)</label>
+            </div>
+            {% for estacao in ponto.estacoes_proximas %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="estacao_codigo" value="{{ estacao.country_code }}:{{ estacao.codigo }}"
+                    id="ac_est_{{ ponto_idx }}_{{ loop.index0 }}" {% if ponto.estacao_selecionada == estacao.codigo %}checked{% endif %}>
+                <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_{{ loop.index0 }}">
+                    📡 {{ estacao.cidade }}/{{ estacao.uf }} ({{ estacao.codigo }}) -- {{ estacao.distancia_km }} km
+                </label>
+            </div>
+            {% endfor %}
+            <span class="autosave-status small ms-2"></span>
+        </form>
+    </div>
+    {% endif %}
+
+    <div class="mb-2">
+        <form method="post" action="{{ url_for('save_whatsapp_days') }}" data-autosave>
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- Texto -- nestes dias (as {{ '%02d'|format(7) }}h):</label>
+            {% for idx, label in weekday_labels %}
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
+                    id="ac_wd_{{ ponto_idx }}_{{ idx }}" {% if idx in ponto.selected_days %}checked{% endif %}>
+                <label class="form-check-label small" for="ac_wd_{{ ponto_idx }}_{{ idx }}">{{ label }}</label>
+            </div>
+            {% endfor %}
+            <span class="autosave-status small ms-2"></span>
+        </form>
+        <form method="post" action="{{ url_for('save_whatsapp_days_pdf') }}" data-autosave class="mt-2">
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- PDF -- nestes dias (as {{ '%02d'|format(7) }}h):</label>
+            {% for idx, label in weekday_labels %}
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
+                    id="ac_wdpdf_{{ ponto_idx }}_{{ idx }}" {% if idx in ponto.selected_days_pdf %}checked{% endif %}>
+                <label class="form-check-label small" for="ac_wdpdf_{{ ponto_idx }}_{{ idx }}">{{ label }}</label>
+            </div>
+            {% endfor %}
+            <span class="autosave-status small ms-2"></span>
+        </form>
+    </div>
+
+    <div class="d-flex align-items-center flex-wrap gap-2 pt-2 border-top">
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('alertas_clima_pdf', site_name=ponto.site_name) }}"
+           title="Gerar PDF com o clima atual e a previsao -- pra encaminhar pra alguem">
+            📄 Clima (PDF)
+        </a>
+        <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn" {% if not ponto.whatsapp_text %}disabled{% endif %}
+                data-text="{{ ponto.whatsapp_text }}"
+                title="Copiar o relatorio de clima pra colar manualmente no WhatsApp">
+            📋 Copiar
+        </button>
+        <form method="post" action="{{ url_for('alertas_clima_whatsapp', site_name=ponto.site_name) }}" class="d-flex align-items-center gap-2 mb-0">
+            <div class="form-check mb-0" title="Incluir o texto no envio">
+                <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked id="ac_txt_{{ ponto_idx }}">
+                <label class="form-check-label small" for="ac_txt_{{ ponto_idx }}">Texto</label>
+            </div>
+            <div class="form-check mb-0" title="Incluir o PDF no envio">
+                <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" id="ac_pdf_{{ ponto_idx }}">
+                <label class="form-check-label small" for="ac_pdf_{{ ponto_idx }}">PDF</label>
+            </div>
+            <button type="submit" class="btn btn-sm btn-outline-success" {% if not ponto.whatsapp_destinos %}disabled{% endif %}
+                    title="{% if ponto.whatsapp_destinos %}Enviar para {{ ponto.whatsapp_destinos }} numero(s) os formatos marcados{% else %}Nenhum numero cadastrado pra esse ponto ainda (aba Usuarios){% endif %}">
+                📲 Enviar agora{% if ponto.whatsapp_destinos %} ({{ ponto.whatsapp_destinos }}){% endif %}
+            </button>
+        </form>
+    </div>
+
+    <p class="text-muted small mb-0 mt-2 pt-2 border-top">
+        Nome, coordenada, raio, pais e remocao desse ponto ficam na aba <strong>Mapa Interpolado</strong> > Pontos Criados.
+        Quem recebe (numero de WhatsApp) se configura na aba <strong>Usuarios</strong>.
+    </p>
+</div>
+{% endfor %}
+{% endblock %}
+{% block extra_scripts %}
+<script>
+document.querySelectorAll('.copy-recomendacao-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var text = btn.dataset.text || '';
+        var original = btn.textContent;
+        function marcarCopiado() {
+            btn.textContent = '✅ Copiado!';
+            setTimeout(function () { btn.textContent = original; }, 2000);
+        }
+        function marcarFalha() {
+            btn.textContent = '⚠️ Copie manualmente (Ctrl+C)';
+            setTimeout(function () { btn.textContent = original; }, 3000);
+        }
+        function copiarComTextarea() {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            try {
+                document.execCommand('copy') ? marcarCopiado() : marcarFalha();
+            } catch (e) {
+                marcarFalha();
+            }
+            document.body.removeChild(ta);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(marcarCopiado).catch(copiarComTextarea);
+        } else {
+            copiarComTextarea();
+        }
+    });
+});
+</script>
+{% endblock %}

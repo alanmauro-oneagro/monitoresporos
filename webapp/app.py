@@ -1900,7 +1900,6 @@ def mapa_interpolado():
         })
 
     site_countries = models.get_all_site_countries()
-    weather_overrides = models.get_all_weather_station_overrides()
     pontos_virtuais = []
     for vf in models.get_all_virtual_farms():
         tipo = vf.get("tipo") or "doenca"
@@ -1916,11 +1915,6 @@ def mapa_interpolado():
             cards, estacoes_usadas = virtual_farms.interpolar_cards(
                 vf["lat"], vf["lon"], vf["raio_km"], cards_reais, coords_reais
             )
-        # Mesmo catalogo de estacoes oficiais usado na aba Fazendas (todo
-        # provedor cadastrado, nao so' o do pais do proprio ponto) -- deixa
-        # escolher aqui, sem precisar ir na aba Fazendas so' pra isso.
-        estacoes_proximas = countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], n=2)
-        escolha = weather_overrides.get(vf["site_name"])
         pontos_virtuais.append({
             **vf,
             "tipo": tipo,
@@ -1928,8 +1922,6 @@ def mapa_interpolado():
             "cards": cards,
             "estacoes_usadas": estacoes_usadas,
             "country_code": site_countries.get(vf["site_name"], countries.DEFAULT_COUNTRY),
-            "estacoes_proximas": estacoes_proximas,
-            "estacao_selecionada": escolha["codigo"] if escolha else "",
         })
         if cards or tipo == "clima":
             sites_data.append({
@@ -2078,6 +2070,83 @@ def remover_ponto_virtual():
     models.delete_virtual_farm(site_name)
     flash("Ponto estimado removido.", "success")
     return redirect(url_for("mapa_interpolado"))
+
+
+def _get_clima_virtual_farm_or_404(site_name):
+    """Fazenda virtual do tipo 'clima' com esse site_name, ou aborta com
+    404 -- usado pelas rotas de `/alertas-clima` pra garantir que ninguem
+    manda WhatsApp/gera PDF de um ponto que nao e' 'clima' (ou nem existe)
+    por essas rotas especificas."""
+    vf = models.get_virtual_farm(site_name)
+    if not vf or vf.get("tipo") != "clima":
+        abort(404)
+    return vf
+
+
+@app.route("/alertas-clima")
+@alan_mauro_required
+def alertas_clima():
+    """Tela dedicada aos pontos "so clima" (ver `mapa_interpolado`/
+    `create_virtual_farm`, tipo='clima') -- escolher a estacao oficial de
+    referencia, a frequencia de envio automatico por WhatsApp (texto/PDF,
+    mesma agenda por dia da semana da aba Fazendas/Manejo) e mandar/baixar
+    na hora, tudo num lugar so'. So' o usuario Alan Mauro ve essa aba (nao
+    e' so' `is_admin`, ver `alan_mauro_required`) -- pedido explicito,
+    igual as outras telas de Configuracoes restritas a ele."""
+    site_countries = models.get_all_site_countries()
+    weather_overrides = models.get_all_weather_station_overrides()
+    all_days = models.get_all_whatsapp_days()
+    all_days_pdf = models.get_all_whatsapp_days_pdf()
+    whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
+    coords = _weather_coords_all()
+
+    pontos = []
+    for vf in models.get_all_virtual_farms():
+        if vf.get("tipo") != "clima":
+            continue
+        site = vf["site_name"]
+        weather = _get_weather_for_site(site, coords)
+        escolha = weather_overrides.get(site)
+        pontos.append({
+            **vf,
+            "country_code": site_countries.get(site, countries.DEFAULT_COUNTRY),
+            "estacoes_proximas": countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], n=2),
+            "estacao_selecionada": escolha["codigo"] if escolha else "",
+            "selected_days": all_days.get(site, set()),
+            "selected_days_pdf": all_days_pdf.get(site, set()),
+            "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
+            "weather": weather,
+            "whatsapp_text": _format_whatsapp_message(site, [], weather=weather, is_virtual=True),
+        })
+    pontos.sort(key=lambda p: p["nome"])
+    return render_template(
+        "alertas_clima.html", pontos=pontos, countries=countries.COUNTRIES,
+        weekday_labels=list(enumerate(WEEKDAY_LABELS)),
+    )
+
+
+@app.route("/alertas-clima/whatsapp/<path:site_name>", methods=["POST"])
+@alan_mauro_required
+def alertas_clima_whatsapp(site_name):
+    _get_clima_virtual_farm_or_404(site_name)
+    enviar_texto = bool(request.form.get("enviar_texto"))
+    enviar_pdf = bool(request.form.get("enviar_pdf"))
+    ok, message = _send_site_whatsapp(site_name, safra=None, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+    if ok:
+        flash(f"WhatsApp de '{site_name}' enviado para {message}.", "success")
+    else:
+        flash(f"Falha ao enviar WhatsApp de '{site_name}': {message}", "error")
+    return redirect(url_for("alertas_clima"))
+
+
+@app.route("/alertas-clima/pdf/<path:site_name>")
+@alan_mauro_required
+def alertas_clima_pdf(site_name):
+    _get_clima_virtual_farm_or_404(site_name)
+    weather = _get_weather_for_site(site_name, _weather_coords_all())
+    produtos = _farm_produtos_estoque(site_name, None)
+    _, filename, pdf_bytes = _build_site_pdf(site_name, [], weather, produtos, cultura=None, safra=None)
+    return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
 SAFRA_LABELS = dict(models.SAFRAS)
