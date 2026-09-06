@@ -3187,7 +3187,15 @@ def admin_fungicidas():
 
     doencas_data = []
     row_counter = 0
-    for doenca_en, info in sorted(translations.items(), key=lambda kv: kv[1]["nome_pt"]):
+    # Doenca com registro encontrado (fungicida_data.py ja tem alguma
+    # coisa cadastrada) primeiro, ordem alfabetica dentro de cada grupo;
+    # "sem dados ainda" sempre por ultimo -- pedido explicito do usuario,
+    # pra facilitar achar rapido o que ainda falta pesquisar.
+    doencas_ordenadas = sorted(
+        translations.items(),
+        key=lambda kv: (not fungicida_data.get_recomendacao(kv[0]), kv[1]["nome_pt"].lower()),
+    )
+    for doenca_en, info in doencas_ordenadas:
         rotulo = info["nome_pt"]
         rec = fungicida_data.get_recomendacao(doenca_en)
         if not rec:
