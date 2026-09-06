@@ -2991,6 +2991,14 @@ _PESQUISA_GERMINACAO_2026_08_27 = {
     "General Alternaria": {"temp_min": 20, "temp_max": 30, "ur_min": 90, "molhamento_horas": 8, "agua_livre_inibe": False},
     "Moniliophthora spp. BETA": {"temp_min": 25, "temp_max": 30, "ur_min": 90, "molhamento_horas": 18, "agua_livre_inibe": False},
     "Powdery Mildew": {"temp_min": 20, "temp_max": 25, "ur_min": 80, "molhamento_horas": None, "agua_livre_inibe": True},
+    # Adicionada em 2026-09 (doenca nova, provavelmente de fazenda do
+    # Chile -- ver aba Doencas) -- literatura (UConn Extension, PNW Pest
+    # Management Handbooks, revisao sobre Alternaria solani em tomate)
+    # aponta faixa bem parecida com "General Alternaria" acima (mesmo
+    # genero Alternaria spp.): 20-30 C timido, UR>=87-95% ou agua livre,
+    # molhamento minimo de 4h com severidade crescente ate 12h (usado 8h
+    # aqui, mesmo valor ja adotado pra General Alternaria).
+    "Alternaria Leaf Blight": {"temp_min": 20, "temp_max": 30, "ur_min": 90, "molhamento_horas": 8, "agua_livre_inibe": False},
 }
 
 
