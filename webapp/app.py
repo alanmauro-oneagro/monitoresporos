@@ -3229,16 +3229,15 @@ def admin_doencas():
     culturas_ativas = models.get_culturas_ativas()
     culturas = models.get_culturas()
     doenca_culturas = models.get_doenca_culturas()
-    # Paises disponiveis na matriz Doenca x Pais: os mesmos que ja tem
-    # fazenda cadastrada (`active_country_codes`, sempre inclui Brasil) --
-    # mesma lista usada como opcao de filtro na aba Graficos, entao marcar
-    # uma doenca aqui sempre corresponde a um pais que realmente aparece la.
-    site_countries = models.get_all_site_countries()
-    paises_disponiveis = sorted(
-        countries.active_country_codes(site_countries),
-        key=lambda c: countries.get_country(c)["nome"],
-    )
-    paises_disponiveis = [{"code": c, "nome": countries.get_country(c)["nome"]} for c in paises_disponiveis]
+    # Paises disponiveis na matriz Doenca x Pais: TODO pais registrado
+    # (`countries.COUNTRIES`, mesma ordem/fonte usada no seletor de Pais
+    # das abas Fazendas e Mapa Interpolado -- ver `templates/fazendas.html`/
+    # `templates/mapa_interpolado.html`, `{% for code, pais in countries.items() %}`),
+    # nao so' quem ja tem fazenda cadastrada -- assim a coluna ja existe
+    # pronta pra marcar a doenca ANTES da primeira fazenda daquele pais
+    # aparecer, igual o slot vazio da matriz Doencas x Culturas. Pedido
+    # explicito do usuario pra ficar "linkado" com as duas outras telas.
+    paises_disponiveis = [{"code": c, "nome": info["nome"]} for c, info in countries.COUNTRIES.items()]
     doenca_paises = models.get_doenca_paises()
     matriz = [
         {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_culturas.get(d["en"], set())}

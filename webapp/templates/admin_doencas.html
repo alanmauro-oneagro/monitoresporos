@@ -6,6 +6,11 @@
    estreitas, senao a tabela fica larga demais e nao cabe na tela do
    computador sem rolar (pedido explicito do usuario). */
 .cultura-nome-input { width: 62px; padding: 2px 4px; font-size: 0.72rem; }
+/* Mesmo padrao estreito no cabecalho da matriz Doencas x Pais -- so
+   texto (pais nao e' editavel aqui, ver seletor de Pais nas abas
+   Fazendas/Mapa Interpolado), mas do mesmo tamanho de caixa pra tabela
+   ficar consistente e caber na tela. */
+.pais-nome-th { width: 62px; font-size: 0.72rem; overflow-wrap: break-word; }
 </style>
 {% endblock %}
 {% block content %}
@@ -150,9 +155,6 @@
 
 <h4 class="mb-2 mt-4">Doencas x Pais</h4>
 
-{% if not paises_disponiveis %}
-<div class="alert alert-info">Nenhum pais com fazenda cadastrada ainda.</div>
-{% else %}
 <form method="post" data-autosave>
     <input type="hidden" name="form_id" value="matriz_paises">
     <div class="table-responsive">
@@ -162,7 +164,7 @@
                     <th>Doenca</th>
                     <th>Nome cientifico</th>
                     {% for pais in paises_disponiveis %}
-                    <th class="text-center">{{ pais.nome }}</th>
+                    <th class="text-center pais-nome-th" title="{{ pais.nome }}">{{ pais.nome }}</th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -187,7 +189,6 @@
     </div>
     <span class="autosave-status small ms-2"></span>
 </form>
-{% endif %}
 
 <p class="text-muted small mt-3 pt-3 border-top">
     Marque em quais paises cada doenca deve aparecer quando o filtro de
