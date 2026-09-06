@@ -29,26 +29,11 @@ html { font-size: 14px; }
     <input type="hidden" name="safra" value="{{ safra }}">
 </form>
 
-<form method="post" action="{{ url_for('send_selected_whatsapp') }}" id="whatsappBulkForm">
-    <input type="hidden" name="safra" value="{{ safra }}">
-</form>
-
-<div class="d-flex align-items-center gap-2 mb-3">
-    <div class="form-check mb-0">
-        <input class="form-check-input" type="checkbox" id="selectAllFarms">
-        <label class="form-check-label small" for="selectAllFarms">Selecionar todas</label>
-    </div>
-    <button type="submit" form="whatsappBulkForm" class="btn btn-sm btn-outline-success" {% if not any_whatsapp_configured %}disabled{% endif %}>
-        📲 Enviar selecionados por WhatsApp
-    </button>
-</div>
-
 {% for site_group in sites_data %}
 {% set outer_loop = loop %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-            <input class="form-check-input farm-select-checkbox mt-0" type="checkbox" name="site_name" value="{{ site_group.site }}" form="whatsappBulkForm" title="Selecionar para envio em lote" style="width: 1.25em; height: 1.25em;">
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
                 <span class="toggle-icon">▶</span> {{ site_group.site }}
             </button>
@@ -309,19 +294,6 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
         var expanded = !body.classList.contains('d-none');
         body.classList.toggle('d-none');
         icon.textContent = expanded ? '▶' : '▼';
-    });
-});
-var selectAll = document.getElementById('selectAllFarms');
-var farmCheckboxes = document.querySelectorAll('.farm-select-checkbox');
-if (selectAll) {
-    selectAll.addEventListener('change', function () {
-        farmCheckboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
-    });
-}
-farmCheckboxes.forEach(function (cb) {
-    cb.addEventListener('change', function () {
-        if (!cb.checked) { selectAll.checked = false; }
-        else if (Array.from(farmCheckboxes).every(function (c) { return c.checked; })) { selectAll.checked = true; }
     });
 });
 

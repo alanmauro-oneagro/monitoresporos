@@ -1500,11 +1500,16 @@ def _uf_por_site():
     coordenada, ou sem estacao proxima resolvida (catalogo fora do ar, ou
     sem credencial configurada pro provedor daquele pais), fica com UF
     None -- nunca quebra a pagina por causa disso, so' nao aparece nos
-    filtros de estado."""
+    filtros de estado. Ponto "so clima" (tipo='clima', aba Alertas Clima)
+    fica de fora -- nao tem doenca nenhuma pra mostrar em grafico, pedido
+    explicito do usuario."""
     coords = _coords_all()
     site_countries = models.get_all_site_countries()
+    virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
     por_site = {}
     for site, latlon in coords.items():
+        if site in virtual_clima_names:
+            continue
         provider = countries.get_country(site_countries.get(site, countries.DEFAULT_COUNTRY))["station_provider"]
         estacao = provider.estacao_mais_proxima(*latlon)
         por_site[site] = estacao["uf"] if estacao else None
@@ -2416,28 +2421,6 @@ def send_site_whatsapp(site_name):
         flash(f"Falha ao enviar WhatsApp de '{site_name}': {message}", "error")
     return redirect(url_for("recommendations", safra=safra))
 
-
-
-@app.route("/recommendations/whatsapp/selecionados", methods=["POST"])
-@login_required
-def send_selected_whatsapp():
-    safra = _safra_or_default(request.form)
-    site_names = request.form.getlist("site_name")
-    allowed = None if current_user.is_admin else set(models.get_user_permitted_site_names(int(current_user.id)))
-    if not site_names:
-        flash("Nenhuma fazenda selecionada.", "error")
-        return redirect(url_for("recommendations", safra=safra))
-    enviados, falhas = [], []
-    for site_name in site_names:
-        if allowed is not None and site_name not in allowed:
-            continue
-        ok, message = _send_site_whatsapp(site_name, safra=safra)
-        (enviados if ok else falhas).append(f"{site_name} ({message})")
-    if enviados:
-        flash(f"WhatsApp enviado para: {', '.join(enviados)}.", "success")
-    if falhas:
-        flash(f"Falha ao enviar para: {', '.join(falhas)}.", "error")
-    return redirect(url_for("recommendations", safra=safra))
 
 
 @app.route("/recommendations/pdf/<path:site_name>")
