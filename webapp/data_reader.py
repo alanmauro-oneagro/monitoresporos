@@ -133,7 +133,61 @@ def read_site_device_ids():
 _csv_cache = {}  # path -> (mtime, linhas)
 
 
-def _read_csv_cached(path):
+_DOENCA_MAP_POR_MINUSCULO = {nome.lower(): nome for nome in DOENCA_MAP}
+_ultimo_mapa_canonico = {}  # minusculo -> grafia canonica, ver _normalizar_display_names
+
+
+def _build_canonical_map(linhas):
+    """minusculo -> grafia canonica: se bater com uma doenca ja conhecida
+    em DOENCA_MAP, usa a grafia de la'; senao, usa a PRIMEIRA grafia
+    vista pra esse nome (ordem do arquivo)."""
+    canonico_por_minusculo = {}
+    for linha in linhas:
+        nome = linha.get("displayName")
+        if not nome:
+            continue
+        chave = nome.lower()
+        if chave not in canonico_por_minusculo:
+            canonico_por_minusculo[chave] = _DOENCA_MAP_POR_MINUSCULO.get(chave, nome)
+    return canonico_por_minusculo
+
+
+def _normalizar_display_names(linhas):
+    """O mesmo fungo pode vir com capitalizacao diferente conforme o
+    dispositivo/regiao que gerou a leitura -- confirmado na pratica:
+    "Grey Mould" (dispositivo no Brasil) x "Grey mould" (dispositivo no
+    Chile), a mesma doenca (Botrytis spp.) virando DUAS linhas na aba
+    Doencas (e, pior, dois cartoes de alerta separados pra mesma
+    fazenda/doenca se ela relatar as duas grafias ao longo do tempo).
+    Uniformiza `displayName` por comparacao sem diferenciar
+    maiuscula/minuscula, assim toda leitura da mesma doenca sempre vira
+    o mesmo `displayName`, nao importa a grafia original. Guarda o mapa
+    usado em `_ultimo_mapa_canonico`, pra' `nome_canonico_para` poder
+    resolver ate' uma grafia antiga que nao aparece mais como valor de
+    nenhuma linha (ver `models.merge_duplicate_disease_translations`,
+    que junta linhas duplicadas salvas ANTES dessa normalizacao
+    existir)."""
+    global _ultimo_mapa_canonico
+    mapa = _build_canonical_map(linhas)
+    for linha in linhas:
+        nome = linha.get("displayName")
+        if nome:
+            linha["displayName"] = mapa[nome.lower()]
+    _ultimo_mapa_canonico = mapa
+
+
+def nome_canonico_para(display_name_en):
+    """Grafia canonica atual (ver `_normalizar_display_names`) pra'
+    qualquer displayName, mesmo uma grafia antiga que nao aparece mais
+    como valor de nenhuma linha do CSV depois da normalizacao."""
+    read_spore_counts()  # garante que _ultimo_mapa_canonico esta' atualizado
+    chave = display_name_en.lower()
+    if chave in _ultimo_mapa_canonico:
+        return _ultimo_mapa_canonico[chave]
+    return _DOENCA_MAP_POR_MINUSCULO.get(chave, display_name_en)
+
+
+def _read_csv_cached(path, postprocess=None):
     """Le e faz o parse do CSV, cacheado em memoria pelo mtime do arquivo
     -- MUITAS funcoes diferentes chamam read_spore_counts/read_weather
     (direto ou indireto, via read_site_coordinates/read_site_device_ids/
@@ -147,13 +201,19 @@ def _read_csv_cached(path):
     cada linha sao compartilhados entre chamadas (mesma lista, nao uma
     copia) -- nenhum consumidor deste modulo ou de app.py altera uma
     linha depois de ler, so' faz `.get()`/leitura, entao compartilhar e'
-    seguro e evita copiar a lista inteira a toa."""
+    seguro e evita copiar a lista inteira a toa. `postprocess` (se dado)
+    roda so' UMA VEZ por leitura de verdade do arquivo (cache miss), nao
+    a cada chamada -- pra normalizacao (ver `_normalizar_display_names`)
+    nao repetir um trabalho O(n) toda vez que alguem pedir os dados ja'
+    em cache."""
     mtime = path.stat().st_mtime
     cached = _csv_cache.get(path)
     if cached and cached[0] == mtime:
         return cached[1]
     with open(path, encoding="utf-8-sig", newline="") as f:
         linhas = list(csv.DictReader(f))
+    if postprocess:
+        postprocess(linhas)
     _csv_cache[path] = (mtime, linhas)
     return linhas
 
@@ -163,7 +223,7 @@ def read_sites():
 
 
 def read_spore_counts():
-    return _read_csv_cached(DATA_DIR / "spore_counts.csv")
+    return _read_csv_cached(DATA_DIR / "spore_counts.csv", postprocess=_normalizar_display_names)
 
 
 def read_weather():

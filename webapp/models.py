@@ -631,6 +631,81 @@ def ensure_disease_translations(display_names, default_map, scientific_map=None)
     conn.close()
 
 
+def merge_duplicate_disease_translations(canonico_por_atual):
+    """canonico_por_atual: display_name_en atual (qualquer grafia ja
+    vista, ver `data_reader.nome_canonico_para`) -> grafia canonica que
+    deveria valer daqui pra frente. Antes de `data_reader` normalizar a
+    capitalizacao do `displayName` do BioScout, a mesma doenca podia
+    virar mais de uma linha em disease_translations (ex.: "Grey Mould" x
+    "Grey mould", confirmado na pratica -- uma fazenda do Brasil, outra
+    do Chile, mesmo fungo). Essa funcao junta essas linhas na canonica --
+    preserva nome cientifico/germinacao ja preenchido de QUALQUER uma
+    das duplicatas (nunca descarta dado, mesma logica de
+    `aplicar_pesquisa_germinacao` em app.py) e remapeia
+    doenca_cultura/fungicida_* pra' apontar pra' canonica -- e apaga a(s)
+    linha(s) sobrando. Chamada toda vez que a aba Doencas carrega
+    (`_load_translations` em app.py); barata quando nao ha' nada pra'
+    juntar, se auto-cura sozinha sem precisar de migracao manual."""
+    conn = get_db()
+    rows = conn.execute(f"SELECT {_DISEASE_INFO_COLUMNS} FROM disease_translations").fetchall()
+    por_atual = {r["display_name_en"]: dict(r) for r in rows}
+
+    grupos = {}
+    for atual in por_atual:
+        canonico = canonico_por_atual.get(atual, atual)
+        grupos.setdefault(canonico, []).append(atual)
+
+    for canonico, variantes in grupos.items():
+        sobras = [v for v in variantes if v != canonico]
+        if not sobras:
+            continue  # essa doenca nao tem duplicata -- nada a fazer
+        if canonico not in por_atual:
+            # a propria grafia canonica nunca virou linha (todas as
+            # leituras ja vistas usaram outra grafia) -- promove a
+            # primeira sobra pra virar a linha canonica em vez de so
+            # apagar tudo.
+            promovida, *sobras = sobras
+            conn.execute(
+                "UPDATE disease_translations SET display_name_en = ? WHERE display_name_en = ?",
+                (canonico, promovida),
+            )
+            por_atual[canonico] = por_atual.pop(promovida)
+            if not sobras:
+                conn.commit()
+                continue
+        base = por_atual[canonico]
+        for sobra in sobras:
+            dup = por_atual[sobra]
+            if not base.get("nome_cientifico") and dup.get("nome_cientifico"):
+                base["nome_cientifico"] = dup["nome_cientifico"]
+            for campo in ("germ_temp_min", "germ_temp_max", "germ_ur_min", "germ_molhamento_horas"):
+                if base.get(campo) is None and dup.get(campo) is not None:
+                    base[campo] = dup[campo]
+            for tabela, coluna in (
+                ("doenca_cultura", "doenca_en"), ("fungicida_overrides", "doenca"),
+                ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
+            ):
+                # OR IGNORE: se a canonica ja tiver uma linha com a mesma
+                # chave (tipo/idx/etc), mantem a dela -- o DELETE logo
+                # abaixo limpa o que sobrar da duplicata sem colidir.
+                conn.execute(f"UPDATE OR IGNORE {tabela} SET {coluna} = ? WHERE {coluna} = ?", (canonico, sobra))
+                conn.execute(f"DELETE FROM {tabela} WHERE {coluna} = ?", (sobra,))
+            conn.execute("DELETE FROM disease_translations WHERE display_name_en = ?", (sobra,))
+        conn.execute(
+            """
+            UPDATE disease_translations
+            SET nome_cientifico = ?, germ_temp_min = ?, germ_temp_max = ?, germ_ur_min = ?, germ_molhamento_horas = ?
+            WHERE display_name_en = ?
+            """,
+            (
+                base.get("nome_cientifico"), base.get("germ_temp_min"), base.get("germ_temp_max"),
+                base.get("germ_ur_min"), base.get("germ_molhamento_horas"), canonico,
+            ),
+        )
+    conn.commit()
+    conn.close()
+
+
 def save_disease_translation(display_name_en, nome_pt, nome_cientifico=""):
     conn = get_db()
     conn.execute(

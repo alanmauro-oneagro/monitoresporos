@@ -358,11 +358,17 @@ def _load_translations():
     """Garante que toda doenca ja vista nos dados tenha uma linha na tabela
     de traducao (doencas novas do BioScout entram prontas para editar, com
     o nome em ingles ou o padrao conhecido, e o nome cientifico ja
-    preenchido quando o BioScout mandar) e devolve o mapa atual."""
+    preenchido quando o BioScout mandar), junta linha duplicada de doenca
+    que sobrou de antes da normalizacao de capitalizacao existir (ver
+    `data_reader.nome_canonico_para`/`models.merge_duplicate_disease_translations`)
+    e devolve o mapa atual."""
     try:
-        models.ensure_disease_translations(
-            data_reader.read_unique_display_names(), data_reader.DOENCA_MAP, data_reader.read_scientific_names()
-        )
+        display_names = data_reader.read_unique_display_names()
+        models.ensure_disease_translations(display_names, data_reader.DOENCA_MAP, data_reader.read_scientific_names())
+        canonico_por_atual = {
+            en: data_reader.nome_canonico_para(en) for en in models.get_all_disease_translations()
+        }
+        models.merge_duplicate_disease_translations(canonico_por_atual)
     except FileNotFoundError:
         pass
     return models.get_all_disease_translations()
