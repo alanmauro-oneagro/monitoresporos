@@ -97,6 +97,23 @@
         tooltipAnchor: [0, -46],
     });
 
+    // Mesmo pino, em azul claro -- ponto criado so' pra referencia de
+    // clima (tipo 'clima', ver mapa_interpolado.html), sem monitoramento
+    // de doenca nenhum.
+    var CLIMA_PIN_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
+        '<defs><clipPath id="mapaPinClipClima"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
+        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#a5d8ff" stroke="#0a1f44" stroke-width="2.5"/>' +
+        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClipClima)"/>' +
+        '</svg>';
+    var climaIcon = L.divIcon({
+        html: CLIMA_PIN_SVG,
+        className: 'mapa-pin-icon',
+        iconSize: [40, 52],
+        iconAnchor: [20, 52],
+        tooltipAnchor: [0, -46],
+    });
+
     var stationIcon = L.divIcon({
         html: '<div style="background:#1971c2;border:2px solid #ffffff;border-radius:50%;' +
             'width:22px;height:22px;display:flex;align-items:center;justify-content:center;' +
@@ -114,6 +131,10 @@
     }
 
     function buildTooltipHtml(site) {
+        if (site.tipo === 'clima') {
+            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.site) + '</div>' +
+                '<div class="mapa-tt-data">☁️ Ponto de referencia de clima (sem monitoramento de doenca)</div></div>';
+        }
         var rows = site.cards.map(function (c) {
             var cls = c.status === 'Perigo' ? 'perigo' : (c.status === 'Atencao' ? 'atencao' : 'normal');
             var valor = (c.concentracao === null || c.concentracao === undefined) ? '-' : c.concentracao;
@@ -291,7 +312,11 @@
         var urls = COUNTRY_BOUNDARIES[code];
         paisGeojsonPromises[code] = addBoundaryLayer(urls.adm0, 3);
         addBoundaryLayer(urls.adm1, 2);
-        addBoundaryLayer(urls.adm2, 1, MUNICIPIO_COLOR);
+        // So os 10 paises "so fronteira" (sem estacao integrada ainda, ver
+        // `_pais_sem_estacoes`) nao tem adm2 (comuna/municipio) cadastrado
+        // -- sem esse if, `addBoundaryLayer(undefined, ...)` disparava um
+        // fetch pra "/undefined" (404 inofensivo, mas sujava o console).
+        if (urls.adm2) addBoundaryLayer(urls.adm2, 1, MUNICIPIO_COLOR);
     });
 
     // Camada de nuvens cobrindo o Brasil inteiro -- mesma logica do Mapa
@@ -468,7 +493,8 @@
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
     var latlngs = sites.map(function (s) { return [s.lat, s.lon]; });
     sites.forEach(function (site) {
-        L.marker([site.lat, site.lon], { icon: site.virtual ? virtualIcon : farmIcon })
+        var icone = site.tipo === 'clima' ? climaIcon : (site.virtual ? virtualIcon : farmIcon);
+        L.marker([site.lat, site.lon], { icon: icone })
             .addTo(map)
             .bindTooltip(buildTooltipHtml(site), { direction: 'top', sticky: true, opacity: 0.95 })
             // Clique no pino leva direto pra aquela fazenda na aba

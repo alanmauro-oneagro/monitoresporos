@@ -54,9 +54,18 @@
             <div class="card-body">
                 <h6 class="fw-bold mb-2">Adicionar Ponto</h6>
                 <form method="post" action="{{ url_for('adicionar_ponto_virtual') }}" id="form-novo-ponto">
+                    <div class="mb-2">
+                        <label class="form-label small text-muted mb-1">Tipo de ponto</label>
+                        <select name="tipo" id="novo-tipo" class="form-select form-select-sm">
+                            <option value="doenca" selected>🦠 Monitorar doencas (interpola fazendas reais no raio)</option>
+                            <option value="clima">☁️ Somente clima (referencia de clima pro cliente, sem doenca)</option>
+                        </select>
+                    </div>
+
                     <div class="border rounded p-2 mb-3 d-flex align-items-center gap-2 flex-wrap" style="background:#faf8ff;">
                         <label class="form-label small fw-bold mb-0" for="novo-raio">Raio de interpolacao (km)</label>
                         <input type="number" name="raio_km" id="novo-raio" class="form-control form-control-sm" style="max-width: 100px;" min="1" step="1" value="120" required>
+                        <span class="text-muted small w-100 d-none" id="novo-raio-nota-clima">Nao usado em ponto "so clima" -- nenhuma interpolacao de doenca acontece aqui.</span>
                     </div>
 
                     <div class="mb-2">
@@ -95,10 +104,14 @@
 <div class="alert alert-info small">Nenhum ponto estimado ainda -- use o formulario acima.</div>
 {% endif %}
 {% for ponto in pontos_virtuais %}
+{% set ponto_idx = loop.index0 %}
 <div class="ponto-virtual-card">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
         <strong>{{ ponto.nome }}</strong>
         <span class="badge bg-secondary">{{ countries[ponto.country_code].nome if ponto.country_code in countries else ponto.country_code }}</span>
+        {% if ponto.tipo == 'clima' %}
+        <span class="badge bg-info text-dark">☁️ So clima</span>
+        {% endif %}
         <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
         <div class="ms-auto d-flex gap-2">
             <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}">✏️ Editar</button>
@@ -114,9 +127,16 @@
         <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end"
               onsubmit="return confirm('Salvar essas alteracoes no ponto estimado \'{{ ponto.nome }}\'? Os dados atuais (nome, coordenada, raio) serao substituidos e nao da pra desfazer depois.');">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-3">
                 <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
                 <input type="text" name="nome" class="form-control form-control-sm" value="{{ ponto.nome }}" required>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">Tipo de ponto</label>
+                <select name="tipo" class="form-select form-select-sm">
+                    <option value="doenca" {% if ponto.tipo != 'clima' %}selected{% endif %}>🦠 Doencas</option>
+                    <option value="clima" {% if ponto.tipo == 'clima' %}selected{% endif %}>☁️ So clima</option>
+                </select>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">Latitude</label>
@@ -126,11 +146,11 @@
                 <label class="form-label small text-muted mb-1">Longitude</label>
                 <input type="text" name="lon" class="form-control form-control-sm" value="{{ ponto.lon }}" required>
             </div>
-            <div class="col-6 col-md-2">
+            <div class="col-6 col-md-1">
                 <label class="form-label small text-muted mb-1">Raio (km)</label>
                 <input type="number" name="raio_km" class="form-control form-control-sm" value="{{ ponto.raio_km|int }}" min="1" step="1" required>
             </div>
-            <div class="col-6 col-md-2">
+            <div class="col-6 col-md-1">
                 <label class="form-label small text-muted mb-1">País</label>
                 <select name="country_code" class="form-select form-select-sm">
                     {% for code, pais in countries.items() %}
@@ -138,14 +158,40 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-6 col-md-2">
+            <div class="col-12 col-md-1">
                 <button type="submit" class="btn btn-sm btn-outline-primary w-100">Salvar</button>
             </div>
         </form>
     </div>
 
-    {% if not ponto.estacoes_usadas %}
+    {% if ponto.tipo == 'clima' %}
+    <div class="alert alert-info small mb-2">☁️ Ponto so' de clima -- nao monitora doencas. Escolha a estacao de referencia abaixo (ou deixe na coordenada do proprio ponto).</div>
+    {% elif not ponto.estacoes_usadas %}
     <div class="alert alert-secondary small mb-2">Nenhuma fazenda real dentro do raio de {{ ponto.raio_km|int }} km -- sem estacao pra interpolar, esse ponto nao gera estimativa (nao aparece em nenhuma outra tela ate ter uma fazenda real por perto ou o raio aumentar).</div>
+    {% endif %}
+
+    {% if ponto.estacoes_proximas %}
+    <div class="mt-2 pt-2 border-top">
+        <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <label class="form-label small text-muted d-block mb-1">Estacao meteorologica de referencia para a previsao (clima do ponto vem da Open-Meteo, na coordenada escolhida aqui):</label>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="estacao_codigo" value=""
+                    id="pv_est_{{ ponto_idx }}_ponto" {% if not ponto.estacao_selecionada %}checked{% endif %}>
+                <label class="form-check-label small" for="pv_est_{{ ponto_idx }}_ponto">Coordenada do proprio ponto (padrao)</label>
+            </div>
+            {% for estacao in ponto.estacoes_proximas %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="estacao_codigo" value="{{ estacao.country_code }}:{{ estacao.codigo }}"
+                    id="pv_est_{{ ponto_idx }}_{{ loop.index0 }}" {% if ponto.estacao_selecionada == estacao.codigo %}checked{% endif %}>
+                <label class="form-check-label small" for="pv_est_{{ ponto_idx }}_{{ loop.index0 }}">
+                    📡 {{ estacao.cidade }}/{{ estacao.uf }} ({{ estacao.codigo }}) -- {{ estacao.distancia_km }} km
+                </label>
+            </div>
+            {% endfor %}
+            <span class="autosave-status small ms-2"></span>
+        </form>
+    </div>
     {% endif %}
 
     <p class="text-muted small mb-0 mt-2 pt-2 border-top">
@@ -186,6 +232,19 @@
         html: VIRTUAL_PIN_SVG, className: 'mapa-pin-icon',
         iconSize: [40, 52], iconAnchor: [20, 52], tooltipAnchor: [0, -46],
     });
+    // Mesmo pino, em azul claro -- ponto criado so' pra referencia de
+    // clima (tipo 'clima'), pra distinguir de relance do amarelo (ponto
+    // que interpola doenca de verdade, tipo 'doenca').
+    var CLIMA_PIN_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
+        '<defs><clipPath id="mapaPinClipClima"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
+        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#a5d8ff" stroke="#0a1f44" stroke-width="2.5"/>' +
+        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClipClima)"/>' +
+        '</svg>';
+    var climaIcon = L.divIcon({
+        html: CLIMA_PIN_SVG, className: 'mapa-pin-icon',
+        iconSize: [40, 52], iconAnchor: [20, 52], tooltipAnchor: [0, -46],
+    });
     var novoIcon = L.divIcon({
         html: '<div style="background:#fff;border:3px solid #7048e8;border-radius:50%;' +
             'width:18px;height:18px;"></div>',
@@ -211,6 +270,12 @@
     }
 
     function buildTooltipHtml(site) {
+        if (site.tipo === 'clima') {
+            // Ponto so' de clima -- nao monitora doenca nenhuma, entao nao
+            // faz sentido mostrar "Leitura de -" nem uma lista vazia.
+            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.site) + '</div>' +
+                '<div class="mapa-tt-data">☁️ Ponto de referencia de clima (sem monitoramento de doenca)</div></div>';
+        }
         var rows = site.cards.map(function (c) {
             var cls = c.status === 'Perigo' ? 'perigo' : (c.status === 'Atencao' ? 'atencao' : 'normal');
             var valor = (c.concentracao === null || c.concentracao === undefined) ? '-' : c.concentracao;
@@ -368,7 +433,11 @@
         var urls = COUNTRY_BOUNDARIES[code];
         paisGeojsonPromises[code] = addBoundaryLayer(urls.adm0, 3);
         addBoundaryLayer(urls.adm1, 2);
-        addBoundaryLayer(urls.adm2, 1, MUNICIPIO_COLOR);
+        // So os 10 paises "so fronteira" (sem estacao integrada ainda, ver
+        // `_pais_sem_estacoes`) nao tem adm2 (comuna/municipio) cadastrado
+        // -- sem esse if, `addBoundaryLayer(undefined, ...)` disparava um
+        // fetch pra "/undefined" (404 inofensivo, mas sujava o console).
+        if (urls.adm2) addBoundaryLayer(urls.adm2, 1, MUNICIPIO_COLOR);
     });
 
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
@@ -376,7 +445,8 @@
     // estimado -- sem circulo de raio nem outro icone uma vez que o
     // ponto ja foi criado, so a cor do pino diferencia.
     sites.forEach(function (site) {
-        L.marker([site.lat, site.lon], { icon: site.virtual ? virtualIcon : farmIcon })
+        var icone = site.tipo === 'clima' ? climaIcon : (site.virtual ? virtualIcon : farmIcon);
+        L.marker([site.lat, site.lon], { icon: icone })
             .addTo(map)
             .bindTooltip(buildTooltipHtml(site), { direction: 'top', sticky: true, opacity: 0.95 })
             // Clique no pino leva pra aquela fazenda na aba Fazendas --
@@ -638,6 +708,17 @@
                 if (dados && dados.country_code && countrySelect) { countrySelect.value = dados.country_code; }
             })
             .catch(function () { /* deteccao automatica e so uma ajuda -- falha silenciosa */ });
+    }
+
+    // Ponto "so clima" nao interpola nada -- o raio fica sem efeito, so
+    // avisa (nao desabilita o campo, o valor ainda e' salvo junto, sem
+    // problema nenhum se ficar preenchido com o padrao).
+    var tipoSelect = document.getElementById('novo-tipo');
+    var raioNotaClima = document.getElementById('novo-raio-nota-clima');
+    if (tipoSelect && raioNotaClima) {
+        tipoSelect.addEventListener('change', function () {
+            raioNotaClima.classList.toggle('d-none', tipoSelect.value !== 'clima');
+        });
     }
 
     // Lembra o ultimo raio digitado (localStorage, so nesse navegador) --

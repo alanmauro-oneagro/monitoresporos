@@ -129,6 +129,8 @@ def _cards_by_site_all(permitted, translations):
     for vf in models.get_all_virtual_farms():
         if permitted is not None and vf["site_name"] not in permitted:
             continue
+        if vf.get("tipo") == "clima":
+            continue  # ponto so' de clima -- nunca tem card de doenca (ver mapa_interpolado)
         cards, _ = virtual_farms.interpolar_cards(vf["lat"], vf["lon"], vf["raio_km"], cards_reais_todos, coords_reais)
         if cards:
             resultado[vf["site_name"]] = cards
@@ -143,6 +145,8 @@ def _resolve_site_cards(site, translations):
     vf = models.get_virtual_farm(site)
     if vf is None:
         return get_dashboard_data({site}, translations).get(site, [])
+    if vf.get("tipo") == "clima":
+        return []  # ponto so' de clima -- nunca tem card de doenca (ver mapa_interpolado)
     cards_reais_todos = get_dashboard_data(None, translations)
     coords_reais = data_reader.read_site_coordinates()
     cards, _ = virtual_farms.interpolar_cards(vf["lat"], vf["lon"], vf["raio_km"], cards_reais_todos, coords_reais)
@@ -1810,17 +1814,15 @@ def mapa():
         estacoes_catalogo.update({e["codigo"]: e for e in countries.get_country(code)["station_provider"].get_estacoes()})
     sites_data = []
     estacoes_by_codigo = {}
-    for site, cards in cards_by_site.items():
-        if site not in coords or not cards:
-            continue  # fazenda sem coordenada, ou fazenda virtual sem estacao real no raio -- nao da pra plotar
-        lat, lon = coords[site]
+
+    def _plotar_site(site, lat, lon, cards, tipo=""):
         provider = countries.get_country(site_countries.get(site, countries.DEFAULT_COUNTRY))["station_provider"]
         escolha = overrides.get(site)
         codigo_escolhido = escolha["codigo"] if escolha else None
         if codigo_escolhido and codigo_escolhido in estacoes_catalogo:
-            # Estacao escolhida na aba Fazendas como referencia de previsao --
-            # essa, e nao a mais proxima, e' quem realmente alimenta o clima
-            # dessa fazenda.
+            # Estacao escolhida na aba Fazendas (ou aqui, Pontos Criados) como
+            # referencia de previsao -- essa, e nao a mais proxima, e' quem
+            # realmente alimenta o clima dessa fazenda/ponto.
             base = estacoes_catalogo[codigo_escolhido]
             distancia = inmet_stations._haversine_km(lat, lon, base["lat"], base["lon"])
             estacao = {**base, "distancia_km": round(distancia, 1)}
@@ -1831,8 +1833,9 @@ def mapa():
             "lat": lat,
             "lon": lon,
             "virtual": site in virtual_names,
+            "tipo": tipo,
             "cards": sorted(cards, key=lambda c: c["doenca"]),
-            "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)),
+            "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
         })
         if estacao:
             entry = estacoes_by_codigo.setdefault(estacao["codigo"], {
@@ -1840,6 +1843,24 @@ def mapa():
                 "lat": estacao["lat"], "lon": estacao["lon"], "fazendas": [],
             })
             entry["fazendas"].append({"site": site, "distancia_km": estacao["distancia_km"]})
+
+    for site, cards in cards_by_site.items():
+        if site not in coords or not cards:
+            continue  # fazenda sem coordenada, ou fazenda virtual sem estacao real no raio -- nao da pra plotar
+        lat, lon = coords[site]
+        _plotar_site(site, lat, lon, cards)
+
+    # Pontos "so' clima" (ver mapa_interpolado/create_virtual_farm) sempre
+    # aparecem no mapa, mesmo sem nenhuma fazenda real por perto -- nao
+    # existe doenca nenhuma pra estimar aqui, entao o filtro "sem card =
+    # nao plota" (acima) nao se aplica a eles.
+    for vf in models.get_all_virtual_farms():
+        if vf.get("tipo") != "clima":
+            continue
+        if permitted is not None and vf["site_name"] not in permitted:
+            continue
+        _plotar_site(vf["site_name"], vf["lat"], vf["lon"], [], tipo="clima")
+
     sites_data.sort(key=lambda s: s["site"])
     # Fronteira desenhada mesmo sem fazenda no pais, desde que o pais ja'
     # tenha integracao de estacao oficial de verdade funcionando (Chile
@@ -1879,23 +1900,43 @@ def mapa_interpolado():
         })
 
     site_countries = models.get_all_site_countries()
+    weather_overrides = models.get_all_weather_station_overrides()
     pontos_virtuais = []
     for vf in models.get_all_virtual_farms():
-        cards, estacoes_usadas = virtual_farms.interpolar_cards(
-            vf["lat"], vf["lon"], vf["raio_km"], cards_reais, coords_reais
-        )
+        tipo = vf.get("tipo") or "doenca"
+        if tipo == "clima":
+            # Ponto so' pra dar clima de referencia ao cliente -- nao
+            # tenta interpolar doenca nenhuma (nem faz sentido: nao ha'
+            # concentracao de esporo pra estimar aqui, so' temperatura/
+            # umidade/previsao, que ja vem de `_weather_coords_all` na
+            # coordenada do ponto ou da estacao escolhida abaixo, exatamente
+            # como pra uma fazenda real -- ver `_get_weather_for_site`).
+            cards, estacoes_usadas = [], []
+        else:
+            cards, estacoes_usadas = virtual_farms.interpolar_cards(
+                vf["lat"], vf["lon"], vf["raio_km"], cards_reais, coords_reais
+            )
+        # Mesmo catalogo de estacoes oficiais usado na aba Fazendas (todo
+        # provedor cadastrado, nao so' o do pais do proprio ponto) -- deixa
+        # escolher aqui, sem precisar ir na aba Fazendas so' pra isso.
+        estacoes_proximas = countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], n=2)
+        escolha = weather_overrides.get(vf["site_name"])
         pontos_virtuais.append({
             **vf,
+            "tipo": tipo,
             "criado_em": models.fmt_data_br(vf["criado_em"]),
             "cards": cards,
             "estacoes_usadas": estacoes_usadas,
             "country_code": site_countries.get(vf["site_name"], countries.DEFAULT_COUNTRY),
+            "estacoes_proximas": estacoes_proximas,
+            "estacao_selecionada": escolha["codigo"] if escolha else "",
         })
-        if cards:
+        if cards or tipo == "clima":
             sites_data.append({
                 "site": vf["site_name"], "lat": vf["lat"], "lon": vf["lon"], "virtual": True,
+                "tipo": tipo,
                 "cards": cards,
-                "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)),
+                "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
                 "raio_km": vf["raio_km"],
                 "estacoes_usadas": estacoes_usadas,
             })
@@ -1982,9 +2023,12 @@ def adicionar_ponto_virtual():
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
         country_code = countries.DEFAULT_COUNTRY
+    tipo = request.form.get("tipo", "doenca")
+    if tipo not in ("doenca", "clima"):
+        tipo = "doenca"
     try:
         models.create_virtual_farm(
-            nome, lat, lon, raio_km, criado_por=current_user.username, country_code=country_code
+            nome, lat, lon, raio_km, criado_por=current_user.username, country_code=country_code, tipo=tipo
         )
     except sqlite3.IntegrityError:
         flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
@@ -2013,8 +2057,11 @@ def editar_ponto_virtual():
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
         country_code = countries.DEFAULT_COUNTRY
+    tipo = request.form.get("tipo", "doenca")
+    if tipo not in ("doenca", "clima"):
+        tipo = "doenca"
     try:
-        models.update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code=country_code)
+        models.update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code=country_code, tipo=tipo)
     except sqlite3.IntegrityError:
         flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
         return redirect(url_for("mapa_interpolado"))

@@ -112,7 +112,8 @@ def init_db():
             lon REAL NOT NULL,
             raio_km REAL NOT NULL,
             criado_em TEXT NOT NULL,
-            criado_por TEXT
+            criado_por TEXT,
+            tipo TEXT NOT NULL DEFAULT 'doenca'
         );
 
         CREATE TABLE IF NOT EXISTS user_site_permissions (
@@ -364,6 +365,17 @@ def init_db():
         # numeracao do INMET. Default 'BR' preserva o comportamento de
         # sempre pras escolhas ja feitas antes dessa coluna existir.
         conn.execute("ALTER TABLE weather_station_overrides ADD COLUMN country_code TEXT NOT NULL DEFAULT 'BR'")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        # 'doenca' (padrao/legado) interpola concentracao de doenca (IDW)
+        # das fazendas reais no raio, igual sempre foi. 'clima' e' um
+        # ponto que existe SO' pra dar ao cliente uma referencia de clima
+        # (previsao/risco via Open-Meteo ou estacao oficial escolhida) --
+        # nao tenta interpolar doenca nenhuma, e por isso aparece no mapa
+        # mesmo sem fazenda real por perto (ver `mapa_interpolado` em
+        # app.py, pedido explicito do usuario).
+        conn.execute("ALTER TABLE virtual_farms ADD COLUMN tipo TEXT NOT NULL DEFAULT 'doenca'")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
 
@@ -1425,7 +1437,9 @@ def get_all_sites():
 def get_all_virtual_farms():
     """Lista de fazendas virtuais/estimadas (ver `virtual_farms.py`) --
     cada uma vira `{"site_name", "nome", "lat", "lon", "raio_km",
-    "criado_em", "criado_por"}`."""
+    "criado_em", "criado_por", "tipo"}` ('doenca' interpola concentracao
+    via IDW, como sempre; 'clima' e' so' referencia de clima pro
+    cliente)."""
     conn = get_db()
     rows = conn.execute("SELECT * FROM virtual_farms ORDER BY nome").fetchall()
     conn.close()
@@ -1449,7 +1463,7 @@ def get_virtual_farm(site_name):
     return dict(row) if row else None
 
 
-def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None, country_code="BR"):
+def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None, country_code="BR", tipo="doenca"):
     """Cria uma fazenda virtual/estimada -- `site_name` vira
     '"{nome}" - OneAgro', o mesmo padrao de nome usado em toda tela
     (Painel, Recomendacoes, Mapa, WhatsApp): parecido com o das fazendas
@@ -1459,18 +1473,20 @@ def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None, country_code="
     com esse nome (nome precisa ser unico). Tambem registra o site_name
     na tabela `sites`, pra poder aparecer na tela de permissoes igual uma
     fazenda de verdade, e o pais em `site_country_overrides` (mesma
-    tabela usada pela fazenda real, aba Fazendas > Pais). Retorna o
-    site_name criado."""
+    tabela usada pela fazenda real, aba Fazendas > Pais). `tipo` e'
+    'doenca' (padrao, interpola concentracao via IDW) ou 'clima' (so'
+    referencia de clima pro cliente, ver `get_all_virtual_farms`).
+    Retorna o site_name criado."""
     nome = nome.strip().replace('"', "")
     site_name = f'"{nome}" - OneAgro'
     conn = get_db()
     try:
         conn.execute(
             """
-            INSERT INTO virtual_farms (site_name, nome, lat, lon, raio_km, criado_em, criado_por)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO virtual_farms (site_name, nome, lat, lon, raio_km, criado_em, criado_por, tipo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (site_name, nome, lat, lon, raio_km, _agora_cuiaba(), criado_por),
+            (site_name, nome, lat, lon, raio_km, _agora_cuiaba(), criado_por, tipo),
         )
         conn.execute("INSERT OR IGNORE INTO sites (site_name) VALUES (?)", (site_name,))
         conn.commit()
@@ -1481,8 +1497,8 @@ def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None, country_code="
     return site_name
 
 
-def update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code="BR"):
-    """Atualiza nome/coordenada/raio/pais de uma fazenda virtual/estimada.
+def update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code="BR", tipo="doenca"):
+    """Atualiza nome/coordenada/raio/pais/tipo de uma fazenda virtual/estimada.
     Se o nome mudar, o site_name muda junto (mesmo padrao de
     `create_virtual_farm`) -- nesse caso propaga o novo site_name pra
     todas as tabelas que guardam dado por fazenda (sites, anotacoes,
@@ -1502,8 +1518,8 @@ def update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code="BR"):
             conn.close()
             raise sqlite3.IntegrityError(f"Ja existe uma fazenda virtual chamada '{nome}'")
     conn.execute(
-        "UPDATE virtual_farms SET site_name=?, nome=?, lat=?, lon=?, raio_km=? WHERE site_name=?",
-        (novo_site_name, nome, lat, lon, raio_km, site_name),
+        "UPDATE virtual_farms SET site_name=?, nome=?, lat=?, lon=?, raio_km=?, tipo=? WHERE site_name=?",
+        (novo_site_name, nome, lat, lon, raio_km, tipo, site_name),
     )
     if novo_site_name != site_name:
         for tabela in (
