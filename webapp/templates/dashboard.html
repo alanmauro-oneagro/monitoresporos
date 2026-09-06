@@ -8,6 +8,12 @@
     </form>
 </div>
 
+{% if fetch_last_error %}
+<div class="alert alert-warning small">
+    ⚠ A ultima busca de dados do BioScout falhou (so' admin ve este aviso): <code>{{ fetch_last_error }}</code>
+</div>
+{% endif %}
+
 {% if no_access %}
 <div class="alert alert-warning">
     Seu usuario ainda nao tem nenhuma fazenda liberada para visualizacao.

@@ -1346,6 +1346,7 @@ def dashboard():
     return render_template(
         "dashboard.html", cards_by_site=cards_by_site, no_access=False,
         weather_by_site=weather_by_site, dados_status_by_site=dados_status_by_site,
+        fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
     )
 
 
