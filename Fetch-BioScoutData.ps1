@@ -99,39 +99,22 @@ if (Test-Path $statePath) {
     $state = [PSCustomObject]@{ lastCompletedMonth = $null }
 }
 
+# Sincroniza TODO site que aparecer nessa conta BioScout -- ate' 2026-09
+# so' entravam os que comecavam com "OneAgro" (convencao dos primeiros
+# clientes, todos no Brasil), e o bloco abaixo ainda APAGAVA do CSV local
+# qualquer leitura de site fora desse padrao a cada execucao. Com a
+# expansao pra America do Sul, fazenda nova (ex.: "Pencahue CYT", "SZ
+# Seeds", clientes do Chile) nao segue mais esse padrao de nome -- ficava
+# de fora da sincronizacao E tinha seu historico local apagado toda vez
+# que esse script rodava, mesmo o BioScout tendo o dado de verdade (mesmo
+# bug ja corrigido em `webapp/bioscout_fetch.py`/2026-09, so' faltava
+# aqui). Filtrar por nome nunca foi o jeito certo de saber "e' nosso" --
+# e' so' o conteudo dessa conta mesmo, entao usa todos e nao apaga nada.
 $allSites = Invoke-RestMethod -Uri "$ApiBase/api/Site/get?SiteRole=2&SiteRole=3&SiteRole=5&SiteRole=6" -Headers $headers -Method Get
-$sites = $allSites | Where-Object { $_.siteName -like 'OneAgro*' }
+$sites = $allSites
 $sites | Select-Object siteId, siteName | Export-Csv (Join-Path $dataDir 'sites.csv') -NoTypeInformation -Encoding UTF8
 $siteIds = $sites | ForEach-Object { $_.siteId }
-Write-Host "Sites OneAgro/Brasil: $($siteIds.Count) (de $($allSites.Count) totais na conta)"
-
-Write-Host "Limpando dados de sites fora do escopo (OneAgro/Brasil)..."
-$sporeCountsPath = Join-Path $dataDir 'spore_counts.csv'
-$weatherPath = Join-Path $dataDir 'weather.csv'
-$validSiteNames = $sites | ForEach-Object { $_.siteName }
-
-if (Test-Path $sporeCountsPath) {
-    $spore = Import-Csv $sporeCountsPath
-    $before = $spore.Count
-    $sporeFiltered = $spore | Where-Object { $validSiteNames -contains $_.siteName }
-    if ($sporeFiltered.Count -lt $before) {
-        $sporeFiltered | Export-Csv $sporeCountsPath -NoTypeInformation -Encoding UTF8
-        Write-Host "  spore_counts.csv: $before -> $($sporeFiltered.Count) linhas"
-    }
-    $validDeviceIds = $sporeFiltered | Select-Object -ExpandProperty deviceUserFriendlyId -Unique
-} else {
-    $validDeviceIds = @()
-}
-
-if ((Test-Path $weatherPath) -and $validDeviceIds.Count -gt 0) {
-    $weather = Import-Csv $weatherPath
-    $before = $weather.Count
-    $weatherFiltered = $weather | Where-Object { $validDeviceIds -contains $_.deviceUserFriendlyId }
-    if ($weatherFiltered.Count -lt $before) {
-        $weatherFiltered | Export-Csv $weatherPath -NoTypeInformation -Encoding UTF8
-        Write-Host "  weather.csv: $before -> $($weatherFiltered.Count) linhas"
-    }
-}
+Write-Host "Sites sincronizados: $($siteIds.Count)"
 
 $start = Get-Date $SinceDate
 $end = Get-Date

@@ -24,6 +24,10 @@ from pathlib import Path
 
 API_BASE = "https://rest.bioscout.com.au"
 LOOKBACK_DAYS = 16
+# Mesmo `-SinceDate` padrao do Fetch-BioScoutData.ps1 -- usado so' pra
+# fazenda NUNCA sincronizada antes (ver `_known_site_ids`/`fetch_recent`),
+# pra backfill de historico completo dela.
+FULL_HISTORY_SINCE = datetime(2025, 10, 1)
 
 
 def _http_json(url, headers=None, method="GET", body=None):
@@ -107,14 +111,45 @@ def _merge_csv(new_rows, path, key_props):
             writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
+def _known_site_ids(spore_counts_path):
+    """siteId (string) de qualquer fazenda que ja tenha pelo menos uma
+    linha salva em spore_counts.csv -- usado por `fetch_recent` pra saber
+    quem so' precisa da janela recente (`lookback_days`) e quem precisa
+    de historico completo (fazenda nunca vista ainda, ver comentario
+    la')."""
+    known = set()
+    if not spore_counts_path.exists():
+        return known
+    with open(spore_counts_path, encoding="utf-8-sig", newline="") as f:
+        for row in csv.DictReader(f):
+            site_id = row.get("siteId")
+            if site_id:
+                known.add(str(site_id))
+    return known
+
+
 def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=print):
-    """Busca sites + spore_counts + weather dos ultimos `lookback_days`
-    dias (janela unica, sem historico). Grava em `data_dir` (sites.csv,
-    spore_counts.csv, weather.csv) -- o merge por chave preserva qualquer
-    leitura mais antiga ja salva la, mesmo que a estacao nao apareca
-    nessa janela."""
+    """Busca sites + spore_counts + weather. Fazenda que a gente ja
+    sincronizou antes so' busca a janela recente (`lookback_days`) --
+    rapido, e o merge por chave preserva qualquer leitura mais antiga ja
+    salva, mesmo que a estacao nao apareca nessa janela. Fazenda NUNCA
+    vista antes (nova no BioScout, ou so' passou a aparecer agora -- ver
+    correcao de 2026-09 sobre o filtro por nome que escondia site fora do
+    padrao "OneAgro") busca o HISTORICO COMPLETO desde `FULL_HISTORY_SINCE`
+    em vez da janela recente -- senao ela so' ganharia dado a partir de
+    agora, e todo o historico anterior que o BioScout tem de verdade (so'
+    nunca foi buscado) ficaria faltando PRA SEMPRE nos graficos, mesmo com
+    o merge rodando toda vez (`lookback_days` sozinho nunca olha pra tras
+    disso)."""
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
+    spore_counts_path = data_dir / "spore_counts.csv"
+
+    # Quem a gente ja tinha pelo menos uma leitura salva ANTES dessa
+    # busca -- capturado logo no inicio (antes de qualquer escrita), pra
+    # decidir daqui a pouco quem e' "fazenda nova" (nunca vista) e
+    # precisa de historico completo.
+    known_site_ids = _known_site_ids(spore_counts_path)
 
     log("Autenticando...")
     token = _get_auth_token(username, password)
@@ -136,26 +171,42 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
         writer.writeheader()
         for s in sites:
             writer.writerow({"siteId": s.get("siteId"), "siteName": s.get("siteName")})
-    site_ids = [s.get("siteId") for s in sites]
+    site_ids = [str(s.get("siteId")) for s in sites]
     log(f"Sites sincronizados: {len(site_ids)}")
 
     end = datetime.now()
-    start = end - timedelta(days=lookback_days)
-    from_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
-    to_iso = end.strftime("%Y-%m-%dT%H:%M:%SZ")
-    log(f"Janela: ultimos {lookback_days} dias ({from_iso} -> {to_iso})")
+    recent_start = end - timedelta(days=lookback_days)
+    new_site_ids = [sid for sid in site_ids if sid not in known_site_ids]
+    if new_site_ids:
+        log(f"Fazenda(s) nunca sincronizada(s) antes -- buscando historico completo desde {FULL_HISTORY_SINCE.date()}: {new_site_ids}")
 
-    try:
-        qs = "&".join(f"SiteIds={sid}" for sid in site_ids)
-        url = f"{API_BASE}/api/service-subscriptions/counts?From={from_iso}&To={to_iso}&{qs}"
-        counts = _http_json(url, headers=headers)
-        _merge_csv(counts, data_dir / "spore_counts.csv", ["tapeScanId", "particulateId"])
-        log(f"  contagem de esporos: {len(counts)} registros")
-    except Exception as exc:
-        log(f"  erro contagem de esporos: {exc}")
+    # Contagem de esporos: uma chamada com a janela recente (todo mundo
+    # que a gente ja conhece) e, se houver fazenda nova, MAIS uma chamada
+    # separada com o historico completo so' pra ela -- assim ela nao fica
+    # faltando dado antigo pra sempre so' porque comecou a ser
+    # sincronizada hoje.
+    janelas = [(recent_start, end, [sid for sid in site_ids if sid not in new_site_ids])]
+    if new_site_ids:
+        janelas.append((FULL_HISTORY_SINCE, end, new_site_ids))
+    for start, window_end, ids in janelas:
+        if not ids:
+            continue
+        from_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+        to_iso = window_end.strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            qs = "&".join(f"SiteIds={sid}" for sid in ids)
+            url = f"{API_BASE}/api/service-subscriptions/counts?From={from_iso}&To={to_iso}&{qs}"
+            counts = _http_json(url, headers=headers)
+            _merge_csv(counts, spore_counts_path, ["tapeScanId", "particulateId"])
+            log(f"  contagem de esporos ({from_iso[:10]} -> {to_iso[:10]}): {len(counts)} registros")
+        except Exception as exc:
+            log(f"  erro contagem de esporos: {exc}")
 
     weather_rows = []
     for site_id in site_ids:
+        start = FULL_HISTORY_SINCE if site_id in new_site_ids else recent_start
+        from_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+        to_iso = end.strftime("%Y-%m-%dT%H:%M:%SZ")
         try:
             w = _http_json(
                 f"{API_BASE}/api/Weather/readings/sites?SiteId={site_id}&StartDate={from_iso}&EndDate={to_iso}",
