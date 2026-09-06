@@ -244,8 +244,6 @@ def build_recommendation_pdf(
             story.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
         if leitura_bioscout:
             story.append(Paragraph(f"<b>Leitura BioScout:</b> {leitura_bioscout}", _ESTILO_NORMAL))
-        if anotacao:
-            story.append(Paragraph(f"<b>Anotação:</b> {anotacao}", _ESTILO_NORMAL))
         if weather.get("previsao_5_dias"):
             partes_prev = []
             for i, d in enumerate(weather["previsao_5_dias"]):
@@ -261,6 +259,14 @@ def build_recommendation_pdf(
             # cabem sem quebrar no meio de um dia (feio, deixava um
             # pedacinho orfao numa 2a linha).
             story.append(Paragraph(f"<b>Previsao:</b><br/>{prev}", _ESTILO_NORMAL))
+        story.append(Spacer(1, 4))
+
+    if anotacao:
+        # Mesma caixa cinza das outras secoes de anotacao livre (Produtos/
+        # Plantio/Pulverizacao) -- destaque visual, em vez de uma linha
+        # em negrito perdida junto do clima.
+        story.append(Paragraph("Anotações", _ESTILO_SECAO))
+        story.append(_caixa([Paragraph(anotacao, _ESTILO_NORMAL)], fundo=CINZA_CLARO))
         story.append(Spacer(1, 4))
 
     if mostrar_secao_doencas:
