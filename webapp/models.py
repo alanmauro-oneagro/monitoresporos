@@ -281,6 +281,12 @@ def init_db():
             PRIMARY KEY (doenca_en, cultura)
         );
 
+        CREATE TABLE IF NOT EXISTS doenca_pais (
+            doenca_en TEXT NOT NULL,
+            country_code TEXT NOT NULL,
+            PRIMARY KEY (doenca_en, country_code)
+        );
+
         CREATE TABLE IF NOT EXISTS weather_station_overrides (
             site_name TEXT PRIMARY KEY,
             estacao_codigo TEXT NOT NULL
@@ -720,7 +726,7 @@ def merge_duplicate_disease_translations(canonico_por_atual):
                 if base.get(campo) is None and dup.get(campo) is not None:
                     base[campo] = dup[campo]
             for tabela, coluna in (
-                ("doenca_cultura", "doenca_en"), ("fungicida_overrides", "doenca"),
+                ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
                 ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
             ):
                 # OR IGNORE: se a canonica ja tiver uma linha com a mesma
@@ -757,7 +763,7 @@ def delete_disease_translation(display_name_en):
     pontual, nao um bloqueio permanente."""
     conn = get_db()
     for tabela, coluna in (
-        ("doenca_cultura", "doenca_en"), ("fungicida_overrides", "doenca"),
+        ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
         ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
     ):
         conn.execute(f"DELETE FROM {tabela} WHERE {coluna} = ?", (display_name_en,))
@@ -1412,6 +1418,32 @@ def set_doenca_culturas(doenca_en, culturas):
     conn.execute("DELETE FROM doenca_cultura WHERE doenca_en = ?", (doenca_en,))
     for cultura in culturas:
         conn.execute("INSERT INTO doenca_cultura (doenca_en, cultura) VALUES (?, ?)", (doenca_en, cultura))
+    conn.commit()
+    conn.close()
+
+
+def get_doenca_paises():
+    """chave: doenca_en -> set(country_code) -- matriz doenca x pais (aba
+    Doencas), mesmo espirito de `get_doenca_culturas`: doenca ausente ou com
+    set vazio nao e' filtrada por nenhum pais (sempre aparece na aba
+    Graficos, mesmo com um pais especifico selecionado) -- usado pra
+    melhorar a busca de produtos com registro por regiao sem esconder por
+    engano uma doenca ainda nao classificada por pais."""
+    conn = get_db()
+    rows = conn.execute("SELECT doenca_en, country_code FROM doenca_pais").fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        result.setdefault(r["doenca_en"], set()).add(r["country_code"])
+    return result
+
+
+def set_doenca_paises(doenca_en, paises):
+    """Substitui o conjunto de paises marcados para aquela doenca."""
+    conn = get_db()
+    conn.execute("DELETE FROM doenca_pais WHERE doenca_en = ?", (doenca_en,))
+    for country_code in paises:
+        conn.execute("INSERT INTO doenca_pais (doenca_en, country_code) VALUES (?, ?)", (doenca_en, country_code))
     conn.commit()
     conn.close()
 

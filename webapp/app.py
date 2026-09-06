@@ -18,6 +18,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+import unicodedata
 from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify
@@ -1719,8 +1720,18 @@ def graficos_dados():
     # explicito do usuario.
     doencas_en = sorted(
         data_reader.read_unique_display_names(),
-        key=lambda en: (translations.get(en, {}).get("nome_cientifico") or "").lower(),
+        key=lambda en: _chave_alfabetica(translations.get(en, {}).get("nome_cientifico") or ""),
     )
+    if paises_sel:
+        # Mesma hierarquia "Doenca x Pais" da aba Doencas (mirror de
+        # "Doenca x Cultura"): doenca sem nenhum pais marcado nunca e'
+        # escondida pelo filtro -- so' filtra quem ja foi classificado,
+        # pra nao sumir um alerta novo/nao classificado por engano.
+        doenca_paises = models.get_doenca_paises()
+        doencas_en = [
+            en for en in doencas_en
+            if not doenca_paises.get(en) or doenca_paises[en] & set(paises_sel)
+        ]
     spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
     hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
     device_by_site = data_reader.read_site_device_ids()
@@ -3042,6 +3053,17 @@ def save_recommendations():
     return _save_response("Anotacoes salvas.", "recommendations", safra=_safra_or_default(request.form))
 
 
+def _chave_alfabetica(texto):
+    """Chave de ordenacao ignorando acento (ordem por codepoint do Python
+    colocaria "Mancha", "Míldio", "Requeima" fora de ordem alfabetica de
+    verdade -- letra acentuada tem codepoint bem maior que as sem acento,
+    entao "Míldio" iria parar depois de "Zebra" em vez de perto de "Mancha").
+    So' usada como chave de comparacao -- o texto exibido continua com
+    acento normal."""
+    sem_acento = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii")
+    return sem_acento.lower()
+
+
 def _parse_float_or_none(valor):
     valor = (valor or "").strip().replace(",", ".")
     if not valor:
@@ -3062,6 +3084,13 @@ def admin_doencas():
                 culturas = request.form.getlist(f"culturas__{idx}")
                 models.set_doenca_culturas(doenca_en, culturas)
             return _save_response("Matriz doenca x cultura atualizada.", "admin_doencas")
+
+        if request.form.get("form_id") == "matriz_paises":
+            doenca_ens = request.form.getlist("doenca_en")
+            for idx, doenca_en in enumerate(doenca_ens):
+                paises = request.form.getlist(f"paises__{idx}")
+                models.set_doenca_paises(doenca_en, paises)
+            return _save_response("Matriz doenca x pais atualizada.", "admin_doencas")
 
         display_names = request.form.getlist("display_name_en")
         nomes_pt = request.form.getlist("nome_pt")
@@ -3103,16 +3132,32 @@ def admin_doencas():
             "ur_min": data["germ_ur_min"], "molhamento_horas": data["germ_molhamento_horas"],
             "agua_livre_inibe": data["germ_agua_livre_inibe"],
         }
-        for en, data in sorted(info.items(), key=lambda kv: (kv[1]["nome_cientifico"] or "").lower())
+        for en, data in sorted(info.items(), key=lambda kv: _chave_alfabetica(kv[1]["nome_cientifico"] or ""))
     ]
     culturas_ativas = models.get_culturas_ativas()
     doenca_culturas = models.get_doenca_culturas()
+    # Paises disponiveis na matriz Doenca x Pais: os mesmos que ja tem
+    # fazenda cadastrada (`active_country_codes`, sempre inclui Brasil) --
+    # mesma lista usada como opcao de filtro na aba Graficos, entao marcar
+    # uma doenca aqui sempre corresponde a um pais que realmente aparece la.
+    site_countries = models.get_all_site_countries()
+    paises_disponiveis = sorted(
+        countries.active_country_codes(site_countries),
+        key=lambda c: countries.get_country(c)["nome"],
+    )
+    paises_disponiveis = [{"code": c, "nome": countries.get_country(c)["nome"]} for c in paises_disponiveis]
+    doenca_paises = models.get_doenca_paises()
     matriz = [
         {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_culturas.get(d["en"], set())}
         for d in doencas
     ]
+    matriz_paises = [
+        {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_paises.get(d["en"], set())}
+        for d in doencas
+    ]
     return render_template(
-        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, matriz=matriz
+        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, matriz=matriz,
+        paises_disponiveis=paises_disponiveis, matriz_paises=matriz_paises,
     )
 
 
@@ -3193,7 +3238,7 @@ def admin_fungicidas():
     # pra facilitar achar rapido o que ainda falta pesquisar.
     doencas_ordenadas = sorted(
         translations.items(),
-        key=lambda kv: (not fungicida_data.get_recomendacao(kv[0]), kv[1]["nome_pt"].lower()),
+        key=lambda kv: (not fungicida_data.get_recomendacao(kv[0]), _chave_alfabetica(kv[1]["nome_pt"])),
     )
     for doenca_en, info in doencas_ordenadas:
         rotulo = info["nome_pt"]
