@@ -25,6 +25,10 @@
         <div class="d-flex justify-content-between align-items-center mb-2">
             <span class="text-muted small fw-bold text-uppercase">{{ d.en }}</span>
             <input type="hidden" name="display_name_en" value="{{ d.en }}">
+            <button type="button" class="btn btn-sm btn-outline-danger excluir-doenca-btn" data-en="{{ d.en }}"
+                    title="Excluir esta doenca -- util quando duas entradas sao o mesmo fungo com nome de exibicao diferente">
+                🗑️ Excluir
+            </button>
         </div>
         <div class="row gx-2">
             <div class="col-md-5">
@@ -133,4 +137,23 @@
     <strong>Nome Culturas</strong> (menu ⋮).
 </p>
 {% endif %}
+{% endblock %}
+{% block extra_scripts %}
+<script>
+// Botao "Excluir" fica FORA do form gigante de autosave (que repete
+// name="display_name_en" uma vez por doenca) -- um submit normal ali
+// dentro mandaria os campos errados. Chama a rota direto via fetch, sem
+// precisar de outro <form> (nao pode aninhar form dentro de form).
+document.querySelectorAll('.excluir-doenca-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var nome = btn.closest('.card-body').querySelector('input[name="nome_pt"]').value || btn.dataset.en;
+        if (!confirm('Excluir a doenca "' + nome + '"? Isso apaga a marcacao de cultura e os ajustes de fungicida dessa doenca. Se o BioScout continuar reportando esse nome, ela pode reaparecer em branco depois.')) return;
+        var body = new URLSearchParams({ display_name_en: btn.dataset.en });
+        fetch('{{ url_for("excluir_doenca") }}', { method: 'POST', body: body, headers: { 'X-Autosave': '1' } })
+            .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
+            .then(function () { location.reload(); })
+            .catch(function () { alert('Falha ao excluir -- tente de novo.'); });
+    });
+});
+</script>
 {% endblock %}

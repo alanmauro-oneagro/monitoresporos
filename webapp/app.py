@@ -3323,6 +3323,21 @@ def aplicar_pesquisa_germinacao():
     return _save_response(f"Pesquisa de germinacao aplicada -- {aplicados} doenca(s) preenchida(s).", "admin_doencas")
 
 
+@app.route("/admin/doencas/excluir", methods=["POST"])
+@admin_required
+def excluir_doenca():
+    """Exclusao manual de uma doenca duplicada (mesmo fungo, nome de
+    exibicao diferente -- o merge automatico so' junta grafias
+    identicas, ver `models.merge_duplicate_disease_translations`),
+    pedido explicito do usuario. Se o BioScout continuar reportando essa
+    display_name_en, ela reaparece em branco no proximo sync."""
+    display_name_en = request.form.get("display_name_en")
+    if not display_name_en:
+        abort(400)
+    models.delete_disease_translation(display_name_en)
+    return _save_response(f"Doenca '{display_name_en}' excluida.", "admin_doencas")
+
+
 @app.route("/admin/fungicidas/mover", methods=["POST"])
 @admin_required
 def mover_fungicida_item():

@@ -744,6 +744,28 @@ def merge_duplicate_disease_translations(canonico_por_atual):
     conn.close()
 
 
+def delete_disease_translation(display_name_en):
+    """Apaga a doenca (linha em disease_translations) e toda config
+    dependente (doenca_cultura, fungicida_overrides/ordem/registro_bloqueado)
+    -- usado pra excluir manualmente uma entrada duplicada (mesmo fungo,
+    nome de exibicao diferente) que o merge automatico (so' pega grafias
+    identicas exceto maiusculas/minusculas, ver
+    `merge_duplicate_disease_translations`) nao junta sozinho -- decisao
+    do admin de que duas entradas sao a mesma doenca. Se o BioScout
+    continuar reportando essa mesma display_name_en depois, ela volta a
+    aparecer (linha nova, em branco) no proximo sync -- e' uma exclusao
+    pontual, nao um bloqueio permanente."""
+    conn = get_db()
+    for tabela, coluna in (
+        ("doenca_cultura", "doenca_en"), ("fungicida_overrides", "doenca"),
+        ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
+    ):
+        conn.execute(f"DELETE FROM {tabela} WHERE {coluna} = ?", (display_name_en,))
+    conn.execute("DELETE FROM disease_translations WHERE display_name_en = ?", (display_name_en,))
+    conn.commit()
+    conn.close()
+
+
 def save_disease_translation(display_name_en, nome_pt, nome_cientifico=""):
     conn = get_db()
     conn.execute(
