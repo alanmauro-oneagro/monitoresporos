@@ -1745,6 +1745,12 @@ def _country_map_context():
         "country_by_site": models.get_all_site_countries(),
         "country_boundary_urls": country_boundary_urls,
         "cloud_bboxes": cloud_bboxes,
+        # Todo pais do registro (nao so os ativos) -- usado pra restringir
+        # a busca de localidade (Nominatim) do Mapa Interpolado aos paises
+        # que o app atende, sem travar num so' -- precisa incluir um pais
+        # sem fazenda nenhuma ainda, ja que a busca serve justamente pra
+        # ajudar a criar o primeiro ponto la'.
+        "country_codes_nominatim": ",".join(code.lower() for code in countries.COUNTRIES),
     }
 
 

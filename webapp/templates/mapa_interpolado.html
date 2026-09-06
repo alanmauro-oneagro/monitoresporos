@@ -689,11 +689,17 @@
         buscaResultados.innerHTML = '';
     }
 
+    // Restringe a busca aos paises que o app atende (nao so' Brasil) --
+    // COUNTRY_CODES_NOMINATIM vem de `countries.py` (todo pais do
+    // registro, nao so' os ativos: precisa achar localidade num pais
+    // ainda sem fazenda nenhuma, e' justamente pra isso que serve).
+    var COUNTRY_CODES_NOMINATIM = {{ country_codes_nominatim | tojson }};
+
     function buscarLocal() {
         var termo = buscaInput.value.trim();
         if (!termo) return;
         buscaResultados.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
-        fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=br&q=' + encodeURIComponent(termo))
+        fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=' + COUNTRY_CODES_NOMINATIM + '&q=' + encodeURIComponent(termo))
             .then(function (r) { return r.ok ? r.json() : []; })
             .then(function (resultados) {
                 if (!resultados || !resultados.length) {
