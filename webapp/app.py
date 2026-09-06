@@ -3956,7 +3956,12 @@ def _save_export_copy_local(conteudo, filename):
 @app.route("/admin/exportar")
 @alan_mauro_required
 def admin_exportar():
-    """Relatorio Excel (cadastro/Fazendas/Manejo das 3 safras) -- so
+    """Relatorio Excel com o maximo de informacao possivel do site --
+    usuarios/subordinados, cadastro de fazendas (pais/estacao/nome de
+    exibicao), Fazendas/Manejo das 3 safras, doencas (traducao/
+    germinacao/culturas/paises), culturas, leituras atuais, WhatsApp
+    (historico/destinatarios/agenda), fungicidas (biblioteca completa) e
+    relatorio diario de clima (ver `export_excel.build_workbook`). So
     `ALAN_MAURO_USERNAME` tem acesso (aba escondida no menu pra qualquer
     outra conta -- ver base.html)."""
     buffer = export_excel.build_workbook()
