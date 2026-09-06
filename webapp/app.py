@@ -725,11 +725,15 @@ _WHATSAPP_SEPARADOR = "━" * 15
 def _whatsapp_titulo(site, is_virtual=False):
     """'OneAgro - Grupo PIVA' -> '*GRUPO PIVA - OneAgro*' -- nome da
     fazenda em destaque, sem repetir 'OneAgro' duas vezes. Fazenda
-    virtual/estimada usa o padrao '"{nome}" - OneAgro' (ver
-    `models.create_virtual_farm`) -- sem nenhuma marca extra no titulo, o
-    padrao de nome diferente e' a unica diferenca visivel."""
+    virtual/estimada usa o nome cadastrado direto do banco (`nome` em
+    `virtual_farms`) em vez de tentar extrair do site_name -- o padrao
+    de site_name difere por tipo ('"{nome}" - OneAgro' pra doenca,
+    '{nome} - Clima - OneAgro' pra clima, ver
+    `models._virtual_farm_site_name`), entao so' o lookup direto
+    funciona pros dois sem quebrar."""
     if is_virtual:
-        nome_fazenda = site.split('"')[1] if site.count('"') >= 2 else site
+        vf = models.get_virtual_farm(site)
+        nome_fazenda = vf["nome"] if vf else site
     else:
         nome_fazenda = site.split(" - ", 1)[1] if " - " in site else site
     return f"*{nome_fazenda.upper()} - OneAgro*"
@@ -1015,10 +1019,8 @@ def _build_site_pdf(site, diseases, weather, produtos, cultura, safra, leitura_b
     for d in diseases:
         d["historico"] = data_reader.get_site_disease_history(site, d["doenca_en"], dias=30)
     plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
-    is_virtual = models.get_virtual_farm(site) is not None
-    nome_fazenda = site.split('"')[1] if is_virtual and site.count('"') >= 2 else (
-        site.split(" - ", 1)[1] if " - " in site else site
-    )
+    vf = models.get_virtual_farm(site)
+    nome_fazenda = vf["nome"] if vf else (site.split(" - ", 1)[1] if " - " in site else site)
     safra_label = SAFRA_LABELS[safra] if safra else "todas as safras"
     rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
     buffer = export_pdf.build_recommendation_pdf(
@@ -2428,10 +2430,16 @@ def save_whatsapp_days_pdf():
 @login_required
 def fazendas():
     virtual_names = models.virtual_farm_site_names()
+    # Ponto "so clima" (aba Alertas Clima) nao aparece aqui -- nao tem
+    # doenca/produtos/plantio/aplicacoes pra anotar (o titulo da pagina e'
+    # literalmente "Anotacoes de Safra"), e ja tem tela propria dedicada
+    # pra configurar tudo que ele precisa (estacao de referencia, agenda
+    # de WhatsApp). Pedido explicito do usuario.
+    virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
     if current_user.is_admin:
-        sites = sorted(set(read_sites()) | virtual_names)
+        sites = sorted((set(read_sites()) | virtual_names) - virtual_clima_names)
     else:
-        sites = sorted(models.get_user_permitted_site_names(int(current_user.id)))
+        sites = sorted(set(models.get_user_permitted_site_names(int(current_user.id))) - virtual_clima_names)
         if not sites:
             return render_template("fazendas.html", sites_data=[], no_access=True)
 

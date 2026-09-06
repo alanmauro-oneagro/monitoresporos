@@ -451,6 +451,21 @@ def init_db():
                 "INSERT INTO doenca_cultura (doenca_en, cultura) VALUES (?, ?)", (doenca_en, cultura)
             )
 
+    # Ponto "so clima" criado antes do padrao de nome dedicado
+    # ('{nome} - Clima - OneAgro') ainda esta com o nome antigo (mesmo
+    # padrao do ponto de doenca, '"{nome}" - OneAgro') -- corrige uma
+    # vez so' aqui, com a mesma propagacao de rename do
+    # `update_virtual_farm`, pra nao depender de alguem reabrir e salvar
+    # o ponto na mao pra ele migrar.
+    for row in conn.execute("SELECT site_name, nome FROM virtual_farms WHERE tipo = 'clima'").fetchall():
+        esperado = _virtual_farm_site_name(row["nome"], "clima")
+        if row["site_name"] != esperado:
+            conn.execute(
+                "UPDATE virtual_farms SET site_name=? WHERE site_name=?", (esperado, row["site_name"])
+            )
+            for tabela in _VIRTUAL_FARM_RENAME_TABLES:
+                conn.execute(f"UPDATE {tabela} SET site_name=? WHERE site_name=?", (esperado, row["site_name"]))
+
     conn.commit()
     conn.close()
 
@@ -1463,22 +1478,47 @@ def get_virtual_farm(site_name):
     return dict(row) if row else None
 
 
-def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None, country_code="BR", tipo="doenca"):
-    """Cria uma fazenda virtual/estimada -- `site_name` vira
-    '"{nome}" - OneAgro', o mesmo padrao de nome usado em toda tela
-    (Painel, Recomendacoes, Mapa, WhatsApp): parecido com o das fazendas
+# Tabelas que guardam dado POR site_name de fazenda virtual -- usado
+# tanto por `update_virtual_farm` (rename) quanto pela migracao de nome
+# dos pontos "so clima" em `init_db` (ver `_virtual_farm_site_name`).
+_VIRTUAL_FARM_RENAME_TABLES = (
+    "sites", "recommendation_notes", "whatsapp_schedule", "whatsapp_schedule_pdf",
+    "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
+    "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_historico",
+    "site_country_overrides",
+)
+
+
+def _virtual_farm_site_name(nome, tipo):
+    """site_name (chave primaria em varias tabelas) de uma fazenda
+    virtual/estimada, a partir do nome digitado e do tipo. 'doenca'
+    (padrao) vira '"{nome}" - OneAgro' -- parecido com o das fazendas
     reais ("OneAgro - X"), mas na ordem invertida e entre aspas, pra dar
     pra notar de relance que foi criada aqui dentro, nao importada do
-    BioScout. Levanta sqlite3.IntegrityError se ja existir uma fazenda
-    com esse nome (nome precisa ser unico). Tambem registra o site_name
-    na tabela `sites`, pra poder aparecer na tela de permissoes igual uma
-    fazenda de verdade, e o pais em `site_country_overrides` (mesma
-    tabela usada pela fazenda real, aba Fazendas > Pais). `tipo` e'
-    'doenca' (padrao, interpola concentracao via IDW) ou 'clima' (so'
-    referencia de clima pro cliente, ver `get_all_virtual_farms`).
-    Retorna o site_name criado."""
+    BioScout. 'clima' (ponto so' de referencia de clima, sem doenca) vira
+    '{nome} - Clima - OneAgro' -- SEM aspas, com "Clima" no meio -- padrao
+    proprio pedido pelo usuario, pra distinguir de relance E pra poder
+    filtrar esses pontos fora da aba Fazendas (ver `fazendas()`, que so'
+    lista fazenda real + virtual tipo 'doenca')."""
     nome = nome.strip().replace('"', "")
-    site_name = f'"{nome}" - OneAgro'
+    if tipo == "clima":
+        return f"{nome} - Clima - OneAgro"
+    return f'"{nome}" - OneAgro'
+
+
+def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None, country_code="BR", tipo="doenca"):
+    """Cria uma fazenda virtual/estimada -- `site_name` vem de
+    `_virtual_farm_site_name` (formato depende de `tipo`: 'doenca'
+    interpola concentracao via IDW, 'clima' e' so' referencia de clima
+    pro cliente, ver `get_all_virtual_farms`). Levanta
+    sqlite3.IntegrityError se ja existir uma fazenda com esse nome+tipo
+    (nome precisa ser unico dentro do mesmo site_name resultante).
+    Tambem registra o site_name na tabela `sites`, pra poder aparecer na
+    tela de permissoes igual uma fazenda de verdade, e o pais em
+    `site_country_overrides` (mesma tabela usada pela fazenda real, aba
+    Fazendas > Pais). Retorna o site_name criado."""
+    nome = nome.strip().replace('"', "")
+    site_name = _virtual_farm_site_name(nome, tipo)
     conn = get_db()
     try:
         conn.execute(
@@ -1499,16 +1539,16 @@ def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None, country_code="
 
 def update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code="BR", tipo="doenca"):
     """Atualiza nome/coordenada/raio/pais/tipo de uma fazenda virtual/estimada.
-    Se o nome mudar, o site_name muda junto (mesmo padrao de
-    `create_virtual_farm`) -- nesse caso propaga o novo site_name pra
-    todas as tabelas que guardam dado por fazenda (sites, anotacoes,
-    agenda de WhatsApp, produtos, plantio, aplicacoes, cultura), pra nao
-    perder o que ja tinha sido cadastrado pra ela. Levanta
-    sqlite3.IntegrityError se o novo nome ja for de outra fazenda
-    virtual. Retorna o site_name final (igual ao antigo se o nome nao
-    mudou)."""
+    Se o nome OU o tipo mudar, o site_name muda junto (mesmo padrao de
+    `create_virtual_farm`, ver `_virtual_farm_site_name`) -- nesse caso
+    propaga o novo site_name pra todas as tabelas que guardam dado por
+    fazenda (sites, anotacoes, agenda de WhatsApp, produtos, plantio,
+    aplicacoes, cultura), pra nao perder o que ja tinha sido cadastrado
+    pra ela. Levanta sqlite3.IntegrityError se o novo nome ja for de
+    outra fazenda virtual. Retorna o site_name final (igual ao antigo se
+    nome e tipo nao mudaram)."""
     nome = nome.strip().replace('"', "")
-    novo_site_name = f'"{nome}" - OneAgro'
+    novo_site_name = _virtual_farm_site_name(nome, tipo)
     conn = get_db()
     if novo_site_name != site_name:
         ja_existe = conn.execute(
@@ -1522,12 +1562,7 @@ def update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code="BR", t
         (novo_site_name, nome, lat, lon, raio_km, tipo, site_name),
     )
     if novo_site_name != site_name:
-        for tabela in (
-            "sites", "recommendation_notes", "whatsapp_schedule", "whatsapp_schedule_pdf",
-            "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
-            "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_historico",
-            "site_country_overrides",
-        ):
+        for tabela in _VIRTUAL_FARM_RENAME_TABLES:
             conn.execute(f"UPDATE {tabela} SET site_name=? WHERE site_name=?", (novo_site_name, site_name))
     conn.commit()
     conn.close()
