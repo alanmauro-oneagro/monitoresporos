@@ -2773,7 +2773,7 @@ def admin_doencas():
             "ur_min": data["germ_ur_min"], "molhamento_horas": data["germ_molhamento_horas"],
             "agua_livre_inibe": data["germ_agua_livre_inibe"],
         }
-        for en, data in sorted(info.items(), key=lambda kv: kv[1]["nome_pt"])
+        for en, data in sorted(info.items(), key=lambda kv: (kv[1]["nome_cientifico"] or "").lower())
     ]
     culturas_ativas = models.get_culturas_ativas()
     doenca_culturas = models.get_doenca_culturas()
