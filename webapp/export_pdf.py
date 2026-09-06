@@ -198,7 +198,7 @@ def _tabela_padrao(headers, rows, col_widths):
 def build_recommendation_pdf(
     nome_fazenda, safra_label, diseases, weather=None, produtos=None,
     cultura=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
-    leitura_bioscout=None,
+    leitura_bioscout=None, mostrar_secao_doencas=True,
 ):
     """`diseases`/`weather`/`produtos`/`cultura` tem o mesmo formato usado
     em `_format_whatsapp_message` (ver app.py); `plantio_linhas` e
@@ -206,7 +206,15 @@ def build_recommendation_pdf(
     `get_all_farm_aplicacoes` (lista de dicts), ja filtrados pra
     fazenda+safra. `leitura_bioscout` (dd/mm/aa, ja formatada) e' a data
     da ultima leitura de doenca do dispositivo BioScout -- None se nao
-    houver nenhuma (ponto "so clima"). Retorna um `io.BytesIO` com o PDF
+    houver nenhuma (ponto "so clima"). `mostrar_secao_doencas=False`
+    omite completamente a secao "Doencas em Atencao/Perigo" (cabecalho
+    incluso, nao so' a mensagem de "nenhuma doenca") -- usado quando
+    `diseases` esta vazio por nao haver monitoramento de doenca de
+    verdade acontecendo (ponto "so clima" da aba Alertas Clima, ou
+    fazenda real com estacao sem leitura ha muito tempo, ver
+    `app._send_site_whatsapp`), pra nao sugerir que a fazenda foi
+    checada e esta tudo bem quando na verdade nao foi checada. Retorna
+    um `io.BytesIO` com o PDF
     pronto."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -251,10 +259,12 @@ def build_recommendation_pdf(
             story.append(Paragraph(f"<b>Previsao:</b><br/>{prev}", _ESTILO_NORMAL))
         story.append(Spacer(1, 4))
 
-    story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
+    if mostrar_secao_doencas:
+        story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
     fontes_pesquisadas = []
     if not diseases:
-        story.append(Paragraph("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.", _ESTILO_NORMAL))
+        if mostrar_secao_doencas:
+            story.append(Paragraph("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.", _ESTILO_NORMAL))
     else:
         for d in diseases:
             cabecalho = []
