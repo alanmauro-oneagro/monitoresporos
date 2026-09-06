@@ -2,15 +2,11 @@
 {% block title %}Doencas - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
-/* Cabecalho da matriz Doencas x Culturas -- 12 caixas de nome bem
-   estreitas, senao a tabela fica larga demais e nao cabe na tela do
-   computador sem rolar (pedido explicito do usuario). */
+/* Cabecalho das matrizes Doencas x Culturas e Doencas x Pais -- 12
+   caixas de nome bem estreitas cada, senao a tabela fica larga demais e
+   nao cabe na tela do computador sem rolar (pedido explicito do
+   usuario). */
 .cultura-nome-input { width: 62px; padding: 2px 4px; font-size: 0.72rem; }
-/* Mesmo padrao estreito no cabecalho da matriz Doencas x Pais -- so
-   texto (pais nao e' editavel aqui, ver seletor de Pais nas abas
-   Fazendas/Mapa Interpolado), mas do mesmo tamanho de caixa pra tabela
-   ficar consistente e caber na tela. */
-.pais-nome-th { width: 62px; font-size: 0.72rem; overflow-wrap: break-word; }
 </style>
 {% endblock %}
 {% block content %}
@@ -163,8 +159,11 @@
                 <tr>
                     <th>Doenca</th>
                     <th>Nome cientifico</th>
-                    {% for pais in paises_disponiveis %}
-                    <th class="text-center pais-nome-th" title="{{ pais.nome }}">{{ pais.nome }}</th>
+                    {% for slot in range(12) %}
+                    <th class="text-center">
+                        <input type="text" name="pais_nome__{{ slot }}" class="form-control form-control-sm text-center cultura-nome-input"
+                               value="{{ paises[slot] }}" placeholder="--" title="{{ paises[slot] }}">
+                    </th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -177,9 +176,11 @@
                         <input type="hidden" name="doenca_en" value="{{ d.en }}">
                     </td>
                     <td><em class="text-muted">{{ d.cientifico }}</em></td>
-                    {% for pais in paises_disponiveis %}
+                    {% for slot in range(12) %}
                     <td class="text-center">
-                        <input type="checkbox" class="form-check-input" name="paises__{{ doenca_loop.index0 }}" value="{{ pais.code }}" {% if pais.code in d.marcadas %}checked{% endif %}>
+                        {% if paises[slot] %}
+                        <input type="checkbox" class="form-check-input" name="paises__{{ doenca_loop.index0 }}" value="{{ slot }}" {% if paises[slot] in d.marcadas %}checked{% endif %}>
+                        {% endif %}
                     </td>
                     {% endfor %}
                 </tr>
@@ -196,8 +197,15 @@
     NUNCA e' escondida pelo filtro -- aparece sempre, pra nao sumir um
     alerta novo/nao classificado por engano. Uma doenca pode valer para
     mais de um pais. Tambem ajuda a organizar a busca de produtos com
-    registro por regiao. As colunas vem dos paises que ja tem fazenda
-    cadastrada (aba Fazendas).
+    registro por regiao. Edite o nome de um pais direto no cabecalho da
+    coluna -- vem preenchido com os 12 paises ja cadastrados na aba
+    Fazendas/Mapa Interpolado, mas pode virar qualquer outro nome (util
+    se um dia a OneAgro vender pra um pais fora da America do Sul, ainda
+    sem fronteira/estacao meteorologica integrada aqui no site);
+    renomear um ja existente preserva a marcacao ja feita pra ele.
+    <strong>Atencao</strong>: renomear um dos 12 paises originais faz o
+    filtro de "Pais" da aba Graficos parar de reconhecer essa doenca por
+    aquele pais (o filtro usa o nome oficial do registro do site).
 </p>
 {% endif %}
 {% endblock %}

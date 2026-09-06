@@ -287,6 +287,11 @@ def init_db():
             PRIMARY KEY (doenca_en, country_code)
         );
 
+        CREATE TABLE IF NOT EXISTS paises_doenca_slots (
+            slot INTEGER PRIMARY KEY,
+            nome TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS weather_station_overrides (
             site_name TEXT PRIMARY KEY,
             estacao_codigo TEXT NOT NULL
@@ -467,6 +472,31 @@ def init_db():
             conn.execute(
                 "INSERT INTO doenca_cultura (doenca_en, cultura) VALUES (?, ?)", (doenca_en, cultura)
             )
+
+    if conn.execute("SELECT COUNT(*) c FROM paises_doenca_slots").fetchone()[0] == 0:
+        # Nasce com os 12 paises ja cadastrados em `countries.py` (mesma
+        # ordem do seletor de Pais das abas Fazendas/Mapa Interpolado),
+        # mas a partir daqui vira texto livre editavel direto no
+        # cabecalho da matriz Doencas x Pais (aba Doencas) -- igual
+        # `culturas`/`doenca_cultura` -- pra poder cadastrar um pais fora
+        # da America do Sul (fora do registro `countries.py`, que exige
+        # fronteira/estacao de verdade) so' pra marcar doenca, se um dia
+        # a OneAgro vender pra outro continente. Import local (nao no
+        # topo do arquivo) so' pra esse seed pontual -- ver nota em
+        # `bloquear_cultura_nova_em_todos_quimicos` sobre o mesmo padrao.
+        import countries as _countries
+        nomes_iniciais = [info["nome"] for info in _countries.COUNTRIES.values()]
+        for slot, nome in enumerate(nomes_iniciais):
+            conn.execute("INSERT INTO paises_doenca_slots (slot, nome) VALUES (?, ?)", (slot, nome))
+        # `doenca_pais.country_code` guardava o CODIGO ISO (ex. 'BR') ate
+        # aqui -- migra pro NOME (ex. 'Brasil') pra bater com o novo
+        # esquema por texto livre (mesma chave que a UI agora usa).
+        codigo_para_nome = {code: info["nome"] for code, info in _countries.COUNTRIES.items()}
+        for codigo, nome in codigo_para_nome.items():
+            conn.execute(
+                "UPDATE OR IGNORE doenca_pais SET country_code = ? WHERE country_code = ?", (nome, codigo)
+            )
+            conn.execute("DELETE FROM doenca_pais WHERE country_code = ?", (codigo,))
 
     # Ponto "so clima" criado antes do padrao de nome dedicado
     # ('{nome} - Clima - OneAgro') ainda esta com o nome antigo (mesmo
@@ -1499,12 +1529,16 @@ def set_doenca_culturas(doenca_en, culturas):
 
 
 def get_doenca_paises():
-    """chave: doenca_en -> set(country_code) -- matriz doenca x pais (aba
+    """chave: doenca_en -> set(nome do pais) -- matriz doenca x pais (aba
     Doencas), mesmo espirito de `get_doenca_culturas`: doenca ausente ou com
     set vazio nao e' filtrada por nenhum pais (sempre aparece na aba
     Graficos, mesmo com um pais especifico selecionado) -- usado pra
     melhorar a busca de produtos com registro por regiao sem esconder por
-    engano uma doenca ainda nao classificada por pais."""
+    engano uma doenca ainda nao classificada por pais. A coluna
+    `country_code` guarda o NOME do pais (texto livre, ver
+    `get_paises_doenca_slots`/`set_paises_doenca_slots`), nao mais o
+    codigo ISO -- nome mantido por compatibilidade com dados ja salvos
+    antes dessa mudanca."""
     conn = get_db()
     rows = conn.execute("SELECT doenca_en, country_code FROM doenca_pais").fetchall()
     conn.close()
@@ -1515,11 +1549,53 @@ def get_doenca_paises():
 
 
 def set_doenca_paises(doenca_en, paises):
-    """Substitui o conjunto de paises marcados para aquela doenca."""
+    """Substitui o conjunto de paises (por NOME, ver `get_doenca_paises`)
+    marcados para aquela doenca."""
     conn = get_db()
     conn.execute("DELETE FROM doenca_pais WHERE doenca_en = ?", (doenca_en,))
-    for country_code in paises:
-        conn.execute("INSERT INTO doenca_pais (doenca_en, country_code) VALUES (?, ?)", (doenca_en, country_code))
+    for nome_pais in paises:
+        conn.execute("INSERT INTO doenca_pais (doenca_en, country_code) VALUES (?, ?)", (doenca_en, nome_pais))
+    conn.commit()
+    conn.close()
+
+
+def get_paises_doenca_slots():
+    """Lista de 12 nomes de pais na ordem dos slots (com "" nos ainda nao
+    preenchidos) -- editavel direto no cabecalho da matriz Doencas x Pais
+    (aba Doencas), mesmo padrao de `get_culturas`. Nasce com os 12 paises
+    de `countries.py` (ver seed em `init_db`), mas e' texto livre daqui
+    em diante -- pode virar qualquer nome (inclusive um pais fora da
+    America do Sul, fora do registro `countries.py`, se um dia a OneAgro
+    vender pra outro continente), sem depender de fronteira/estacao de
+    verdade cadastrada."""
+    conn = get_db()
+    rows = conn.execute("SELECT slot, nome FROM paises_doenca_slots ORDER BY slot").fetchall()
+    conn.close()
+    return [r["nome"] or "" for r in rows]
+
+
+def set_paises_doenca_slots(nomes):
+    """Substitui os 12 nomes (na ordem dos slots) -- mesma migracao de
+    `set_culturas` quando e' so' um renomeio (slot que ja tinha nome
+    recebe um nome diferente): atualiza `doenca_pais` do nome antigo pro
+    novo em vez de perder a marcacao ja feita. So' essa tabela depende do
+    nome de pais (ao contrario de cultura, pais nao tem registro de
+    fungicida nem "Cultura atual" de fazenda amarrado a ele)."""
+    antigos = get_paises_doenca_slots()
+    conn = get_db()
+    for slot, nome in enumerate(nomes[:12]):
+        nome = (nome or "").strip()
+        antigo = antigos[slot] if slot < len(antigos) else ""
+        if antigo and nome and antigo != nome:
+            conn.execute("UPDATE OR IGNORE doenca_pais SET country_code = ? WHERE country_code = ?", (nome, antigo))
+            conn.execute("DELETE FROM doenca_pais WHERE country_code = ?", (antigo,))
+        conn.execute(
+            """
+            INSERT INTO paises_doenca_slots (slot, nome) VALUES (?, ?)
+            ON CONFLICT(slot) DO UPDATE SET nome = excluded.nome
+            """,
+            (slot, nome),
+        )
     conn.commit()
     conn.close()
 

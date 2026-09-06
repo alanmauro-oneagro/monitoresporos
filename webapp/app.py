@@ -1790,11 +1790,19 @@ def graficos_dados():
         # Mesma hierarquia "Doenca x Pais" da aba Doencas (mirror de
         # "Doenca x Cultura"): doenca sem nenhum pais marcado nunca e'
         # escondida pelo filtro -- so' filtra quem ja foi classificado,
-        # pra nao sumir um alerta novo/nao classificado por engano.
+        # pra nao sumir um alerta novo/nao classificado por engano. A
+        # matriz guarda o pais por NOME (texto livre, editavel -- ver
+        # `models.set_paises_doenca_slots`), enquanto esse filtro vem por
+        # CODIGO ISO (`countries.py`) -- converte pra nome antes de
+        # cruzar; so' funciona pro pais cujo nome na matriz ainda bate
+        # com o nome oficial (se alguem renomear o slot, esse pais para
+        # de casar com o filtro ate' renomear de volta -- risco aceito,
+        # o campo virou texto livre de proposito).
         doenca_paises = models.get_doenca_paises()
+        nomes_sel = {countries.get_country(c)["nome"] for c in paises_sel}
         doencas_en = [
             en for en in doencas_en
-            if not doenca_paises.get(en) or doenca_paises[en] & set(paises_sel)
+            if not doenca_paises.get(en) or doenca_paises[en] & nomes_sel
         ]
 
     doencas_payload = []
@@ -3178,10 +3186,26 @@ def admin_doencas():
             return _save_response("Matriz doenca x cultura atualizada.", "admin_doencas")
 
         if request.form.get("form_id") == "matriz_paises":
+            # Nome dos 12 paises agora e' editavel direto no cabecalho
+            # desta matriz -- mesmo padrao de `matriz_culturas`, pra
+            # poder cadastrar um pais fora do registro `countries.py`
+            # (fora da America do Sul) so' pra marcar doenca, sem
+            # depender de fronteira/estacao de verdade.
+            nomes_slots = [request.form.get(f"pais_nome__{i}", "").strip() for i in range(12)]
+            models.set_paises_doenca_slots(nomes_slots)
+
             doenca_ens = request.form.getlist("doenca_en")
             for idx, doenca_en in enumerate(doenca_ens):
-                paises = request.form.getlist(f"paises__{idx}")
-                models.set_doenca_paises(doenca_en, paises)
+                slots_marcados = request.form.getlist(f"paises__{idx}")
+                paises_marcados = []
+                for slot_str in slots_marcados:
+                    try:
+                        slot = int(slot_str)
+                    except ValueError:
+                        continue
+                    if 0 <= slot < len(nomes_slots) and nomes_slots[slot]:
+                        paises_marcados.append(nomes_slots[slot])
+                models.set_doenca_paises(doenca_en, paises_marcados)
             return _save_response("Matriz doenca x pais atualizada.", "admin_doencas")
 
         display_names = request.form.getlist("display_name_en")
@@ -3229,15 +3253,13 @@ def admin_doencas():
     culturas_ativas = models.get_culturas_ativas()
     culturas = models.get_culturas()
     doenca_culturas = models.get_doenca_culturas()
-    # Paises disponiveis na matriz Doenca x Pais: TODO pais registrado
-    # (`countries.COUNTRIES`, mesma ordem/fonte usada no seletor de Pais
-    # das abas Fazendas e Mapa Interpolado -- ver `templates/fazendas.html`/
-    # `templates/mapa_interpolado.html`, `{% for code, pais in countries.items() %}`),
-    # nao so' quem ja tem fazenda cadastrada -- assim a coluna ja existe
-    # pronta pra marcar a doenca ANTES da primeira fazenda daquele pais
-    # aparecer, igual o slot vazio da matriz Doencas x Culturas. Pedido
-    # explicito do usuario pra ficar "linkado" com as duas outras telas.
-    paises_disponiveis = [{"code": c, "nome": info["nome"]} for c, info in countries.COUNTRIES.items()]
+    # 12 nomes de pais editaveis direto no cabecalho da matriz Doencas x
+    # Pais -- mesmo padrao de `culturas`/`culturas_ativas` acima. Nasce
+    # com os paises de `countries.py` (ver seed em `models.init_db`),
+    # mas pode virar qualquer nome dali em diante -- inclusive um pais
+    # fora da America do Sul, se um dia a OneAgro vender pra outro
+    # continente, sem precisar de fronteira/estacao cadastrada nele.
+    paises = models.get_paises_doenca_slots()
     doenca_paises = models.get_doenca_paises()
     matriz = [
         {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_culturas.get(d["en"], set())}
@@ -3249,7 +3271,7 @@ def admin_doencas():
     ]
     return render_template(
         "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, culturas=culturas, matriz=matriz,
-        paises_disponiveis=paises_disponiveis, matriz_paises=matriz_paises,
+        paises=paises, matriz_paises=matriz_paises,
     )
 
 
