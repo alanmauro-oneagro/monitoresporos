@@ -200,11 +200,13 @@ def _prefetch_weather(sites, coords):
 
 def _weather_coords_all():
     """Coordenada usada pra buscar a previsao (Open-Meteo) de cada site --
-    normalmente a mesma da fazenda (`_coords_all`), mas usa a estacao
-    oficial (INMET ou DMC, conforme o pais da escolha) escolhida
-    manualmente na aba Fazendas quando houver (`weather_station_overrides`),
-    pra deixar a pessoa optar por uma referencia mais representativa do
-    clima da regiao dela."""
+    usa a estacao oficial (INMET ou DMC, conforme o pais da escolha)
+    escolhida em `weather_station_overrides` quando houver -- por padrao
+    ja' e' a mais proxima, escolhida sozinha por `_auto_detectar_estacoes_novas`
+    assim que a fazenda aparece, mas o cliente pode trocar (aba Fazendas/
+    Alertas Clima) por outra estacao ou pela coordenada da propria
+    fazenda (`_coords_all`), reservada pra quem tem estacao meteorologica
+    propria."""
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
     if not overrides:
@@ -1303,6 +1305,37 @@ def _ensure_sites_synced():
     except FileNotFoundError:
         pass
     _auto_detectar_paises_novos()
+    _auto_detectar_estacoes_novas()
+
+
+def _auto_detectar_estacoes_novas():
+    """Fazenda (real ou virtual/estimada, qualquer tipo) com coordenada
+    mas ainda sem estacao de referencia escolhida (nem por escolha manual
+    do cliente, nem por deteccao anterior) tem a estacao oficial mais
+    proxima escolhida e GRAVADA sozinha como padrao (`weather_station_overrides`)
+    -- fica a criterio do cliente trocar depois (aba Fazendas/Alertas
+    Clima) pra outra estacao ou pra "coordenada da propria fazenda"
+    (reservado pra quem tem estacao meteorologica propria, ver
+    `_weather_coords_all`). NUNCA sobrescreve uma escolha ja feita
+    (manual ou automatica anterior) -- so' age em quem ainda nao tem
+    nenhuma linha na tabela. Pais sem estacao oficial integrada ainda
+    (a maioria da America do Sul alem de Brasil/Chile, ver
+    `countries.estacoes_mais_proximas_global`) continua sem override
+    nenhum -- nao ha' nada pra' escolher ainda, cai na coordenada da
+    propria fazenda por falta de opcao melhor."""
+    try:
+        coords = _coords_all()
+    except FileNotFoundError:
+        return
+    overrides = models.get_all_weather_station_overrides()
+    for site, (lat, lon) in coords.items():
+        if site in overrides:
+            continue
+        candidatas = countries.estacoes_mais_proximas_global(lat, lon, n=1)
+        if not candidatas:
+            continue
+        estacao = candidatas[0]
+        models.set_weather_station_override(site, estacao["codigo"], estacao["country_code"])
 
 
 def _auto_detectar_paises_novos():
