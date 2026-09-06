@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Doencas - OneAgro{% endblock %}
+{% block extra_head %}
+<style>
+/* Cabecalho da matriz Doencas x Culturas -- 12 caixas de nome bem
+   estreitas, senao a tabela fica larga demais e nao cabe na tela do
+   computador sem rolar (pedido explicito do usuario). */
+.cultura-nome-input { width: 62px; padding: 2px 4px; font-size: 0.72rem; }
+</style>
+{% endblock %}
 {% block content %}
 <h4 class="mb-2">Doencas</h4>
 
@@ -99,8 +107,8 @@
                     <th>Nome cientifico</th>
                     {% for slot in range(12) %}
                     <th class="text-center">
-                        <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm text-center"
-                               style="min-width: 100px;" value="{{ culturas[slot] }}" placeholder="(vazio)">
+                        <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm text-center cultura-nome-input"
+                               value="{{ culturas[slot] }}" placeholder="--" title="{{ culturas[slot] }}">
                     </th>
                     {% endfor %}
                 </tr>
