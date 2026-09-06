@@ -38,16 +38,16 @@
                 <input type="date" id="filtroFim" class="form-control form-control-sm" value="{{ fim }}">
             </div>
             <div class="col-md-3">
-                <label class="form-label small text-muted mb-1 d-block">Estado</label>
+                <label class="form-label small text-muted mb-1 d-block">País</label>
                 <div class="filtro-box">
-                    <button type="button" class="form-control form-control-sm text-start d-flex justify-content-between align-items-center" data-box-toggle="boxEstado">
-                        <span id="resumoEstado"></span><span>&#9662;</span>
+                    <button type="button" class="form-control form-control-sm text-start d-flex justify-content-between align-items-center" data-box-toggle="boxPais">
+                        <span id="resumoPais"></span><span>&#9662;</span>
                     </button>
-                    <div id="boxEstado" class="filtro-box-menu d-none bg-white shadow rounded p-2">
-                        {% for uf in estados_disponiveis %}
+                    <div id="boxPais" class="filtro-box-menu d-none bg-white shadow rounded p-2">
+                        {% for pais in paises_disponiveis %}
                         <div class="form-check">
-                            <input class="form-check-input filtro-estado" type="checkbox" value="{{ uf }}" id="estado_{{ uf }}">
-                            <label class="form-check-label small" for="estado_{{ uf }}">{{ uf }}</label>
+                            <input class="form-check-input filtro-pais" type="checkbox" value="{{ pais.code }}" id="pais_{{ pais.code }}">
+                            <label class="form-check-label small" for="pais_{{ pais.code }}">{{ pais.nome }}</label>
                         </div>
                         {% endfor %}
                     </div>
@@ -55,7 +55,7 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label small text-muted mb-1 d-block">
-                    Estacao <span class="text-muted">(se marcar alguma, ignora o Estado)</span>
+                    Estacao <span class="text-muted">(se marcar alguma, ignora o País)</span>
                 </label>
                 <div class="filtro-box">
                     <button type="button" class="form-control form-control-sm text-start d-flex justify-content-between align-items-center" data-box-toggle="boxEstacao">
@@ -64,7 +64,7 @@
                     <div id="boxEstacao" class="filtro-box-menu d-none bg-white shadow rounded p-2">
                         {% for e in estacoes_disponiveis %}
                         <div class="form-check">
-                            <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" data-uf="{{ e.uf or '' }}" id="est_{{ loop.index }}">
+                            <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" data-pais="{{ e.pais or '' }}" id="est_{{ loop.index }}">
                             <label class="form-check-label small" for="est_{{ loop.index }}">{{ e.nome }}{% if e.uf %} ({{ e.uf }}){% endif %}</label>
                         </div>
                         {% endfor %}
@@ -204,7 +204,7 @@
     Chart.register(anotacoesPlugin);
 
     // {site: [{data_iso|dia_mes, tipo}, ...]} (vindo de /graficos/dados,
-    // ja restrito as fazendas do filtro Estado/Estacao) -> {indice_do_
+    // ja restrito as fazendas do filtro Pais/Estacao) -> {indice_do_
     // eixo_x: {tipo: [site, ...]}} -- `dia_mes` (anotacao sem ano, campo
     // e' texto livre) casa contra QUALQUER dia de `dias` com o mesmo
     // dia/mes (pode marcar mais de um indice se o periodo do filtro
@@ -429,7 +429,7 @@
     // de excedido) e o azul do grafico de risco.
     var CORES_FAZENDA = ['#212529', '#fd7e14', '#6f42c1', '#e83e8c', '#795548', '#997404', '#0dcaf0', '#5c636a'];
 
-    // Boxes de filtro (Estado/Estacao) que abrem/fecham ao clicar --
+    // Boxes de filtro (Pais/Estacao) que abrem/fecham ao clicar --
     // mesmo padrao do menu "Configuracoes" do menu principal, mas
     // proprio desta pagina (aquele so' liga o clique nos elementos que
     // ja existem no HTML quando o script do base.html roda, antes do
@@ -452,42 +452,42 @@
     });
 
     function atualizarResumos() {
-        var estados = document.querySelectorAll('.filtro-estado:checked');
-        var resumoEstado = document.getElementById('resumoEstado');
-        if (!estados.length) resumoEstado.textContent = 'Nenhum (mostra tudo)';
-        else if (estados.length === 1) resumoEstado.textContent = estados[0].value;
-        else resumoEstado.textContent = estados.length + ' estados';
+        var paises = document.querySelectorAll('.filtro-pais:checked');
+        var resumoPais = document.getElementById('resumoPais');
+        if (!paises.length) resumoPais.textContent = 'Nenhum (mostra tudo)';
+        else if (paises.length === 1) resumoPais.textContent = paises[0].nextElementSibling.textContent;
+        else resumoPais.textContent = paises.length + ' paises';
 
         var estacoes = document.querySelectorAll('.filtro-estacao:checked');
         var resumoEstacao = document.getElementById('resumoEstacao');
-        if (!estacoes.length) resumoEstacao.textContent = 'Todas (usa Estado)';
+        if (!estacoes.length) resumoEstacao.textContent = 'Todas (usa País)';
         else if (estacoes.length === 1) resumoEstacao.textContent = estacoes[0].nextElementSibling.textContent;
         else resumoEstacao.textContent = estacoes.length + ' estacoes';
     }
-    document.querySelectorAll('.filtro-estado, .filtro-estacao').forEach(function (el) {
+    document.querySelectorAll('.filtro-pais, .filtro-estacao').forEach(function (el) {
         el.addEventListener('change', atualizarResumos);
     });
 
-    // Marcar um Estado esconde do box de Estacao as que nao sao daquele
-    // estado (e desmarca as que ja estavam marcadas e ficaram escondidas,
+    // Marcar um Pais esconde do box de Estacao as que nao sao daquele
+    // pais (e desmarca as que ja estavam marcadas e ficaram escondidas,
     // pra' nao filtrar por uma estacao invisivel sem o usuario perceber).
-    // Sem nenhum Estado marcado, mostra todas.
-    function filtrarEstacoesPorEstado() {
-        var ufs = Array.from(document.querySelectorAll('.filtro-estado:checked')).map(function (el) { return el.value; });
+    // Sem nenhum Pais marcado, mostra todas.
+    function filtrarEstacoesPorPais() {
+        var codigos = Array.from(document.querySelectorAll('.filtro-pais:checked')).map(function (el) { return el.value; });
         document.querySelectorAll('.filtro-estacao').forEach(function (chk) {
             var linha = chk.closest('.form-check');
-            var mostra = !ufs.length || ufs.indexOf(chk.dataset.uf) !== -1;
+            var mostra = !codigos.length || codigos.indexOf(chk.dataset.pais) !== -1;
             linha.classList.toggle('d-none', !mostra);
             if (!mostra && chk.checked) chk.checked = false;
         });
         atualizarResumos();
     }
-    document.querySelectorAll('.filtro-estado').forEach(function (el) {
-        el.addEventListener('change', filtrarEstacoesPorEstado);
+    document.querySelectorAll('.filtro-pais').forEach(function (el) {
+        el.addEventListener('change', filtrarEstacoesPorPais);
     });
 
     // Congela os filtros entre visitas (localStorage, por navegador) --
-    // assim a pessoa nao precisa reconfigurar periodo/estado/estacao
+    // assim a pessoa nao precisa reconfigurar periodo/pais/estacao
     // toda vez que reabre a aba. So' guarda no navegador de quem
     // acessou, nunca no servidor.
     var FILTROS_STORAGE_KEY = 'oneagro_graficos_filtros';
@@ -496,7 +496,7 @@
             localStorage.setItem(FILTROS_STORAGE_KEY, JSON.stringify({
                 inicio: document.getElementById('filtroInicio').value,
                 fim: document.getElementById('filtroFim').value,
-                estado: Array.from(document.querySelectorAll('.filtro-estado:checked')).map(function (el) { return el.value; }),
+                pais: Array.from(document.querySelectorAll('.filtro-pais:checked')).map(function (el) { return el.value; }),
                 estacao: Array.from(document.querySelectorAll('.filtro-estacao:checked')).map(function (el) { return el.value; }),
                 ocultarRisco: document.getElementById('filtroOcultarRisco').checked,
             }));
@@ -510,8 +510,12 @@
         try { f = JSON.parse(bruto); } catch (e) { return; }
         if (f.inicio) document.getElementById('filtroInicio').value = f.inicio;
         if (f.fim) document.getElementById('filtroFim').value = f.fim;
-        if (Array.isArray(f.estado)) {
-            document.querySelectorAll('.filtro-estado').forEach(function (el) { el.checked = f.estado.indexOf(el.value) !== -1; });
+        if (Array.isArray(f.pais)) {
+            document.querySelectorAll('.filtro-pais').forEach(function (el) { el.checked = f.pais.indexOf(el.value) !== -1; });
+        } else if (Array.isArray(f.estado)) {
+            // Filtro antigo (antes de virar Pais) guardava sigla de
+            // estado no localStorage -- nao da pra' converter pra pais
+            // sozinho, so' ignora e deixa sem nenhum pais marcado.
         }
         if (Array.isArray(f.estacao)) {
             document.querySelectorAll('.filtro-estacao').forEach(function (el) { el.checked = f.estacao.indexOf(el.value) !== -1; });
@@ -519,11 +523,11 @@
         if (typeof f.ocultarRisco === 'boolean') document.getElementById('filtroOcultarRisco').checked = f.ocultarRisco;
     }
     restaurarFiltros();
-    filtrarEstacoesPorEstado();
+    filtrarEstacoesPorPais();
     atualizarResumos();
 
     // Salvamento automatico dos filtros -- qualquer mudanca (data,
-    // estado, estacao) recarrega os graficos sozinha, sem botao
+    // pais, estacao) recarrega os graficos sozinha, sem botao
     // "Aplicar"; debounce de 600ms (mesmo espirito do autosave de
     // formulario ja usado no resto do site) pra nao disparar um recarga
     // por cada caixa marcada quando a pessoa marca varias em sequencia.
@@ -534,12 +538,12 @@
     }
     document.getElementById('filtroInicio').addEventListener('change', agendarRecarga);
     document.getElementById('filtroFim').addEventListener('change', agendarRecarga);
-    document.querySelectorAll('.filtro-estado, .filtro-estacao').forEach(function (el) {
+    document.querySelectorAll('.filtro-pais, .filtro-estacao').forEach(function (el) {
         el.addEventListener('change', agendarRecarga);
     });
     document.getElementById('filtroInicio').addEventListener('change', salvarFiltros);
     document.getElementById('filtroFim').addEventListener('change', salvarFiltros);
-    document.querySelectorAll('.filtro-estado, .filtro-estacao').forEach(function (el) {
+    document.querySelectorAll('.filtro-pais, .filtro-estacao').forEach(function (el) {
         el.addEventListener('change', salvarFiltros);
     });
 
@@ -572,7 +576,7 @@
         params.set('inicio', document.getElementById('filtroInicio').value);
         params.set('fim', document.getElementById('filtroFim').value);
         document.querySelectorAll('.filtro-estacao:checked').forEach(function (el) { params.append('estacao', el.value); });
-        document.querySelectorAll('.filtro-estado:checked').forEach(function (el) { params.append('estado', el.value); });
+        document.querySelectorAll('.filtro-pais:checked').forEach(function (el) { params.append('pais', el.value); });
         return params.toString();
     }
 

@@ -1608,12 +1608,24 @@ def graficos():
     uf_por_site = _uf_por_site()
     if permitidos is not None:
         uf_por_site = {s: uf for s, uf in uf_por_site.items() if s in permitidos}
+    site_countries = models.get_all_site_countries()
     estacoes_disponiveis = sorted(uf_por_site.keys(), key=str.lower)
-    estados_disponiveis = sorted({uf for uf in uf_por_site.values() if uf})
+    # Pais (nao mais Estado -- generaliza melhor com fazenda fora do
+    # Brasil, onde "Estado" nao faz sentido/nao existe): mesmo pais
+    # registrado da fazenda (aba Fazendas) que ja decide qual provedor de
+    # estacao `_uf_por_site` usa pra achar a UF/regiao, entao filtrar por
+    # ele continua 100% consistente com o filtro de Estacao.
+    paises_presentes = sorted(
+        {site_countries.get(s, countries.DEFAULT_COUNTRY) for s in uf_por_site},
+        key=lambda c: countries.get_country(c)["nome"],
+    )
     return render_template(
         "graficos.html", inicio=inicio.isoformat(), fim=fim.isoformat(),
-        estacoes_disponiveis=[{"nome": s, "uf": uf_por_site.get(s)} for s in estacoes_disponiveis],
-        estados_disponiveis=estados_disponiveis,
+        estacoes_disponiveis=[
+            {"nome": s, "uf": uf_por_site.get(s), "pais": site_countries.get(s, countries.DEFAULT_COUNTRY)}
+            for s in estacoes_disponiveis
+        ],
+        paises_disponiveis=[{"code": c, "nome": countries.get_country(c)["nome"]} for c in paises_presentes],
     )
 
 
@@ -1638,13 +1650,14 @@ def graficos_dados():
     if permitidos is not None:
         uf_por_site = {s: uf for s, uf in uf_por_site.items() if s in permitidos}
     todos_sites = sorted(uf_por_site.keys(), key=str.lower)
+    site_countries = models.get_all_site_countries()
 
     estacoes_sel = [s for s in request.args.getlist("estacao") if s]
-    estados_sel = [e for e in request.args.getlist("estado") if e]
+    paises_sel = [p for p in request.args.getlist("pais") if p]
     if estacoes_sel:
         sites = [s for s in todos_sites if s in estacoes_sel]
-    elif estados_sel:
-        sites = [s for s in todos_sites if uf_por_site.get(s) in estados_sel]
+    elif paises_sel:
+        sites = [s for s in todos_sites if site_countries.get(s, countries.DEFAULT_COUNTRY) in paises_sel]
     else:
         # Sem filtro escolhido -- mostra tudo. Antes tinha um default
         # fixo pro estado "MT" (Mato Grosso), mas com fazendas em mais de
@@ -1653,7 +1666,7 @@ def graficos_dados():
         sites = todos_sites
     if not sites:
         # Filtro nao bateu com nenhuma fazenda (ex.: catalogo de estacoes
-        # fora do ar na primeira chamada, ou filtro de estado sem
+        # fora do ar na primeira chamada, ou filtro de pais sem
         # fazenda cadastrada) -- mostra tudo em vez de pagina vazia.
         sites = todos_sites
 
