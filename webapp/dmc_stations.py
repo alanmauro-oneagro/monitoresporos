@@ -106,8 +106,21 @@ def get_estacoes():
             lon = float(props["longitud"])
         except (TypeError, ValueError, KeyError):
             continue
+        codigo = props.get("CodigoNacional")
+        if codigo is None:
+            continue
+        # str() -- "CodigoNacional" e' puramente numerico (ex. 410002), ao
+        # contrario do codigo do INMET (alfanumerico, ex. "A950"), entao a
+        # resposta JSON da DMC pode vir como numero sem aspas (int em vez
+        # de str). Se guardasse assim, comparacoes depois (aba Fazendas
+        # decidindo qual radio marcar, `estacao_selecionada == estacao.codigo`)
+        # comparariam a STRING vinda do banco (SQLite TEXT, sempre str)
+        # contra um INT vindo daqui de novo a cada request -- nunca bate,
+        # o radio da estacao escolhida nunca aparece marcado mesmo com a
+        # escolha salva certinho (bug real visto em producao com fazenda
+        # do Chile).
         estacoes.append({
-            "codigo": props.get("CodigoNacional"),
+            "codigo": str(codigo),
             "cidade": props.get("nombreEstacion"),
             "uf": _NOME_REGIAO.get(props.get("NumeroRegion"), ""),
             "lat": lat,

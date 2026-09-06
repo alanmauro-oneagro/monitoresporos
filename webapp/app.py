@@ -1691,6 +1691,11 @@ def graficos_dados():
         # um pais nao ha' mais um estado/regiao obviamente "principal" pra
         # supor sozinho.
         sites = todos_sites
+    # So restringe as doencas mostradas ao que a(s) estacao(oes)
+    # selecionada(s) realmente tem cadastrado quando o filtro bateu com
+    # alguma fazenda de verdade -- ver `filtro_estacao_aplicado` mais
+    # abaixo (usa `spore_lookup`/vizinhas, calculado depois de `sites`).
+    filtro_estacao_aplicado = bool(estacoes_sel) and bool(sites)
     if not sites:
         # Filtro nao bateu com nenhuma fazenda (ex.: catalogo de estacoes
         # fora do ar na primeira chamada, ou filtro de pais sem
@@ -1730,24 +1735,6 @@ def graficos_dados():
         previsao_horaria_por_site[site] = (clima or {}).get("previsao_horaria_por_dia", {})
 
     translations = models.get_all_disease_translations()
-    # Mesma ordem (nome cientifico) ja usada na aba Doencas -- os graficos
-    # aparecem na mesma hierarquia, em vez da ordem crua de
-    # `read_unique_display_names` (aparicao no CSV/BioScout). Pedido
-    # explicito do usuario.
-    doencas_en = sorted(
-        data_reader.read_unique_display_names(),
-        key=lambda en: _chave_alfabetica(translations.get(en, {}).get("nome_cientifico") or ""),
-    )
-    if paises_sel:
-        # Mesma hierarquia "Doenca x Pais" da aba Doencas (mirror de
-        # "Doenca x Cultura"): doenca sem nenhum pais marcado nunca e'
-        # escondida pelo filtro -- so' filtra quem ja foi classificado,
-        # pra nao sumir um alerta novo/nao classificado por engano.
-        doenca_paises = models.get_doenca_paises()
-        doencas_en = [
-            en for en in doencas_en
-            if not doenca_paises.get(en) or doenca_paises[en] & set(paises_sel)
-        ]
     spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
     hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
     device_by_site = data_reader.read_site_device_ids()
@@ -1772,6 +1759,43 @@ def graficos_dados():
         for vf in models.get_all_virtual_farms()
         if vf["site_name"] in sites
     }
+
+    # Mesma ordem (nome cientifico) ja usada na aba Doencas -- os graficos
+    # aparecem na mesma hierarquia, em vez da ordem crua de
+    # `read_unique_display_names` (aparicao no CSV/BioScout). Pedido
+    # explicito do usuario.
+    doencas_en = sorted(
+        data_reader.read_unique_display_names(),
+        key=lambda en: _chave_alfabetica(translations.get(en, {}).get("nome_cientifico") or ""),
+    )
+    if filtro_estacao_aplicado:
+        # So' traz doenca realmente cadastrada na(s) estacao(oes)
+        # selecionada(s) -- antes mostrava TODA doenca ja vista em
+        # qualquer fazenda, inclusive as de cultura completamente
+        # diferente da fazenda escolhida (ex.: doenca de uva aparecendo,
+        # em branco, pro grafico de uma fazenda de soja). Pedido explicito
+        # do usuario. Fazenda virtual/estimada usa a doenca das vizinhas
+        # reais que alimentam sua interpolacao (`vizinhas_por_ponto_virtual`),
+        # ja' que ela nunca tem leitura propria.
+        doencas_por_site = {}
+        for s, doenca in spore_lookup:
+            doencas_por_site.setdefault(s, set()).add(doenca)
+        doencas_das_estacoes = set()
+        for site in sites:
+            fontes = [real for real, _ in vizinhas_por_ponto_virtual[site]] if site in vizinhas_por_ponto_virtual else [site]
+            for fonte in fontes:
+                doencas_das_estacoes |= doencas_por_site.get(fonte, set())
+        doencas_en = [en for en in doencas_en if en in doencas_das_estacoes]
+    elif paises_sel:
+        # Mesma hierarquia "Doenca x Pais" da aba Doencas (mirror de
+        # "Doenca x Cultura"): doenca sem nenhum pais marcado nunca e'
+        # escondida pelo filtro -- so' filtra quem ja foi classificado,
+        # pra nao sumir um alerta novo/nao classificado por engano.
+        doenca_paises = models.get_doenca_paises()
+        doencas_en = [
+            en for en in doencas_en
+            if not doenca_paises.get(en) or doenca_paises[en] & set(paises_sel)
+        ]
 
     doencas_payload = []
     for doenca_en in doencas_en:

@@ -489,13 +489,15 @@
     // Congela os filtros entre visitas (localStorage, por navegador) --
     // assim a pessoa nao precisa reconfigurar periodo/pais/estacao
     // toda vez que reabre a aba. So' guarda no navegador de quem
-    // acessou, nunca no servidor.
+    // acessou, nunca no servidor. Data final NAO entra aqui de proposito
+    // -- sempre parte do "hoje" que o servidor ja manda (`value="{{ fim }}"`),
+    // nunca de uma data antiga esquecida numa visita anterior. Pedido
+    // explicito do usuario.
     var FILTROS_STORAGE_KEY = 'oneagro_graficos_filtros';
     function salvarFiltros() {
         try {
             localStorage.setItem(FILTROS_STORAGE_KEY, JSON.stringify({
                 inicio: document.getElementById('filtroInicio').value,
-                fim: document.getElementById('filtroFim').value,
                 pais: Array.from(document.querySelectorAll('.filtro-pais:checked')).map(function (el) { return el.value; }),
                 estacao: Array.from(document.querySelectorAll('.filtro-estacao:checked')).map(function (el) { return el.value; }),
                 ocultarRisco: document.getElementById('filtroOcultarRisco').checked,
@@ -509,7 +511,6 @@
         var f;
         try { f = JSON.parse(bruto); } catch (e) { return; }
         if (f.inicio) document.getElementById('filtroInicio').value = f.inicio;
-        if (f.fim) document.getElementById('filtroFim').value = f.fim;
         if (Array.isArray(f.pais)) {
             document.querySelectorAll('.filtro-pais').forEach(function (el) { el.checked = f.pais.indexOf(el.value) !== -1; });
         } else if (Array.isArray(f.estado)) {
