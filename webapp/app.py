@@ -1864,14 +1864,13 @@ def mapa_interpolado():
     sites_data.sort(key=lambda s: s["site"])
     pontos_virtuais.sort(key=lambda p: p["nome"])
 
-    # Todas as estacoes de cada pais ativo aqui (nao so as dos estados com
-    # fazenda/ponto, como no Mapa normal) -- essa tela e' justamente pra
-    # escolher onde criar um ponto novo, em qualquer lugar do pais. So
-    # inclui um pais alem do Brasil se ja tiver fazenda/ponto marcado la',
-    # mesmo criterio do Mapa (evita chamar um provedor sem necessidade).
-    active_countries = countries.active_country_codes(site_countries)
+    # Todas as estacoes de TODO pais do registro aqui (nao so os que ja
+    # tem fazenda/ponto marcado, diferente do Mapa normal) -- essa tela e'
+    # justamente pra escolher onde criar o PRIMEIRO ponto de um pais novo,
+    # entao precisa mostrar o Chile (fronteira + estacoes da DMC) mesmo
+    # sem nenhuma fazenda la' ainda.
     estacoes = []
-    for code in active_countries:
+    for code in countries.COUNTRIES:
         estacoes.extend(countries.get_country(code)["station_provider"].get_estacoes())
 
     return render_template(
