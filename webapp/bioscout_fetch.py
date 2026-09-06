@@ -121,15 +121,23 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
     headers = {"Authorization": f"Bearer {token}"}
     log("OK.")
 
+    # Sincroniza TODO site que aparecer nessa conta BioScout -- ate' 2026-09
+    # so' entravam os que comecavam com "OneAgro" (convencao dos primeiros
+    # clientes, todos no Brasil); com a expansao pra America do Sul,
+    # fazenda nova (ex.: "Pencahue CYT", "SZ Seeds", clientes do Chile)
+    # nao segue mais esse padrao de nome e ficava de fora, silenciosamente
+    # (nem aparecia em log de erro -- so' nunca sincronizava). Filtrar por
+    # nome nunca foi o jeito certo de saber "e' nosso" -- e' so' o
+    # conteudo dessa conta mesmo, entao usa todos.
     all_sites = _http_json(f"{API_BASE}/api/Site/get?SiteRole=2&SiteRole=3&SiteRole=5&SiteRole=6", headers=headers)
-    sites = [s for s in all_sites if str(s.get("siteName") or "").startswith("OneAgro")]
+    sites = all_sites
     with open(data_dir / "sites.csv", "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["siteId", "siteName"])
         writer.writeheader()
         for s in sites:
             writer.writerow({"siteId": s.get("siteId"), "siteName": s.get("siteName")})
     site_ids = [s.get("siteId") for s in sites]
-    log(f"Sites OneAgro/Brasil: {len(site_ids)} (de {len(all_sites)} totais na conta)")
+    log(f"Sites sincronizados: {len(site_ids)}")
 
     end = datetime.now()
     start = end - timedelta(days=lookback_days)

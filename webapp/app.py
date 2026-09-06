@@ -2983,8 +2983,20 @@ def aplicar_pesquisa_germinacao():
     aplicados = 0
     for doenca_en, dados in _PESQUISA_GERMINACAO_2026_08_27.items():
         atual = info.get(doenca_en)
-        if atual is None or atual["germ_temp_min"] is not None:
-            continue  # doenca nao existe ainda, ou ja tem limite editado -- nao sobrescreve
+        if atual is None:
+            continue  # doenca nao existe ainda
+        # So aplica se os 4 campos numericos estiverem TODOS vazios --
+        # olhar so' germ_temp_min (como era antes) deixava passar o caso
+        # de alguem ja ter validado manualmente ur_min/molhamento_horas/
+        # temp_max mas ainda nao ter preenchido temp_min: o clique aqui
+        # sobrescrevia esses 3 ja validados junto, porque
+        # save_disease_germ_limits grava os 5 campos sempre juntos.
+        campos_numericos = (
+            atual["germ_temp_min"], atual["germ_temp_max"],
+            atual["germ_ur_min"], atual["germ_molhamento_horas"],
+        )
+        if any(v is not None for v in campos_numericos):
+            continue  # pelo menos um campo ja foi validado/editado -- nao mexe em nenhum
         models.save_disease_germ_limits(
             doenca_en, dados["temp_min"], dados["temp_max"], dados["ur_min"],
             dados["molhamento_horas"], dados["agua_livre_inibe"],
