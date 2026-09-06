@@ -1833,6 +1833,7 @@ def mapa_interpolado():
             "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)),
         })
 
+    site_countries = models.get_all_site_countries()
     pontos_virtuais = []
     for vf in models.get_all_virtual_farms():
         cards, estacoes_usadas = virtual_farms.interpolar_cards(
@@ -1843,6 +1844,7 @@ def mapa_interpolado():
             "criado_em": models.fmt_data_br(vf["criado_em"]),
             "cards": cards,
             "estacoes_usadas": estacoes_usadas,
+            "country_code": site_countries.get(vf["site_name"], countries.DEFAULT_COUNTRY),
         })
         if cards:
             sites_data.append({
@@ -1861,13 +1863,14 @@ def mapa_interpolado():
     # escolher onde criar um ponto novo, em qualquer lugar do pais. So
     # inclui um pais alem do Brasil se ja tiver fazenda/ponto marcado la',
     # mesmo criterio do Mapa (evita chamar um provedor sem necessidade).
-    active_countries = countries.active_country_codes(models.get_all_site_countries())
+    active_countries = countries.active_country_codes(site_countries)
     estacoes = []
     for code in active_countries:
         estacoes.extend(countries.get_country(code)["station_provider"].get_estacoes())
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, estacoes=estacoes,
+        countries=countries.COUNTRIES,
         **_country_map_context(),
     )
 
@@ -1908,8 +1911,13 @@ def adicionar_ponto_virtual():
     if not nome or raio_km <= 0:
         flash("Nome obrigatorio e o raio precisa ser maior que zero.", "error")
         return redirect(url_for("mapa_interpolado"))
+    country_code = request.form.get("country_code", "BR")
+    if country_code not in countries.COUNTRIES:
+        country_code = countries.DEFAULT_COUNTRY
     try:
-        models.create_virtual_farm(nome, lat, lon, raio_km, criado_por=current_user.username)
+        models.create_virtual_farm(
+            nome, lat, lon, raio_km, criado_por=current_user.username, country_code=country_code
+        )
     except sqlite3.IntegrityError:
         flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
         return redirect(url_for("mapa_interpolado"))
@@ -1934,8 +1942,11 @@ def editar_ponto_virtual():
     if not nome or raio_km <= 0:
         flash("Nome obrigatorio e o raio precisa ser maior que zero.", "error")
         return redirect(url_for("mapa_interpolado"))
+    country_code = request.form.get("country_code", "BR")
+    if country_code not in countries.COUNTRIES:
+        country_code = countries.DEFAULT_COUNTRY
     try:
-        models.update_virtual_farm(site_name, nome, lat, lon, raio_km)
+        models.update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code=country_code)
     except sqlite3.IntegrityError:
         flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
         return redirect(url_for("mapa_interpolado"))

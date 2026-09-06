@@ -64,6 +64,14 @@
                         <input type="text" name="nome" class="form-control form-control-sm" placeholder="Ex.: Area Norte" required>
                     </div>
                     <div class="mb-2">
+                        <label class="form-label small text-muted mb-1">País</label>
+                        <select name="country_code" class="form-select form-select-sm">
+                            {% for code, pais in countries.items() %}
+                            <option value="{{ code }}" {% if code == 'BR' %}selected{% endif %}>{{ pais.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
                         <label class="form-label small text-muted mb-1">Latitude</label>
                         <input type="text" name="lat" id="novo-lat" class="form-control form-control-sm" required>
                     </div>
@@ -90,6 +98,7 @@
 <div class="ponto-virtual-card">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
         <strong>{{ ponto.nome }}</strong>
+        <span class="badge bg-secondary">{{ countries[ponto.country_code].nome if ponto.country_code in countries else ponto.country_code }}</span>
         <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
         <div class="ms-auto d-flex gap-2">
             <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}">✏️ Editar</button>
@@ -120,6 +129,14 @@
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">Raio (km)</label>
                 <input type="number" name="raio_km" class="form-control form-control-sm" value="{{ ponto.raio_km|int }}" min="1" step="1" required>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1">País</label>
+                <select name="country_code" class="form-select form-select-sm">
+                    {% for code, pais in countries.items() %}
+                    <option value="{{ code }}" {% if ponto.country_code == code %}selected{% endif %}>{{ pais.nome }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-6 col-md-2">
                 <button type="submit" class="btn btn-sm btn-outline-primary w-100">Salvar</button>

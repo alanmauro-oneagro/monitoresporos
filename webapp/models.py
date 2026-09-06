@@ -1369,7 +1369,7 @@ def get_virtual_farm(site_name):
     return dict(row) if row else None
 
 
-def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None):
+def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None, country_code="BR"):
     """Cria uma fazenda virtual/estimada -- `site_name` vira
     '"{nome}" - OneAgro', o mesmo padrao de nome usado em toda tela
     (Painel, Recomendacoes, Mapa, WhatsApp): parecido com o das fazendas
@@ -1378,7 +1378,9 @@ def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None):
     BioScout. Levanta sqlite3.IntegrityError se ja existir uma fazenda
     com esse nome (nome precisa ser unico). Tambem registra o site_name
     na tabela `sites`, pra poder aparecer na tela de permissoes igual uma
-    fazenda de verdade. Retorna o site_name criado."""
+    fazenda de verdade, e o pais em `site_country_overrides` (mesma
+    tabela usada pela fazenda real, aba Fazendas > Pais). Retorna o
+    site_name criado."""
     nome = nome.strip().replace('"', "")
     site_name = f'"{nome}" - OneAgro'
     conn = get_db()
@@ -1395,12 +1397,13 @@ def create_virtual_farm(nome, lat, lon, raio_km, criado_por=None):
     finally:
         conn.close()
     seed_default_whatsapp_schedule(site_name)
+    set_site_country(site_name, country_code)
     return site_name
 
 
-def update_virtual_farm(site_name, nome, lat, lon, raio_km):
-    """Atualiza nome/coordenada/raio de uma fazenda virtual/estimada. Se
-    o nome mudar, o site_name muda junto (mesmo padrao de
+def update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code="BR"):
+    """Atualiza nome/coordenada/raio/pais de uma fazenda virtual/estimada.
+    Se o nome mudar, o site_name muda junto (mesmo padrao de
     `create_virtual_farm`) -- nesse caso propaga o novo site_name pra
     todas as tabelas que guardam dado por fazenda (sites, anotacoes,
     agenda de WhatsApp, produtos, plantio, aplicacoes, cultura), pra nao
@@ -1432,6 +1435,7 @@ def update_virtual_farm(site_name, nome, lat, lon, raio_km):
             conn.execute(f"UPDATE {tabela} SET site_name=? WHERE site_name=?", (novo_site_name, site_name))
     conn.commit()
     conn.close()
+    set_site_country(novo_site_name, country_code)
     return novo_site_name
 
 
