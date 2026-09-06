@@ -749,11 +749,14 @@ def _format_whatsapp_message(
     `aplicacoes_linhas` vem do mesmo lugar que alimenta o PDF (ver
     `_build_site_pdf`/`_farm_plantio_aplicacoes_estoque`) -- omitidos
     (None), a mensagem so' fica sem essas partes, sem quebrar. Sem
-    nenhuma doenca em Atencao/Perigo, a mensagem e' so o aviso de que
-    esta tudo tranquilo (mesmo texto usado na tela de Recomendacoes) --
-    esse caminho curto NAO repete Produtos/Plantio/Pulverizacao (ao
-    contrario do PDF, que sempre mostra essas secoes), de proposito, pra'
-    manter o aviso "esta tudo tranquilo" curto. As caixas de Observacao
+    nenhuma doenca em Atencao/Perigo, a mensagem e' o clima (ver
+    `_linhas_clima`) seguido do aviso de que esta tudo tranquilo (mesmo
+    texto usado na tela de Recomendacoes) -- e' o caminho SEMPRE usado
+    pelos pontos "so clima" da aba Alertas Clima (nunca tem doenca), por
+    isso o clima nao pode faltar aqui. Esse caminho curto NAO repete
+    Produtos/Plantio/Pulverizacao (ao contrario do PDF, que sempre mostra
+    essas secoes), de proposito, pra' manter o aviso "esta tudo tranquilo"
+    curto. As caixas de Observacao
     (por doenca) e Produtos Fazenda sempre aparecem, mesmo vazias --
     nesse caso o valor e' so "*", pra manter o mesmo formato de relatorio
     sempre (nao muda de estrutura conforme o que foi preenchido).
@@ -776,6 +779,45 @@ def _format_whatsapp_message(
     if weather and weather.get("cidade"):
         rodape_data += f" · {weather['cidade']}/{weather['uf']}"
 
+    def _linhas_clima():
+        """"Clima agora"/"Previsao" -- extraido pra funcao porque o
+        caminho curto (sem doenca nenhuma em Atencao/Perigo, usado
+        sempre pelos pontos "so clima" da aba Alertas Clima, que nunca
+        tem doenca) tambem precisa mostrar isso -- sem essa funcao, esse
+        caminho pulava direto pro "esta tudo tranquilo" e nunca mostrava
+        clima nenhum, o que inutilizava o relatorio de um ponto so' de
+        clima."""
+        linhas = []
+        if not weather:
+            return linhas
+        partes = []
+        if weather.get("temperatura_atual") is not None:
+            partes.append(f"🌡️ {weather['temperatura_atual']}°C")
+        if weather.get("umidade_atual") is not None:
+            partes.append(f"💧 {weather['umidade_atual']}%")
+        if weather.get("chuva_atual_mm") is not None:
+            partes.append(f"🌧️ {weather['chuva_atual_mm']} mm")
+        if partes:
+            linhas.append("🌤️ *Clima agora:* " + " · ".join(partes))
+        else:
+            linhas.append("🌤️ *Clima agora*")
+        if weather.get("previsao_5_dias"):
+            partes_prev = []
+            for i, d in enumerate(weather["previsao_5_dias"]):
+                # dd/mm, mesmo padrao de data do resto do relatorio (nao o
+                # AAAA-MM-DD cru que vem do forecast).
+                data_fmt = f"{d['data'][8:10]}/{d['data'][5:7]}"
+                # Temp. min/max so' nos 2 primeiros dias -- dias 3-5 sao
+                # os menos confiaveis da previsao (mais longe no tempo),
+                # deixa so' a chuva pra' nao poluir com numero pouco
+                # confiavel.
+                if i < 2:
+                    partes_prev.append(f"*{data_fmt}*: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)")
+                else:
+                    partes_prev.append(f"*{data_fmt}*: {d['chuva_mm']}mm")
+            linhas.append("Previsao: " + " | ".join(partes_prev))
+        return linhas
+
     if not diseases:
         partes = [_whatsapp_titulo(site, is_virtual), ""]
         if safra_label:
@@ -784,6 +826,8 @@ def _format_whatsapp_message(
             partes.append(f"Cultura: *{cultura.upper()}*")
         if safra_label or cultura:
             partes.append("")
+        partes.extend(_linhas_clima())
+        partes.append("")
         partes.append("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.")
         partes.append("")
         partes.append(rodape_data)
@@ -799,33 +843,7 @@ def _format_whatsapp_message(
     if safra_label or cultura:
         lines.append("")
 
-    if weather:
-        partes = []
-        if weather.get("temperatura_atual") is not None:
-            partes.append(f"🌡️ {weather['temperatura_atual']}°C")
-        if weather.get("umidade_atual") is not None:
-            partes.append(f"💧 {weather['umidade_atual']}%")
-        if weather.get("chuva_atual_mm") is not None:
-            partes.append(f"🌧️ {weather['chuva_atual_mm']} mm")
-        if partes:
-            lines.append("🌤️ *Clima agora:* " + " · ".join(partes))
-        else:
-            lines.append("🌤️ *Clima agora*")
-        if weather.get("previsao_5_dias"):
-            partes_prev = []
-            for i, d in enumerate(weather["previsao_5_dias"]):
-                # dd/mm, mesmo padrao de data do resto do relatorio (nao o
-                # AAAA-MM-DD cru que vem do forecast).
-                data_fmt = f"{d['data'][8:10]}/{d['data'][5:7]}"
-                # Temp. min/max so' nos 2 primeiros dias -- dias 3-5 sao
-                # os menos confiaveis da previsao (mais longe no tempo),
-                # deixa so' a chuva pra' nao poluir com numero pouco
-                # confiavel.
-                if i < 2:
-                    partes_prev.append(f"*{data_fmt}*: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)")
-                else:
-                    partes_prev.append(f"*{data_fmt}*: {d['chuva_mm']}mm")
-            lines.append("Previsao: " + " | ".join(partes_prev))
+    lines.extend(_linhas_clima())
 
     lines.append(_WHATSAPP_SEPARADOR)
     lines.append("*Doenças em Atenção / Perigo*")
