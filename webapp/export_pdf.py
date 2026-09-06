@@ -198,7 +198,7 @@ def _tabela_padrao(headers, rows, col_widths):
 def build_recommendation_pdf(
     nome_fazenda, safra_label, diseases, weather=None, produtos=None,
     cultura=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
-    leitura_bioscout=None, mostrar_secao_doencas=True,
+    leitura_bioscout=None, mostrar_secao_doencas=True, anotacao=None,
 ):
     """`diseases`/`weather`/`produtos`/`cultura` tem o mesmo formato usado
     em `_format_whatsapp_message` (ver app.py); `plantio_linhas` e
@@ -213,7 +213,9 @@ def build_recommendation_pdf(
     verdade acontecendo (ponto "so clima" da aba Alertas Clima, ou
     fazenda real com estacao sem leitura ha muito tempo, ver
     `app._send_site_whatsapp`), pra nao sugerir que a fazenda foi
-    checada e esta tudo bem quando na verdade nao foi checada. Retorna
+    checada e esta tudo bem quando na verdade nao foi checada.
+    `anotacao` (texto livre, ver `models.get_site_climate_note`) aparece
+    logo apos o clima, quando preenchida. Retorna
     um `io.BytesIO` com o PDF
     pronto."""
     buffer = io.BytesIO()
@@ -242,6 +244,8 @@ def build_recommendation_pdf(
             story.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
         if leitura_bioscout:
             story.append(Paragraph(f"<b>Leitura BioScout:</b> {leitura_bioscout}", _ESTILO_NORMAL))
+        if anotacao:
+            story.append(Paragraph(f"<b>Anotação:</b> {anotacao}", _ESTILO_NORMAL))
         if weather.get("previsao_5_dias"):
             partes_prev = []
             for i, d in enumerate(weather["previsao_5_dias"]):

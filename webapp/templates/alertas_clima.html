@@ -32,6 +32,15 @@
         {% endif %}
     </div>
 
+    <div class="mb-2">
+        <form method="post" action="{{ url_for('save_site_climate_note') }}" data-autosave>
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <label class="form-label small text-muted d-block mb-1">Anotações (aparecem no relatório de texto e PDF desse ponto):</label>
+            <textarea name="nota" class="form-control form-control-sm" rows="2" placeholder="Ex.: referência pra manejo do cliente, contexto da região, etc.">{{ ponto.nota }}</textarea>
+            <span class="autosave-status small ms-2"></span>
+        </form>
+    </div>
+
     {% if ponto.estacoes_proximas %}
     <div class="mb-2">
         <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>

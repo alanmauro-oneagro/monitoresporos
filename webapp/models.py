@@ -149,6 +149,12 @@ def init_db():
             PRIMARY KEY (site_name, doenca)
         );
 
+        CREATE TABLE IF NOT EXISTS site_climate_notes (
+            site_name TEXT PRIMARY KEY,
+            nota TEXT,
+            updated_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS disease_translations (
             display_name_en TEXT PRIMARY KEY,
             nome_pt TEXT NOT NULL,
@@ -1409,6 +1415,41 @@ def save_recommendation_note(site_name, doenca, nota):
     conn.close()
 
 
+def get_all_site_climate_notes():
+    """{site_name: nota} -- anotacao livre por ponto (hoje so' usada pelos
+    pontos "so clima" da aba Alertas Clima, ver `app.alertas_clima`),
+    replicada no relatorio de texto/PDF desse ponto. So' entra no dict
+    quem tem nota preenchida (string vazia == sem entrada)."""
+    conn = get_db()
+    rows = conn.execute("SELECT site_name, nota FROM site_climate_notes").fetchall()
+    conn.close()
+    return {r["site_name"]: r["nota"] for r in rows if r["nota"]}
+
+
+def get_site_climate_note(site_name):
+    return get_all_site_climate_notes().get(site_name, "")
+
+
+def set_site_climate_note(site_name, nota):
+    """Substitui a anotacao do ponto -- nota vazia apaga a linha (mesma
+    semantica de `set_weather_station_override` pro valor "vazio")."""
+    nota = (nota or "").strip()
+    conn = get_db()
+    if nota:
+        conn.execute(
+            """
+            INSERT INTO site_climate_notes (site_name, nota, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(site_name) DO UPDATE SET nota = excluded.nota, updated_at = excluded.updated_at
+            """,
+            (site_name, nota, _agora_cuiaba()),
+        )
+    else:
+        conn.execute("DELETE FROM site_climate_notes WHERE site_name = ?", (site_name,))
+    conn.commit()
+    conn.close()
+
+
 def sync_sites(site_names):
     """Garante que a tabela sites tenha uma linha para cada fazenda do CSV.
     Retorna os nomes que eram novos (ainda nao estavam na tabela) -- usado
@@ -1485,7 +1526,7 @@ _VIRTUAL_FARM_RENAME_TABLES = (
     "sites", "recommendation_notes", "whatsapp_schedule", "whatsapp_schedule_pdf",
     "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
     "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_historico",
-    "site_country_overrides",
+    "site_country_overrides", "site_climate_notes",
 )
 
 
@@ -1591,6 +1632,7 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM farm_ndvi_area WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_ndvi_historico WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM site_country_overrides WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM site_climate_notes WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 
