@@ -37,6 +37,24 @@ def get_country(code):
     return COUNTRIES.get(code, COUNTRIES[DEFAULT_COUNTRY])
 
 
+def estacoes_mais_proximas_global(lat, lon, n=2):
+    """As `n` estacoes oficiais mais pertas de uma coordenada, buscando em
+    TODO provedor cadastrado (INMET, DMC, ...) e misturando por distancia
+    -- ao contrario de so' olhar o catalogo do pais da propria fazenda,
+    isso deixa escolher a estacao de referencia realmente mais perto
+    mesmo quando ela e' de outro pais (ex.: fazenda perto de fronteira).
+    Cada estacao devolvida ganha "country_code" (o pais do PROVEDOR
+    daquela estacao especifica -- usado por `set_weather_station_override`
+    pra saber em qual catalogo procurar o codigo de novo depois; nao tem
+    nada a ver com o pais da fazenda que fez a busca)."""
+    candidatas = []
+    for code, info in COUNTRIES.items():
+        for e in info["station_provider"].estacoes_mais_proximas(lat, lon, n=n):
+            candidatas.append({**e, "country_code": code})
+    candidatas.sort(key=lambda e: e["distancia_km"])
+    return candidatas[:n]
+
+
 def active_country_codes(site_country_map):
     """Codigos de pais realmente em uso (valores de `site_country_map`,
     ver `models.get_all_site_countries`) -- sempre inclui 'BR', mesmo sem

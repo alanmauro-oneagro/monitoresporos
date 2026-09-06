@@ -2267,8 +2267,11 @@ def fazendas():
             })
         latlon = coords.get(site)
         country_code = site_countries.get(site, countries.DEFAULT_COUNTRY)
-        provider = countries.get_country(country_code)["station_provider"]
-        estacoes_proximas = provider.estacoes_mais_proximas(*latlon, n=2) if latlon else []
+        # Mistura todo provedor cadastrado (nao so' o do pais da propria
+        # fazenda) -- deixa escolher a estacao de referencia realmente
+        # mais perto, mesmo que seja de outro pais (fazenda perto de
+        # fronteira, por exemplo).
+        estacoes_proximas = countries.estacoes_mais_proximas_global(*latlon, n=2) if latlon else []
         escolha = overrides.get(site)
         sites_data.append({
             "site": site, "safras": safras_data, "selected_days": all_days.get(site, set()),
@@ -2561,8 +2564,16 @@ def save_weather_station_override():
         allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
         if site_name not in allowed:
             abort(403)
-    estacao_codigo = request.form.get("estacao_codigo", "")
-    country_code = models.get_site_country(site_name)
+    # O valor vem como "PAIS:codigo" (ver fazendas.html) -- o pais aqui e'
+    # o do PROVEDOR da estacao escolhida (pode ser diferente do pais da
+    # propria fazenda, ver `countries.estacoes_mais_proximas_global`), nao
+    # o da fazenda. "" (radio "coordenada da propria fazenda") continua
+    # limpando a escolha manual, como antes.
+    raw = request.form.get("estacao_codigo", "")
+    if ":" in raw:
+        country_code, estacao_codigo = raw.split(":", 1)
+    else:
+        country_code, estacao_codigo = countries.DEFAULT_COUNTRY, raw
     models.set_weather_station_override(site_name, estacao_codigo, country_code)
     # Sem isso, `_weather_cache` continuava com o clima da coordenada
     # ANTIGA por ate' `WEATHER_CACHE_TTL_SECONDS` (30min) -- a troca so'

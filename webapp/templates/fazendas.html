@@ -136,7 +136,7 @@
                     </div>
                     {% for estacao in site_group.estacoes_proximas %}
                     <div class="form-check">
-                        <input class="form-check-input" type="radio" name="estacao_codigo" value="{{ estacao.codigo }}"
+                        <input class="form-check-input" type="radio" name="estacao_codigo" value="{{ estacao.country_code }}:{{ estacao.codigo }}"
                             id="est_{{ farm_idx }}_{{ loop.index0 }}" {% if site_group.estacao_selecionada == estacao.codigo %}checked{% endif %}>
                         <label class="form-check-label small" for="est_{{ farm_idx }}_{{ loop.index0 }}">
                             📡 {{ estacao.cidade }}/{{ estacao.uf }} ({{ estacao.codigo }}) -- {{ estacao.distancia_km }} km
