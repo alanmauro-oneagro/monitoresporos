@@ -27,6 +27,7 @@
         <span class="text-muted small">
             {% if ponto.weather.temperatura_atual is not none %}🌡️ {{ ponto.weather.temperatura_atual }}°C{% endif %}
             {% if ponto.weather.umidade_atual is not none %} · 💧 {{ ponto.weather.umidade_atual }}%{% endif %}
+            {% if ponto.weather.chuva_24h_mm is not none %} · ☔ {{ ponto.weather.chuva_24h_mm }} mm (24h){% endif %}
         </span>
         {% endif %}
     </div>

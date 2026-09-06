@@ -737,7 +737,7 @@ def _whatsapp_titulo(site, is_virtual=False):
 
 def _format_whatsapp_message(
     site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None,
-    safra_label=None, plantio_linhas=None, aplicacoes_linhas=None,
+    safra_label=None, plantio_linhas=None, aplicacoes_linhas=None, leitura_bioscout=None,
 ):
     """Monta o relatorio inteiro de uma fazenda numa unica mensagem de
     texto -- MESMO conteudo e ordem do PDF (`export_pdf.build_recommendation_pdf`),
@@ -750,7 +750,10 @@ def _format_whatsapp_message(
     Recomendacoes > Produtos Fazenda); `safra_label`/`plantio_linhas`/
     `aplicacoes_linhas` vem do mesmo lugar que alimenta o PDF (ver
     `_build_site_pdf`/`_farm_plantio_aplicacoes_estoque`) -- omitidos
-    (None), a mensagem so' fica sem essas partes, sem quebrar. Sem
+    (None), a mensagem so' fica sem essas partes, sem quebrar.
+    `leitura_bioscout` (dd/mm/aa, ja formatada) e' a data da ultima
+    leitura de doenca do dispositivo BioScout -- None se nao houver
+    nenhuma (ponto "so clima"). Sem
     nenhuma doenca em Atencao/Perigo, a mensagem e' o clima (ver
     `_linhas_clima`) seguido do aviso de que esta tudo tranquilo (mesmo
     texto usado na tela de Recomendacoes) -- e' o caminho SEMPRE usado
@@ -799,10 +802,14 @@ def _format_whatsapp_message(
             partes.append(f"💧 {weather['umidade_atual']}%")
         if weather.get("chuva_atual_mm") is not None:
             partes.append(f"🌧️ {weather['chuva_atual_mm']} mm")
+        if weather.get("chuva_24h_mm") is not None:
+            partes.append(f"☔ {weather['chuva_24h_mm']} mm (24h)")
         if partes:
             linhas.append("🌤️ *Clima agora:* " + " · ".join(partes))
         else:
             linhas.append("🌤️ *Clima agora*")
+        if leitura_bioscout:
+            linhas.append(f"📅 Leitura BioScout: {leitura_bioscout}")
         if weather.get("previsao_5_dias"):
             partes_prev = []
             for i, d in enumerate(weather["previsao_5_dias"]):
@@ -996,13 +1003,15 @@ def _farm_plantio_aplicacoes_estoque(site, safra):
     return plantio, aplicacoes
 
 
-def _build_site_pdf(site, diseases, weather, produtos, cultura, safra):
+def _build_site_pdf(site, diseases, weather, produtos, cultura, safra, leitura_bioscout=None):
     """Gera o mesmo PDF do botao "Recomendacao (PDF)" -- usado tanto pelo
     download manual (`recommendation_pdf`) quanto pelo envio automatico
     junto do WhatsApp (`_send_site_whatsapp`). `safra=None` (envio
     agendado, sem uma safra especifica) usa a uniao das duas safras pros
     dados de plantio/aplicacao, e um rotulo generico no lugar do nome da
-    safra."""
+    safra. `leitura_bioscout` (dd/mm/aa, ja formatada) e' a data da
+    ultima leitura de doenca do dispositivo BioScout -- None quando nao
+    houver nenhuma (ponto "so clima" da aba Alertas Clima, por exemplo)."""
     for d in diseases:
         d["historico"] = data_reader.get_site_disease_history(site, d["doenca_en"], dias=30)
     plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
@@ -1015,7 +1024,7 @@ def _build_site_pdf(site, diseases, weather, produtos, cultura, safra):
     buffer = export_pdf.build_recommendation_pdf(
         nome_fazenda, safra_label, diseases, weather=weather, produtos=produtos,
         cultura=cultura, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
-        rodape_data=rodape_data,
+        rodape_data=rodape_data, leitura_bioscout=leitura_bioscout,
     )
     filename = f"Recomendacao_{nome_fazenda}_{datetime.now().strftime('%Y%m%d')}.pdf".replace(" ", "_")
     return nome_fazenda, filename, buffer.getvalue()
@@ -1056,6 +1065,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     translations = _load_translations()
     raw_cards = _resolve_site_cards(site, translations)
     dias_sem_leitura = _dias_sem_leitura(raw_cards)
+    leitura_bioscout = models.fmt_data_br(max((c["data"] for c in raw_cards), default=None))
     culturas_by_site = models.get_all_farm_culturas()
     cultura = _cultura_label(site, safra, culturas_by_site)
     if _nivel_dados_defasados(dias_sem_leitura) == "bloqueado":
@@ -1089,6 +1099,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
         text = _format_whatsapp_message(
             site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura,
             safra_label=safra_label, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
+            leitura_bioscout=leitura_bioscout,
         )
 
     # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
@@ -1098,7 +1109,9 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     pdf_nome_fazenda = pdf_filename = pdf_bytes = None
     if enviar_pdf:
         try:
-            pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(site, diseases, weather, produtos, cultura, safra)
+            pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(
+                site, diseases, weather, produtos, cultura, safra, leitura_bioscout=leitura_bioscout
+            )
         except Exception as exc:
             models.log_whatsapp_envio(site, None, None, False, f"Falha ao gerar PDF pra WhatsApp: {exc}")
 
@@ -2250,6 +2263,7 @@ def recommendations(safra):
             safra_label=SAFRA_LABELS[safra],
             plantio_linhas=plantio_by_site.get(site, {}).get(safra, []),
             aplicacoes_linhas=aplicacoes_by_site.get(site, {}).get(safra, []),
+            leitura_bioscout=models.fmt_data_br(leitura_data),
         )
         plantio_linhas = [l for l in plantio_by_site.get(site, {}).get(safra, []) if any(l.values())]
         aplicacoes_linhas = [l for l in aplicacoes_by_site.get(site, {}).get(safra, []) if any(l.values())]
@@ -2371,7 +2385,10 @@ def recommendation_pdf(site_name):
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
     produtos = _farm_produtos_estoque(site_name, safra)
-    _, filename, pdf_bytes = _build_site_pdf(site_name, diseases, weather, produtos, cultura, safra)
+    leitura_bioscout = models.fmt_data_br(max((c["data"] for c in raw_cards), default=None))
+    _, filename, pdf_bytes = _build_site_pdf(
+        site_name, diseases, weather, produtos, cultura, safra, leitura_bioscout=leitura_bioscout
+    )
     return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 

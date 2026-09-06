@@ -64,7 +64,7 @@ html { font-size: 14px; }
                 <span class="autosave-status small"></span>
             </form>
             {% if site_group.leitura_data %}
-            <span class="text-muted small">leitura de {{ site_group.leitura_data | data_br }}</span>
+            <span class="text-muted small">Leitura BioScout: {{ site_group.leitura_data | data_br }}</span>
             {% endif %}
             {% if site_group.dias_desde_atualizacao is not none and site_group.dias_desde_atualizacao > 120 %}
             <span class="badge bg-warning text-dark" title="Cultura definida ha {{ site_group.dias_desde_atualizacao }} dias -- confirme se ainda esta certa">
@@ -120,6 +120,7 @@ html { font-size: 14px; }
                 🌡️ {{ site_group.weather.temperatura_atual }}°C
                 {% if site_group.weather.umidade_atual is not none %}· 💧 {{ site_group.weather.umidade_atual }}% umidade{% endif %}
                 {% if site_group.weather.chuva_atual_mm is not none %}· 🌧️ {{ site_group.weather.chuva_atual_mm }} mm agora{% endif %}
+                {% if site_group.weather.chuva_24h_mm is not none %}· ☔ {{ site_group.weather.chuva_24h_mm }} mm (24h){% endif %}
                 · {{ origem }}
             </div>
             {% if site_group.weather.previsao_5_dias %}

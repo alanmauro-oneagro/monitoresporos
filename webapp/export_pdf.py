@@ -198,12 +198,16 @@ def _tabela_padrao(headers, rows, col_widths):
 def build_recommendation_pdf(
     nome_fazenda, safra_label, diseases, weather=None, produtos=None,
     cultura=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
+    leitura_bioscout=None,
 ):
     """`diseases`/`weather`/`produtos`/`cultura` tem o mesmo formato usado
     em `_format_whatsapp_message` (ver app.py); `plantio_linhas` e
     `aplicacoes_linhas` vem de `models.get_all_farm_plantio`/
     `get_all_farm_aplicacoes` (lista de dicts), ja filtrados pra
-    fazenda+safra. Retorna um `io.BytesIO` com o PDF pronto."""
+    fazenda+safra. `leitura_bioscout` (dd/mm/aa, ja formatada) e' a data
+    da ultima leitura de doenca do dispositivo BioScout -- None se nao
+    houver nenhuma (ponto "so clima"). Retorna um `io.BytesIO` com o PDF
+    pronto."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
@@ -224,8 +228,12 @@ def build_recommendation_pdf(
             partes.append(f"Umidade: {weather['umidade_atual']}%")
         if weather.get("chuva_atual_mm") is not None:
             partes.append(f"Chuva agora: {weather['chuva_atual_mm']} mm")
+        if weather.get("chuva_24h_mm") is not None:
+            partes.append(f"Chuva 24h: {weather['chuva_24h_mm']} mm")
         if partes:
             story.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
+        if leitura_bioscout:
+            story.append(Paragraph(f"<b>Leitura BioScout:</b> {leitura_bioscout}", _ESTILO_NORMAL))
         if weather.get("previsao_5_dias"):
             partes_prev = []
             for i, d in enumerate(weather["previsao_5_dias"]):
