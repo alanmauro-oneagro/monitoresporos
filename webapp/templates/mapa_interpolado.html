@@ -65,7 +65,7 @@
                     </div>
                     <div class="mb-2">
                         <label class="form-label small text-muted mb-1">País</label>
-                        <select name="country_code" class="form-select form-select-sm">
+                        <select name="country_code" id="novo-country" class="form-select form-select-sm">
                             {% for code, pais in countries.items() %}
                             <option value="{{ code }}" {% if code == 'BR' %}selected{% endif %}>{{ pais.nome }}</option>
                             {% endfor %}
@@ -621,8 +621,24 @@
     var latInput = document.getElementById('novo-lat');
     var lonInput = document.getElementById('novo-lon');
     var raioInput = document.getElementById('novo-raio');
+    var countrySelect = document.getElementById('novo-country');
     var novoMarker = null;
     var novoCirculo = null;
+
+    // Detecta sozinho o Pais do ponto clicado/arrastado (contorno oficial
+    // completo no backend, ver `/mapa-interpolado/detectar-pais`) --
+    // preenche o seletor, mas continua editavel na mao se a deteccao
+    // errar ou a pessoa quiser outro pais mesmo assim. So chama uma vez
+    // por clique/soltar o arrasto (nao a cada pixel de 'drag'), pra nao
+    // martelar o servidor.
+    function detectarPaisPreview(latlng) {
+        fetch('{{ url_for("detectar_pais_ponto_virtual") }}?lat=' + latlng.lat + '&lon=' + latlng.lng)
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (dados) {
+                if (dados && dados.country_code && countrySelect) { countrySelect.value = dados.country_code; }
+            })
+            .catch(function () { /* deteccao automatica e so uma ajuda -- falha silenciosa */ });
+    }
 
     // Lembra o ultimo raio digitado (localStorage, so nesse navegador) --
     // senao toda vez que a pagina recarrega (ex.: logo apos adicionar um
@@ -652,6 +668,7 @@
         if (!novoMarker) {
             novoMarker = L.marker(latlng, { icon: novoIcon, draggable: true }).addTo(map);
             novoMarker.on('drag', function (ev) { atualizarPreview(ev.target.getLatLng()); });
+            novoMarker.on('dragend', function (ev) { detectarPaisPreview(ev.target.getLatLng()); });
         } else {
             novoMarker.setLatLng(latlng);
         }
@@ -665,7 +682,7 @@
         }
     }
 
-    map.on('click', function (e) { atualizarPreview(e.latlng); });
+    map.on('click', function (e) { atualizarPreview(e.latlng); detectarPaisPreview(e.latlng); });
 
     // Um clique sem querer no mapa (rolando/dando zoom, por exemplo) larga
     // um pino de previa e preenche latitude/longitude -- nada e' salvo de
@@ -721,6 +738,7 @@
                         var latlng = L.latLng(parseFloat(r.lat), parseFloat(r.lon));
                         map.setView(latlng, 12);
                         atualizarPreview(latlng);
+                        detectarPaisPreview(latlng);
                         limparResultadosBusca();
                         buscaInput.value = r.display_name;
                     });

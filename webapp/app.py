@@ -1924,6 +1924,25 @@ def mapa_interpolado():
     )
 
 
+@app.route("/mapa-interpolado/detectar-pais")
+@admin_required
+def detectar_pais_ponto_virtual():
+    """Pais de uma coordenada (contorno oficial completo de TODO pais
+    cadastrado, nao so' os ativos -- ver `countries.detectar_pais_por_coordenada`)
+    pra preencher sozinho o seletor de Pais ao clicar/arrastar o pino no
+    Mapa Interpolado. Fica no backend (em vez de testar no navegador contra
+    o GeoJSON do contorno) justamente pra poder detectar QUALQUER um dos
+    12 paises registrados sem precisar baixar o contorno de todos eles no
+    navegador so' pra cobrir esse caso (ver o cuidado ja tomado com
+    `paises_com_estacoes`/leveza)."""
+    try:
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lon"))
+    except (TypeError, ValueError):
+        abort(400)
+    return jsonify({"country_code": countries.detectar_pais_por_coordenada(lat, lon)})
+
+
 @app.route("/mapa-interpolado/nuvens-grade", methods=["POST"])
 @login_required
 def nuvens_grade():
