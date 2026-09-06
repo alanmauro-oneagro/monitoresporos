@@ -78,12 +78,20 @@ def get_weather_forecast(lat, lon):
             # em vez de so' descartar essa parte da resposta.
             futuras_por_dia.setdefault(dt.date().isoformat(), []).append(ponto)
 
+    ultimas_24h = passadas[-24:]
+    # Soma da chuva de cada uma das ultimas 24h (cada ponto horario ja e' o
+    # total precipitado NAQUELA hora, ver doc da Open-Meteo) -- diferente
+    # de `chuva_atual_mm` (so' a hora corrente/instantanea), isso da' o
+    # acumulado real do dia todo, mais util pra avaliar risco de doenca.
+    chuva_24h_mm = round(sum(p["chuva"] for p in ultimas_24h if p.get("chuva") is not None), 1) if ultimas_24h else None
+
     return {
         "temperatura_atual": current.get("temperature_2m"),
         "umidade_atual": current.get("relative_humidity_2m"),
         "chuva_atual_mm": current.get("precipitation"),
+        "chuva_24h_mm": chuva_24h_mm,
         "previsao_5_dias": previsao[:5],
-        "ultimas_24h": passadas[-24:],
+        "ultimas_24h": ultimas_24h,
         "previsao_horaria_por_dia": futuras_por_dia,
     }
 

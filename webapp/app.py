@@ -1374,6 +1374,7 @@ def dashboard():
         weather_by_site[site] = {
             "umidade": weather.get("umidade_atual") if weather else None,
             "chuva": weather.get("chuva_atual_mm") if weather else None,
+            "chuva_24h": weather.get("chuva_24h_mm") if weather else None,
             "data": mais_recente["data"],
         }
         dias_sem_leitura = _dias_sem_leitura(cards)

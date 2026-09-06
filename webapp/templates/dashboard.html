@@ -28,17 +28,18 @@
 <div class="site-heading d-flex align-items-center flex-wrap gap-2 {% if status and status.nivel_dados == 'bloqueado' %}site-heading-bloqueado{% elif status and status.nivel_dados == 'atencao' %}site-heading-atencao{% endif %}">
     <span>{{ status.nome_exibicao if status else site }}</span>
     {% if weather_by_site.get(site) %}
-    <span class="site-weather-badge" title="Clima atual (Open-Meteo) -- ultima leitura de doenca em {{ weather_by_site[site].data | data_br }}">
+    <span class="site-weather-badge" title="Clima atual (Open-Meteo)">
         💧 {{ weather_by_site[site].umidade ~ '%' if weather_by_site[site].umidade is not none else '-' }}
         &nbsp;🌧️ {{ weather_by_site[site].chuva ~ ' mm' if weather_by_site[site].chuva is not none else '-' }}
         <span class="site-weather-date">(clima agora)</span>
+        &nbsp;·&nbsp;☔ {{ weather_by_site[site].chuva_24h ~ ' mm' if weather_by_site[site].chuva_24h is not none else '-' }} <span class="site-weather-date">(24h)</span>
+        &nbsp;·&nbsp;<span class="site-weather-date">Leitura BioScout: {{ weather_by_site[site].data | data_br }}</span>
     </span>
     {% endif %}
     {% if status and status.nivel_dados %}
     <span class="badge ms-auto {{ 'bg-danger' if status.nivel_dados == 'bloqueado' else 'bg-warning text-dark' }}"
           title="Estacao sem leitura nova ha {{ status.dias_sem_leitura }} dias{% if status.nivel_dados == 'bloqueado' %} -- WhatsApp/PDF da aba Manejo passam a mandar so' o clima, sem doenca (dado velho demais pra confiar){% endif %}">
         {{ '🚫' if status.nivel_dados == 'bloqueado' else '📡⚠' }} sem leitura ha {{ status.dias_sem_leitura }}d
-        {% if weather_by_site.get(site) %}· Leitura BioScout: {{ weather_by_site[site].data | data_br }}{% endif %}
     </span>
     {% endif %}
 </div>
