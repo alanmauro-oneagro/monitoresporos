@@ -1228,6 +1228,30 @@ def _ensure_sites_synced():
             models.seed_default_whatsapp_schedule(site_name)
     except FileNotFoundError:
         pass
+    _auto_detectar_paises_novos()
+
+
+def _auto_detectar_paises_novos():
+    """Fazenda com coordenada mas ainda sem pais marcado (nem por escolha
+    manual na aba Fazendas, nem por deteccao anterior) tem o pais
+    detectado sozinho pela coordenada (contorno estatico do Chile, etc --
+    ver `countries.detectar_pais_por_coordenada`), e a escolha e' GRAVADA
+    mesmo quando da' Brasil (o padrao) -- assim essa fazenda fica marcada
+    como "ja testada" e nunca mais entra nesse calculo de novo, so' se
+    alguem trocar manualmente depois. So' faz o teste geometrico (o unico
+    passo que custa alguma coisa, ~300KB de GeoJSON) pra quem realmente
+    ainda nao foi testado -- em regime permanente (a maioria das fazendas
+    ja' testada) isso e' so' duas consultas rapidas ao banco, sem abrir
+    nenhum arquivo."""
+    try:
+        coords = _coords_all()
+    except FileNotFoundError:
+        return
+    site_countries = models.get_all_site_countries()
+    for site, (lat, lon) in coords.items():
+        if site in site_countries:
+            continue
+        models.set_site_country(site, countries.detectar_pais_por_coordenada(lat, lon))
 
 
 @app.route("/sw.js")

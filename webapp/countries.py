@@ -7,6 +7,11 @@ precisar mexer nas rotas/templates que ja iteram sobre `COUNTRIES`.
 `station_provider` e' uma referencia direta ao modulo (nao uma string),
 pra `/mapa` e `/mapa-interpolado` chamarem `.get_estacoes()`/
 `.estacao_mais_proxima()` genericamente sem if/elif por pais."""
+import json
+from pathlib import Path
+
+from shapely.geometry import Point, shape
+
 import inmet_stations
 import dmc_stations
 
@@ -35,6 +40,53 @@ COUNTRIES = {
 
 def get_country(code):
     return COUNTRIES.get(code, COUNTRIES[DEFAULT_COUNTRY])
+
+
+_STATIC_DIR = Path(__file__).parent / "static"
+_poligono_pais_cache = {}
+
+
+def _poligono_pais(code):
+    """Poligono ADM0 (shapely) de um pais com fronteira estatica --
+    cacheado em memoria pro processo inteiro (o arquivo praticamente
+    nunca muda, e reparsear ~300KB de GeoJSON a cada fazenda nova seria
+    desperdicio). None se o pais nao tiver `boundary_mode` estatico
+    (Brasil usa IBGE ao vivo -- nao faz sentido testar contorno do
+    Brasil aqui, ele ja' e' o palpite padrao quando nada mais bate) ou
+    se o arquivo nao existir/nao carregar."""
+    if code in _poligono_pais_cache:
+        return _poligono_pais_cache[code]
+    info = COUNTRIES.get(code, {})
+    poligono = None
+    if info.get("boundary_mode") == "static_geoboundaries":
+        try:
+            caminho = _STATIC_DIR / info["boundary_files"]["adm0"]
+            with open(caminho, encoding="utf-8") as f:
+                geojson = json.load(f)
+            poligono = shape(geojson["features"][0]["geometry"])
+        except Exception:
+            poligono = None
+    _poligono_pais_cache[code] = poligono
+    return poligono
+
+
+def detectar_pais_por_coordenada(lat, lon):
+    """Pais cujo contorno estatico contem essa coordenada (Chile, e
+    qualquer outro pais com `boundary_mode: static_geoboundaries` que
+    entrar depois) -- usado pra marcar sozinho o pais de uma fazenda
+    nova, sem precisar de ninguem escolhendo na aba Fazendas na mao
+    (ver `app._auto_detectar_paises_novos`). Devolve `DEFAULT_COUNTRY`
+    ('BR') se a coordenada nao cair em nenhum contorno conhecido --
+    Brasil e' sempre o palpite padrao, nunca testado por poligono
+    proprio aqui."""
+    ponto = Point(lon, lat)
+    for code in COUNTRIES:
+        if code == DEFAULT_COUNTRY:
+            continue
+        poligono = _poligono_pais(code)
+        if poligono is not None and poligono.contains(ponto):
+            return code
+    return DEFAULT_COUNTRY
 
 
 def estacoes_mais_proximas_global(lat, lon, n=2):
