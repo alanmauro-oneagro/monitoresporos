@@ -3291,6 +3291,58 @@ _PESQUISA_GERMINACAO_2026_08_27 = {
     # molhamento minimo de 4h com severidade crescente ate 12h (usado 8h
     # aqui, mesmo valor ja adotado pra General Alternaria).
     "Alternaria Leaf Blight": {"temp_min": 20, "temp_max": 30, "ur_min": 90, "molhamento_horas": 8, "agua_livre_inibe": False},
+    # Adicionadas em 2026-09 -- doencas de videira/batata (cliente com
+    # fazenda de uva e/ou batata, provavelmente Chile) que apareceram sem
+    # nenhuma condicao de germinacao pesquisada ainda. Fontes
+    # internacionais (UC IPM, APS/Plant Disease journal, PNW Pest
+    # Management Handbooks, Cornell/Cooperative Extension) alem das ja
+    # usadas antes (EMBRAPA/APS/Crop Protection Network), pedido
+    # explicito do usuario.
+    #
+    # Botrytis cinerea (grey mould/bunch rot): germina 1-30 C, otimo
+    # 15-20 C; infeccao com UR>90% e agua livre; regra classica de
+    # viticultura (UC IPM/Ohioline) = 15h de molhamento continuo a pelo
+    # menos 15 C ja basta pra infeccao.
+    "Grey Mould": {"temp_min": 15, "temp_max": 28, "ur_min": 90, "molhamento_horas": 15, "agua_livre_inibe": False},
+    # Botryosphaeriaceae spp. (canker/bunch rot -- doenca de tronco,
+    # entra por ferimento de poda): germina acima de 5 C, desenvolvimento
+    # otimo 20-30 C e alta umidade; infeccao favorecida por periodos
+    # PROLONGADOS de molhamento (chuva), mais longos que doenca foliar
+    # tipica (PNW Handbooks/Lodi Growers).
+    "Canker & Bunch Rot": {"temp_min": 20, "temp_max": 30, "ur_min": 90, "molhamento_horas": 24, "agua_livre_inibe": False},
+    # Eutypa lata (Diatrypaceae spp., tambem doenca de tronco/ferimento
+    # de poda): ascosporos germinam 10-30 C, precisam de ~12h de umidade
+    # continua pra germinar (Plant Disease journal/UC IPM).
+    "Eutypa Dieback": {"temp_min": 10, "temp_max": 30, "ur_min": 90, "molhamento_horas": 12, "agua_livre_inibe": False},
+    # Erysiphe necator (oidio da videira) -- mesmo genero/comportamento
+    # ja cadastrado em "Powdery Mildew" acima (agua livre ATRAPALHA a
+    # germinacao dos conidios, ao contrario da maioria dos fungos, ver
+    # CABI/PNW Handbooks) -- mesmos valores, so' com nome de exibicao
+    # diferente (BioScout reportou como entrada separada).
+    "Grape Powdery Mildew": {"temp_min": 20, "temp_max": 25, "ur_min": 80, "molhamento_horas": None, "agua_livre_inibe": True},
+    # Plasmopara viticola (mildio da videira): zoosporos germinam 5-30 C,
+    # tubo germinativo penetra o estomato so' entre 10-25 C; regra
+    # classica internacional de previsao ("regra 10-10-24": 10 C, chuva,
+    # 24h de molhamento foliar continuo) usada mundialmente (APS
+    # Education Center/extensao).
+    "Grape Downy Mildew": {"temp_min": 10, "temp_max": 25, "ur_min": 90, "molhamento_horas": 24, "agua_livre_inibe": False},
+    # Helminthosporium solani (sarna prateada da batata -- doenca de
+    # tuberculo/armazenamento, nao foliar): desenvolve de 5 C ate' otimo
+    # 20-25 C, espalha rapido em armazem quente e umido (15-20 C, UR>90%)
+    # com condensacao/agua livre no tuberculo (Cornell/Univ. Maine
+    # Extension). "Molhamento" aqui representa a umidade/condensacao
+    # persistente do armazenamento, nao chuva de campo.
+    # Nome de exibicao com "s" minusculo em "scurf" mesmo -- e' assim que
+    # o BioScout reportou (ver print do usuario, campo "Nome no nosso
+    # site" ainda no padrao/sem edicao, que equivale ao display_name_en
+    # original enquanto ninguem traduzir na mao).
+    "Silver scurf": {"temp_min": 15, "temp_max": 25, "ur_min": 90, "molhamento_horas": 24, "agua_livre_inibe": False},
+    # Phytophthora infestans (requeima da batata): favorecida por
+    # UR>90% e temperaturas 10-25 C; criterio internacional classico de
+    # previsao ("Smith Period", usado no Reino Unido e adotado em varios
+    # paises) exige >=11h com UR>=90% e temp minima >=10 C em 2 dias
+    # seguidos -- usado aqui como o limiar de molhamento.
+    "Late Blight": {"temp_min": 10, "temp_max": 25, "ur_min": 90, "molhamento_horas": 11, "agua_livre_inibe": False},
 }
 
 
