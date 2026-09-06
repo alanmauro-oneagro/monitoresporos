@@ -923,7 +923,7 @@ def set_fungicida_registro_bloqueado(doenca, tipo, idx, culturas_bloqueadas):
 
 
 def bloquear_cultura_nova_em_todos_quimicos(cultura):
-    """Quando uma cultura nova e' cadastrada (aba Nome Culturas), bloqueia
+    """Quando uma cultura nova e' cadastrada (matriz Doencas x Culturas, aba Doencas), bloqueia
     ela de saida em TODO quimico ja existente na biblioteca de
     fungicidas -- ninguem pesquisou registro pra essa cultura ainda,
     entao o padrao seguro e' exigir confirmacao explicita (o admin
@@ -1415,7 +1415,8 @@ def delete_farm_ndvi_historico_de_site(site_name):
 
 def get_culturas():
     """Lista de 12 nomes na ordem dos slots (com "" nos ainda nao
-    preenchidos) -- menu Opcoes > Nome Culturas."""
+    preenchidos) -- editavel direto no cabecalho da matriz Doencas x
+    Culturas (aba Doencas)."""
     conn = get_db()
     rows = conn.execute("SELECT slot, nome FROM culturas ORDER BY slot").fetchall()
     conn.close()
@@ -1429,18 +1430,49 @@ def get_culturas_ativas():
 
 
 def set_culturas(nomes):
-    """Substitui os 12 nomes (na ordem dos slots)."""
+    """Substitui os 12 nomes (na ordem dos slots) -- editado direto no
+    cabecalho da matriz Doencas x Culturas (aba Doencas), no lugar da
+    antiga aba separada "Nome Culturas". Quando um slot que JA tinha nome
+    recebe um nome DIFERENTE (renomear -- corrigir digitacao, por
+    exemplo -- e nao um slot vazio virando novo), migra as referencias
+    por NOME nas tabelas dependentes (`doenca_cultura`, marcacao da
+    matriz; `fungicida_registro_bloqueado`, registro por cultura na
+    Biblioteca de Fungicidas; `farm_culturas`, "Cultura atual" escolhida
+    por fazenda) do nome antigo pro novo -- essas tabelas guardam a
+    cultura pelo NOME, nao pelo slot, entao sem essa migracao um simples
+    renomeio perderia toda marcacao/registro ja feito pra aquela cultura.
+    Se o novo nome ja' e' usado por OUTRO slot (colisao rara, tipo
+    digitar errado o nome de uma cultura ja existente), a marcacao antiga
+    e' descartada em vez de duplicar (`UPDATE OR IGNORE` + `DELETE` da
+    sobra, mesmo padrao de `merge_duplicate_disease_translations`).
+    Devolve a lista dos nomes GENUINAMENTE novos (slot que estava vazio
+    antes) -- um renomeio nao conta como novo, ja que o registro por
+    quimico dele ja existia e foi migrado junto; o chamador usa essa
+    lista pra decidir quem precisa do bloqueio de seguranca em todo
+    quimico (`bloquear_cultura_nova_em_todos_quimicos`)."""
+    antigos = get_culturas()
+    genuinamente_novos = []
     conn = get_db()
     for slot, nome in enumerate(nomes[:12]):
+        nome = (nome or "").strip()
+        antigo = antigos[slot] if slot < len(antigos) else ""
+        if not antigo and nome:
+            genuinamente_novos.append(nome)
+        elif antigo and nome and antigo != nome:
+            for tabela in ("doenca_cultura", "fungicida_registro_bloqueado"):
+                conn.execute(f"UPDATE OR IGNORE {tabela} SET cultura = ? WHERE cultura = ?", (nome, antigo))
+                conn.execute(f"DELETE FROM {tabela} WHERE cultura = ?", (antigo,))
+            conn.execute("UPDATE farm_culturas SET cultura = ? WHERE cultura = ?", (nome, antigo))
         conn.execute(
             """
             INSERT INTO culturas (slot, nome) VALUES (?, ?)
             ON CONFLICT(slot) DO UPDATE SET nome = excluded.nome
             """,
-            (slot, (nome or "").strip()),
+            (slot, nome),
         )
     conn.commit()
     conn.close()
+    return genuinamente_novos
 
 
 def get_doenca_culturas():

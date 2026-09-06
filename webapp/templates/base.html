@@ -116,7 +116,7 @@
         <button type="button" class="navbar-toggler" id="navToggleBtn" aria-label="Abrir menu">
             <span class="navbar-toggler-icon"></span>
         </button>
-        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'admin_culturas', 'mapa_interpolado', 'alertas_clima', 'admin_whatsapp', 'admin_relatorio_whatsapp', 'admin_relatorio_fungicidas', 'admin_exportar'] %}
+        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'alertas_clima', 'admin_whatsapp', 'admin_relatorio_whatsapp', 'admin_relatorio_fungicidas', 'admin_exportar'] %}
         <div class="d-none d-lg-flex flex-column flex-lg-row gap-2 gap-lg-3 align-items-lg-center justify-content-lg-end w-100" id="mainNavMenu">
             <a class="nav-link text-white{% if request.endpoint == 'mapa' %} tab-ativa{% endif %}" href="{{ url_for('mapa') }}">Mapa</a>
             <a class="nav-link text-white{% if request.endpoint == 'fazendas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas') }}">Fazendas</a>
@@ -137,7 +137,6 @@
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_users' %} tab-ativa{% endif %}" href="{{ url_for('admin_users') }}">Usuários</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_doencas' %} tab-ativa{% endif %}" href="{{ url_for('admin_doencas') }}">Doenças</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_fungicidas' %} tab-ativa{% endif %}" href="{{ url_for('admin_fungicidas') }}">Fungicidas</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_culturas' %} tab-ativa{% endif %}" href="{{ url_for('admin_culturas') }}">Culturas</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'mapa_interpolado' %} tab-ativa{% endif %}" href="{{ url_for('mapa_interpolado') }}">Mapa Interpolado</a>
                     {% if current_user.username == 'Alan Mauro' %}
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'alertas_clima' %} tab-ativa{% endif %}" href="{{ url_for('alertas_clima') }}">Alertas Clima</a>

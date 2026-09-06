@@ -89,9 +89,6 @@
 
 <h4 class="mb-2 mt-4">Doencas x Culturas</h4>
 
-{% if not culturas_ativas %}
-<div class="alert alert-info">Nenhuma cultura cadastrada ainda -- va em Nome Culturas (menu ⋮) para adicionar.</div>
-{% else %}
 <form method="post" data-autosave>
     <input type="hidden" name="form_id" value="matriz_culturas">
     <div class="table-responsive">
@@ -100,8 +97,11 @@
                 <tr>
                     <th>Doenca</th>
                     <th>Nome cientifico</th>
-                    {% for cultura in culturas_ativas %}
-                    <th class="text-center">{{ cultura }}</th>
+                    {% for slot in range(12) %}
+                    <th class="text-center">
+                        <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm text-center"
+                               style="min-width: 100px;" value="{{ culturas[slot] }}" placeholder="(vazio)">
+                    </th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -114,9 +114,11 @@
                         <input type="hidden" name="doenca_en" value="{{ d.en }}">
                     </td>
                     <td><em class="text-muted">{{ d.cientifico }}</em></td>
-                    {% for cultura in culturas_ativas %}
+                    {% for slot in range(12) %}
                     <td class="text-center">
-                        <input type="checkbox" class="form-check-input" name="culturas__{{ doenca_loop.index0 }}" value="{{ cultura }}" {% if cultura in d.marcadas %}checked{% endif %}>
+                        {% if culturas[slot] %}
+                        <input type="checkbox" class="form-check-input" name="culturas__{{ doenca_loop.index0 }}" value="{{ slot }}" {% if culturas[slot] in d.marcadas %}checked{% endif %}>
+                        {% endif %}
                     </td>
                     {% endfor %}
                 </tr>
@@ -126,15 +128,16 @@
     </div>
     <span class="autosave-status small ms-2"></span>
 </form>
-{% endif %}
 
 <p class="text-muted small mt-3 pt-3 border-top">
     Marque em quais culturas cada doenca deve aparecer quando o filtro de
     "Cultura atual" estiver ativo (aba Manejo). Doenca sem nenhuma
     marcacao aqui NUNCA e' escondida pelo filtro -- aparece sempre, pra nao
     sumir um alerta novo/desconhecido por engano. Uma doenca pode valer
-    para mais de uma cultura. As colunas vem da aba
-    <strong>Nome Culturas</strong> (menu ⋮).
+    para mais de uma cultura. Edite o nome de uma cultura direto no
+    cabecalho da coluna -- uma coluna vazia fica disponivel pra cadastrar
+    uma cultura nova; renomear uma ja existente preserva as marcacoes e o
+    registro de fungicida ja feitos pra ela.
 </p>
 
 <h4 class="mb-2 mt-4">Doencas x Pais</h4>

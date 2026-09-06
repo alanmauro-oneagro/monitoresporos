@@ -3148,10 +3148,33 @@ def _parse_float_or_none(valor):
 def admin_doencas():
     if request.method == "POST":
         if request.form.get("form_id") == "matriz_culturas":
+            # Nome das 12 culturas agora e' editado direto no cabecalho
+            # desta matriz (antiga aba separada "Nome Culturas", removida
+            # -- `models.set_culturas` migra sozinho toda marcacao/
+            # registro ja feito quando e' so' um renomeio, nao uma
+            # cultura nova de verdade).
+            nomes_slots = [request.form.get(f"cultura_nome__{i}", "").strip() for i in range(12)]
+            genuinamente_novos = models.set_culturas(nomes_slots)
+            for nome in genuinamente_novos:
+                # Cultura nova de verdade (slot vazio antes): bloqueia ela
+                # de saida em todo quimico ja cadastrado -- ninguem
+                # pesquisou registro pra ela ainda (mesmo raciocinio de
+                # antes, so' que agora so' dispara pra slot GENUINAMENTE
+                # novo, nao pra um renomeio).
+                models.bloquear_cultura_nova_em_todos_quimicos(nome)
+
             doenca_ens = request.form.getlist("doenca_en")
             for idx, doenca_en in enumerate(doenca_ens):
-                culturas = request.form.getlist(f"culturas__{idx}")
-                models.set_doenca_culturas(doenca_en, culturas)
+                slots_marcados = request.form.getlist(f"culturas__{idx}")
+                culturas_marcadas = []
+                for slot_str in slots_marcados:
+                    try:
+                        slot = int(slot_str)
+                    except ValueError:
+                        continue
+                    if 0 <= slot < len(nomes_slots) and nomes_slots[slot]:
+                        culturas_marcadas.append(nomes_slots[slot])
+                models.set_doenca_culturas(doenca_en, culturas_marcadas)
             return _save_response("Matriz doenca x cultura atualizada.", "admin_doencas")
 
         if request.form.get("form_id") == "matriz_paises":
@@ -3204,6 +3227,7 @@ def admin_doencas():
         for en, data in sorted(info.items(), key=lambda kv: _chave_alfabetica(kv[1]["nome_cientifico"] or ""))
     ]
     culturas_ativas = models.get_culturas_ativas()
+    culturas = models.get_culturas()
     doenca_culturas = models.get_doenca_culturas()
     # Paises disponiveis na matriz Doenca x Pais: os mesmos que ja tem
     # fazenda cadastrada (`active_country_codes`, sempre inclui Brasil) --
@@ -3225,29 +3249,9 @@ def admin_doencas():
         for d in doencas
     ]
     return render_template(
-        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, matriz=matriz,
+        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, culturas=culturas, matriz=matriz,
         paises_disponiveis=paises_disponiveis, matriz_paises=matriz_paises,
     )
-
-
-@app.route("/admin/culturas", methods=["GET", "POST"])
-@admin_required
-def admin_culturas():
-    if request.method == "POST":
-        culturas_antigas = set(models.get_culturas_ativas())
-        nomes = [request.form.get(f"nome_{i}", "").strip() for i in range(12)]
-        models.set_culturas(nomes)
-        # Cultura nova (nao existia antes): bloqueia ela de saida em todo
-        # quimico ja cadastrado na biblioteca de Fungicidas -- ninguem
-        # pesquisou registro pra ela ainda, entao comeca desmarcada (o
-        # admin confirma uma a uma as que realmente tem registro), em vez
-        # de herdar "registrado" so por nunca ter sido revisada.
-        for nome in nomes:
-            if nome and nome not in culturas_antigas:
-                models.bloquear_cultura_nova_em_todos_quimicos(nome)
-        return _save_response("Nomes de culturas atualizados.", "admin_culturas")
-
-    return render_template("admin_culturas.html", nomes=models.get_culturas())
 
 
 @app.route("/admin/fungicidas", methods=["GET", "POST"])
