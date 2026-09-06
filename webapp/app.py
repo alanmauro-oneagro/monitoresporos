@@ -3322,6 +3322,7 @@ def admin_fungicidas():
     overrides = models.get_all_fungicida_overrides()
     registro_bloqueado = models.get_all_fungicida_registro_bloqueado()
     culturas_ativas = models.get_culturas_ativas()
+    doenca_paises = models.get_doenca_paises()
     translations = _load_translations()
 
     doencas_data = []
@@ -3336,9 +3337,16 @@ def admin_fungicidas():
     )
     for doenca_en, info in doencas_ordenadas:
         rotulo = info["nome_pt"]
+        # Mesma info da matriz Doencas x Pais (aba Doencas) -- sem nenhum
+        # pais marcado la' significa "se aplica a qualquer pais" (mesmo
+        # "nunca escondida por engano" da matriz), mostrado aqui vazio em
+        # vez de listar todo pais registrado.
+        paises_doenca = sorted(doenca_paises.get(doenca_en, set()))
         rec = fungicida_data.get_recomendacao(doenca_en)
         if not rec:
-            doencas_data.append({"doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True})
+            doencas_data.append({
+                "doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True, "paises": paises_doenca,
+            })
             continue
         grupos = []
         for tipo, grupo in (("quimico", rec["quimicos"]), ("biologico", rec["biologicos"])):
@@ -3370,7 +3378,9 @@ def admin_fungicidas():
                 "tipo": tipo, "titulo": "Quimicos" if tipo == "quimico" else "Biologicos",
                 "fonte": grupo["fonte"], "fonte_url": grupo["fonte_url"], "linhas": linhas,
             })
-        doencas_data.append({"doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False})
+        doencas_data.append({
+            "doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False, "paises": paises_doenca,
+        })
 
     classes = [("", "Sem classificacao")] + list(fungicida_data.CLASSE_LABEL.items())
     return render_template(
@@ -3439,12 +3449,27 @@ _PESQUISA_REGISTRO_2026_08_26 = {
 @app.route("/admin/fungicidas/aplicar-pesquisa-registro", methods=["POST"])
 @admin_required
 def aplicar_pesquisa_registro():
+    # Agrofit/MAPA e' o registro de agrotoxicos do BRASIL -- essa
+    # pesquisa so' faz sentido pra doenca que realmente se aplica ao
+    # Brasil. Doenca marcada na matriz Doencas x Pais (aba Doencas) SO'
+    # pra outro pais (ex.: so' Chile) fica de fora -- Agrofit nao regula
+    # nada la, aplicar o bloqueio seria informacao errada. Doenca sem
+    # NENHUM pais marcado ainda entra normalmente (mesma regra "sem
+    # marcacao = se aplica a qualquer pais" da propria matriz).
+    doenca_paises = models.get_doenca_paises()
+    nome_brasil = countries.get_country("BR")["nome"]
+    aplicados, fora_do_escopo = 0, 0
     for (doenca, tipo, idx), culturas in _PESQUISA_REGISTRO_2026_08_26.items():
+        paises_da_doenca = doenca_paises.get(doenca)
+        if paises_da_doenca and nome_brasil not in paises_da_doenca:
+            fora_do_escopo += 1
+            continue
         models.set_fungicida_registro_bloqueado(doenca, tipo, idx, culturas)
-    return _save_response(
-        f"Pesquisa de registro aplicada -- {len(_PESQUISA_REGISTRO_2026_08_26)} itens revisados.",
-        "admin_fungicidas",
-    )
+        aplicados += 1
+    mensagem = f"Pesquisa de registro aplicada -- {aplicados} item(ns) revisado(s)."
+    if fora_do_escopo:
+        mensagem += f" {fora_do_escopo} fora do escopo Brasil/Agrofit (doenca marcada so' pra outro pais)."
+    return _save_response(mensagem, "admin_fungicidas")
 
 
 # Pesquisa de condicoes de germinacao (temperatura, UR, molhamento foliar)

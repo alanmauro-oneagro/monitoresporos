@@ -5,12 +5,15 @@
 
 <form method="post" action="{{ url_for('aplicar_pesquisa_registro') }}" class="mb-3">
     <button type="submit" class="btn btn-sm btn-outline-primary">
-        🔎 Aplicar pesquisa de registro Agrofit/MAPA (26/08/2026)
+        🔎 Aplicar pesquisa de registro Agrofit/MAPA -- Brasil (26/08/2026)
     </button>
     <span class="text-muted small ms-2">
         Desmarca os quimicos sem registro confirmado por cultura, pesquisados no Agrofit/Agrolink.
-        Pode clicar mais de uma vez sem problema -- so precisa fazer isso uma vez em cada ambiente
-        (local e o site publicado usam bancos de dados separados).
+        So' se aplica a doenca marcada <strong>Brasil</strong> (ou sem nenhum pais marcado ainda) na
+        matriz Doencas x Pais -- doenca marcada so' pra outro pais fica de fora (Agrofit/MAPA e' o
+        registro brasileiro, nao vale pra outro pais). Pode clicar mais de uma vez sem problema -- so
+        precisa fazer isso uma vez em cada ambiente (local e o site publicado usam bancos de dados
+        separados).
     </span>
 </form>
 
@@ -19,7 +22,14 @@
 <div class="card shadow-sm mb-3">
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">{{ d.rotulo }}</h5>
+            <h5 class="mb-0">
+                {{ d.rotulo }}
+                {% if d.paises %}
+                <span class="badge bg-light text-dark border fw-normal ms-1" title="Pais marcado na matriz Doencas x Pais (aba Doencas)">🌎 {{ d.paises | join(", ") }}</span>
+                {% else %}
+                <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum pais marcado na matriz Doencas x Pais -- se aplica a qualquer pais">🌎 Todos os paises</span>
+                {% endif %}
+            </h5>
             {% if d.sem_dados %}
             <span class="badge bg-secondary">Sem dados ainda</span>
             {% endif %}
