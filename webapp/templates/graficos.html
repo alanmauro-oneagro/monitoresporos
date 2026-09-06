@@ -65,7 +65,7 @@
                         {% for e in estacoes_disponiveis %}
                         <div class="form-check">
                             <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" data-pais="{{ e.pais or '' }}" id="est_{{ loop.index }}">
-                            <label class="form-check-label small" for="est_{{ loop.index }}">{{ e.nome }}{% if e.uf %} ({{ e.uf }}){% endif %}</label>
+                            <label class="form-check-label small" for="est_{{ loop.index }}">{{ e.nome_exibicao }}{% if e.uf %} ({{ e.uf }}){% endif %}</label>
                         </div>
                         {% endfor %}
                     </div>

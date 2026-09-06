@@ -297,6 +297,11 @@ def init_db():
             country_code TEXT NOT NULL DEFAULT 'BR'
         );
 
+        CREATE TABLE IF NOT EXISTS site_display_names (
+            site_name TEXT PRIMARY KEY,
+            nome_exibicao TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS farm_ndvi_area (
             site_name TEXT PRIMARY KEY,
             kml TEXT NOT NULL,
@@ -1148,19 +1153,24 @@ def get_all_weather_station_overrides():
 
 
 def set_weather_station_override(site_name, estacao_codigo, country_code="BR"):
-    """estacao_codigo = "" (ou None) remove a escolha manual -- volta a
-    usar a coordenada da propria fazenda pra previsao."""
+    """estacao_codigo = "" (ou None) e' a escolha explicita "coordenada da
+    propria fazenda" -- GRAVA a linha mesmo assim (com codigo vazio) em vez
+    de apagar. Se apagasse a linha, `app._auto_detectar_estacoes_novas`
+    (que so age em site "ainda sem nenhuma linha") ia enxergar esse site
+    como "nunca decidido" no proximo request e escolher uma estacao
+    sozinha de novo, desfazendo a escolha do cliente sem ele mexer em
+    nada -- bug real ja visto em producao. Todo lugar que le esse dict
+    (`get_all_weather_station_overrides`) ja trata codigo vazio como "sem
+    estacao escolhida, usa coordenada propria" (`if escolha["codigo"]:
+    ...`), entao manter a linha nao muda nenhum comportamento visivel."""
     conn = get_db()
-    if estacao_codigo:
-        conn.execute(
-            """
-            INSERT INTO weather_station_overrides (site_name, estacao_codigo, country_code) VALUES (?, ?, ?)
-            ON CONFLICT(site_name) DO UPDATE SET estacao_codigo = excluded.estacao_codigo, country_code = excluded.country_code
-            """,
-            (site_name, estacao_codigo, country_code),
-        )
-    else:
-        conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (site_name,))
+    conn.execute(
+        """
+        INSERT INTO weather_station_overrides (site_name, estacao_codigo, country_code) VALUES (?, ?, ?)
+        ON CONFLICT(site_name) DO UPDATE SET estacao_codigo = excluded.estacao_codigo, country_code = excluded.country_code
+        """,
+        (site_name, estacao_codigo or "", country_code),
+    )
     conn.commit()
     conn.close()
 
@@ -1196,6 +1206,40 @@ def set_site_country(site_name, country_code):
         )
     else:
         conn.execute("DELETE FROM site_country_overrides WHERE site_name = ?", (site_name,))
+    conn.commit()
+    conn.close()
+
+
+def get_all_site_display_names():
+    """site_name -> nome de exibicao escolhido na aba Fazendas, pra
+    fazenda REAL (vinda do BioScout) -- so' os sites com escolha manual
+    aparecem aqui; sem entrada, quem le isso cai no nome derivado do
+    proprio site_name (ver `app._nome_exibicao`). NAO se aplica a fazenda
+    virtual/estimada -- essa ja tem nome proprio editavel desde sempre
+    (`nome` em `virtual_farms`, ver `update_virtual_farm`); essa tabela e'
+    so' o equivalente pra fazenda real, cujo site_name (chave de casamento
+    com o CSV do BioScout) nunca pode mudar."""
+    conn = get_db()
+    rows = conn.execute("SELECT site_name, nome_exibicao FROM site_display_names").fetchall()
+    conn.close()
+    return {r["site_name"]: r["nome_exibicao"] for r in rows}
+
+
+def set_site_display_name(site_name, nome_exibicao):
+    """nome_exibicao = "" (ou None) remove a escolha manual -- volta a
+    usar o nome derivado do site_name (ver `app._nome_exibicao`)."""
+    nome_exibicao = (nome_exibicao or "").strip()
+    conn = get_db()
+    if nome_exibicao:
+        conn.execute(
+            """
+            INSERT INTO site_display_names (site_name, nome_exibicao) VALUES (?, ?)
+            ON CONFLICT(site_name) DO UPDATE SET nome_exibicao = excluded.nome_exibicao
+            """,
+            (site_name, nome_exibicao),
+        )
+    else:
+        conn.execute("DELETE FROM site_display_names WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 

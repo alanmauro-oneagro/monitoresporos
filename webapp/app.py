@@ -735,21 +735,35 @@ def _fmt_ingrediente(item, classe_label):
 _WHATSAPP_SEPARADOR = "━" * 15
 
 
-def _whatsapp_titulo(site, is_virtual=False):
+def _nome_exibicao(site):
+    """Nome "bonito" da fazenda pra mostrar em qualquer tela/relatorio --
+    fonte UNICA usada em todo o site (Painel, Mapa, Manejo, WhatsApp, PDF,
+    Graficos), pra uma troca na aba Fazendas refletir em todo lugar de
+    uma vez so'. NUNCA usar pra casar com o CSV do BioScout/tabelas do
+    banco -- so' pra EXIBICAO; o `site_name` real continua sendo a chave
+    em todo lugar. Fazenda virtual/estimada usa o nome cadastrado direto
+    no banco (`nome` em `virtual_farms`, editavel desde sempre em Mapa
+    Interpolado) -- o padrao de site_name difere por tipo ('"{nome}" -
+    OneAgro' pra doenca, '{nome} - Clima - OneAgro' pra clima, ver
+    `models._virtual_farm_site_name`), entao so' esse lookup direto
+    funciona pros dois sem quebrar. Fazenda real (site_name imutavel, e' a
+    chave de casamento com o CSV do BioScout) usa a escolha manual da aba
+    Fazendas (`site_display_names`) quando existir, senao cai no nome
+    derivado do proprio site_name (tira o prefixo 'OneAgro - ', mesmo
+    padrao de sempre)."""
+    vf = models.get_virtual_farm(site)
+    if vf:
+        return vf["nome"]
+    override = models.get_all_site_display_names().get(site)
+    if override:
+        return override
+    return site.split(" - ", 1)[1] if " - " in site else site
+
+
+def _whatsapp_titulo(site):
     """'OneAgro - Grupo PIVA' -> '*GRUPO PIVA - OneAgro*' -- nome da
-    fazenda em destaque, sem repetir 'OneAgro' duas vezes. Fazenda
-    virtual/estimada usa o nome cadastrado direto do banco (`nome` em
-    `virtual_farms`) em vez de tentar extrair do site_name -- o padrao
-    de site_name difere por tipo ('"{nome}" - OneAgro' pra doenca,
-    '{nome} - Clima - OneAgro' pra clima, ver
-    `models._virtual_farm_site_name`), entao so' o lookup direto
-    funciona pros dois sem quebrar."""
-    if is_virtual:
-        vf = models.get_virtual_farm(site)
-        nome_fazenda = vf["nome"] if vf else site
-    else:
-        nome_fazenda = site.split(" - ", 1)[1] if " - " in site else site
-    return f"*{nome_fazenda.upper()} - OneAgro*"
+    fazenda em destaque, sem repetir 'OneAgro' duas vezes."""
+    return f"*{_nome_exibicao(site).upper()} - OneAgro*"
 
 
 def _format_whatsapp_message(
@@ -859,7 +873,7 @@ def _format_whatsapp_message(
         return linhas
 
     if not diseases:
-        partes = [_whatsapp_titulo(site, is_virtual), ""]
+        partes = [_whatsapp_titulo(site), ""]
         if safra_label:
             partes.append(f"Manejo: *{safra_label}*")
         if cultura:
@@ -875,7 +889,7 @@ def _format_whatsapp_message(
         partes.append("Powered by BioScout")
         return "\n".join(partes)
 
-    lines = [_whatsapp_titulo(site, is_virtual), ""]
+    lines = [_whatsapp_titulo(site), ""]
 
     if safra_label:
         lines.append(f"Manejo: *{safra_label}*")
@@ -1054,8 +1068,7 @@ def _build_site_pdf(
     for d in diseases:
         d["historico"] = data_reader.get_site_disease_history(site, d["doenca_en"], dias=30)
     plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
-    vf = models.get_virtual_farm(site)
-    nome_fazenda = vf["nome"] if vf else (site.split(" - ", 1)[1] if " - " in site else site)
+    nome_fazenda = _nome_exibicao(site)
     safra_label = SAFRA_LABELS[safra] if safra else "todas as safras"
     rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
     buffer = export_pdf.build_recommendation_pdf(
@@ -1476,7 +1489,7 @@ def dashboard():
             "dias_sem_leitura": dias_sem_leitura,
             "nivel_dados": _nivel_dados_defasados(dias_sem_leitura),
             "virtual": site in nomes_virtuais,
-            "nome_exibicao": nomes_virtuais.get(site, site),
+            "nome_exibicao": _nome_exibicao(site),
         }
 
     # Ordem do Painel: por data da leitura mais recente (weather_by_site
@@ -1633,7 +1646,10 @@ def graficos():
     return render_template(
         "graficos.html", inicio=inicio.isoformat(), fim=fim.isoformat(),
         estacoes_disponiveis=[
-            {"nome": s, "uf": uf_por_site.get(s), "pais": site_countries.get(s, countries.DEFAULT_COUNTRY)}
+            {
+                "nome": s, "nome_exibicao": _nome_exibicao(s), "uf": uf_por_site.get(s),
+                "pais": site_countries.get(s, countries.DEFAULT_COUNTRY),
+            }
             for s in estacoes_disponiveis
         ],
         paises_disponiveis=[{"code": c, "nome": countries.get_country(c)["nome"]} for c in paises_presentes],
@@ -1979,6 +1995,7 @@ def mapa():
             estacao = provider.estacao_mais_proxima(lat, lon)
         sites_data.append({
             "site": site,
+            "nome_exibicao": _nome_exibicao(site),
             "lat": lat,
             "lon": lon,
             "virtual": site in virtual_names,
@@ -1991,7 +2008,9 @@ def mapa():
                 "codigo": estacao["codigo"], "cidade": estacao["cidade"], "uf": estacao["uf"],
                 "lat": estacao["lat"], "lon": estacao["lon"], "fazendas": [],
             })
-            entry["fazendas"].append({"site": site, "distancia_km": estacao["distancia_km"]})
+            entry["fazendas"].append({
+                "site": site, "nome_exibicao": _nome_exibicao(site), "distancia_km": estacao["distancia_km"],
+            })
 
     for site, cards in cards_by_site.items():
         if site not in coords or not cards:
@@ -2043,7 +2062,7 @@ def mapa_interpolado():
             continue
         lat, lon = coords_reais[site]
         sites_data.append({
-            "site": site, "lat": lat, "lon": lon, "virtual": False,
+            "site": site, "nome_exibicao": _nome_exibicao(site), "lat": lat, "lon": lon, "virtual": False,
             "cards": sorted(cards, key=lambda c: c["doenca"]),
             "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)),
         })
@@ -2074,7 +2093,7 @@ def mapa_interpolado():
         })
         if cards or tipo == "clima":
             sites_data.append({
-                "site": vf["site_name"], "lat": vf["lat"], "lon": vf["lon"], "virtual": True,
+                "site": vf["site_name"], "nome_exibicao": vf["nome"], "lat": vf["lat"], "lon": vf["lon"], "virtual": True,
                 "tipo": tipo,
                 "cards": cards,
                 "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
@@ -2408,7 +2427,7 @@ def recommendations(safra):
         plantio_linhas = [l for l in plantio_by_site.get(site, {}).get(safra, []) if any(l.values())]
         aplicacoes_linhas = [l for l in aplicacoes_by_site.get(site, {}).get(safra, []) if any(l.values())]
         sites_data.append({
-            "site": site, "diseases": diseases, "thumbnails": thumbnails,
+            "site": site, "nome_exibicao": _nome_exibicao(site), "diseases": diseases, "thumbnails": thumbnails,
             "virtual": is_virtual,
             "weather": weather,
             "leitura_data": leitura_data,
@@ -2619,7 +2638,8 @@ def fazendas():
         estacoes_proximas = countries.estacoes_mais_proximas_global(*latlon, n=2) if latlon else []
         escolha = overrides.get(site)
         sites_data.append({
-            "site": site, "safras": safras_data, "selected_days": all_days.get(site, set()),
+            "site": site, "nome_exibicao": _nome_exibicao(site), "safras": safras_data,
+            "selected_days": all_days.get(site, set()),
             "selected_days_pdf": all_days_pdf.get(site, set()),
             "virtual": site in virtual_names,
             "estacoes_proximas": estacoes_proximas,
@@ -2664,6 +2684,7 @@ def ndvi():
     sites_data = [
         {
             "site": site,
+            "nome_exibicao": _nome_exibicao(site),
             "area": areas.get(site),
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
@@ -2947,6 +2968,30 @@ def save_site_country():
     models.set_site_country(site_name, country_code)
     nome_pais = countries.get_country(country_code)["nome"]
     return _save_response(f"'{site_name}' marcada como {nome_pais}.", "fazendas")
+
+
+@app.route("/fazendas/nome/save", methods=["POST"])
+@login_required
+def save_site_display_name():
+    """Nome de exibicao de fazenda REAL (vinda do BioScout) -- so' muda
+    como ela aparece no site inteiro (Painel, Mapa, Manejo, WhatsApp, PDF,
+    Graficos, ver `_nome_exibicao`); o site_name em si (chave de casamento
+    com o CSV do BioScout) nunca muda. Fazenda virtual/estimada ja tem seu
+    proprio nome editavel (aba Mapa Interpolado, `update_virtual_farm`) --
+    essa rota nao se aplica a ela."""
+    site_name = request.form.get("site_name")
+    if not current_user.is_admin:
+        allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
+        if site_name not in allowed:
+            abort(403)
+    if models.get_virtual_farm(site_name):
+        return _save_response(
+            "Fazenda virtual/estimada -- edite o nome na aba Mapa Interpolado.", "fazendas", ok=False,
+        )
+    nome_exibicao = request.form.get("nome_exibicao", "")
+    models.set_site_display_name(site_name, nome_exibicao)
+    novo_nome = _nome_exibicao(site_name)
+    return _save_response(f"Nome de exibicao atualizado para '{novo_nome}'.", "fazendas")
 
 
 @app.route("/fazendas/save", methods=["POST"])

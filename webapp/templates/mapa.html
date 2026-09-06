@@ -132,7 +132,7 @@
 
     function buildTooltipHtml(site) {
         if (site.tipo === 'clima') {
-            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.site) + '</div>' +
+            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
                 '<div class="mapa-tt-data">☁️ Ponto de referencia de clima (sem monitoramento de doenca)</div></div>';
         }
         var rows = site.cards.map(function (c) {
@@ -144,7 +144,7 @@
                 '<span class="mapa-tt-valor">' + escapeHtml(valor) + '</span>' +
                 '</div>';
         }).join('');
-        return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.site) + '</div>' +
+        return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
             '<div class="mapa-tt-data">Leitura de ' + escapeHtml(site.ultima_leitura) + '</div>' + rows + '</div>';
     }
 
@@ -155,7 +155,7 @@
         }
         var fazendasHtml = estacao.fazendas.map(function (f) {
             return '<div class="mapa-tt-row">' +
-                '<span class="mapa-tt-doenca">' + escapeHtml(f.site) + '</span>' +
+                '<span class="mapa-tt-doenca">' + escapeHtml(f.nome_exibicao) + '</span>' +
                 '<span class="mapa-tt-valor">' + escapeHtml(f.distancia_km) + ' km</span>' +
                 '</div>';
         }).join('');

@@ -253,7 +253,7 @@
         if (site.tipo === 'clima') {
             // Ponto so' de clima -- nao monitora doenca nenhuma, entao nao
             // faz sentido mostrar "Leitura de -" nem uma lista vazia.
-            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.site) + '</div>' +
+            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
                 '<div class="mapa-tt-data">☁️ Ponto de referencia de clima (sem monitoramento de doenca)</div></div>';
         }
         var rows = site.cards.map(function (c) {
@@ -265,7 +265,7 @@
                 '<span class="mapa-tt-valor">' + escapeHtml(valor) + '</span>' +
                 '</div>';
         }).join('');
-        return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.site) + '</div>' +
+        return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
             '<div class="mapa-tt-data">Leitura de ' + escapeHtml(site.ultima_leitura) + '</div>' + rows + '</div>';
     }
 
