@@ -1354,33 +1354,26 @@ def dashboard():
     cards_by_site = _cards_by_site_all(permitted, _load_translations())
     # Painel mostra TODAS as caixas de doenca sempre -- o filtro de cultura
     # so se aplica nas abas Recomendacoes (Safra / 2 Safra), nao aqui.
-    # Umidade/chuva sao do mesmo sensor da fazenda para todas as doencas --
-    # mostra uma vez so, ao lado do nome da fazenda, usando a leitura mais
-    # recente entre as doencas (em vez de repetir em cada caixa).
+    # Umidade/chuva vem SEMPRE da Open-Meteo (mesma fonte usada em
+    # Recomendacoes/Alertas Clima/WhatsApp) -- nao mais do sensor do
+    # proprio dispositivo BioScout, que so' ficava tao fresco quanto a
+    # ultima sincronizacao daquele aparelho (podendo ficar velho bem na
+    # hora que a fazenda mais precisa de clima confiavel, ver
+    # DADOS_BLOQUEIO_DIAS) -- pedido explicito do usuario ("sempre
+    # atualizar a informacao de clima"). Mostrado uma vez so, ao lado do
+    # nome da fazenda, em vez de repetir em cada caixa de doenca.
     weather_by_site = {}
     dados_status_by_site = {}
     nomes_virtuais = {vf["site_name"]: vf["nome"] for vf in models.get_all_virtual_farms()}
     coords = _weather_coords_all()
     mais_recente_by_site = {site: max(cards, key=lambda c: c["data"]) for site, cards in cards_by_site.items()}
-    _prefetch_weather(
-        [s for s, m in mais_recente_by_site.items() if s in nomes_virtuais and m["umidade"] is None and m["chuva"] is None],
-        coords,
-    )
+    _prefetch_weather(list(cards_by_site.keys()), coords)
     for site, cards in cards_by_site.items():
         mais_recente = mais_recente_by_site[site]
-        umidade, chuva = mais_recente["umidade"], mais_recente["chuva"]
-        if umidade is None and chuva is None and site in nomes_virtuais:
-            # Fazenda virtual/estimada nao tem sensor de umidade/chuva
-            # proprio (esses campos vem do dispositivo do BioScout) --
-            # usa a Open-Meteo pra coordenada dela, igual a tela de
-            # Recomendacoes ja faz.
-            weather = _get_weather_for_site(site, coords)
-            if weather:
-                umidade = weather.get("umidade_atual")
-                chuva = weather.get("chuva_atual_mm")
+        weather = _get_weather_for_site(site, coords)
         weather_by_site[site] = {
-            "umidade": umidade,
-            "chuva": chuva,
+            "umidade": weather.get("umidade_atual") if weather else None,
+            "chuva": weather.get("chuva_atual_mm") if weather else None,
             "data": mais_recente["data"],
         }
         dias_sem_leitura = _dias_sem_leitura(cards)
