@@ -77,30 +77,23 @@ html { font-size: 14px; }
                     <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}" id="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">
                     <label class="form-check-label small" for="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">PDF</label>
                 </div>
-                {% if site_group.whatsapp_text %}
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
-                   title="Gerar PDF com clima, recomendacoes, produtos, datas de plantio e de pulverizacao -- pra encaminhar pra alguem">
+                   title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- PDF vem so' com o clima{% else %}Gerar PDF com clima, recomendacoes, produtos, datas de plantio e de pulverizacao -- pra encaminhar pra alguem{% endif %}">
                     📄 Recomendacao (PDF)
                 </a>
-                {% else %}
-                <button type="button" class="btn btn-sm btn-outline-primary" disabled
-                        title="Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias">
-                    📄 Recomendacao (PDF)
-                </button>
-                {% endif %}
                 <div class="form-check mb-0" title="Incluir o texto no envio por WhatsApp">
                     <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}" id="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">
                     <label class="form-check-label small" for="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">Texto</label>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn" {% if not site_group.whatsapp_text %}disabled{% endif %}
+                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn"
                         data-text="{{ site_group.whatsapp_text }}"
-                        title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
+                        title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- copia so' o clima{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
                     📋 Copiar recomendacao
                 </button>
                 <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" id="{{ whatsapp_form_id }}" class="mb-0">
                     <input type="hidden" name="safra" value="{{ safra }}">
-                    <button type="submit" class="btn btn-sm btn-outline-success" {% if not site_group.whatsapp_destinos or site_group.nivel_dados == 'bloqueado' %}disabled{% endif %}
-                            title="{% if site_group.nivel_dados == 'bloqueado' %}Bloqueado -- estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias{% elif site_group.whatsapp_destinos %}Enviar para {{ site_group.whatsapp_destinos }} numero(s) os formatos marcados acima (texto/PDF){% else %}Nenhum numero cadastrado pra essa fazenda ainda{% endif %}">
+                    <button type="submit" class="btn btn-sm btn-outline-success" {% if not site_group.whatsapp_destinos %}disabled{% endif %}
+                            title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- envia so' o clima{% elif site_group.whatsapp_destinos %}Enviar para {{ site_group.whatsapp_destinos }} numero(s) os formatos marcados acima (texto/PDF){% else %}Nenhum numero cadastrado pra essa fazenda ainda{% endif %}">
                         📲 Enviar por WhatsApp{% if site_group.whatsapp_destinos %} ({{ site_group.whatsapp_destinos }}){% endif %}
                     </button>
                 </form>

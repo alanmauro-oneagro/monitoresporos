@@ -72,7 +72,7 @@ WHATSAPP_SEND_HOUR = 7  # hora do dia (0-23) em que o envio automatico roda
 WEATHER_CACHE_TTL_SECONDS = 30 * 60  # nao busca de novo na Open-Meteo antes disso, por fazenda
 NDVI_PREVIEW_TTL_SECONDS = 30 * 60  # pre-visualizacao de NDVI expira sozinha se ninguem confirmar/descartar
 DADOS_AVISO_DIAS = 7  # ate isso = verde (ok); acima = aviso (amarelo)
-DADOS_BLOQUEIO_DIAS = 15  # acima disso (16+ dias) = vermelho, bloqueia envio/copia da recomendacao
+DADOS_BLOQUEIO_DIAS = 15  # acima disso (16+ dias) = vermelho, WhatsApp/PDF/copia da recomendacao viram so' clima (sem doenca)
 
 
 def _dias_sem_leitura(cards):
@@ -87,8 +87,10 @@ def _dias_sem_leitura(cards):
 
 
 def _nivel_dados_defasados(dias_sem_leitura):
-    """None (ok), 'atencao' (mostra aviso) ou 'bloqueado' (recomendacao
-    bloqueada) de acordo com `dias_sem_leitura`."""
+    """None (ok), 'atencao' (mostra aviso) ou 'bloqueado' (dado de doenca
+    velho demais pra confiar -- WhatsApp/PDF/copia da recomendacao caem
+    pro relatorio SO' de clima, ver `_send_site_whatsapp`/
+    `recommendation_pdf`) de acordo com `dias_sem_leitura`."""
     if dias_sem_leitura is None:
         return None
     if dias_sem_leitura > DADOS_BLOQUEIO_DIAS:
@@ -1042,29 +1044,29 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     `safra` filtra pela cultura daquela safra (quando chamado a partir de
     uma das telas de Recomendacoes) e define de qual safra vem os
     "Produtos Fazenda"; sem `safra` (envio agendado), usa a uniao das
-    culturas e dos produtos das duas safras. Bloqueia o envio (sem mandar
-    nada) se a estacao dessa fazenda estiver sem leitura nova ha mais de
-    `DADOS_BLOQUEIO_DIAS` -- dado velho demais pra virar recomendacao."""
+    culturas e dos produtos das duas safras. Quando a estacao dessa
+    fazenda esta sem leitura nova ha mais de `DADOS_BLOQUEIO_DIAS` (dado
+    de doenca velho demais pra virar recomendacao), NAO bloqueia mais o
+    envio -- em vez disso manda um relatorio SO' de clima, exatamente
+    igual ao dos pontos "so clima" da aba Alertas Clima (`diseases=[]`,
+    mesmo caminho curto de `_format_whatsapp_message`/`_build_site_pdf`),
+    pedido explicito do usuario (antes nao mandava nada nesse caso)."""
     if not enviar_texto and not enviar_pdf:
         return False, "Nada a enviar (nem texto nem PDF agendado pra hoje)."
     translations = _load_translations()
     raw_cards = _resolve_site_cards(site, translations)
     dias_sem_leitura = _dias_sem_leitura(raw_cards)
-    if _nivel_dados_defasados(dias_sem_leitura) == "bloqueado":
-        motivo = (
-            f"Estacao de '{site}' sem leitura nova ha {dias_sem_leitura} dias -- "
-            "envio bloqueado (dado velho demais pra confiar)."
-        )
-        models.log_whatsapp_envio(site, None, None, False, motivo)
-        return False, motivo
     culturas_by_site = models.get_all_farm_culturas()
-    cards_by_site = _filter_cards_by_cultura(
-        {site: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
-    )
-    cards = cards_by_site.get(site, [])
-    notes = models.get_all_recommendation_notes()
     cultura = _cultura_label(site, safra, culturas_by_site)
-    diseases = _build_site_diseases(site, cards, notes, cultura=cultura)
+    if _nivel_dados_defasados(dias_sem_leitura) == "bloqueado":
+        diseases = []
+    else:
+        cards_by_site = _filter_cards_by_cultura(
+            {site: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
+        )
+        cards = cards_by_site.get(site, [])
+        notes = models.get_all_recommendation_notes()
+        diseases = _build_site_diseases(site, cards, notes, cultura=cultura)
 
     coords = _weather_coords_all()
     weather = _get_weather_for_site(site, coords)
@@ -2241,15 +2243,19 @@ def recommendations(safra):
         dias_sem_leitura = _dias_sem_leitura(raw_cards_by_site.get(site, []))
         nivel_dados = _nivel_dados_defasados(dias_sem_leitura)
         is_virtual = site in virtual_names
-        whatsapp_text = (
-            "" if nivel_dados == "bloqueado"
-            else _format_whatsapp_message(
-                site, diseases, weather=weather, produtos=_farm_produtos_estoque(site, safra),
-                is_virtual=is_virtual, cultura=cultura_info.get("cultura") or "",
-                safra_label=SAFRA_LABELS[safra],
-                plantio_linhas=plantio_by_site.get(site, {}).get(safra, []),
-                aplicacoes_linhas=aplicacoes_by_site.get(site, {}).get(safra, []),
-            )
+        # Estacao sem leitura ha muito tempo -- mesma regra de
+        # `_send_site_whatsapp`: em vez de nao mostrar/enviar nada, o
+        # preview (e o que realmente sera enviado) vira um relatorio SO'
+        # de clima (diseases=[]), igual ao dos pontos da aba Alertas
+        # Clima -- os cards de doenca na TELA continuam mostrando a
+        # ultima leitura conhecida normalmente, so o WhatsApp que muda.
+        whatsapp_text = _format_whatsapp_message(
+            site, [] if nivel_dados == "bloqueado" else diseases, weather=weather,
+            produtos=_farm_produtos_estoque(site, safra),
+            is_virtual=is_virtual, cultura=cultura_info.get("cultura") or "",
+            safra_label=SAFRA_LABELS[safra],
+            plantio_linhas=plantio_by_site.get(site, {}).get(safra, []),
+            aplicacoes_linhas=aplicacoes_by_site.get(site, {}).get(safra, []),
         )
         plantio_linhas = [l for l in plantio_by_site.get(site, {}).get(safra, []) if any(l.values())]
         aplicacoes_linhas = [l for l in aplicacoes_by_site.get(site, {}).get(safra, []) if any(l.values())]
@@ -2344,7 +2350,10 @@ def recommendation_pdf(site_name):
     """PDF com o mesmo conteudo do relatorio de WhatsApp (clima, cultura,
     doencas em Atencao/Perigo, produtos ja disponiveis) mais as datas de
     plantio e de pulverizacao daquela safra (aba Fazendas) -- pra
-    encaminhar por email/impressao em vez de copiar texto."""
+    encaminhar por email/impressao em vez de copiar texto. Estacao sem
+    leitura ha muito tempo -- mesma regra de `_send_site_whatsapp`: o PDF
+    vira SO' de clima (diseases=[]), igual ao dos pontos da aba Alertas
+    Clima, em vez de mostrar doenca com dado velho demais pra confiar."""
     if not current_user.is_admin:
         allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
         if site_name not in allowed:
@@ -2353,12 +2362,15 @@ def recommendation_pdf(site_name):
     translations = _load_translations()
     raw_cards = _resolve_site_cards(site_name, translations)
     culturas_by_site = models.get_all_farm_culturas()
-    cards_by_site = _filter_cards_by_cultura(
-        {site_name: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
-    )
-    notes = models.get_all_recommendation_notes()
     cultura = _cultura_label(site_name, safra, culturas_by_site)
-    diseases = _build_site_diseases(site_name, cards_by_site.get(site_name, []), notes, cultura=cultura)
+    if _nivel_dados_defasados(_dias_sem_leitura(raw_cards)) == "bloqueado":
+        diseases = []
+    else:
+        cards_by_site = _filter_cards_by_cultura(
+            {site_name: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
+        )
+        notes = models.get_all_recommendation_notes()
+        diseases = _build_site_diseases(site_name, cards_by_site.get(site_name, []), notes, cultura=cultura)
     coords = _weather_coords_all()
     weather = _get_weather_for_site(site_name, coords)
     for d in diseases:

@@ -36,7 +36,7 @@
     {% endif %}
     {% if status and status.nivel_dados %}
     <span class="badge ms-auto {{ 'bg-danger' if status.nivel_dados == 'bloqueado' else 'bg-warning text-dark' }}"
-          title="Estacao sem leitura nova ha {{ status.dias_sem_leitura }} dias{% if status.nivel_dados == 'bloqueado' %} -- envio/copia da recomendacao por WhatsApp bloqueado na aba Manejo{% endif %}">
+          title="Estacao sem leitura nova ha {{ status.dias_sem_leitura }} dias{% if status.nivel_dados == 'bloqueado' %} -- WhatsApp/PDF da aba Manejo passam a mandar so' o clima, sem doenca (dado velho demais pra confiar){% endif %}">
         {{ '🚫' if status.nivel_dados == 'bloqueado' else '📡⚠' }} sem leitura ha {{ status.dias_sem_leitura }}d
     </span>
     {% endif %}
