@@ -5,14 +5,16 @@ locais usam) que roda em qualquer lugar, sem precisar de Windows/PowerShell.
 Usado pelo site hospedado (Railway/Linux), onde o script original nao pode
 rodar -- ver `_run_fetch_in_background` em `app.py`.
 
-Fazenda ja conhecida (pelo menos uma leitura salva antes) busca so' uma
-janela deslizante dos ultimos `LOOKBACK_DAYS` dias -- rapido, uma chamada
-por site em vez de meses de historico, suficiente pra manter o Painel/
-Graficos em dia. Fazenda NUNCA sincronizada antes busca o HISTORICO
-COMPLETO desde `FULL_HISTORY_SINCE` (ver `_known_site_ids`/`fetch_recent`),
-senao ela ficaria com buraco permanente nos graficos pra qualquer data
-anterior a' primeira sincronizacao (bug real, ja visto com fazenda do
-Chile -- ver conversa de 2026-09-06). O merge por chave (`_merge_csv`) so
+Fazenda com historico completo desde `FULL_HISTORY_SINCE` ja salvo busca
+so' uma janela deslizante dos ultimos `LOOKBACK_DAYS` dias -- rapido, uma
+chamada por site em vez de meses de historico, suficiente pra manter o
+Painel/Graficos em dia. Fazenda sem esse historico completo (nunca
+sincronizada, OU so' recebeu uma sincronizacao PARCIAL alguma vez -- ver
+`_earliest_reading_by_site`/`fetch_recent`) busca o HISTORICO COMPLETO
+desde `FULL_HISTORY_SINCE`, senao ela ficaria com buraco permanente nos
+graficos pra qualquer data anterior a essa sincronizacao parcial (bug
+real, ja visto com fazenda do Chile -- ver conversa de 2026-09-06). O
+merge por chave (`_merge_csv`) so
 atualiza ou adiciona linha, nunca remove -- se uma estacao nao aparecer na
 janela (sem leitura nova), a ultima leitura que ja tinha no CSV fica
 exatamente como estava, nunca "some".
@@ -34,8 +36,8 @@ API_BASE = "https://rest.bioscout.com.au"
 # de 16 dias corridos criava risco de buraco permanente de novo).
 LOOKBACK_DAYS = 30
 # Mesmo `-SinceDate` padrao do Fetch-BioScoutData.ps1 -- usado so' pra
-# fazenda NUNCA sincronizada antes (ver `_known_site_ids`/`fetch_recent`),
-# pra backfill de historico completo dela.
+# fazenda sem historico completo ainda (ver `_earliest_reading_by_site`/
+# `fetch_recent`), pra backfill de historico completo dela.
 FULL_HISTORY_SINCE = datetime(2025, 10, 1)
 
 
@@ -120,45 +122,67 @@ def _merge_csv(new_rows, path, key_props):
             writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
-def _known_site_ids(spore_counts_path):
-    """siteId (string) de qualquer fazenda que ja tenha pelo menos uma
-    linha salva em spore_counts.csv -- usado por `fetch_recent` pra saber
-    quem so' precisa da janela recente (`lookback_days`) e quem precisa
-    de historico completo (fazenda nunca vista ainda, ver comentario
-    la')."""
-    known = set()
+def _earliest_reading_by_site(spore_counts_path):
+    """siteId (string) -> data (datetime) da leitura mais ANTIGA ja salva
+    em spore_counts.csv -- usado por `fetch_recent` pra saber quem
+    precisa de backfill de historico completo. Nao basta checar so' "a
+    fazenda ja apareceu alguma vez" (site pode ter recebido so' uma
+    sincronizacao PARCIAL antes -- ex.: uma busca de janela recente que
+    rodou entre a fazenda comecar a ser sincronizada e o backfill de
+    historico completo ainda nao existir/nao ter rodado -- ficando com
+    so' alguns dias salvos pra sempre, mesmo com esse backfill existindo
+    agora); comparar a data mais antiga contra `FULL_HISTORY_SINCE` pega
+    esse caso tambem, nao so' o de fazenda 100% nunca vista."""
+    earliest = {}
     if not spore_counts_path.exists():
-        return known
+        return earliest
     with open(spore_counts_path, encoding="utf-8-sig", newline="") as f:
         for row in csv.DictReader(f):
             site_id = row.get("siteId")
-            if site_id:
-                known.add(str(site_id))
-    return known
+            ts = row.get("samplingStartTime")
+            if not site_id or not ts:
+                continue
+            try:
+                dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+            except ValueError:
+                continue
+            site_id = str(site_id)
+            if site_id not in earliest or dt < earliest[site_id]:
+                earliest[site_id] = dt
+    return earliest
 
 
 def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=print):
-    """Busca sites + spore_counts + weather. Fazenda que a gente ja
-    sincronizou antes so' busca a janela recente (`lookback_days`) --
-    rapido, e o merge por chave preserva qualquer leitura mais antiga ja
-    salva, mesmo que a estacao nao apareca nessa janela. Fazenda NUNCA
-    vista antes (nova no BioScout, ou so' passou a aparecer agora -- ver
-    correcao de 2026-09 sobre o filtro por nome que escondia site fora do
-    padrao "OneAgro") busca o HISTORICO COMPLETO desde `FULL_HISTORY_SINCE`
-    em vez da janela recente -- senao ela so' ganharia dado a partir de
-    agora, e todo o historico anterior que o BioScout tem de verdade (so'
-    nunca foi buscado) ficaria faltando PRA SEMPRE nos graficos, mesmo com
-    o merge rodando toda vez (`lookback_days` sozinho nunca olha pra tras
-    disso)."""
+    """Busca sites + spore_counts + weather. Fazenda com historico
+    completo desde `FULL_HISTORY_SINCE` ja salvo so' busca a janela
+    recente (`lookback_days`) -- rapido, e o merge por chave preserva
+    qualquer leitura mais antiga ja salva, mesmo que a estacao nao
+    apareca nessa janela. Fazenda cuja leitura mais antiga salva e' mais
+    recente que `FULL_HISTORY_SINCE` (nunca vista antes, OU so' recebeu
+    uma sincronizacao PARCIAL alguma vez -- ver `_earliest_reading_by_site`)
+    busca o HISTORICO COMPLETO desde `FULL_HISTORY_SINCE` em vez da
+    janela recente -- senao ela fica faltando PRA SEMPRE nos graficos
+    pra qualquer data anterior a essa sincronizacao parcial, mesmo com o
+    merge rodando toda vez (`lookback_days` sozinho nunca olha pra tras
+    disso). Caso real (2026-09-06): fazenda do Chile ficou marcada como
+    "ja conhecida" so' por ter recebido uma janela recente antes do
+    backfill completo existir, e nunca mais ganhou o historico anterior
+    ate essa checagem virar "data mais antiga", nao so' "existe alguma
+    linha"."""
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     spore_counts_path = data_dir / "spore_counts.csv"
 
-    # Quem a gente ja tinha pelo menos uma leitura salva ANTES dessa
-    # busca -- capturado logo no inicio (antes de qualquer escrita), pra
-    # decidir daqui a pouco quem e' "fazenda nova" (nunca vista) e
-    # precisa de historico completo.
-    known_site_ids = _known_site_ids(spore_counts_path)
+    # Data mais antiga ja salva por site, ANTES dessa busca -- capturado
+    # logo no inicio (antes de qualquer escrita), pra decidir daqui a
+    # pouco quem precisa de backfill de historico completo.
+    earliest_by_site = _earliest_reading_by_site(spore_counts_path)
+    # Margem de alguns dias -- a API pode nao ter leitura EXATAMENTE no
+    # primeiro dia certo (fazenda instalada uns dias depois do inicio do
+    # mes, fim de semana sem leitura etc.), entao so' conta como
+    # "precisa de backfill" quem esta bem mais recente que o esperado,
+    # nao qualquer diferenca de 1-2 dias.
+    backfill_grace = timedelta(days=5)
 
     log("Autenticando...")
     token = _get_auth_token(username, password)
@@ -185,9 +209,12 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
 
     end = datetime.now()
     recent_start = end - timedelta(days=lookback_days)
-    new_site_ids = [sid for sid in site_ids if sid not in known_site_ids]
+    new_site_ids = [
+        sid for sid in site_ids
+        if sid not in earliest_by_site or earliest_by_site[sid] > FULL_HISTORY_SINCE + backfill_grace
+    ]
     if new_site_ids:
-        log(f"Fazenda(s) nunca sincronizada(s) antes -- buscando historico completo desde {FULL_HISTORY_SINCE.date()}: {new_site_ids}")
+        log(f"Fazenda(s) sem historico completo -- buscando desde {FULL_HISTORY_SINCE.date()}: {new_site_ids}")
 
     # Contagem de esporos: uma chamada com a janela recente (todo mundo
     # que a gente ja conhece) e, se houver fazenda nova, MAIS uma chamada
