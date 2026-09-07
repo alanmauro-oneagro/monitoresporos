@@ -257,7 +257,7 @@ def _relatorio_diario_rows():
     rows = []
     for r in report:
         rows.append([
-            r["estacao"], models.fmt_data_br(r["data"]) or r["data"],
+            models.fmt_data_br(r["data"]) or r["data"], r["estacao"],
             r["temp_min"], r["temp_max"],
         ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [
             r["horas_molhamento"], r["vento_predominante"] or "-",
@@ -391,7 +391,7 @@ def build_workbook():
         _write_sheet(wb, "Fungicidas (erro)", ["Erro"], [[str(exc)]])
     _try_sheet(
         wb, "Relatorio Diario",
-        ["Estacao", "Data", "Temp min (C)", "Temp max (C)"]
+        ["Data", "Estacao", "Temp min (C)", "Temp max (C)"]
         + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
         + ["Horas molhamento foliar", "Vento predominante"],
         _relatorio_diario_rows,
