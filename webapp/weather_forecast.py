@@ -7,6 +7,7 @@ import urllib.parse
 from datetime import datetime
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
 
 def get_weather_forecast(lat, lon):
@@ -127,3 +128,43 @@ def get_cloud_forecast_grid(lats, lons):
             "nuvens_pct_por_dia": daily.get("cloud_cover_mean", [])[:6],
         })
     return saida
+
+
+def get_historico_por_dia(lat, lon, data_inicio, data_fim):
+    """Chuva (mm) e direcao de vento (graus) hora a hora, de verdade (nao
+    previsao), entre `data_inicio` e `data_fim` (inclusive, "YYYY-MM-DD"),
+    agrupado por dia local -- MESMO FORMATO do retorno de
+    `data_reader.build_hourly_weather_lookup` (uma lista de
+    {"chuva", "vento"} por dia), so' que pra uma coordenada qualquer, nao
+    um device do BioScout, pra poder reusar `data_reader.contar_direcoes_vento`
+    sem duplicar logica de bucket/media circular. Usado quando a fazenda
+    nao tem device proprio (fazenda virtual/estimada, ver
+    `app._chuva_vento_ultimos_30_dias`) -- endpoint DIFERENTE do usado por
+    `get_weather_forecast` (esse aqui e' o arquivo historico da
+    Open-Meteo, sem o limite de "so' 1 dia pra tras" da previsao).
+    Retorna {} se a busca falhar (sem internet, coordenada invalida,
+    etc.) -- o chamador trata como "sem dado dessa estacao", nao erro."""
+    params = {
+        "latitude": lat, "longitude": lon,
+        "start_date": data_inicio, "end_date": data_fim,
+        "hourly": "precipitation,wind_direction_10m",
+        "timezone": "auto",
+    }
+    url = f"{ARCHIVE_URL}?{urllib.parse.urlencode(params)}"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            data = json.load(resp)
+    except Exception:
+        return {}
+    hourly = data.get("hourly", {})
+    horas = hourly.get("time", [])
+    chuva = hourly.get("precipitation", [])
+    vento = hourly.get("wind_direction_10m", [])
+    por_dia = {}
+    for i, hora_iso in enumerate(horas):
+        dia = hora_iso[:10]  # "YYYY-MM-DDTHH:MM" -> "YYYY-MM-DD"
+        por_dia.setdefault(dia, []).append({
+            "chuva": chuva[i] if i < len(chuva) else None,
+            "vento": vento[i] if i < len(vento) else None,
+        })
+    return por_dia

@@ -2959,23 +2959,70 @@ def _chuva_vento_ultimos_30_dias(site_name, data_final):
     """Chuva acumulada (mm) e direcao de vento predominante (nome por
     extenso, ver `_NOME_DIRECAO_VENTO`) nos 30 dias ATE `data_final`
     (inclusive) -- pras linhas desenhadas na imagem NDVI (ver
-    `ndvi_service.desenhar_informacoes`). Usa a leitura do device
-    BioScout da propria fazenda (mesma fonte do Relatorio Diario/aba
-    Graficos, `data_reader.read_site_device_ids`/`build_hourly_weather_lookup`),
-    NAO a estacao de referencia escolhida pra previsao (essa e' so' pra
-    clima atual/futuro via Open-Meteo -- nao tem historico de 30 dias
-    pra tras pra' nenhuma coordenada arbitraria). Devolve (None, None)
-    se a fazenda nao tiver device mapeado ou nao houver nenhuma leitura
-    na janela, pra' `desenhar_informacoes` simplesmente omitir essas
-    linhas em vez de mostrar dado inventado."""
-    device = data_reader.read_site_device_ids().get(site_name)
-    if not device:
-        return None, None
-    hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
+    `ndvi_service.desenhar_informacoes`).
+
+    Preferencia 1: leitura do device BioScout da propria fazenda (mesma
+    fonte do Relatorio Diario/aba Graficos,
+    `data_reader.read_site_device_ids`/`build_hourly_weather_lookup`) --
+    mais precisa (sensor na propria fazenda).
+
+    Preferencia 2 (fazenda virtual/estimada, ou fazenda real sem leitura
+    na janela -- sem device proprio pra' consultar): media das 3
+    estacoes oficiais mais proximas da coordenada da fazenda
+    (`countries.estacoes_mais_proximas_global`, mesmo catalogo usado
+    pelo seletor de "estacao de referencia" da aba Fazendas), buscando o
+    HISTORICO real (nao previsao -- endpoint diferente, sem o limite de
+    "so' 1 dia pra tras" de `get_weather_forecast`) de cada uma via
+    `weather_forecast.get_historico_por_dia`. Chuva de cada estacao e'
+    somada nos 30 dias, depois tirada a media aritmetica entre as 3;
+    vento de todas as estacoes/dias entra junto em
+    `data_reader.contar_direcoes_vento` (mesma agregacao ja usada pra
+    combinar mais de uma estacao no grafico de vento da aba Graficos).
+
+    Devolve (None, None) se nenhuma das duas fontes tiver dado nenhum
+    (sem device E sem estacao oficial perto o suficiente, ou rede fora
+    do ar), pra' `desenhar_informacoes` simplesmente omitir essas linhas
+    em vez de mostrar dado inventado."""
     dias_janela = [(data_final - timedelta(days=i)).isoformat() for i in range(30)]
-    horas = [h for dia in dias_janela for h in hourly_lookup.get((device, dia), [])]
-    chuva_acumulada = round(sum(h.get("chuva") or 0 for h in horas), 1) if horas else None
-    contagem = data_reader.contar_direcoes_vento(hourly_lookup, [device], dias_janela)
+
+    device = data_reader.read_site_device_ids().get(site_name)
+    if device:
+        hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
+        horas = [h for dia in dias_janela for h in hourly_lookup.get((device, dia), [])]
+        if horas:
+            chuva_acumulada = round(sum(h.get("chuva") or 0 for h in horas), 1)
+            contagem = data_reader.contar_direcoes_vento(hourly_lookup, [device], dias_janela)
+            codigo_vento = max(contagem, key=contagem.get) if any(contagem.values()) else None
+            return chuva_acumulada, _NOME_DIRECAO_VENTO.get(codigo_vento, codigo_vento)
+
+    latlon = _coords_all().get(site_name)
+    if not latlon:
+        return None, None
+    site_country = models.get_site_country(site_name)
+    estacoes = countries.estacoes_mais_proximas_global(*latlon, site_country, n=3)
+    if not estacoes:
+        return None, None
+
+    desde = (data_final - timedelta(days=29)).isoformat()
+    ate = data_final.isoformat()
+    hourly_lookup_estacoes = {}
+    chuvas_por_estacao = []
+    chaves_estacoes = []
+    for estacao in estacoes:
+        por_dia = weather_forecast.get_historico_por_dia(estacao["lat"], estacao["lon"], desde, ate)
+        if not por_dia:
+            continue
+        chave = estacao["codigo"]
+        chaves_estacoes.append(chave)
+        todas_horas = [h for horas_dia in por_dia.values() for h in horas_dia]
+        chuvas_por_estacao.append(sum(h.get("chuva") or 0 for h in todas_horas if h.get("chuva") is not None))
+        for dia, horas_dia in por_dia.items():
+            hourly_lookup_estacoes[(chave, dia)] = horas_dia
+    if not chuvas_por_estacao:
+        return None, None
+
+    chuva_acumulada = round(sum(chuvas_por_estacao) / len(chuvas_por_estacao), 1)
+    contagem = data_reader.contar_direcoes_vento(hourly_lookup_estacoes, chaves_estacoes, dias_janela)
     codigo_vento = max(contagem, key=contagem.get) if any(contagem.values()) else None
     vento_predominante = _NOME_DIRECAO_VENTO.get(codigo_vento, codigo_vento)
     return chuva_acumulada, vento_predominante
