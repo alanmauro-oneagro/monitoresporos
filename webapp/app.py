@@ -157,7 +157,7 @@ def _resolve_site_cards(site, translations):
     return cards
 
 
-_weather_cache = {}  # site_name -> (timestamp, dados)
+_weather_cache = {}  # site_name -> (timestamp, latlon, dados)
 _ndvi_preview_cache = {}  # site_name -> (timestamp, {"imagem":..., "data":..., "cobertura_nuvens":...})
 
 
@@ -166,21 +166,28 @@ def _get_weather_for_site(site, coords):
     cada carregamento da pagina de Recomendacoes. Alem do clima em si,
     marca de onde veio (`fonte`) e a cidade da estacao oficial do INMET
     mais proxima (`cidade`/`uf`, so como referencia geografica -- o valor
-    numerico continua sendo o da Open-Meteo, ver `inmet_stations.py`)."""
+    numerico continua sendo o da Open-Meteo, ver `inmet_stations.py`).
+    O cache guarda TAMBEM o `latlon` que gerou aquele dado -- nao so'
+    tempo decorrido -- pra um chamador que (por engano, ex. bug ja visto
+    em `graficos_dados`) passar a coordenada ERRADA de uma fazenda (a
+    propria em vez da estacao escolhida em `weather_station_overrides`,
+    ver `_weather_coords_all`) nunca "vazar" esse dado errado pros
+    chamadores CORRETOS -- cada combinacao (site, latlon) tem sua propria
+    entrada logica, uma simplesmente nao invalida a outra."""
     latlon = coords.get(site)
     if not latlon:
         return None
     cached = _weather_cache.get(site)
     now = time.time()
-    if cached and now - cached[0] < WEATHER_CACHE_TTL_SECONDS:
-        return cached[1]
+    if cached and cached[1] == latlon and now - cached[0] < WEATHER_CACHE_TTL_SECONDS:
+        return cached[2]
     data = weather_forecast.get_weather_forecast(*latlon)
     if data:
         estacao = inmet_stations.estacao_mais_proxima(*latlon)
         data["cidade"] = estacao["cidade"] if estacao else None
         data["uf"] = estacao["uf"] if estacao else None
         data["fonte"] = "Open-Meteo"
-        _weather_cache[site] = (now, data)
+        _weather_cache[site] = (now, latlon, data)
     return data
 
 
@@ -1831,7 +1838,15 @@ def graficos_dados():
     dias_previsao_set = set(dias_previsao)
     dias = dias + dias_previsao
 
-    coords_all = _coords_all()
+    # `_weather_coords_all()` (nao `_coords_all()`) -- a previsao horaria
+    # daqui precisa respeitar a estacao escolhida em
+    # `weather_station_overrides` igual toda outra tela (Painel,
+    # Recomendacoes, WhatsApp, PDF), senao o `_weather_cache` compartilhado
+    # fica com o clima calculado na coordenada ERRADA (a propria fazenda,
+    # nao a estacao) -- bug real ja visto em producao (fazenda com estacao
+    # escolhida na aba Fazendas nao refletia isso no relatorio, porque
+    # essa rota "envenenava" o cache primeiro com a coordenada errada).
+    coords_all = _weather_coords_all()
     previsao_horaria_por_site = {}
     if dias_previsao:
         _prefetch_weather(sites, coords_all)
@@ -2366,6 +2381,10 @@ def editar_ponto_virtual():
     except sqlite3.IntegrityError:
         flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
         return redirect(url_for("mapa_interpolado"))
+    # Mesmo motivo do pop em `save_weather_station_override` -- sem isso,
+    # `_weather_cache` continuava servindo o clima da coordenada ANTIGA
+    # por ate' `WEATHER_CACHE_TTL_SECONDS` (30min) depois de mover o ponto.
+    _weather_cache.pop(site_name, None)
     flash(f"Ponto estimado '{nome}' atualizado.", "success")
     return redirect(url_for("mapa_interpolado"))
 
