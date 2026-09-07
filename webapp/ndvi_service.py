@@ -524,6 +524,59 @@ def _desenhar_data(imagem_bytes, data):
     return saida.getvalue()
 
 
+def _desenhar_rosa_dos_ventos(imagem_bytes):
+    """Desenha uma seta simples apontando pro Norte no canto superior
+    direito da imagem, no mesmo estilo do selo de data (`_desenhar_data`)
+    -- fundo escuro semi-transparente atras de uma seta branca + "N",
+    legivel em qualquer cor de fundo do NDVI. A Process API sempre
+    devolve a imagem "norte pra cima" (bounds em CRS84/lon-lat, sem
+    nenhuma rotacao -- linha 0 da imagem = maior latitude do bbox), entao
+    uma seta fixa apontando pra cima e' geometricamente correta em
+    qualquer chamada, sem precisar calcular bearing nenhum."""
+    img = Image.open(io.BytesIO(imagem_bytes)).convert("RGBA")
+    try:
+        fonte = ImageFont.load_default(size=max(12, img.width // 30))
+    except TypeError:
+        fonte = ImageFont.load_default()  # Pillow < 10.1 nao aceita `size`
+
+    medidor = ImageDraw.Draw(img)
+    texto = "N"
+    x0_texto, y0_texto, x1_texto, y1_texto = medidor.textbbox((0, 0), texto, font=fonte)
+    largura_texto, altura_texto = x1_texto - x0_texto, y1_texto - y0_texto
+
+    margem = 6
+    espaco_seta_texto = margem
+    altura_seta = altura_texto
+    largura_seta = altura_seta * 0.8
+
+    largura_conteudo = largura_seta + espaco_seta_texto + largura_texto
+    x1 = img.width - 4
+    y0 = 4
+    x0 = x1 - largura_conteudo - margem * 2
+    y1 = y0 + altura_texto + margem * 2
+
+    faixa = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ImageDraw.Draw(faixa).rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 170))
+    img = Image.alpha_composite(img, faixa)
+    desenho = ImageDraw.Draw(img)
+
+    # Seta (triangulo apontando pra cima) alinhada verticalmente com o "N".
+    seta_x0 = x0 + margem
+    seta_topo = y0 + margem
+    seta_base = seta_topo + altura_seta
+    ponta = (seta_x0 + largura_seta / 2, seta_topo)
+    base_esquerda = (seta_x0, seta_base)
+    base_direita = (seta_x0 + largura_seta, seta_base)
+    desenho.polygon([ponta, base_esquerda, base_direita], fill=(255, 255, 255, 255))
+
+    texto_x = seta_x0 + largura_seta + espaco_seta_texto
+    desenho.text((texto_x - x0_texto, y0 + margem - y0_texto), texto, fill=(255, 255, 255, 255), font=fonte)
+
+    saida = io.BytesIO()
+    img.save(saida, format="PNG", optimize=True)
+    return saida.getvalue()
+
+
 def gerar_thumbnail(imagem_bytes, tamanho=200):
     """Miniatura pra galeria do historico NDVI (ver ndvi.html) -- a imagem
     original vem em ate' 2500px de lado (ver `buscar_ndvi`), mas a galeria
@@ -657,4 +710,5 @@ def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_
         return None, f"Falha ao buscar imagem NDVI: {exc}"
 
     imagem = _desenhar_data(imagem, data_da_cena)
+    imagem = _desenhar_rosa_dos_ventos(imagem)
     return {"imagem": imagem, "data": data_da_cena, "cobertura_nuvens": cobertura}, None
