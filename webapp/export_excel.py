@@ -8,6 +8,7 @@ completa) e Relatorio Diario de clima -- exportacao restrita a
 import io
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font
 
 import countries
@@ -23,13 +24,24 @@ SAFRA_LABELS = dict(models.SAFRAS)
 WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda ... 6=Domingo
 
 
+def _safe_row(row):
+    """Remove caractere de controle invalido em XML (0x00-0x08, 0x0B-0x0C,
+    0x0E-0x1F) de qualquer valor de texto na linha -- sem isso, um unico
+    caractere assim (ex.: copiado de uma mensagem de erro do
+    whatsapp-bridge, ou de um campo de anotacao livre) faz
+    `ws.append` levantar `IllegalCharacterError` e derruba a exportacao
+    INTEIRA (mesmo quem so' queria uma aba sem nada a ver com o campo
+    problematico -- ja aconteceu, ver conversa)."""
+    return [ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v for v in row]
+
+
 def _write_sheet(wb, title, headers, rows):
     ws = wb.create_sheet(title=title)
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
     for row in rows:
-        ws.append(row)
+        ws.append(_safe_row(row))
     for col in ws.columns:
         length = max((len(str(c.value)) for c in col if c.value is not None), default=8)
         ws.column_dimensions[col[0].column_letter].width = min(max(length + 2, 10), 50)
@@ -250,11 +262,11 @@ def _add_whatsapp_sheet(wb):
     for cell in ws[ws.max_row]:
         cell.font = Font(bold=True)
     for log in models.get_whatsapp_envio_log(limit=1_000_000):
-        ws.append([
+        ws.append(_safe_row([
             models.fmt_data_br(log["criado_em"]) or "",
             log["site_name"], log["destinatario"] or "", models.fmt_telefone_br(log["telefone"]) or "",
             "Enviado" if log["ok"] else "Falha", log["mensagem"] or "",
-        ])
+        ]))
 
     # Fazenda real (tabela `sites`) + virtual/estimada -- as duas podem
     # ter destinatario/agenda proprios (`_send_site_whatsapp` funciona
@@ -269,7 +281,7 @@ def _add_whatsapp_sheet(wb):
         cell.font = Font(bold=True)
     for site_name in site_names:
         for r in models.get_site_whatsapp_recipients(site_name):
-            ws.append([site_name, r["username"], models.fmt_telefone_br(r["telefone"])])
+            ws.append(_safe_row([site_name, r["username"], models.fmt_telefone_br(r["telefone"])]))
 
     ws.append([])
     ws.append(["Agenda de Envio"])
