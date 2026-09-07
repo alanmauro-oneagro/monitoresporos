@@ -249,6 +249,66 @@ def _leituras_atuais_rows():
     return rows
 
 
+_MOLHAMENTO_PADRAO_HORAS = 6  # mesmo padrao/valor de `app._MOLHAMENTO_PADRAO_HORAS` -- duplicado aqui de proposito (nao importado de app.py, que importaria export_excel.py de volta e criaria import circular), mesmo padrao ja usado no projeto (ex.: haversine duplicada entre inmet_stations.py/virtual_farms.py) pra' uma conta pequena e pura como essa.
+
+
+def _calc_risco_diario_pct(disease, horas_do_dia):
+    """Mesma conta de `app.calc_risco_diario_pct` (risco de infeccao
+    0-100%, horas do dia com temp E umidade/chuva favoraveis ao mesmo
+    tempo pra germinacao, dividido pelo limiar de molhamento da doenca)
+    -- duplicada aqui pelo mesmo motivo do `_MOLHAMENTO_PADRAO_HORAS`
+    acima. Retorna None quando falta clima ou limite cadastrado."""
+    temp_min, temp_max, ur_min = disease.get("germ_temp_min"), disease.get("germ_temp_max"), disease.get("germ_ur_min")
+    if temp_min is None or temp_max is None or not horas_do_dia:
+        return None
+    agua_livre_inibe = disease.get("germ_agua_livre_inibe")
+    favoraveis = 0
+    for h in horas_do_dia:
+        temp, umidade, chuva = h.get("temp"), h.get("umidade"), h.get("chuva") or 0
+        if temp is None:
+            continue
+        temp_ok = temp_min <= temp <= temp_max
+        umidade_ok = False
+        if ur_min is not None and umidade is not None:
+            if agua_livre_inibe:
+                umidade_ok = umidade >= ur_min and chuva <= 0.2
+            else:
+                umidade_ok = umidade >= ur_min or chuva > 0.2
+        if temp_ok and umidade_ok:
+            favoraveis += 1
+    limiar = disease.get("germ_molhamento_horas") or _MOLHAMENTO_PADRAO_HORAS
+    return round(min(100, favoraveis / limiar * 100))
+
+
+def _doencas_historico_rows():
+    """Uma linha por (fazenda, doenca, dia) com a concentracao de esporos
+    (leitura real do BioScout, mesma fonte da aba Graficos) e o risco de
+    infeccao calculado (so' clima x germinacao, 0-100%, mesma conta do
+    grafico de Risco de Infeccao da aba Graficos) -- dia a dia, ao
+    contrario da aba "Leituras Atuais" (que so' tem a leitura mais
+    recente de cada fazenda x doenca)."""
+    translations = models.get_all_disease_translations()
+    spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
+    hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
+    device_by_site = data_reader.read_site_device_ids()
+    rows = []
+    for (site, doenca_en), pontos in spore_lookup.items():
+        info = translations.get(doenca_en, {})
+        nome_pt = info.get("nome_pt") or doenca_en
+        device = device_by_site.get(site)
+        for p in pontos:
+            horas = hourly_lookup.get((device, p["data"]))
+            risco_pct = _calc_risco_diario_pct(info, horas) if horas else None
+            conc = p["concentracao"]
+            rows.append((site, nome_pt, p["data"], round(conc, 1) if conc is not None else None, risco_pct))
+    # Fazenda/doenca em ordem alfabetica; dentro de cada par, data mais
+    # NOVA primeiro (mesmo padrao do Relatorio Diario) -- dois sorts
+    # stable em sequencia, mesmo truque usado la'.
+    rows.sort(key=lambda r: r[2], reverse=True)
+    rows.sort(key=lambda r: (r[0].lower(), r[1].lower()))
+    return [[r[0], r[1], models.fmt_data_br(r[2]) or r[2], r[3], r[4]] for r in rows]
+
+
 def _relatorio_diario_rows():
     report = data_reader.build_daily_weather_report(data_reader.read_weather(), UR_LIMIARES)
     rows = []
@@ -257,7 +317,7 @@ def _relatorio_diario_rows():
             models.fmt_data_br(r["data"]) or r["data"], r["estacao"],
             r["temp_min"], r["temp_max"],
         ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [
-            r["horas_molhamento"], r["vento_predominante"] or "-",
+            r["vento_predominante"] or "-",
         ])
     return rows
 
@@ -375,6 +435,11 @@ def build_workbook():
     _try_sheet(wb, "Manejo - Anotacoes", ["Fazenda", "Doenca", "Nota"], _manejo_anotacoes_rows)
     _try_sheet(wb, "Leituras Atuais", ["Fazenda", "Doenca", "Status", "Concentracao (esporos/m3)", "Data da leitura"], _leituras_atuais_rows)
     _try_sheet(
+        wb, "Doencas - Historico Diario",
+        ["Fazenda", "Doenca", "Data", "Concentracao (esporos/m3)", "Risco de Infeccao (%)"],
+        _doencas_historico_rows,
+    )
+    _try_sheet(
         wb, "Doencas",
         ["Nome (site)", "Nome (BioScout, EN)", "Nome cientifico", "Culturas", "Paises",
          "Germ. temp min (C)", "Germ. temp max (C)", "Germ. UR min (%)", "Germ. molhamento (h)", "Agua livre inibe"],
@@ -393,7 +458,7 @@ def build_workbook():
         wb, "Relatorio Diario",
         ["Data", "Estacao", "Temp min (C)", "Temp max (C)"]
         + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
-        + ["Horas molhamento foliar", "Vento predominante"],
+        + ["Vento predominante"],
         _relatorio_diario_rows,
     )
 
