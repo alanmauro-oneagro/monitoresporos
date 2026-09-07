@@ -121,7 +121,15 @@ def _fazendas_cadastro_rows():
             criado_por = vf.get("criado_por") or ""
         else:
             tipo = "Real"
-            nome_exibicao = display_names.get(site) or ""
+            # Mesma cadeia de fallback de `app._nome_exibicao` (duplicada
+            # aqui pelo mesmo motivo de `_calc_risco_diario_pct` --
+            # importar app.py criaria import circular): escolha manual
+            # da aba Fazendas primeiro, senao deriva do site_name (tira
+            # o prefixo "OneAgro - "). Sem esse fallback, toda fazenda
+            # SEM override ficava com essa coluna em branco, mesmo tendo
+            # um nome de exibicao normal em todo o resto do site.
+            override = display_names.get(site)
+            nome_exibicao = override or (site.split(" - ", 1)[1] if " - " in site else site)
             raio_km = ""
             criado_em = ""
             criado_por = ""
