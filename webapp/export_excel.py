@@ -3,8 +3,9 @@ site: cadastro (usuarios/subordinados), Fazendas (cadastro/produtos/
 plantio/aplicacoes), Manejo das 3 safras (cultura, estoque rapido,
 anotacoes), Doencas (traducao/germinacao/culturas/paises), Culturas,
 WhatsApp (historico/destinatarios/agenda), Fungicidas (biblioteca
-completa) e Relatorio Diario de clima -- exportacao restrita a
-`ALAN_MAURO_USERNAME`, ver `admin_exportar` em `app.py`."""
+completa) e Relatorio Diario (clima + concentracao de esporos e risco
+de infeccao, dia a dia) -- exportacao restrita a `ALAN_MAURO_USERNAME`,
+ver `admin_exportar` em `app.py`."""
 import io
 
 from openpyxl import Workbook
@@ -280,18 +281,28 @@ def _calc_risco_diario_pct(disease, horas_do_dia):
     return round(min(100, favoraveis / limiar * 100))
 
 
-def _doencas_historico_rows():
-    """Uma linha por (fazenda, doenca, dia) com a concentracao de esporos
-    (leitura real do BioScout, mesma fonte da aba Graficos) e o risco de
-    infeccao calculado (so' clima x germinacao, 0-100%, mesma conta do
-    grafico de Risco de Infeccao da aba Graficos) -- dia a dia, ao
-    contrario da aba "Leituras Atuais" (que so' tem a leitura mais
-    recente de cada fazenda x doenca)."""
+def _relatorio_diario_rows():
+    """Uma linha por (estacao/fazenda, dia, doenca) -- clima do dia (temp,
+    UR, vento, igual sempre) MAIS a concentracao de esporos (leitura real
+    do BioScout, mesma fonte da aba Graficos) e o risco de infeccao
+    calculado daquele dia (so' clima x germinacao, 0-100%, mesma conta do
+    grafico de Risco de Infeccao da aba Graficos) pra' cada doenca com
+    leitura naquele dia -- pedido explicito do usuario de ter doenca e
+    clima juntos na mesma aba, nao numa aba separada. Fazenda/dia sem
+    NENHUMA leitura de doenca ainda vira 1 linha so' com essas 3 colunas
+    em branco (nao perde o clima so' por falta de doenca cadastrada);
+    fazenda/dia com N doencas com leitura vira N linhas (clima repetido),
+    ordenadas por nome de doenca dentro do mesmo dia."""
+    report = data_reader.build_daily_weather_report(data_reader.read_weather(), UR_LIMIARES)
     translations = models.get_all_disease_translations()
     spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
     hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
     device_by_site = data_reader.read_site_device_ids()
-    rows = []
+    device_to_site = {device: site for site, device in device_by_site.items()}
+
+    # (site, dia) -> lista de (nome_pt, concentracao, risco_pct), ordenada
+    # por nome de doenca -- montada uma vez so', fora do loop principal.
+    doencas_por_site_dia = {}
     for (site, doenca_en), pontos in spore_lookup.items():
         info = translations.get(doenca_en, {})
         nome_pt = info.get("nome_pt") or doenca_en
@@ -300,25 +311,25 @@ def _doencas_historico_rows():
             horas = hourly_lookup.get((device, p["data"]))
             risco_pct = _calc_risco_diario_pct(info, horas) if horas else None
             conc = p["concentracao"]
-            rows.append((site, nome_pt, p["data"], round(conc, 1) if conc is not None else None, risco_pct))
-    # Fazenda/doenca em ordem alfabetica; dentro de cada par, data mais
-    # NOVA primeiro (mesmo padrao do Relatorio Diario) -- dois sorts
-    # stable em sequencia, mesmo truque usado la'.
-    rows.sort(key=lambda r: r[2], reverse=True)
-    rows.sort(key=lambda r: (r[0].lower(), r[1].lower()))
-    return [[r[0], r[1], models.fmt_data_br(r[2]) or r[2], r[3], r[4]] for r in rows]
+            doencas_por_site_dia.setdefault((site, p["data"]), []).append(
+                (nome_pt, round(conc, 1) if conc is not None else None, risco_pct)
+            )
+    for lista in doencas_por_site_dia.values():
+        lista.sort(key=lambda t: t[0].lower())
 
-
-def _relatorio_diario_rows():
-    report = data_reader.build_daily_weather_report(data_reader.read_weather(), UR_LIMIARES)
     rows = []
     for r in report:
-        rows.append([
+        base = [
             models.fmt_data_br(r["data"]) or r["data"], r["estacao"],
             r["temp_min"], r["temp_max"],
-        ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [
-            r["vento_predominante"] or "-",
-        ])
+        ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [r["vento_predominante"] or "-"]
+        site = device_to_site.get(r["estacao"])
+        doencas = doencas_por_site_dia.get((site, r["data"]), []) if site else []
+        if not doencas:
+            rows.append(base + [None, None, None])
+            continue
+        for nome_pt, conc, risco_pct in doencas:
+            rows.append(base + [nome_pt, conc, risco_pct])
     return rows
 
 
@@ -435,11 +446,6 @@ def build_workbook():
     _try_sheet(wb, "Manejo - Anotacoes", ["Fazenda", "Doenca", "Nota"], _manejo_anotacoes_rows)
     _try_sheet(wb, "Leituras Atuais", ["Fazenda", "Doenca", "Status", "Concentracao (esporos/m3)", "Data da leitura"], _leituras_atuais_rows)
     _try_sheet(
-        wb, "Doencas - Historico Diario",
-        ["Fazenda", "Doenca", "Data", "Concentracao (esporos/m3)", "Risco de Infeccao (%)"],
-        _doencas_historico_rows,
-    )
-    _try_sheet(
         wb, "Doencas",
         ["Nome (site)", "Nome (BioScout, EN)", "Nome cientifico", "Culturas", "Paises",
          "Germ. temp min (C)", "Germ. temp max (C)", "Germ. UR min (%)", "Germ. molhamento (h)", "Agua livre inibe"],
@@ -458,7 +464,7 @@ def build_workbook():
         wb, "Relatorio Diario",
         ["Data", "Estacao", "Temp min (C)", "Temp max (C)"]
         + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
-        + ["Vento predominante"],
+        + ["Vento predominante", "Doenca", "Concentracao (esporos/m3)", "Risco de Infeccao (%)"],
         _relatorio_diario_rows,
     )
 
