@@ -30,6 +30,7 @@
 <div class="alert alert-info">Nenhuma fazenda cadastrada ainda.</div>
 {% else %}
 {% for site_group in sites_data %}
+{% set site_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
         <div class="fw-bold mb-2">
@@ -56,12 +57,12 @@
                 <form method="post" action="{{ url_for('save_ndvi_car') }}" enctype="multipart/form-data">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener" class="small d-inline-block mb-2">Buscar contorno da fazenda no SICAR &raquo;</a>
-                    <label class="small text-muted mb-1 d-block" for="nome_car_{{ loop.index0 }}">Nome do CAR (opcional -- ex.: nome do talhao/propriedade)</label>
-                    <input type="text" class="form-control form-control-sm mb-2" id="nome_car_{{ loop.index0 }}" name="nome" placeholder="Ex.: Talhao Norte">
-                    <label class="small text-muted mb-1 d-block" for="kml_file_{{ loop.index0 }}">Arquivo KML ou Shapefile (.zip com .shp/.shx/.dbf/.prj)</label>
-                    <input type="file" class="form-control form-control-sm mb-2" id="kml_file_{{ loop.index0 }}" name="kml_file" accept=".kml,.zip">
-                    <label class="small text-muted mb-1" for="kml_texto_{{ loop.index0 }}">...ou cole o conteudo do KML aqui</label>
-                    <textarea class="form-control form-control-sm mb-2" id="kml_texto_{{ loop.index0 }}" name="kml_texto" rows="4" placeholder="&lt;kml&gt;...&lt;/kml&gt;"></textarea>
+                    <label class="small text-muted mb-1 d-block" for="nome_car_{{ site_idx }}">Nome do CAR (opcional -- ex.: nome do talhao/propriedade)</label>
+                    <input type="text" class="form-control form-control-sm mb-2" id="nome_car_{{ site_idx }}" name="nome" placeholder="Ex.: Talhao Norte">
+                    <label class="small text-muted mb-1 d-block" for="kml_file_{{ site_idx }}">Arquivo KML ou Shapefile (.zip com .shp/.shx/.dbf/.prj)</label>
+                    <input type="file" class="form-control form-control-sm mb-2" id="kml_file_{{ site_idx }}" name="kml_file" accept=".kml,.zip">
+                    <label class="small text-muted mb-1" for="kml_texto_{{ site_idx }}">...ou cole o conteudo do KML aqui</label>
+                    <textarea class="form-control form-control-sm mb-2" id="kml_texto_{{ site_idx }}" name="kml_texto" rows="4" placeholder="&lt;kml&gt;...&lt;/kml&gt;"></textarea>
                     <button type="submit" class="btn btn-sm btn-success">{{ 'Anexar mais um CAR' if site_group.cars else 'Anexar CAR' }}</button>
                 </form>
                 <div class="text-muted small mt-2">
@@ -73,8 +74,8 @@
                 {% if site_group.cars %}
                 <form method="post" action="{{ url_for('pre_visualizar_ndvi') }}" class="mb-2 d-flex align-items-center flex-wrap gap-2">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                    <label class="small text-muted mb-0" for="data_alvo_{{ loop.index0 }}">Data (opcional):</label>
-                    <input type="date" class="form-control form-control-sm" style="width: auto;" id="data_alvo_{{ loop.index0 }}" name="data_alvo" max="{{ hoje }}" min="2015-06-23">
+                    <label class="small text-muted mb-0" for="data_alvo_{{ site_idx }}">Data (opcional):</label>
+                    <input type="date" class="form-control form-control-sm" style="width: auto;" id="data_alvo_{{ site_idx }}" name="data_alvo" max="{{ hoje }}" min="2015-06-23">
                     <button type="submit" class="btn btn-sm btn-primary" {% if not credenciais_ok %}disabled{% endif %}>Pre-visualizar</button>
                 </form>
                 <div class="text-muted small mb-2">Deixe a data em branco pra buscar a imagem mais recente disponivel.</div>
@@ -104,16 +105,26 @@
                 </div>
                 {% endif %}
                 {% if site_group.historico %}
-                <form method="post" action="{{ url_for('enviar_ndvi_historico_whatsapp') }}" id="ndvi_whats_{{ loop.index0 }}">
+                <form method="post" action="{{ url_for('enviar_ndvi_historico_whatsapp') }}" id="ndvi_whats_{{ site_idx }}">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    {% if site_group.whatsapp_destinatarios %}
+                    <div class="small text-muted mb-1">Enviar pra (desmarque quem nao deve receber dessa vez):</div>
+                    {% for destinatario in site_group.whatsapp_destinatarios %}
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="destino_telefones"
+                               value="{{ destinatario.telefone }}" id="ndvi_dest_{{ site_idx }}_{{ loop.index0 }}" checked>
+                        <label class="form-check-label small" for="ndvi_dest_{{ site_idx }}_{{ loop.index0 }}">{{ destinatario.rotulo }}</label>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
                 </form>
                 <div class="d-flex gap-2 overflow-auto pb-1" style="max-width: 100%;">
                     {% for item in site_group.historico %}
                     <div class="text-center flex-shrink-0" style="width: 90px;">
                         <div class="form-check mb-1" title="Marcar pra enviar por WhatsApp">
-                            <input class="form-check-input" type="checkbox" form="ndvi_whats_{{ loop.index0 }}"
-                                   name="historico_ids" value="{{ item.id }}" id="ndvi_sel_{{ loop.index0 }}_{{ item.id }}">
-                            <label class="form-check-label small" for="ndvi_sel_{{ loop.index0 }}_{{ item.id }}">Selecionar</label>
+                            <input class="form-check-input" type="checkbox" form="ndvi_whats_{{ site_idx }}"
+                                   name="historico_ids" value="{{ item.id }}" id="ndvi_sel_{{ site_idx }}_{{ item.id }}">
+                            <label class="form-check-label small" for="ndvi_sel_{{ site_idx }}_{{ item.id }}">Selecionar</label>
                         </div>
                         <a href="{{ url_for('ver_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
                            target="_blank" rel="noopener" class="text-decoration-none d-block" title="Abrir em nova aba (com zoom)">
@@ -132,9 +143,9 @@
                     </div>
                     {% endfor %}
                 </div>
-                <button type="submit" form="ndvi_whats_{{ loop.index0 }}" class="btn btn-sm btn-outline-success mt-2"
-                        {% if not site_group.whatsapp_destinos %}disabled{% endif %}
-                        title="{% if site_group.whatsapp_destinos %}Enviar as imagens marcadas pra quem recebe relatorio dessa fazenda ({{ site_group.whatsapp_destinos }} numero(s)){% else %}Nenhum numero cadastrado pra receber relatorio dessa fazenda (aba Usuarios){% endif %}">
+                <button type="submit" form="ndvi_whats_{{ site_idx }}" class="btn btn-sm btn-outline-success mt-2"
+                        {% if not site_group.whatsapp_destinatarios %}disabled{% endif %}
+                        title="{% if site_group.whatsapp_destinatarios %}Enviar as imagens marcadas pros destinatarios marcados acima{% else %}Nenhum numero cadastrado pra receber relatorio dessa fazenda (aba Usuarios){% endif %}">
                     📲 Enviar selecionadas por WhatsApp
                 </button>
                 {% else %}

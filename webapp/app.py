@@ -2839,7 +2839,10 @@ def ndvi():
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
             "preview": _get_ndvi_preview(site),
-            "whatsapp_destinos": len(_site_whatsapp_destinations(site)),
+            "whatsapp_destinatarios": [
+                {"telefone": telefone, "rotulo": rotulo}
+                for telefone, rotulo in _site_whatsapp_destinations(site)
+            ],
         }
         for site in sites
     ]
@@ -3043,22 +3046,31 @@ def enviar_ndvi_historico_whatsapp():
     """Manda, por WhatsApp, uma ou mais imagens marcadas na galeria da
     aba NDVI -- cada imagem selecionada vira uma mensagem separada (o
     WhatsApp/Baileys nao tem um jeito nativo de agrupar varias fotos
-    numa unica mensagem), mandada em sequencia pra todo numero que
-    recebe relatorio dessa fazenda (mesmo cadastro usado por
-    `_send_site_whatsapp`, aba Usuarios > "Receber relatorios"). "Enviar
-    agrupadas" aqui significa "escolher varias de uma vez e mandar tudo
-    numa acao so'", nao uma unica mensagem com varias fotos dentro."""
+    numa unica mensagem), mandada em sequencia pros destinatarios
+    marcados no formulario. A lista de destinatarios pra ESCOLHER vem do
+    mesmo cadastro usado por `_send_site_whatsapp` (aba Usuarios >
+    "Receber relatorios") -- o formulario so' deixa marcar/desmarcar
+    quem ja' esta' nessa lista, nunca um numero avulso (o telefone
+    marcado e' conferido contra `_site_whatsapp_destinations` de novo
+    aqui, nao so' confiado no que veio do form). "Enviar agrupadas" aqui
+    significa "escolher varias de uma vez e mandar tudo numa acao so'",
+    nao uma unica mensagem com varias fotos dentro."""
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
     historico_ids = [int(v) for v in request.form.getlist("historico_ids") if v.isdigit()]
     if not historico_ids:
         return _save_response("Selecione pelo menos uma imagem da galeria pra enviar.", "ndvi", ok=False)
-    destinos = _site_whatsapp_destinations(site_name)
-    if not destinos:
+
+    todos_destinos = _site_whatsapp_destinations(site_name)
+    if not todos_destinos:
         return _save_response(
             f"Nenhum numero cadastrado pra receber relatorio de '{_nome_exibicao(site_name)}' (aba Usuarios).",
             "ndvi", ok=False,
         )
+    telefones_marcados = set(request.form.getlist("destino_telefones"))
+    destinos = [(phone, rotulo) for phone, rotulo in todos_destinos if phone in telefones_marcados]
+    if not destinos:
+        return _save_response("Selecione pelo menos um destinatario pra enviar.", "ndvi", ok=False)
 
     nome_exibicao = _nome_exibicao(site_name)
     imagens_enviadas, falhas = 0, []
