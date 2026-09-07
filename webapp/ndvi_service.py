@@ -343,38 +343,44 @@ def _corrigir_anel(anel):
     return [p] if p.geom_type == "Polygon" else list(p.geoms)
 
 
-def _geometria_valida(aneis):
-    """Monta a geometria (Polygon com 1 poligono resultante, MultiPolygon
-    com mais de 1) validando/corrigindo CADA ANEL DE ENTRADA
-    INDEPENDENTEMENTE (nao o contorno inteiro de uma vez) -- shapefiles do
-    CAR/SICAR as vezes tem um anel com defeito serio de digitalizacao
-    (auto-intersecao grave, nao so' um cruzamento simples), e corrigir
-    tudo junto deixava esse anel ruim contaminar os aneis bons: um caso
-    real (fazenda com 5 aneis, um com 111 pontos bagunçados) virou 41
-    fragmentos, quase todos com area numerica proxima de zero, cobrindo
-    uma fracao minuscula da area real da propriedade.
+def _poligonos_corrigidos(aneis):
+    """Corrige CADA ANEL DE ENTRADA INDEPENDENTEMENTE (nao o contorno
+    inteiro de uma vez) -- shapefiles do CAR/SICAR as vezes tem um anel
+    com defeito serio de digitalizacao (auto-intersecao grave, nao so'
+    um cruzamento simples), e corrigir tudo junto deixava esse anel
+    ruim contaminar os aneis bons: um caso real (fazenda com 5 aneis,
+    um com 111 pontos bagunçados) virou 41 fragmentos, quase todos com
+    area numerica proxima de zero, cobrindo uma fracao minuscula da
+    area real da propriedade.
 
     Depois de corrigir anel por anel, descarta fragmentos residuais cuja
-    area e' insignificante (<0.1%) comparada ao maior poligono resultante
-    -- isso remove o "ruido" de um anel corrompido sem descartar partes
-    legitimas da propriedade (talhoes menores mas reais). Por fim, junta
-    tudo com `unary_union`: aneis diferentes as vezes se sobrepoem entre si
-    (ex. um deles e' na verdade um "buraco" tipo Reserva Legal/APP contido
-    dentro de outro, distincao que se perde ao achatar tudo em aneis
-    independentes) -- MultiPolygon nao pode ter membros sobrepostos (regra
-    OGC) e a Copernicus rejeita com "Polygon rings are intersecting" se
-    tiver. `unary_union` resolve qualquer sobreposicao (total, parcial ou
-    nenhuma) automaticamente, sempre devolvendo geometria valida."""
+    area e' insignificante (<0.1%) comparada ao MAIOR POLIGONO DESSE
+    MESMO `aneis` -- isso remove o "ruido" de um anel corrompido sem
+    descartar partes legitimas da propriedade (talhoes menores mas
+    reais). Por isso quem tem mais de um CAR independente (ver
+    `geometria_combinada`) precisa chamar essa funcao UMA VEZ PRA CADA
+    CAR, nunca com os aneis de todos juntos -- senao um CAR legitimo
+    mas bem menor que os outros vira "ruido" pelo mesmo criterio e e'
+    descartado inteiro."""
     poligonos = []
     for anel in aneis:
         poligonos.extend(_corrigir_anel(anel))
-
     if not poligonos:
-        raise ValueError("nenhum anel do contorno resultou em geometria valida")
-
+        return []
     maior_area = max(p.area for p in poligonos)
-    poligonos = [p for p in poligonos if p.area >= maior_area * 0.001]
+    return [p for p in poligonos if p.area >= maior_area * 0.001]
 
+
+def _geometria_a_partir_dos_poligonos(poligonos):
+    """Junta poligonos ja' corrigidos (ver `_poligonos_corrigidos`) numa
+    geometria so' com `unary_union`: aneis diferentes as vezes se
+    sobrepoem entre si (ex. um deles e' na verdade um "buraco" tipo
+    Reserva Legal/APP contido dentro de outro, distincao que se perde ao
+    achatar tudo em aneis independentes) -- MultiPolygon nao pode ter
+    membros sobrepostos (regra OGC) e a Copernicus rejeita com "Polygon
+    rings are intersecting" se tiver. `unary_union` resolve qualquer
+    sobreposicao (total, parcial ou nenhuma) automaticamente, sempre
+    devolvendo geometria valida."""
     unido = unary_union(poligonos)
     poligonos = [unido] if unido.geom_type == "Polygon" else list(unido.geoms)
 
@@ -387,6 +393,36 @@ def _geometria_valida(aneis):
     if len(aneis_finais) == 1:
         return {"type": "Polygon", "coordinates": aneis_finais[0]}
     return {"type": "MultiPolygon", "coordinates": aneis_finais}
+
+
+def _geometria_valida(aneis):
+    """Monta a geometria (Polygon com 1 poligono resultante, MultiPolygon
+    com mais de 1) de UM UNICO CAR/KML -- ver `_poligonos_corrigidos` e
+    `_geometria_a_partir_dos_poligonos`. Pra combinar VARIOS CAR
+    independentes, use `geometria_combinada`, nao esta funcao."""
+    poligonos = _poligonos_corrigidos(aneis)
+    if not poligonos:
+        raise ValueError("nenhum anel do contorno resultou em geometria valida")
+    return _geometria_a_partir_dos_poligonos(poligonos)
+
+
+def geometria_combinada(lista_de_aneis_por_car):
+    """Combina os poligonos de VARIOS CAR anexados a mesma fazenda numa
+    geometria so' (ver `pre_visualizar_ndvi`/`debug_ndvi` em app.py --
+    cada item da lista e' o `aneis` de UM CAR, o que `parse_kml_poligono`
+    devolve pra aquele KML). A correcao/filtro de ruido de digitalizacao
+    (`_poligonos_corrigidos`) e' feita PRA CADA CAR SEPARADAMENTE, ANTES
+    de juntar tudo -- se corrigisse com os aneis de todos os CAR
+    misturados, um CAR legitimo mas bem menor que os outros (ex. um
+    talhao pequeno anexado junto de uma fazenda grande) seria descartado
+    como se fosse "ruido" de um anel mal digitalizado, ja que o filtro e'
+    relativo ao maior poligono do conjunto que ele analisa."""
+    poligonos = []
+    for aneis in lista_de_aneis_por_car:
+        poligonos.extend(_poligonos_corrigidos(aneis))
+    if not poligonos:
+        raise ValueError("nenhum CAR resultou em geometria valida")
+    return _geometria_a_partir_dos_poligonos(poligonos)
 
 
 def resumo_geometria(geometria):
@@ -506,7 +542,7 @@ def gerar_thumbnail(imagem_bytes, tamanho=200):
     return saida.getvalue()
 
 
-def buscar_ndvi(aneis, data_alvo=None, janela_dias=90, largura_px=512):
+def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_px=512):
     """Busca a cena Sentinel-2 mais proxima de `data_alvo` (ou de hoje, se
     nao informada) dentro de uma janela de +/-`janela_dias`, descartando
     cenas com mais de `COBERTURA_NUVENS_MAXIMA`% de nuvens -- com o limite
@@ -520,13 +556,20 @@ def buscar_ndvi(aneis, data_alvo=None, janela_dias=90, largura_px=512):
     ({"imagem": bytes_png, "data": date, "cobertura_nuvens": float|None},
     None) em caso de sucesso, ou (None, mensagem_de_erro) -- nunca levanta
     excecao, pra rota poder mostrar uma mensagem amigavel em vez de quebrar
-    a pagina."""
+    a pagina.
+
+    `lista_de_aneis_por_car` e' uma LISTA DE LISTAS -- um item por CAR
+    anexado a fazenda (o `aneis` que `parse_kml_poligono` devolve pra
+    cada KML), NAO os aneis de todos os CAR ja' misturados -- ver
+    `geometria_combinada` sobre por que a correcao de ruido de
+    digitalizacao precisa ver cada CAR separado antes de juntar. Uma
+    fazenda com 1 CAR so' passa `[aneis_desse_car]`."""
     token, erro = _obter_token()
     if not token:
         return None, f"Nao foi possivel autenticar na Copernicus Data Space Ecosystem: {erro}."
 
     try:
-        geometria = _geometria_valida(aneis)
+        geometria = geometria_combinada(lista_de_aneis_por_car)
     except ValueError as exc:
         return None, f"Contorno invalido: {exc}."
 
@@ -560,7 +603,7 @@ def buscar_ndvi(aneis, data_alvo=None, janela_dias=90, largura_px=512):
     data_da_cena = _data_da_cena(melhor)
     cobertura = melhor["properties"].get("eo:cloud_cover")
 
-    min_lon, min_lat, max_lon, max_lat = _bbox(aneis)
+    min_lon, min_lat, max_lon, max_lat = _bbox([anel for aneis in lista_de_aneis_por_car for anel in aneis])
     largura_graus = max(max_lon - min_lon, 0.0005)
     altura_graus = max(max_lat - min_lat, 0.0005)
     # Sem teto, um contorno muito alongado (faixa estreita ao longo de um

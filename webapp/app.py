@@ -2918,17 +2918,15 @@ def pre_visualizar_ndvi():
             return _save_response("Nao e' possivel gerar NDVI de uma data no futuro.", "ndvi", ok=False)
 
     try:
-        # Combina o poligono de TODOS os CAR anexados a fazenda numa lista
-        # so' de aneis -- `_geometria_valida`/`buscar_ndvi` ja tratam
-        # multiplos aneis desde sempre (varios Placemarks dentro do mesmo
-        # KML), entao gerar o NDVI da uniao dos CAR nao precisa de nenhuma
-        # mudanca em `ndvi_service`.
-        aneis = []
-        for kml in cars_kml:
-            aneis.extend(ndvi_service.parse_kml_poligono(kml))
+        # Um item por CAR anexado (NAO junta os aneis de todos os CAR numa
+        # lista so' antes de mandar pra `buscar_ndvi` -- ela precisa saber
+        # onde um CAR termina e outro comeca, pra corrigir/filtrar ruido
+        # de digitalizacao de cada CAR separadamente antes de combinar
+        # tudo, ver `ndvi_service.geometria_combinada`).
+        lista_de_aneis_por_car = [ndvi_service.parse_kml_poligono(kml) for kml in cars_kml]
     except ValueError as exc:
         return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' invalido: {exc}", "ndvi", ok=False)
-    resultado, erro = ndvi_service.buscar_ndvi(aneis, data_alvo=data_alvo)
+    resultado, erro = ndvi_service.buscar_ndvi(lista_de_aneis_por_car, data_alvo=data_alvo)
     if erro:
         return _save_response(f"Nao foi possivel gerar o NDVI de '{_nome_exibicao(site_name)}': {erro}", "ndvi", ok=False)
     _ndvi_preview_cache[site_name] = (time.time(), resultado)
@@ -3107,9 +3105,8 @@ def debug_ndvi(site_name):
     cars_kml = models.get_farm_ndvi_cars_kml(site_name)
     if not cars_kml:
         return {"erro": "sem CAR cadastrado"}
-    aneis = []
-    for kml in cars_kml:
-        aneis.extend(ndvi_service.parse_kml_poligono(kml))
+    lista_de_aneis_por_car = [ndvi_service.parse_kml_poligono(kml) for kml in cars_kml]
+    aneis = [anel for grupo in lista_de_aneis_por_car for anel in grupo]
     resposta = {
         "site": site_name,
         "n_aneis": len(aneis),
@@ -3119,7 +3116,7 @@ def debug_ndvi(site_name):
         ],
     }
     try:
-        geometria = ndvi_service._geometria_valida(aneis)
+        geometria = ndvi_service.geometria_combinada(lista_de_aneis_por_car)
         resposta["apos_correcao"] = ndvi_service.resumo_geometria(geometria)
     except ValueError as exc:
         resposta["apos_correcao_erro"] = str(exc)
