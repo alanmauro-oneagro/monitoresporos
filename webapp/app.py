@@ -2947,16 +2947,16 @@ def delete_ndvi_car():
 
 def _chuva_vento_ultimos_30_dias(site_name, data_final):
     """Chuva acumulada (mm) e direcao de vento predominante nos 30 dias
-    ATE `data_final` (inclusive) -- pro quadro desenhado na imagem NDVI
-    (ver `ndvi_service.desenhar_quadro_norte`). Usa a leitura do device
+    ATE `data_final` (inclusive) -- pras linhas desenhadas na imagem NDVI
+    (ver `ndvi_service.desenhar_informacoes`). Usa a leitura do device
     BioScout da propria fazenda (mesma fonte do Relatorio Diario/aba
     Graficos, `data_reader.read_site_device_ids`/`build_hourly_weather_lookup`),
     NAO a estacao de referencia escolhida pra previsao (essa e' so' pra
     clima atual/futuro via Open-Meteo -- nao tem historico de 30 dias
     pra tras pra' nenhuma coordenada arbitraria). Devolve (None, None)
     se a fazenda nao tiver device mapeado ou nao houver nenhuma leitura
-    na janela, pra' `desenhar_quadro_norte` simplesmente omitir essas
-    linhas do quadro em vez de mostrar dado inventado."""
+    na janela, pra' `desenhar_informacoes` simplesmente omitir essas
+    linhas em vez de mostrar dado inventado."""
     device = data_reader.read_site_device_ids().get(site_name)
     if not device:
         return None, None
@@ -3001,8 +3001,9 @@ def pre_visualizar_ndvi():
     if erro:
         return _save_response(f"Nao foi possivel gerar o NDVI de '{_nome_exibicao(site_name)}': {erro}", "ndvi", ok=False)
     chuva_acumulada, vento_predominante = _chuva_vento_ultimos_30_dias(site_name, resultado["data"])
-    resultado["imagem"] = ndvi_service.desenhar_quadro_norte(
-        resultado["imagem"], chuva_acumulada_mm=chuva_acumulada, vento_predominante=vento_predominante
+    resultado["imagem"] = ndvi_service.desenhar_informacoes(
+        resultado["imagem"], resultado["data"],
+        chuva_acumulada_mm=chuva_acumulada, vento_predominante=vento_predominante,
     )
     _ndvi_preview_cache[site_name] = (time.time(), resultado)
     mensagem = f"Pre-visualizacao de '{_nome_exibicao(site_name)}' pronta (cena de {resultado['data'].strftime('%d/%m/%Y')}"

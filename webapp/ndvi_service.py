@@ -495,58 +495,70 @@ def _buscar_cenas(token, geometria, desde, ate):
     return dados.get("features", [])
 
 
-def _desenhar_data(imagem_bytes, data):
-    """Escreve a data da cena no canto inferior esquerdo da imagem, com uma
-    faixa escura semi-transparente atras do texto pra ficar legivel em
-    qualquer cor de fundo do NDVI (do marrom do solo exposto ao verde
-    escuro da vegetacao densa)."""
-    img = Image.open(io.BytesIO(imagem_bytes)).convert("RGBA")
-    texto = data.strftime("%d/%m/%Y")
-    try:
-        fonte = ImageFont.load_default(size=max(12, img.width // 30))
-    except TypeError:
-        fonte = ImageFont.load_default()  # Pillow < 10.1 nao aceita `size`
-
-    medidor = ImageDraw.Draw(img)
-    x0_texto, y0_texto, x1_texto, y1_texto = medidor.textbbox((0, 0), texto, font=fonte)
-    largura_texto, altura_texto = x1_texto - x0_texto, y1_texto - y0_texto
-    margem = 6
-    x0, y0 = 4, img.height - altura_texto - margem * 2 - 4
-    x1, y1 = x0 + largura_texto + margem * 2, img.height - 4
-
-    faixa = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    ImageDraw.Draw(faixa).rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 170))
-    img = Image.alpha_composite(img, faixa)
-    ImageDraw.Draw(img).text((x0 + margem, y0 + margem - y0_texto), texto, fill=(255, 255, 255, 255), font=fonte)
-
-    saida = io.BytesIO()
-    img.save(saida, format="PNG", optimize=True)
-    return saida.getvalue()
+def _desenhar_seta_norte(desenho, cx, y_topo, y_base, largura):
+    """Seta (triangulo) apontando pro Norte com um contorno preto fino por
+    baixo do preenchimento branco -- mesma ideia do `stroke_width` usado
+    no texto (ver `desenhar_informacoes`): garante que a seta continue
+    visivel mesmo se cair sobre uma area bem clara da imagem (solo
+    exposto, nuvem), sem precisar de nenhuma caixa de fundo."""
+    contorno = 2
+    ponta = (cx, y_topo)
+    base_esquerda = (cx - largura / 2, y_base)
+    base_direita = (cx + largura / 2, y_base)
+    ponta_c = (cx, y_topo - contorno)
+    base_esquerda_c = (cx - largura / 2 - contorno, y_base + contorno)
+    base_direita_c = (cx + largura / 2 + contorno, y_base + contorno)
+    desenho.polygon([ponta_c, base_esquerda_c, base_direita_c], fill=(0, 0, 0, 255))
+    desenho.polygon([ponta, base_esquerda, base_direita], fill=(255, 255, 255, 255))
 
 
-def desenhar_quadro_norte(imagem_bytes, chuva_acumulada_mm=None, vento_predominante=None):
-    """Desenha, no canto superior direito da imagem, um quadro com a seta
-    apontando pro Norte + "N" (primeira linha, sempre) e, quando
-    informados, a chuva acumulada nos ultimos 30 dias ate' a data da cena
-    e a direcao de vento predominante no mesmo periodo (calculados pelo
-    chamador -- este modulo nao le weather.csv, so' desenha o que
-    `pre_visualizar_ndvi` em app.py ja calculou, pra nao acoplar
-    ndvi_service.py a leitura de clima). `chuva_acumulada_mm`/
-    `vento_predominante` en None (fazenda sem device BioScout mapeado, ou
-    sem nenhuma leitura de clima na janela de 30 dias) simplesmente
-    OMITE aquela linha, em vez de mostrar "None" ou uma linha em branco.
+def desenhar_informacoes(imagem_bytes, data, chuva_acumulada_mm=None, vento_predominante=None):
+    """Escreve, no canto inferior esquerdo da imagem: a data da cena, o
+    Norte (seta + "N") e -- quando informados pelo chamador -- a chuva
+    acumulada nos ultimos 30 dias ate' a data da cena e a direcao de
+    vento predominante no mesmo periodo (calculados por
+    `app._chuva_vento_ultimos_30_dias`; este modulo nao le weather.csv,
+    so' desenha numeros ja prontos, pra nao acoplar ndvi_service.py a
+    leitura de clima). `chuva_acumulada_mm`/`vento_predominante` None
+    (fazenda sem device BioScout mapeado, ou sem leitura na janela de 30
+    dias) simplesmente OMITE aquela linha, em vez de mostrar "None".
 
-    Mesmo fundo escuro semi-transparente do selo de data (`_desenhar_data`),
-    legivel em qualquer cor de fundo do NDVI. A Process API sempre devolve
-    a imagem "norte pra cima" (bounds em CRS84/lon-lat, sem nenhuma
-    rotacao -- linha 0 da imagem = maior latitude do bbox), entao a seta
-    fixa apontando pra cima e' geometricamente correta em qualquer
-    chamada, sem precisar calcular bearing nenhum."""
+    Texto branco com CONTORNO preto fino (`stroke_width`), SEM nenhuma
+    caixa de fundo -- a versao anterior usava uma faixa escura
+    semi-transparente atras do texto, mas isso cobria uma parte real da
+    imagem perto dos cantos (pedido explicito do usuario pra' nao
+    "poluir" a imagem). O contorno sozinho ja garante leitura em
+    qualquer cor de fundo do NDVI, do amarelo claro da vegetacao rala ao
+    verde escuro da vegetacao densa -- testado visualmente contra as 3
+    faixas de cor antes de trocar.
+
+    A Process API sempre devolve a imagem "norte pra cima" (bounds em
+    CRS84/lon-lat, sem nenhuma rotacao -- linha 0 da imagem = maior
+    latitude do bbox), entao uma seta fixa apontando pra cima e'
+    geometricamente correta em qualquer chamada, sem precisar calcular
+    bearing nenhum."""
     img = Image.open(io.BytesIO(imagem_bytes)).convert("RGBA")
     try:
         fonte = ImageFont.load_default(size=max(12, img.width // 30))
     except TypeError:
         fonte = ImageFont.load_default()  # Pillow < 10.1 nao aceita `size`
+
+    desenho = ImageDraw.Draw(img)
+    contorno = 2
+
+    def _escrever(x, y_topo, texto):
+        bbox = desenho.textbbox((0, 0), texto, font=fonte)
+        desenho.text(
+            (x - bbox[0], y_topo - bbox[1]), texto, font=fonte,
+            fill=(255, 255, 255, 255), stroke_width=contorno, stroke_fill=(0, 0, 0, 255),
+        )
+
+    bbox_n = desenho.textbbox((0, 0), "N", font=fonte)
+    altura_linha = bbox_n[3] - bbox_n[1]
+    largura_seta = altura_linha * 0.8
+    espaco_seta_texto = 4
+    espaco_entre_linhas = 4
+    margem_borda = 6
 
     linhas_extra = []
     if chuva_acumulada_mm is not None:
@@ -554,53 +566,21 @@ def desenhar_quadro_norte(imagem_bytes, chuva_acumulada_mm=None, vento_predomina
     if vento_predominante:
         linhas_extra.append(f"Vento 30d: {vento_predominante}")
 
-    medidor = ImageDraw.Draw(img)
-    texto_norte = "N"
-    x0_norte, y0_norte, x1_norte, y1_norte = medidor.textbbox((0, 0), texto_norte, font=fonte)
-    largura_norte, altura_norte = x1_norte - x0_norte, y1_norte - y0_norte
+    # Data + linha do Norte sempre entram; chuva/vento so' quando informados.
+    n_linhas = 2 + len(linhas_extra)
+    altura_total = n_linhas * altura_linha + (n_linhas - 1) * espaco_entre_linhas
+    y = img.height - margem_borda - altura_total
 
-    margem = 6
-    espaco_seta_texto = margem
-    espaco_entre_linhas = 3
-    altura_seta = altura_norte
-    largura_seta = altura_seta * 0.8
-    largura_linha_norte = largura_seta + espaco_seta_texto + largura_norte
+    _escrever(margem_borda, y, data.strftime("%d/%m/%Y"))
+    y += altura_linha + espaco_entre_linhas
 
-    # Cada linha extra e' medida igual a do "N" (mesma fonte) -- guarda
-    # bbox de cada uma pra' desenhar depois, sem remedir.
-    bboxes_extra = [medidor.textbbox((0, 0), linha, font=fonte) for linha in linhas_extra]
-    larguras_extra = [x1 - x0 for x0, y0, x1, y1 in bboxes_extra]
-    altura_linha_extra = altura_norte  # mesma fonte, mesma altura de linha
+    _desenhar_seta_norte(desenho, margem_borda + largura_seta / 2, y, y + altura_linha, largura_seta)
+    _escrever(margem_borda + largura_seta + espaco_seta_texto, y, "N")
+    y += altura_linha + espaco_entre_linhas
 
-    largura_conteudo = max([largura_linha_norte] + larguras_extra)
-    altura_conteudo = altura_norte + len(linhas_extra) * (espaco_entre_linhas + altura_linha_extra)
-
-    x1 = img.width - 4
-    y0 = 4
-    x0 = x1 - largura_conteudo - margem * 2
-    y1 = y0 + altura_conteudo + margem * 2
-
-    faixa = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    ImageDraw.Draw(faixa).rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 170))
-    img = Image.alpha_composite(img, faixa)
-    desenho = ImageDraw.Draw(img)
-
-    # Seta (triangulo apontando pra cima) alinhada verticalmente com o "N".
-    seta_x0 = x0 + margem
-    seta_topo = y0 + margem
-    seta_base = seta_topo + altura_seta
-    ponta = (seta_x0 + largura_seta / 2, seta_topo)
-    base_esquerda = (seta_x0, seta_base)
-    base_direita = (seta_x0 + largura_seta, seta_base)
-    desenho.polygon([ponta, base_esquerda, base_direita], fill=(255, 255, 255, 255))
-
-    texto_x = seta_x0 + largura_seta + espaco_seta_texto
-    desenho.text((texto_x - x0_norte, y0 + margem - y0_norte), texto_norte, fill=(255, 255, 255, 255), font=fonte)
-
-    y_linha = y0 + margem + altura_norte + espaco_entre_linhas
-    for linha, (bx0, by0, bx1, by1) in zip(linhas_extra, bboxes_extra):
-        desenho.text((x0 + margem - bx0, y_linha - by0), linha, fill=(255, 255, 255, 255), font=fonte)
-        y_linha += altura_linha_extra + espaco_entre_linhas
+    for linha in linhas_extra:
+        _escrever(margem_borda, y, linha)
+        y += altura_linha + espaco_entre_linhas
 
     saida = io.BytesIO()
     img.save(saida, format="PNG", optimize=True)
@@ -634,8 +614,10 @@ def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_
     consulta a Catalog API (metadado leve) pra escolher a melhor cena, so'
     DEPOIS pede a imagem de verdade (Process API) pra essa cena especifica,
     em vez de so' confiar no "menor nuvem" automatico da Process API (que
-    nao garante proximidade da data pedida). A imagem final tem a data da
-    cena escrita no canto. Sentinel-2 cobre desde 2015-06-23. Devolve
+    nao garante proximidade da data pedida). A imagem devolvida aqui NAO
+    tem nenhuma anotacao ainda -- quem chama desenha data/Norte/chuva/
+    vento depois, ver `desenhar_informacoes`. Sentinel-2 cobre desde
+    2015-06-23. Devolve
     ({"imagem": bytes_png, "data": date, "cobertura_nuvens": float|None},
     None) em caso de sucesso, ou (None, mensagem_de_erro) -- nunca levanta
     excecao, pra rota poder mostrar uma mensagem amigavel em vez de quebrar
@@ -739,11 +721,9 @@ def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_
     except Exception as exc:
         return None, f"Falha ao buscar imagem NDVI: {exc}"
 
-    # So' o selo de data (nao depende de nada alem da propria cena) --
-    # o quadro do Norte/chuva/vento (`desenhar_quadro_norte`) e' desenhado
-    # por quem chama (`pre_visualizar_ndvi` em app.py), ja' que a chuva
-    # acumulada e o vento predominante dos ultimos 30 dias so' dao pra
-    # calcular DEPOIS de saber `data_da_cena` (a data real da cena
-    # escolhida, que so' e' resolvida aqui dentro).
-    imagem = _desenhar_data(imagem, data_da_cena)
+    # Nao desenha nada aqui dentro -- `desenhar_informacoes` (data, Norte,
+    # chuva/vento) e' chamada por quem chama (`pre_visualizar_ndvi` em
+    # app.py), ja' que a chuva acumulada e o vento predominante dos
+    # ultimos 30 dias so' dao pra calcular DEPOIS de saber `data_da_cena`
+    # (a data real da cena escolhida, que so' e' resolvida aqui dentro).
     return {"imagem": imagem, "data": data_da_cena, "cobertura_nuvens": cobertura}, None
