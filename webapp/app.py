@@ -1457,10 +1457,12 @@ def _auto_detectar_estacoes_novas():
     except FileNotFoundError:
         return
     overrides = models.get_all_weather_station_overrides()
+    site_countries = models.get_all_site_countries()
     for site, (lat, lon) in coords.items():
         if site in overrides:
             continue
-        candidatas = countries.estacoes_mais_proximas_global(lat, lon, n=1)
+        pais_fazenda = site_countries.get(site, countries.DEFAULT_COUNTRY)
+        candidatas = countries.estacoes_mais_proximas_global(lat, lon, pais_fazenda, n=1)
         if not candidatas:
             continue
         estacao = candidatas[0]
@@ -2421,7 +2423,7 @@ def alertas_clima():
             **vf,
             "country_code": _pais_code_clima,
             "pais_nome": countries.get_country(_pais_code_clima)["nome"],
-            "estacoes_proximas": countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], n=2),
+            "estacoes_proximas": countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], _pais_code_clima, n=2),
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "selected_days": all_days.get(site, set()),
             "selected_days_pdf": all_days_pdf.get(site, set()),
@@ -2785,7 +2787,7 @@ def fazendas():
         # fazenda) -- deixa escolher a estacao de referencia realmente
         # mais perto, mesmo que seja de outro pais (fazenda perto de
         # fronteira, por exemplo).
-        estacoes_proximas = countries.estacoes_mais_proximas_global(*latlon, n=2) if latlon else []
+        estacoes_proximas = countries.estacoes_mais_proximas_global(*latlon, country_code, n=2) if latlon else []
         escolha = overrides.get(site)
         sites_data.append({
             "site": site, "nome_exibicao": _nome_exibicao(site), "safras": safras_data,

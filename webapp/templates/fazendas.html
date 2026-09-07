@@ -140,7 +140,6 @@
                 </form>
             </div>
 
-            {% if site_group.estacoes_proximas %}
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
@@ -150,6 +149,9 @@
                             id="est_{{ farm_idx }}_fazenda" {% if not site_group.estacao_selecionada %}checked{% endif %}>
                         <label class="form-check-label small" for="est_{{ farm_idx }}_fazenda">Coordenada da propria fazenda (so' se tiver estacao meteorologica propria)</label>
                     </div>
+                    {% if not site_group.estacoes_proximas %}
+                    <div class="small text-muted mt-1">Nenhuma estacao oficial perto o suficiente encontrada -- usando a coordenada da propria fazenda.</div>
+                    {% endif %}
                     {% for estacao in site_group.estacoes_proximas %}
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="estacao_codigo" value="{{ estacao.country_code }}:{{ estacao.codigo }}"
@@ -162,7 +164,6 @@
                     <span class="autosave-status small ms-2"></span>
                 </form>
             </div>
-            {% endif %}
 
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_whatsapp_days') }}" data-autosave>

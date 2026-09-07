@@ -556,6 +556,31 @@ def init_db():
             for tabela in _VIRTUAL_FARM_RENAME_TABLES:
                 conn.execute(f"UPDATE {tabela} SET site_name=? WHERE site_name=?", (esperado, row["site_name"]))
 
+    # `countries.estacoes_mais_proximas_global` tinha um bug real: fazenda
+    # do Chile sem nenhuma estacao DMC disponivel (credencial
+    # METEOCHILE_USUARIO/TOKEN nao configurada -> catalogo DMC sempre
+    # vazio) acabava herdando a estacao INMET (Brasil) mais proxima
+    # mesmo assim -- ja aconteceu de verdade com uma estacao a mais de
+    # 1500km de distancia (Uruguaiana-RS). Limpa aqui qualquer
+    # combinacao BR<->CL ja gravada por esse bug -- Brasil e Chile NUNCA
+    # fazem fronteira entre si (Argentina/Bolivia ficam no meio), entao
+    # essa combinacao especifica NUNCA e' uma escolha legitima de
+    # "estacao de pais vizinho" (ao contrario de BR/UY ou BR/AR, que sao
+    # fronteira de verdade) -- seguro rodar em toda subida, nunca vai
+    # apagar uma escolha genuina. Limpa a linha inteira (nao so' zera o
+    # codigo) pra `app._auto_detectar_estacoes_novas` tentar de novo com
+    # a correcao (ou deixar em "coordenada propria" se nao achar nada
+    # dentro da distancia maxima agora).
+    site_countries_atual = {
+        r["site_name"]: r["country_code"] for r in conn.execute("SELECT site_name, country_code FROM site_country_overrides")
+    }
+    for row in conn.execute(
+        "SELECT site_name, country_code FROM weather_station_overrides WHERE estacao_codigo != ''"
+    ).fetchall():
+        pais_fazenda = site_countries_atual.get(row["site_name"], "BR")
+        if {row["country_code"], pais_fazenda} == {"BR", "CL"}:
+            conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (row["site_name"],))
+
     conn.commit()
     conn.close()
 

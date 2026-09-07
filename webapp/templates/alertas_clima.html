@@ -41,7 +41,6 @@
         </form>
     </div>
 
-    {% if ponto.estacoes_proximas %}
     <div class="mb-2">
         <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
@@ -51,6 +50,9 @@
                     id="ac_est_{{ ponto_idx }}_ponto" {% if not ponto.estacao_selecionada %}checked{% endif %}>
                 <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_ponto">Coordenada do proprio ponto (so' se tiver estacao meteorologica propria)</label>
             </div>
+            {% if not ponto.estacoes_proximas %}
+            <div class="small text-muted mt-1">Nenhuma estacao oficial perto o suficiente encontrada -- usando a coordenada do proprio ponto.</div>
+            {% endif %}
             {% for estacao in ponto.estacoes_proximas %}
             <div class="form-check">
                 <input class="form-check-input" type="radio" name="estacao_codigo" value="{{ estacao.country_code }}:{{ estacao.codigo }}"
@@ -63,7 +65,6 @@
             <span class="autosave-status small ms-2"></span>
         </form>
     </div>
-    {% endif %}
 
     <div class="mb-2">
         <form method="post" action="{{ url_for('save_whatsapp_days') }}" data-autosave>

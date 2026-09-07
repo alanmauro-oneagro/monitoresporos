@@ -125,20 +125,51 @@ def detectar_pais_por_coordenada(lat, lon):
     return DEFAULT_COUNTRY
 
 
-def estacoes_mais_proximas_global(lat, lon, n=2):
+# Distancia maxima (km) pra uma estacao de OUTRO pais (diferente do
+# pais cadastrado da propria fazenda) ainda contar como "fazenda perto
+# de fronteira" em `estacoes_mais_proximas_global` -- candidata do
+# MESMO pais da fazenda nunca tem esse teto (uma fazenda remota, longe
+# de toda estacao do proprio pais, ainda deve cair na mais proxima
+# disponivel, por mais longe que esteja -- comportamento de sempre).
+# Sem esse teto pras candidatas de FORA, um pais cujo provedor devolve
+# lista vazia (ex.: DMC do Chile sem credencial configurada, ou
+# qualquer pais em `sem_estacoes.py`) deixava a "mais proxima entre as
+# poucas que sobraram" vencer por padrao, nao importa a distancia real
+# -- bug real ja visto em producao (fazenda no Chile herdou uma
+# estacao INMET a mais de 1500km, no Rio Grande do Sul). 150km cobre
+# folgado qualquer fronteira de verdade (INMET tem estacao bem mais
+# densa que isso perto de area povoada) sem deixar um pais "vazio"
+# roubar a escolha de um continente inteiro de distancia.
+DISTANCIA_MAXIMA_ESTACAO_VIZINHA_KM = 150
+
+
+def estacoes_mais_proximas_global(lat, lon, site_country, n=2):
     """As `n` estacoes oficiais mais pertas de uma coordenada, buscando em
     TODO provedor cadastrado (INMET, DMC, ...) e misturando por distancia
     -- ao contrario de so' olhar o catalogo do pais da propria fazenda,
     isso deixa escolher a estacao de referencia realmente mais perto
     mesmo quando ela e' de outro pais (ex.: fazenda perto de fronteira).
-    Cada estacao devolvida ganha "country_code" (o pais do PROVEDOR
-    daquela estacao especifica -- usado por `set_weather_station_override`
-    pra saber em qual catalogo procurar o codigo de novo depois; nao tem
-    nada a ver com o pais da fazenda que fez a busca)."""
+    `site_country` e' o pais CADASTRADO da fazenda que esta' pedindo
+    (`models.get_site_country`/`site_country_overrides`) -- candidata de
+    um pais DIFERENTE desse so' entra se estiver dentro de
+    `DISTANCIA_MAXIMA_ESTACAO_VIZINHA_KM` (ver comentario la'); candidata
+    do MESMO pais nunca tem esse teto. Pode devolver menos de `n` (ou
+    nenhuma) se nao houver estacao nenhuma perto o suficiente nem no
+    proprio pais nem fora, o que e' o comportamento certo (melhor cair
+    pra "coordenada propria" do que usar uma estacao de outro
+    continente). Cada estacao devolvida ganha "country_code" (o pais do
+    PROVEDOR daquela estacao especifica -- usado por
+    `set_weather_station_override` pra saber em qual catalogo procurar
+    o codigo de novo depois; pode ser igual ou diferente de
+    `site_country`)."""
     candidatas = []
     for code, info in COUNTRIES.items():
         for e in info["station_provider"].estacoes_mais_proximas(lat, lon, n=n):
             candidatas.append({**e, "country_code": code})
+    candidatas = [
+        e for e in candidatas
+        if e["country_code"] == site_country or e["distancia_km"] <= DISTANCIA_MAXIMA_ESTACAO_VIZINHA_KM
+    ]
     candidatas.sort(key=lambda e: e["distancia_km"])
     return candidatas[:n]
 
