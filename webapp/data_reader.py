@@ -456,7 +456,13 @@ def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_mo
             "horas_molhamento": vals["molhamento"],
             "vento_predominante": predominante,
         })
-    rows.sort(key=lambda r: ((r["estacao"] or "").lower(), r["data"]))
+    # Estacao em ordem alfabetica, mas dentro de cada estacao a data mais
+    # NOVA primeiro (pedido explicito do usuario) -- dois sorts stable
+    # em sequencia (primeiro por data decrescente, depois por estacao)
+    # em vez de uma chave composta, pra' inverter so' a data sem
+    # inverter junto a ordem alfabetica da estacao.
+    rows.sort(key=lambda r: r["data"], reverse=True)
+    rows.sort(key=lambda r: (r["estacao"] or "").lower())
     return rows
 
 

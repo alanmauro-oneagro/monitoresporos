@@ -77,7 +77,9 @@ def _usuarios_rows():
             u["username"], u["email"] or "", models.fmt_telefone_br(u["telefone"]) or "",
             "Sim" if u["is_admin"] else "Nao", fazendas, relatorios,
         ])
-    rows.sort(key=lambda r: r[0].lower())
+    # Admin primeiro (entre eles, ordem alfabetica), depois os demais --
+    # mesma ordem de `models.get_all_users` (pedido explicito do usuario).
+    rows.sort(key=lambda r: (0 if r[3] == "Sim" else 1, r[0].lower()))
     return rows
 
 

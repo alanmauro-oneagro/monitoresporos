@@ -1858,9 +1858,12 @@ def get_user_by_id(user_id):
 
 
 def get_all_users():
+    """Admin primeiro (entre eles, ordem alfabetica), depois os demais
+    (tambem em ordem alfabetica) -- pedido explicito do usuario, pra
+    quem administra o site aparecer sempre no topo da aba Usuarios."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, username, is_admin, email, telefone FROM users ORDER BY username"
+        "SELECT id, username, is_admin, email, telefone FROM users ORDER BY is_admin DESC, username COLLATE NOCASE"
     ).fetchall()
     conn.close()
     return rows
