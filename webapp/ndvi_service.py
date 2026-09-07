@@ -524,36 +524,61 @@ def _desenhar_data(imagem_bytes, data):
     return saida.getvalue()
 
 
-def _desenhar_rosa_dos_ventos(imagem_bytes):
-    """Desenha uma seta simples apontando pro Norte no canto superior
-    direito da imagem, no mesmo estilo do selo de data (`_desenhar_data`)
-    -- fundo escuro semi-transparente atras de uma seta branca + "N",
-    legivel em qualquer cor de fundo do NDVI. A Process API sempre
-    devolve a imagem "norte pra cima" (bounds em CRS84/lon-lat, sem
-    nenhuma rotacao -- linha 0 da imagem = maior latitude do bbox), entao
-    uma seta fixa apontando pra cima e' geometricamente correta em
-    qualquer chamada, sem precisar calcular bearing nenhum."""
+def desenhar_quadro_norte(imagem_bytes, chuva_acumulada_mm=None, vento_predominante=None):
+    """Desenha, no canto superior direito da imagem, um quadro com a seta
+    apontando pro Norte + "N" (primeira linha, sempre) e, quando
+    informados, a chuva acumulada nos ultimos 30 dias ate' a data da cena
+    e a direcao de vento predominante no mesmo periodo (calculados pelo
+    chamador -- este modulo nao le weather.csv, so' desenha o que
+    `pre_visualizar_ndvi` em app.py ja calculou, pra nao acoplar
+    ndvi_service.py a leitura de clima). `chuva_acumulada_mm`/
+    `vento_predominante` en None (fazenda sem device BioScout mapeado, ou
+    sem nenhuma leitura de clima na janela de 30 dias) simplesmente
+    OMITE aquela linha, em vez de mostrar "None" ou uma linha em branco.
+
+    Mesmo fundo escuro semi-transparente do selo de data (`_desenhar_data`),
+    legivel em qualquer cor de fundo do NDVI. A Process API sempre devolve
+    a imagem "norte pra cima" (bounds em CRS84/lon-lat, sem nenhuma
+    rotacao -- linha 0 da imagem = maior latitude do bbox), entao a seta
+    fixa apontando pra cima e' geometricamente correta em qualquer
+    chamada, sem precisar calcular bearing nenhum."""
     img = Image.open(io.BytesIO(imagem_bytes)).convert("RGBA")
     try:
         fonte = ImageFont.load_default(size=max(12, img.width // 30))
     except TypeError:
         fonte = ImageFont.load_default()  # Pillow < 10.1 nao aceita `size`
 
+    linhas_extra = []
+    if chuva_acumulada_mm is not None:
+        linhas_extra.append(f"Chuva 30d: {chuva_acumulada_mm:.1f}mm")
+    if vento_predominante:
+        linhas_extra.append(f"Vento 30d: {vento_predominante}")
+
     medidor = ImageDraw.Draw(img)
-    texto = "N"
-    x0_texto, y0_texto, x1_texto, y1_texto = medidor.textbbox((0, 0), texto, font=fonte)
-    largura_texto, altura_texto = x1_texto - x0_texto, y1_texto - y0_texto
+    texto_norte = "N"
+    x0_norte, y0_norte, x1_norte, y1_norte = medidor.textbbox((0, 0), texto_norte, font=fonte)
+    largura_norte, altura_norte = x1_norte - x0_norte, y1_norte - y0_norte
 
     margem = 6
     espaco_seta_texto = margem
-    altura_seta = altura_texto
+    espaco_entre_linhas = 3
+    altura_seta = altura_norte
     largura_seta = altura_seta * 0.8
+    largura_linha_norte = largura_seta + espaco_seta_texto + largura_norte
 
-    largura_conteudo = largura_seta + espaco_seta_texto + largura_texto
+    # Cada linha extra e' medida igual a do "N" (mesma fonte) -- guarda
+    # bbox de cada uma pra' desenhar depois, sem remedir.
+    bboxes_extra = [medidor.textbbox((0, 0), linha, font=fonte) for linha in linhas_extra]
+    larguras_extra = [x1 - x0 for x0, y0, x1, y1 in bboxes_extra]
+    altura_linha_extra = altura_norte  # mesma fonte, mesma altura de linha
+
+    largura_conteudo = max([largura_linha_norte] + larguras_extra)
+    altura_conteudo = altura_norte + len(linhas_extra) * (espaco_entre_linhas + altura_linha_extra)
+
     x1 = img.width - 4
     y0 = 4
     x0 = x1 - largura_conteudo - margem * 2
-    y1 = y0 + altura_texto + margem * 2
+    y1 = y0 + altura_conteudo + margem * 2
 
     faixa = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ImageDraw.Draw(faixa).rectangle([x0, y0, x1, y1], fill=(0, 0, 0, 170))
@@ -570,7 +595,12 @@ def _desenhar_rosa_dos_ventos(imagem_bytes):
     desenho.polygon([ponta, base_esquerda, base_direita], fill=(255, 255, 255, 255))
 
     texto_x = seta_x0 + largura_seta + espaco_seta_texto
-    desenho.text((texto_x - x0_texto, y0 + margem - y0_texto), texto, fill=(255, 255, 255, 255), font=fonte)
+    desenho.text((texto_x - x0_norte, y0 + margem - y0_norte), texto_norte, fill=(255, 255, 255, 255), font=fonte)
+
+    y_linha = y0 + margem + altura_norte + espaco_entre_linhas
+    for linha, (bx0, by0, bx1, by1) in zip(linhas_extra, bboxes_extra):
+        desenho.text((x0 + margem - bx0, y_linha - by0), linha, fill=(255, 255, 255, 255), font=fonte)
+        y_linha += altura_linha_extra + espaco_entre_linhas
 
     saida = io.BytesIO()
     img.save(saida, format="PNG", optimize=True)
@@ -709,6 +739,11 @@ def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_
     except Exception as exc:
         return None, f"Falha ao buscar imagem NDVI: {exc}"
 
+    # So' o selo de data (nao depende de nada alem da propria cena) --
+    # o quadro do Norte/chuva/vento (`desenhar_quadro_norte`) e' desenhado
+    # por quem chama (`pre_visualizar_ndvi` em app.py), ja' que a chuva
+    # acumulada e o vento predominante dos ultimos 30 dias so' dao pra
+    # calcular DEPOIS de saber `data_da_cena` (a data real da cena
+    # escolhida, que so' e' resolvida aqui dentro).
     imagem = _desenhar_data(imagem, data_da_cena)
-    imagem = _desenhar_rosa_dos_ventos(imagem)
     return {"imagem": imagem, "data": data_da_cena, "cobertura_nuvens": cobertura}, None
