@@ -2829,16 +2829,17 @@ def ndvi():
         if not sites:
             return render_template("ndvi.html", sites_data=[], no_access=True, credenciais_ok=True)
 
-    areas = models.get_all_farm_ndvi_areas()
+    cars_by_site = models.get_all_farm_ndvi_cars()
     coords = _coords_all()
     sites_data = [
         {
             "site": site,
             "nome_exibicao": _nome_exibicao(site),
-            "area": areas.get(site),
+            "cars": cars_by_site.get(site, []),
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
             "preview": _get_ndvi_preview(site),
+            "whatsapp_destinos": len(_site_whatsapp_destinations(site)),
         }
         for site in sites
     ]
@@ -2856,12 +2857,13 @@ def _checar_acesso_site(site_name):
             abort(403)
 
 
-@app.route("/ndvi/area/save", methods=["POST"])
+@app.route("/ndvi/car/save", methods=["POST"])
 @login_required
-def save_ndvi_area():
+def save_ndvi_car():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
     arquivo = request.files.get("kml_file")
+    nome = request.form.get("nome", "").strip()
     try:
         if arquivo and arquivo.filename:
             conteudo = arquivo.read()
@@ -2869,23 +2871,31 @@ def save_ndvi_area():
                 aneis = ndvi_service.parse_shapefile_zip(conteudo)
             else:
                 aneis = ndvi_service.parse_kml_poligono(conteudo.decode("utf-8", errors="replace"))
+            nome = nome or arquivo.filename
         else:
             aneis = ndvi_service.parse_kml_poligono(request.form.get("kml_texto", ""))
     except ValueError as exc:
-        return _save_response(f"Nao foi possivel salvar o contorno de '{_nome_exibicao(site_name)}': {exc}", "ndvi", ok=False)
+        return _save_response(f"Nao foi possivel salvar o CAR de '{_nome_exibicao(site_name)}': {exc}", "ndvi", ok=False)
+    nome = nome or f"CAR {len(models.get_farm_ndvi_cars(site_name)) + 1}"
     # Sempre grava KML de verdade (mesmo quando a origem foi um shapefile),
-    # pra `gerar_ndvi` ter so' um formato pra reler do banco.
-    models.set_farm_ndvi_area(site_name, ndvi_service.aneis_para_kml(aneis))
-    return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' salvo -- agora e' so' clicar em \"Gerar NDVI\".", "ndvi")
+    # pra `pre_visualizar_ndvi` ter so' um formato pra reler do banco.
+    # NAO substitui os CAR ja anexados -- cada chamada acrescenta mais um
+    # (uma fazenda pode ter varios CAR, ex. propriedades vizinhas
+    # arrendadas juntas; o NDVI gerado combina o poligono de todos).
+    models.add_farm_ndvi_car(site_name, nome, ndvi_service.aneis_para_kml(aneis))
+    return _save_response(f"CAR '{nome}' anexado a '{_nome_exibicao(site_name)}' -- agora e' so' clicar em \"Pre-visualizar\".", "ndvi")
 
 
-@app.route("/ndvi/area/delete", methods=["POST"])
+@app.route("/ndvi/car/delete", methods=["POST"])
 @login_required
-def delete_ndvi_area():
+def delete_ndvi_car():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
-    models.delete_farm_ndvi_area(site_name)
-    return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' removido.", "ndvi")
+    car_id = request.form.get("car_id", type=int)
+    if car_id is None:
+        abort(400)
+    models.delete_farm_ndvi_car(car_id, site_name)
+    return _save_response(f"CAR removido de '{_nome_exibicao(site_name)}'.", "ndvi")
 
 
 @app.route("/ndvi/pre_visualizar", methods=["POST"])
@@ -2893,9 +2903,9 @@ def delete_ndvi_area():
 def pre_visualizar_ndvi():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
-    area = models.get_farm_ndvi_area(site_name)
-    if not area:
-        return _save_response(f"'{_nome_exibicao(site_name)}' ainda nao tem contorno KML cadastrado.", "ndvi", ok=False)
+    cars_kml = models.get_farm_ndvi_cars_kml(site_name)
+    if not cars_kml:
+        return _save_response(f"'{_nome_exibicao(site_name)}' ainda nao tem nenhum CAR cadastrado.", "ndvi", ok=False)
 
     data_texto = request.form.get("data_alvo", "").strip()
     data_alvo = None
@@ -2908,7 +2918,14 @@ def pre_visualizar_ndvi():
             return _save_response("Nao e' possivel gerar NDVI de uma data no futuro.", "ndvi", ok=False)
 
     try:
-        aneis = ndvi_service.parse_kml_poligono(area["kml"])
+        # Combina o poligono de TODOS os CAR anexados a fazenda numa lista
+        # so' de aneis -- `_geometria_valida`/`buscar_ndvi` ja tratam
+        # multiplos aneis desde sempre (varios Placemarks dentro do mesmo
+        # KML), entao gerar o NDVI da uniao dos CAR nao precisa de nenhuma
+        # mudanca em `ndvi_service`.
+        aneis = []
+        for kml in cars_kml:
+            aneis.extend(ndvi_service.parse_kml_poligono(kml))
     except ValueError as exc:
         return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' invalido: {exc}", "ndvi", ok=False)
     resultado, erro = ndvi_service.buscar_ndvi(aneis, data_alvo=data_alvo)
@@ -3022,6 +3039,62 @@ def delete_ndvi_historico():
     return _save_response(f"Imagem removida da galeria de '{_nome_exibicao(site_name)}'.", "ndvi")
 
 
+@app.route("/ndvi/historico/enviar-whatsapp", methods=["POST"])
+@login_required
+def enviar_ndvi_historico_whatsapp():
+    """Manda, por WhatsApp, uma ou mais imagens marcadas na galeria da
+    aba NDVI -- cada imagem selecionada vira uma mensagem separada (o
+    WhatsApp/Baileys nao tem um jeito nativo de agrupar varias fotos
+    numa unica mensagem), mandada em sequencia pra todo numero que
+    recebe relatorio dessa fazenda (mesmo cadastro usado por
+    `_send_site_whatsapp`, aba Usuarios > "Receber relatorios"). "Enviar
+    agrupadas" aqui significa "escolher varias de uma vez e mandar tudo
+    numa acao so'", nao uma unica mensagem com varias fotos dentro."""
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    historico_ids = [int(v) for v in request.form.getlist("historico_ids") if v.isdigit()]
+    if not historico_ids:
+        return _save_response("Selecione pelo menos uma imagem da galeria pra enviar.", "ndvi", ok=False)
+    destinos = _site_whatsapp_destinations(site_name)
+    if not destinos:
+        return _save_response(
+            f"Nenhum numero cadastrado pra receber relatorio de '{_nome_exibicao(site_name)}' (aba Usuarios).",
+            "ndvi", ok=False,
+        )
+
+    nome_exibicao = _nome_exibicao(site_name)
+    imagens_enviadas, falhas = 0, []
+    for historico_id in historico_ids:
+        item = models.get_farm_ndvi_historico_item(historico_id, site_name)
+        imagem = models.get_farm_ndvi_historico_imagem(historico_id, site_name)
+        if not item or not imagem:
+            continue
+        data_br = models.fmt_data_br(item["data_alvo"])
+        legenda = f"🛰️ NDVI - {nome_exibicao} - {data_br}"
+        if item.get("cobertura_nuvens") is not None:
+            legenda += f" ({item['cobertura_nuvens']:.0f}% de nuvens)"
+        ok_alguma = False
+        for phone, rotulo in destinos:
+            ok, mensagem = whatsapp.send_whatsapp_image(phone, imagem, caption=legenda)
+            models.log_whatsapp_envio(site_name, rotulo, phone, ok, f"NDVI {data_br}: {mensagem}")
+            if ok:
+                ok_alguma = True
+            else:
+                falhas.append(f"{rotulo} ({data_br})")
+        if ok_alguma:
+            imagens_enviadas += 1
+
+    if imagens_enviadas == 0:
+        return _save_response(
+            f"Nao foi possivel enviar nenhuma imagem de '{nome_exibicao}' -- {'; '.join(falhas) or 'erro desconhecido'}.",
+            "ndvi", ok=False,
+        )
+    resumo = f"{imagens_enviadas} imagem(ns) de '{nome_exibicao}' enviada(s) por WhatsApp pra {len(destinos)} numero(s)."
+    if falhas:
+        resumo += f" Falhas: {'; '.join(falhas)}."
+    return _save_response(resumo, "ndvi", ok=not falhas)
+
+
 @app.route("/ndvi/debug/<path:site_name>")
 @login_required
 def debug_ndvi(site_name):
@@ -3031,10 +3104,12 @@ def debug_ndvi(site_name):
     pra achar a causa real sem precisar adivinhar."""
     if not current_user.is_admin:
         abort(403)
-    area = models.get_farm_ndvi_area(site_name)
-    if not area:
-        return {"erro": "sem contorno cadastrado"}
-    aneis = ndvi_service.parse_kml_poligono(area["kml"])
+    cars_kml = models.get_farm_ndvi_cars_kml(site_name)
+    if not cars_kml:
+        return {"erro": "sem CAR cadastrado"}
+    aneis = []
+    for kml in cars_kml:
+        aneis.extend(ndvi_service.parse_kml_poligono(kml))
     resposta = {
         "site": site_name,
         "n_aneis": len(aneis),

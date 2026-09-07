@@ -108,7 +108,9 @@ function normalizePhone(phone) {
 }
 
 const app = express();
-app.use(express.json());
+// Default do express.json() e' 100kb -- pequeno demais pro PDF/imagem NDVI
+// em base64 (que ja aumenta ~33% so' de virar texto).
+app.use(express.json({ limit: "20mb" }));
 
 app.get("/status", (req, res) => {
     res.json({
@@ -173,9 +175,9 @@ app.post("/check-number", async (req, res) => {
 });
 
 app.post("/send", (req, res) => {
-    const { phone, message, documentBase64, fileName, caption } = req.body || {};
-    if (!phone || (!message && !documentBase64)) {
-        return res.status(400).json({ ok: false, error: "phone e (message ou documentBase64) sao obrigatorios" });
+    const { phone, message, documentBase64, imageBase64, fileName, caption } = req.body || {};
+    if (!phone || (!message && !documentBase64 && !imageBase64)) {
+        return res.status(400).json({ ok: false, error: "phone e (message, documentBase64 ou imageBase64) sao obrigatorios" });
     }
     if (!connected || !sock) {
         return res.status(503).json({ ok: false, error: "WhatsApp nao conectado -- escaneie o QR code em /qr" });
@@ -213,6 +215,17 @@ app.post("/send", (req, res) => {
                     document: Buffer.from(documentBase64, "base64"),
                     mimetype: "application/pdf",
                     fileName: fileName || "relatorio.pdf",
+                    caption: caption || undefined,
+                });
+            }
+            if (imageBase64) {
+                // Imagem NDVI salva na galeria (ver
+                // `enviar_ndvi_historico_whatsapp` em app.py) -- `image`
+                // (nao `document`) faz o Baileys mandar como foto de
+                // verdade (com preview na conversa), nao como arquivo
+                // anexado.
+                return sock.sendMessage(jid, {
+                    image: Buffer.from(imageBase64, "base64"),
                     caption: caption || undefined,
                 });
             }

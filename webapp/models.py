@@ -309,11 +309,18 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS farm_ndvi_area (
             site_name TEXT PRIMARY KEY,
-            kml TEXT NOT NULL,
-            atualizado_em TEXT NOT NULL,
             imagem BLOB,
             imagem_gerada_em TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS farm_ndvi_car (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_name TEXT NOT NULL,
+            nome TEXT NOT NULL,
+            kml TEXT NOT NULL,
+            criado_em TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_farm_ndvi_car_site ON farm_ndvi_car(site_name);
 
         CREATE TABLE IF NOT EXISTS farm_ndvi_historico (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -457,6 +464,42 @@ def init_db():
             """
         )
         conn.execute("DROP TABLE farm_aplicacoes_old")
+
+    # farm_ndvi_area guardava so' 1 contorno por fazenda (kml unico,
+    # sobrescrito a cada salvamento) -- agora cada CAR anexado vira uma
+    # linha propria em farm_ndvi_car (permite anexar varios CAR por
+    # fazenda, cada um removivel independente; o NDVI gerado combina
+    # TODOS os poligonos anexados, ver `pre_visualizar_ndvi` em app.py).
+    # Se o banco foi criado antes dessa versao, farm_ndvi_area ainda tem
+    # a coluna "kml" antiga -- migra o contorno existente como o
+    # primeiro CAR de cada fazenda e reduz a tabela pro novo formato
+    # (so' cache da ultima imagem gerada).
+    farm_ndvi_area_cols = [r[1] for r in conn.execute("PRAGMA table_info(farm_ndvi_area)")]
+    if "kml" in farm_ndvi_area_cols:
+        conn.execute("ALTER TABLE farm_ndvi_area RENAME TO farm_ndvi_area_old")
+        conn.execute(
+            """
+            CREATE TABLE farm_ndvi_area (
+                site_name TEXT PRIMARY KEY,
+                imagem BLOB,
+                imagem_gerada_em TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO farm_ndvi_area (site_name, imagem, imagem_gerada_em)
+            SELECT site_name, imagem, imagem_gerada_em FROM farm_ndvi_area_old
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO farm_ndvi_car (site_name, nome, kml, criado_em)
+            SELECT site_name, 'CAR 1', kml, atualizado_em FROM farm_ndvi_area_old
+            WHERE kml IS NOT NULL AND kml != ''
+            """
+        )
+        conn.execute("DROP TABLE farm_ndvi_area_old")
 
     if conn.execute("SELECT COUNT(*) c FROM culturas").fetchone()[0] == 0:
         for slot, nome in enumerate(data_reader.DEFAULT_CULTURAS):
@@ -1274,50 +1317,75 @@ def set_site_display_name(site_name, nome_exibicao):
     conn.close()
 
 
-def get_farm_ndvi_area(site_name):
-    """KML da area cadastrada pra essa fazenda na aba NDVI, ou None se
-    ainda nao tiver sido cadastrada."""
-    conn = get_db()
-    row = conn.execute(
-        "SELECT site_name, kml, atualizado_em, imagem_gerada_em FROM farm_ndvi_area WHERE site_name = ?",
-        (site_name,),
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def get_all_farm_ndvi_areas():
-    """site_name -> dict (sem a coluna `imagem`, que pode ser grande --
-    usa `get_farm_ndvi_image` pra pegar o PNG de uma fazenda especifica)."""
+def get_farm_ndvi_cars(site_name):
+    """Lista (sem o KML, que pode ser grande) dos CAR anexados a essa
+    fazenda, do mais antigo pro mais novo -- usada pra listar os CARs ja
+    cadastrados na aba NDVI."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT site_name, kml, atualizado_em, imagem_gerada_em FROM farm_ndvi_area"
+        "SELECT id, nome, criado_em FROM farm_ndvi_car WHERE site_name = ? ORDER BY criado_em, id",
+        (site_name,),
     ).fetchall()
     conn.close()
-    return {r["site_name"]: dict(r) for r in rows}
+    return [dict(r) for r in rows]
 
 
-def set_farm_ndvi_area(site_name, kml):
-    """Cadastra/substitui o contorno KML de uma fazenda. Zera a imagem
-    NDVI anterior (se o contorno mudou, a imagem antiga nao vale mais)."""
+def get_all_farm_ndvi_cars():
+    """site_name -> lista de CARs (sem KML) -- usada pra montar a tela
+    NDVI de todas as fazendas de uma vez sem carregar todo KML."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT site_name, id, nome, criado_em FROM farm_ndvi_car ORDER BY site_name, criado_em, id"
+    ).fetchall()
+    conn.close()
+    por_site = {}
+    for r in rows:
+        por_site.setdefault(r["site_name"], []).append(
+            {"id": r["id"], "nome": r["nome"], "criado_em": r["criado_em"]}
+        )
+    return por_site
+
+
+def get_farm_ndvi_cars_kml(site_name):
+    """KML de TODOS os CAR anexados a essa fazenda, na ordem em que
+    foram anexados -- usado na hora de gerar o NDVI (o poligono de todos
+    eles e' combinado num so', ver `ndvi_service`/`pre_visualizar_ndvi`
+    em app.py)."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT kml FROM farm_ndvi_car WHERE site_name = ? ORDER BY criado_em, id", (site_name,)
+    ).fetchall()
+    conn.close()
+    return [r["kml"] for r in rows]
+
+
+def add_farm_ndvi_car(site_name, nome, kml):
+    """Anexa mais um CAR a fazenda -- NAO substitui os anteriores, cada
+    CAR fica numa linha propria, removivel independente (ver
+    `delete_farm_ndvi_car`)."""
     conn = get_db()
     conn.execute(
-        """
-        INSERT INTO farm_ndvi_area (site_name, kml, atualizado_em, imagem, imagem_gerada_em)
-        VALUES (?, ?, ?, NULL, NULL)
-        ON CONFLICT(site_name) DO UPDATE SET
-            kml = excluded.kml, atualizado_em = excluded.atualizado_em,
-            imagem = NULL, imagem_gerada_em = NULL
-        """,
-        (site_name, kml, _agora_cuiaba()),
+        "INSERT INTO farm_ndvi_car (site_name, nome, kml, criado_em) VALUES (?, ?, ?, ?)",
+        (site_name, nome, kml, _agora_cuiaba()),
+    )
+    # O CAR anexado muda o contorno combinado da fazenda -- a ultima
+    # imagem cacheada (se tiver) nao vale mais.
+    conn.execute(
+        "UPDATE farm_ndvi_area SET imagem = NULL, imagem_gerada_em = NULL WHERE site_name = ?", (site_name,)
     )
     conn.commit()
     conn.close()
 
 
-def delete_farm_ndvi_area(site_name):
+def delete_farm_ndvi_car(car_id, site_name):
+    """Remove um CAR especifico da fazenda (`site_name` filtrado pelo
+    mesmo motivo de `get_farm_ndvi_historico_imagem` -- fecha o vinculo
+    entre o id pedido e uma fazenda que o usuario tem acesso)."""
     conn = get_db()
-    conn.execute("DELETE FROM farm_ndvi_area WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM farm_ndvi_car WHERE id = ? AND site_name = ?", (car_id, site_name))
+    conn.execute(
+        "UPDATE farm_ndvi_area SET imagem = NULL, imagem_gerada_em = NULL WHERE site_name = ?", (site_name,)
+    )
     conn.commit()
     conn.close()
 
@@ -1325,8 +1393,11 @@ def delete_farm_ndvi_area(site_name):
 def save_farm_ndvi_image(site_name, imagem_bytes):
     conn = get_db()
     conn.execute(
-        "UPDATE farm_ndvi_area SET imagem = ?, imagem_gerada_em = ? WHERE site_name = ?",
-        (imagem_bytes, _agora_cuiaba(), site_name),
+        """
+        INSERT INTO farm_ndvi_area (site_name, imagem, imagem_gerada_em) VALUES (?, ?, ?)
+        ON CONFLICT(site_name) DO UPDATE SET imagem = excluded.imagem, imagem_gerada_em = excluded.imagem_gerada_em
+        """,
+        (site_name, imagem_bytes, _agora_cuiaba()),
     )
     conn.commit()
     conn.close()
@@ -1731,7 +1802,7 @@ def get_virtual_farm(site_name):
 _VIRTUAL_FARM_RENAME_TABLES = (
     "sites", "recommendation_notes", "whatsapp_schedule", "whatsapp_schedule_pdf",
     "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
-    "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_historico",
+    "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_car", "farm_ndvi_historico",
     "site_country_overrides", "site_climate_notes",
 )
 
@@ -1836,6 +1907,7 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM farm_culturas WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_ndvi_area WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM farm_ndvi_car WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM farm_ndvi_historico WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM site_country_overrides WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM site_climate_notes WHERE site_name = ?", (site_name,))

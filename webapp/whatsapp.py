@@ -109,6 +109,41 @@ def send_whatsapp(phone, text):
         return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
 
 
+def send_whatsapp_image(phone, imagem_bytes, caption=None):
+    """Manda uma imagem (PNG) anexada -- o mesmo /send do bridge, so' que
+    com `imageBase64` em vez de `message`/`documentBase64` (o WhatsApp
+    trata imagem como um tipo de midia diferente de documento -- vira
+    uma foto na conversa, com preview, em vez de um arquivo anexado).
+    Usado pelas imagens de NDVI salvas na galeria (ver
+    `enviar_ndvi_historico_whatsapp` em app.py). Retorna (ok: bool,
+    mensagem: str)."""
+    if not phone:
+        return False, "Numero de WhatsApp nao informado."
+    try:
+        payload = json.dumps({
+            "phone": phone,
+            "imageBase64": base64.b64encode(imagem_bytes).decode("ascii"),
+            "caption": caption or "",
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{BRIDGE_URL}/send",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            body = json.load(resp)
+            return (True, "enviado") if body.get("ok") else (False, body.get("error", "falha desconhecida"))
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.load(exc)
+            return False, body.get("error", str(exc))
+        except Exception:
+            return False, str(exc)
+    except Exception as exc:
+        return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
+
+
 def send_whatsapp_document(phone, pdf_bytes, filename, caption=None):
     """Manda um PDF como documento anexado (nao so' texto) -- o mesmo
     /send do bridge, so' que com `documentBase64`/`fileName` em vez de
