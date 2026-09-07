@@ -495,25 +495,17 @@ def _buscar_cenas(token, geometria, desde, ate):
     return dados.get("features", [])
 
 
-def _desenhar_seta_norte(desenho, cx, y_topo, y_base, largura):
-    """Seta (triangulo) apontando pro Norte com um contorno preto fino por
-    baixo do preenchimento branco -- mesma ideia do `stroke_width` usado
-    no texto (ver `desenhar_informacoes`): garante que a seta continue
-    visivel mesmo se cair sobre uma area bem clara da imagem (solo
-    exposto, nuvem), sem precisar de nenhuma caixa de fundo."""
-    contorno = 2
+def _desenhar_seta_norte(desenho, cx, y_topo, y_base, largura, cor=(0, 0, 0, 255)):
+    """Seta (triangulo) apontando pro Norte."""
     ponta = (cx, y_topo)
     base_esquerda = (cx - largura / 2, y_base)
     base_direita = (cx + largura / 2, y_base)
-    ponta_c = (cx, y_topo - contorno)
-    base_esquerda_c = (cx - largura / 2 - contorno, y_base + contorno)
-    base_direita_c = (cx + largura / 2 + contorno, y_base + contorno)
-    desenho.polygon([ponta_c, base_esquerda_c, base_direita_c], fill=(0, 0, 0, 255))
-    desenho.polygon([ponta, base_esquerda, base_direita], fill=(255, 255, 255, 255))
+    desenho.polygon([ponta, base_esquerda, base_direita], fill=cor)
 
 
 def desenhar_informacoes(imagem_bytes, data, chuva_acumulada_mm=None, vento_predominante=None):
-    """Escreve, no canto inferior esquerdo da imagem: a data da cena, o
+    """Acrescenta uma FAIXA BRANCA fixa embaixo da imagem (aumenta a
+    altura da imagem, nunca sobrepoe a foto) com: a data da cena, o
     Norte (seta + "N") e -- quando informados pelo chamador -- a chuva
     acumulada nos ultimos 30 dias ate' a data da cena e a direcao de
     vento predominante no mesmo periodo (calculados por
@@ -521,69 +513,64 @@ def desenhar_informacoes(imagem_bytes, data, chuva_acumulada_mm=None, vento_pred
     so' desenha numeros ja prontos, pra nao acoplar ndvi_service.py a
     leitura de clima). `chuva_acumulada_mm`/`vento_predominante` None
     (fazenda sem device BioScout mapeado, ou sem leitura na janela de 30
-    dias) simplesmente OMITE aquela linha, em vez de mostrar "None".
+    dias) simplesmente OMITE aquele item, em vez de mostrar "None".
 
-    Texto branco com CONTORNO preto fino (`stroke_width`), SEM nenhuma
-    caixa de fundo -- a versao anterior usava uma faixa escura
-    semi-transparente atras do texto, mas isso cobria uma parte real da
-    imagem perto dos cantos (pedido explicito do usuario pra' nao
-    "poluir" a imagem). O contorno sozinho ja garante leitura em
-    qualquer cor de fundo do NDVI, do amarelo claro da vegetacao rala ao
-    verde escuro da vegetacao densa -- testado visualmente contra as 3
-    faixas de cor antes de trocar.
+    Texto preto direto sobre a faixa branca, numa linha so' -- pedido
+    explicito do usuario pra' essas informacoes NUNCA ficarem em cima da
+    foto (nem com contorno, versao anterior): sempre numa faixa
+    dedicada, abaixo, que nunca cobre pixel nenhum do NDVI de verdade.
 
     A Process API sempre devolve a imagem "norte pra cima" (bounds em
     CRS84/lon-lat, sem nenhuma rotacao -- linha 0 da imagem = maior
     latitude do bbox), entao uma seta fixa apontando pra cima e'
     geometricamente correta em qualquer chamada, sem precisar calcular
     bearing nenhum."""
-    img = Image.open(io.BytesIO(imagem_bytes)).convert("RGBA")
+    foto = Image.open(io.BytesIO(imagem_bytes)).convert("RGB")
     try:
-        fonte = ImageFont.load_default(size=max(12, img.width // 30))
+        fonte = ImageFont.load_default(size=max(13, foto.width // 28))
     except TypeError:
         fonte = ImageFont.load_default()  # Pillow < 10.1 nao aceita `size`
 
-    desenho = ImageDraw.Draw(img)
-    contorno = 2
-
-    def _escrever(x, y_topo, texto):
-        bbox = desenho.textbbox((0, 0), texto, font=fonte)
-        desenho.text(
-            (x - bbox[0], y_topo - bbox[1]), texto, font=fonte,
-            fill=(255, 255, 255, 255), stroke_width=contorno, stroke_fill=(0, 0, 0, 255),
-        )
-
-    bbox_n = desenho.textbbox((0, 0), "N", font=fonte)
-    altura_linha = bbox_n[3] - bbox_n[1]
-    largura_seta = altura_linha * 0.8
-    espaco_seta_texto = 4
-    espaco_entre_linhas = 4
-    margem_borda = 6
-
-    linhas_extra = []
+    extras = []
     if chuva_acumulada_mm is not None:
-        linhas_extra.append(f"Chuva 30d: {chuva_acumulada_mm:.1f}mm")
+        extras.append(f"Chuva 30d: {chuva_acumulada_mm:.1f}mm")
     if vento_predominante:
-        linhas_extra.append(f"Vento 30d: {vento_predominante}")
+        extras.append(f"Vento 30d: {vento_predominante}")
 
-    # Data + linha do Norte sempre entram; chuva/vento so' quando informados.
-    n_linhas = 2 + len(linhas_extra)
-    altura_total = n_linhas * altura_linha + (n_linhas - 1) * espaco_entre_linhas
-    y = img.height - margem_borda - altura_total
+    medidor = ImageDraw.Draw(foto)
+    bbox_ref = medidor.textbbox((0, 0), "Ag", font=fonte)
+    altura_linha = bbox_ref[3] - bbox_ref[1]
+    largura_seta = altura_linha * 0.7
+    espaco_seta_texto = 4
+    espaco_entre_itens = 16
+    margem_vertical = 10
+    margem_horizontal = 8
 
-    _escrever(margem_borda, y, data.strftime("%d/%m/%Y"))
-    y += altura_linha + espaco_entre_linhas
+    altura_faixa = altura_linha + margem_vertical * 2
+    nova = Image.new("RGB", (foto.width, foto.height + altura_faixa), (255, 255, 255))
+    nova.paste(foto, (0, 0))
+    desenho = ImageDraw.Draw(nova)
 
-    _desenhar_seta_norte(desenho, margem_borda + largura_seta / 2, y, y + altura_linha, largura_seta)
-    _escrever(margem_borda + largura_seta + espaco_seta_texto, y, "N")
-    y += altura_linha + espaco_entre_linhas
+    y = foto.height + margem_vertical
+    x = margem_horizontal
 
-    for linha in linhas_extra:
-        _escrever(margem_borda, y, linha)
-        y += altura_linha + espaco_entre_linhas
+    def _item_texto(texto):
+        nonlocal x
+        bbox = desenho.textbbox((0, 0), texto, font=fonte)
+        desenho.text((x - bbox[0], y - bbox[1]), texto, font=fonte, fill=(0, 0, 0, 255))
+        x += (bbox[2] - bbox[0]) + espaco_entre_itens
+
+    _item_texto(data.strftime("%d/%m/%Y"))
+
+    _desenhar_seta_norte(desenho, x + largura_seta / 2, y, y + altura_linha, largura_seta)
+    x += largura_seta + espaco_seta_texto
+    _item_texto("N")
+
+    for extra in extras:
+        _item_texto(extra)
 
     saida = io.BytesIO()
-    img.save(saida, format="PNG", optimize=True)
+    nova.save(saida, format="PNG", optimize=True)
     return saida.getvalue()
 
 
