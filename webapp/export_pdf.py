@@ -352,7 +352,7 @@ def build_recommendation_pdf(
                     _ESTILO_RISCO_CLIMATICO,
                 ))
             if d.get("germinacao"):
-                cabecalho.append(Paragraph(f'{d.get("cientifico", "")} — germinação: {d["germinacao"]}', _ESTILO_GERMINACAO))
+                cabecalho.append(Paragraph(f'{d.get("cientifico", "")} — condições para germinação de esporos: {d["germinacao"]}', _ESTILO_GERMINACAO))
             elif d.get("cientifico"):
                 cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
             story.append(KeepTogether(cabecalho))

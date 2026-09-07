@@ -130,7 +130,7 @@ html { font-size: 14px; }
                 </span>
                 <span class="small text-muted ms-2">Contagem: {{ row.concentracao }} esporos/m³</span>
                 {% if row.germinacao %}
-                <span class="small text-muted ms-2">({{ row.cientifico }} — germinação: {{ row.germinacao }})</span>
+                <span class="small text-muted ms-2">({{ row.cientifico }} — condições para germinação de esporos: {{ row.germinacao }})</span>
                 {% elif row.cientifico %}
                 <span class="small text-muted fst-italic ms-2">({{ row.cientifico }})</span>
                 {% endif %}

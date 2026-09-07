@@ -991,7 +991,7 @@ def _format_whatsapp_message(
                 )
                 linhas.append(f"Risco de infecção: {dias_txt}")
             if d.get("germinacao"):
-                linhas.append(f"({d['cientifico']} — germinação: {d['germinacao']})")
+                linhas.append(f"({d['cientifico']} — condições para germinação de esporos: {d['germinacao']})")
             elif d.get("cientifico"):
                 linhas.append(f"({d['cientifico']})")
         return linhas
@@ -1052,7 +1052,7 @@ def _format_whatsapp_message(
             )
             lines.append(f"Risco de infecção: {dias_txt}")
         if d.get("germinacao"):
-            lines.append(f"({d['cientifico']} — germinação: {d['germinacao']})")
+            lines.append(f"({d['cientifico']} — condições para germinação de esporos: {d['germinacao']})")
         elif d.get("cientifico"):
             lines.append(f"({d['cientifico']})")
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
