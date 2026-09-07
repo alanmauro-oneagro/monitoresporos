@@ -45,7 +45,22 @@ def _write_sheet(wb, title, headers, rows):
     for col in ws.columns:
         length = max((len(str(c.value)) for c in col if c.value is not None), default=8)
         ws.column_dimensions[col[0].column_letter].width = min(max(length + 2, 10), 50)
-    return ws
+
+
+def _try_sheet(wb, title, headers, rows_fn):
+    """Roda `rows_fn()` protegido -- se QUALQUER excecao acontecer (dado
+    inesperado vindo de producao, campo ausente etc.) na montagem de
+    UMA aba, escreve essa aba mesmo assim com uma linha explicando o
+    erro em vez de derrubar a exportacao INTEIRA por causa dela (sem
+    isso, um bug numa unica aba fazia a rota inteira devolver erro,
+    nenhum arquivo pra baixar -- ou pior, a aba simplesmente sumia sem
+    nenhuma pista do motivo). O erro fica visivel na propria planilha,
+    facil de reportar de volta."""
+    try:
+        rows = rows_fn()
+    except Exception as exc:
+        rows = [[f"Erro ao gerar esta aba: {exc}"] + [""] * (len(headers) - 1)]
+    _write_sheet(wb, title, headers, rows)
 
 
 def _usuarios_rows():
@@ -341,37 +356,43 @@ def build_workbook():
     wb = Workbook()
     wb.remove(wb.active)
 
-    _write_sheet(wb, "Usuarios", ["Usuario", "Email", "Telefone", "Admin", "Fazendas liberadas", "Recebe relatorio"], _usuarios_rows())
-    _write_sheet(wb, "Subordinados", ["Dono (usuario)", "Subordinado", "Telefone", "Fazendas (recebe relatorio)"], _subordinados_rows())
-    _write_sheet(
+    _try_sheet(wb, "Usuarios", ["Usuario", "Email", "Telefone", "Admin", "Fazendas liberadas", "Recebe relatorio"], _usuarios_rows)
+    _try_sheet(wb, "Subordinados", ["Dono (usuario)", "Subordinado", "Telefone", "Fazendas (recebe relatorio)"], _subordinados_rows)
+    _try_sheet(
         wb, "Fazendas - Cadastro",
         ["Fazenda (site_name)", "Nome de exibicao", "Tipo", "Pais", "Latitude", "Longitude",
          "Estacao de referencia", "Raio (km, se virtual)", "Criado em (se virtual)", "Criado por (se virtual)",
          "Anotacao de clima"],
-        _fazendas_cadastro_rows(),
+        _fazendas_cadastro_rows,
     )
-    _write_sheet(wb, "Fazendas - Produtos", ["Fazenda", "Safra", "Momento", "Tipo", "Data/Anotacao", "Nome do produto", "Ingrediente ativo"], _fazendas_produtos_rows())
-    _write_sheet(wb, "Fazendas - Plantio", ["Fazenda", "Safra", "Data plantio", "Talhao", "Variedade", "Ciclo (dias)"], _fazendas_plantio_rows())
-    _write_sheet(wb, "Fazendas - Aplicacoes", ["Fazenda", "Safra", "Data aplicacao", "Talhao", "Fungicidas quimicos", "Fungicidas biologicos"], _fazendas_aplicacoes_rows())
-    _write_sheet(wb, "Manejo - Cultura", ["Fazenda", "Safra", "Cultura", "Atualizado em"], _manejo_cultura_rows())
-    _write_sheet(wb, "Manejo - Estoque rapido", ["Fazenda", "Safra", "Tipo", "Data/Anotacao", "Nome do produto"], _manejo_estoque_rows())
-    _write_sheet(wb, "Manejo - Anotacoes", ["Fazenda", "Doenca", "Nota"], _manejo_anotacoes_rows())
-    _write_sheet(wb, "Leituras Atuais", ["Fazenda", "Doenca", "Status", "Concentracao (esporos/m3)", "Data da leitura"], _leituras_atuais_rows())
-    _write_sheet(
+    _try_sheet(wb, "Fazendas - Produtos", ["Fazenda", "Safra", "Momento", "Tipo", "Data/Anotacao", "Nome do produto", "Ingrediente ativo"], _fazendas_produtos_rows)
+    _try_sheet(wb, "Fazendas - Plantio", ["Fazenda", "Safra", "Data plantio", "Talhao", "Variedade", "Ciclo (dias)"], _fazendas_plantio_rows)
+    _try_sheet(wb, "Fazendas - Aplicacoes", ["Fazenda", "Safra", "Data aplicacao", "Talhao", "Fungicidas quimicos", "Fungicidas biologicos"], _fazendas_aplicacoes_rows)
+    _try_sheet(wb, "Manejo - Cultura", ["Fazenda", "Safra", "Cultura", "Atualizado em"], _manejo_cultura_rows)
+    _try_sheet(wb, "Manejo - Estoque rapido", ["Fazenda", "Safra", "Tipo", "Data/Anotacao", "Nome do produto"], _manejo_estoque_rows)
+    _try_sheet(wb, "Manejo - Anotacoes", ["Fazenda", "Doenca", "Nota"], _manejo_anotacoes_rows)
+    _try_sheet(wb, "Leituras Atuais", ["Fazenda", "Doenca", "Status", "Concentracao (esporos/m3)", "Data da leitura"], _leituras_atuais_rows)
+    _try_sheet(
         wb, "Doencas",
         ["Nome (site)", "Nome (BioScout, EN)", "Nome cientifico", "Culturas", "Paises",
          "Germ. temp min (C)", "Germ. temp max (C)", "Germ. UR min (%)", "Germ. molhamento (h)", "Agua livre inibe"],
-        _doencas_rows(),
+        _doencas_rows,
     )
-    _write_sheet(wb, "Culturas", ["Slot", "Nome"], _culturas_rows())
-    _add_whatsapp_sheet(wb)
-    _add_fungicidas_sheet(wb, models.get_culturas_ativas())
-    _write_sheet(
+    _try_sheet(wb, "Culturas", ["Slot", "Nome"], _culturas_rows)
+    try:
+        _add_whatsapp_sheet(wb)
+    except Exception as exc:
+        _write_sheet(wb, "WhatsApp (erro)", ["Erro"], [[str(exc)]])
+    try:
+        _add_fungicidas_sheet(wb, models.get_culturas_ativas())
+    except Exception as exc:
+        _write_sheet(wb, "Fungicidas (erro)", ["Erro"], [[str(exc)]])
+    _try_sheet(
         wb, "Relatorio Diario",
         ["Estacao", "Data", "Temp min (C)", "Temp max (C)"]
         + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
         + ["Horas molhamento foliar", "Vento predominante"],
-        _relatorio_diario_rows(),
+        _relatorio_diario_rows,
     )
 
     buffer = io.BytesIO()
