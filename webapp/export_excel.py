@@ -234,22 +234,6 @@ def _culturas_rows():
     return [[i + 1, nome] for i, nome in enumerate(models.get_culturas()) if nome]
 
 
-def _leituras_atuais_rows():
-    """Ultima leitura conhecida de cada fazenda REAL x doenca (status,
-    concentracao, data) -- so' as fazendas de verdade (com dispositivo
-    BioScout proprio); fazenda virtual/estimada nao entra aqui (o valor
-    dela e' sempre estimado por interpolacao das vizinhas, nao uma
-    leitura de verdade)."""
-    translations = models.get_all_disease_translations()
-    cards_by_site = data_reader.get_dashboard_data(None, translations)
-    rows = []
-    for site_name, cards in cards_by_site.items():
-        for c in cards:
-            rows.append([site_name, c["doenca"], c["status"], c["concentracao"], models.fmt_data_br(c["data"]) or c["data"]])
-    rows.sort(key=lambda r: (r[0].lower(), r[1]))
-    return rows
-
-
 _MOLHAMENTO_PADRAO_HORAS = 6  # mesmo padrao/valor de `app._MOLHAMENTO_PADRAO_HORAS` -- duplicado aqui de proposito (nao importado de app.py, que importaria export_excel.py de volta e criaria import circular), mesmo padrao ja usado no projeto (ex.: haversine duplicada entre inmet_stations.py/virtual_farms.py) pra' uma conta pequena e pura como essa.
 
 
@@ -444,7 +428,6 @@ def build_workbook():
     _try_sheet(wb, "Manejo - Cultura", ["Fazenda", "Safra", "Cultura", "Atualizado em"], _manejo_cultura_rows)
     _try_sheet(wb, "Manejo - Estoque rapido", ["Fazenda", "Safra", "Tipo", "Data/Anotacao", "Nome do produto"], _manejo_estoque_rows)
     _try_sheet(wb, "Manejo - Anotacoes", ["Fazenda", "Doenca", "Nota"], _manejo_anotacoes_rows)
-    _try_sheet(wb, "Leituras Atuais", ["Fazenda", "Doenca", "Status", "Concentracao (esporos/m3)", "Data da leitura"], _leituras_atuais_rows)
     _try_sheet(
         wb, "Doencas",
         ["Nome (site)", "Nome (BioScout, EN)", "Nome cientifico", "Culturas", "Paises",
