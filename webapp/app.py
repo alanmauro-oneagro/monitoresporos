@@ -1949,7 +1949,7 @@ def graficos_dados():
 
                 if not all(v is None for v in esporos):
                     series.append({
-                        "estacao": site, "esporos": esporos, "esporos_excedido": excedido,
+                        "estacao": site, "estacao_nome": _nome_exibicao(site), "esporos": esporos, "esporos_excedido": excedido,
                         "limite_warn": limites_modelo.get("warn"), "limite_danger": limites_modelo.get("danger"),
                         "limite_maximo": limites_modelo.get("maximo"),
                     })
@@ -2003,7 +2003,7 @@ def graficos_dados():
 
             if not all(v is None for v in esporos):
                 series.append({
-                    "estacao": site, "esporos": esporos, "esporos_excedido": excedido,
+                    "estacao": site, "estacao_nome": _nome_exibicao(site), "esporos": esporos, "esporos_excedido": excedido,
                     "limite_warn": ultimo.get("warn"), "limite_danger": ultimo.get("danger"), "limite_maximo": ultimo.get("maximo"),
                 })
 
@@ -2220,13 +2220,15 @@ def mapa_interpolado():
             cards, estacoes_usadas = virtual_farms.interpolar_cards(
                 vf["lat"], vf["lon"], vf["raio_km"], cards_reais, coords_reais
             )
+        _pais_code_vf = site_countries.get(vf["site_name"], countries.DEFAULT_COUNTRY)
         pontos_virtuais.append({
             **vf,
             "tipo": tipo,
             "criado_em": models.fmt_data_br(vf["criado_em"]),
             "cards": cards,
             "estacoes_usadas": estacoes_usadas,
-            "country_code": site_countries.get(vf["site_name"], countries.DEFAULT_COUNTRY),
+            "country_code": _pais_code_vf,
+            "pais_nome": countries.get_country(_pais_code_vf)["nome"],
         })
         if cards or tipo == "clima":
             sites_data.append({
@@ -2414,9 +2416,11 @@ def alertas_clima():
         weather = _get_weather_for_site(site, coords)
         escolha = weather_overrides.get(site)
         anotacao = notes_by_site.get(site, "")
+        _pais_code_clima = site_countries.get(site, countries.DEFAULT_COUNTRY)
         pontos.append({
             **vf,
-            "country_code": site_countries.get(site, countries.DEFAULT_COUNTRY),
+            "country_code": _pais_code_clima,
+            "pais_nome": countries.get_country(_pais_code_clima)["nome"],
             "estacoes_proximas": countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], n=2),
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "selected_days": all_days.get(site, set()),
@@ -2442,10 +2446,11 @@ def alertas_clima_whatsapp(site_name):
     enviar_texto = bool(request.form.get("enviar_texto"))
     enviar_pdf = bool(request.form.get("enviar_pdf"))
     ok, message = _send_site_whatsapp(site_name, safra=None, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+    nome_exibicao = _nome_exibicao(site_name)
     if ok:
-        flash(f"WhatsApp de '{site_name}' enviado para {message}.", "success")
+        flash(f"WhatsApp de '{nome_exibicao}' enviado para {message}.", "success")
     else:
-        flash(f"Falha ao enviar WhatsApp de '{site_name}': {message}", "error")
+        flash(f"Falha ao enviar WhatsApp de '{nome_exibicao}': {message}", "error")
     return redirect(url_for("alertas_clima"))
 
 
@@ -2468,7 +2473,7 @@ def save_site_climate_note():
     site_name = request.form.get("site_name")
     _get_clima_virtual_farm_or_404(site_name)
     models.set_site_climate_note(site_name, request.form.get("nota", ""))
-    return _save_response(f"Anotacao de '{site_name}' salva.", "alertas_clima")
+    return _save_response(f"Anotacao de '{_nome_exibicao(site_name)}' salva.", "alertas_clima")
 
 
 SAFRA_LABELS = dict(models.SAFRAS)
@@ -2623,10 +2628,11 @@ def send_site_whatsapp(site_name):
     enviar_texto = bool(request.form.get("enviar_texto"))
     enviar_pdf = bool(request.form.get("enviar_pdf"))
     ok, message = _send_site_whatsapp(site_name, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+    nome_exibicao = _nome_exibicao(site_name)
     if ok:
-        flash(f"WhatsApp de '{site_name}' enviado para {message}.", "success")
+        flash(f"WhatsApp de '{nome_exibicao}' enviado para {message}.", "success")
     else:
-        flash(f"Falha ao enviar WhatsApp de '{site_name}': {message}", "error")
+        flash(f"Falha ao enviar WhatsApp de '{nome_exibicao}': {message}", "error")
     return redirect(url_for("recommendations", safra=safra))
 
 
@@ -2688,7 +2694,7 @@ def save_whatsapp_days():
         abort(403)
     days = {int(v) for v in request.form.getlist("weekday")}
     models.set_whatsapp_days(site_name, days)
-    return _save_response(f"Agenda de WhatsApp (texto) de '{site_name}' salva.", "fazendas")
+    return _save_response(f"Agenda de WhatsApp (texto) de '{_nome_exibicao(site_name)}' salva.", "fazendas")
 
 
 @app.route("/recommendations/whatsapp-days-pdf/save", methods=["POST"])
@@ -2704,7 +2710,7 @@ def save_whatsapp_days_pdf():
         abort(403)
     days = {int(v) for v in request.form.getlist("weekday")}
     models.set_whatsapp_days_pdf(site_name, days)
-    return _save_response(f"Agenda de WhatsApp (PDF) de '{site_name}' salva.", "fazendas")
+    return _save_response(f"Agenda de WhatsApp (PDF) de '{_nome_exibicao(site_name)}' salva.", "fazendas")
 
 
 @app.route("/fazendas")
@@ -2866,11 +2872,11 @@ def save_ndvi_area():
         else:
             aneis = ndvi_service.parse_kml_poligono(request.form.get("kml_texto", ""))
     except ValueError as exc:
-        return _save_response(f"Nao foi possivel salvar o contorno de '{site_name}': {exc}", "ndvi", ok=False)
+        return _save_response(f"Nao foi possivel salvar o contorno de '{_nome_exibicao(site_name)}': {exc}", "ndvi", ok=False)
     # Sempre grava KML de verdade (mesmo quando a origem foi um shapefile),
     # pra `gerar_ndvi` ter so' um formato pra reler do banco.
     models.set_farm_ndvi_area(site_name, ndvi_service.aneis_para_kml(aneis))
-    return _save_response(f"Contorno de '{site_name}' salvo -- agora e' so' clicar em \"Gerar NDVI\".", "ndvi")
+    return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' salvo -- agora e' so' clicar em \"Gerar NDVI\".", "ndvi")
 
 
 @app.route("/ndvi/area/delete", methods=["POST"])
@@ -2879,7 +2885,7 @@ def delete_ndvi_area():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
     models.delete_farm_ndvi_area(site_name)
-    return _save_response(f"Contorno de '{site_name}' removido.", "ndvi")
+    return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' removido.", "ndvi")
 
 
 @app.route("/ndvi/pre_visualizar", methods=["POST"])
@@ -2889,7 +2895,7 @@ def pre_visualizar_ndvi():
     _checar_acesso_site(site_name)
     area = models.get_farm_ndvi_area(site_name)
     if not area:
-        return _save_response(f"'{site_name}' ainda nao tem contorno KML cadastrado.", "ndvi", ok=False)
+        return _save_response(f"'{_nome_exibicao(site_name)}' ainda nao tem contorno KML cadastrado.", "ndvi", ok=False)
 
     data_texto = request.form.get("data_alvo", "").strip()
     data_alvo = None
@@ -2904,12 +2910,12 @@ def pre_visualizar_ndvi():
     try:
         aneis = ndvi_service.parse_kml_poligono(area["kml"])
     except ValueError as exc:
-        return _save_response(f"Contorno de '{site_name}' invalido: {exc}", "ndvi", ok=False)
+        return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' invalido: {exc}", "ndvi", ok=False)
     resultado, erro = ndvi_service.buscar_ndvi(aneis, data_alvo=data_alvo)
     if erro:
-        return _save_response(f"Nao foi possivel gerar o NDVI de '{site_name}': {erro}", "ndvi", ok=False)
+        return _save_response(f"Nao foi possivel gerar o NDVI de '{_nome_exibicao(site_name)}': {erro}", "ndvi", ok=False)
     _ndvi_preview_cache[site_name] = (time.time(), resultado)
-    mensagem = f"Pre-visualizacao de '{site_name}' pronta (cena de {resultado['data'].strftime('%d/%m/%Y')}"
+    mensagem = f"Pre-visualizacao de '{_nome_exibicao(site_name)}' pronta (cena de {resultado['data'].strftime('%d/%m/%Y')}"
     if resultado["cobertura_nuvens"] is not None:
         mensagem += f", {resultado['cobertura_nuvens']:.0f}% de nuvens"
     mensagem += ") -- confira antes de salvar na galeria."
@@ -2940,7 +2946,7 @@ def confirmar_ndvi_preview():
     )
     models.save_farm_ndvi_image(site_name, preview["imagem"])
     _ndvi_preview_cache.pop(site_name, None)
-    return _save_response(f"NDVI de '{site_name}' salvo na galeria.", "ndvi")
+    return _save_response(f"NDVI de '{_nome_exibicao(site_name)}' salvo na galeria.", "ndvi")
 
 
 @app.route("/ndvi/pre_visualizar/descartar", methods=["POST"])
@@ -2949,7 +2955,7 @@ def descartar_ndvi_preview():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
     _ndvi_preview_cache.pop(site_name, None)
-    return _save_response(f"Pre-visualizacao de '{site_name}' descartada.", "ndvi")
+    return _save_response(f"Pre-visualizacao de '{_nome_exibicao(site_name)}' descartada.", "ndvi")
 
 
 @app.route("/ndvi/imagem/<path:site_name>")
@@ -2999,7 +3005,9 @@ def ver_ndvi_historico(historico_id, site_name):
     item = models.get_farm_ndvi_historico_item(historico_id, site_name)
     if not item:
         abort(404)
-    return render_template("ndvi_visualizar.html", site_name=site_name, item=item)
+    return render_template(
+        "ndvi_visualizar.html", site_name=site_name, nome_exibicao=_nome_exibicao(site_name), item=item
+    )
 
 
 @app.route("/ndvi/historico/delete", methods=["POST"])
@@ -3011,7 +3019,7 @@ def delete_ndvi_historico():
     if historico_id is None:
         abort(400)
     models.delete_farm_ndvi_historico_item(historico_id, site_name)
-    return _save_response(f"Imagem removida da galeria de '{site_name}'.", "ndvi")
+    return _save_response(f"Imagem removida da galeria de '{_nome_exibicao(site_name)}'.", "ndvi")
 
 
 @app.route("/ndvi/debug/<path:site_name>")
@@ -3056,15 +3064,16 @@ def save_farm_cultura():
     if cultura and cultura != CULTURA_TODOS and cultura not in models.get_culturas_ativas():
         abort(400)
     models.set_farm_cultura(site_name, safra, cultura)
+    nome_exibicao = _nome_exibicao(site_name)
     if cultura == CULTURA_TODOS:
-        message = f"'{site_name}' na {SAFRA_LABELS[safra]} passa a mostrar todas as doencas cadastradas, sem filtro de cultura."
+        message = f"'{nome_exibicao}' na {SAFRA_LABELS[safra]} passa a mostrar todas as doencas cadastradas, sem filtro de cultura."
     elif cultura:
         message = (
-            f"Cultura de '{site_name}' na {SAFRA_LABELS[safra]} definida como {cultura} -- "
+            f"Cultura de '{nome_exibicao}' na {SAFRA_LABELS[safra]} definida como {cultura} -- "
             "essa aba passa a mostrar so doencas dessa cultura."
         )
     else:
-        message = f"'{site_name}' na {SAFRA_LABELS[safra]} sem cultura definida -- nenhuma doenca aparece ate escolher uma cultura ou 'Todos'."
+        message = f"'{nome_exibicao}' na {SAFRA_LABELS[safra]} sem cultura definida -- nenhuma doenca aparece ate escolher uma cultura ou 'Todos'."
     return _save_response(message, "recommendations", safra=safra)
 
 
@@ -3091,10 +3100,11 @@ def save_weather_station_override():
     # ANTIGA por ate' `WEATHER_CACHE_TTL_SECONDS` (30min) -- a troca so'
     # valia na proxima vez que o cache expirasse sozinho.
     _weather_cache.pop(site_name, None)
+    nome_exibicao = _nome_exibicao(site_name)
     if estacao_codigo:
-        message = f"Previsao de '{site_name}' agora usa a estacao {estacao_codigo} como referencia."
+        message = f"Previsao de '{nome_exibicao}' agora usa a estacao {estacao_codigo} como referencia."
     else:
-        message = f"Previsao de '{site_name}' volta a usar a coordenada da propria fazenda."
+        message = f"Previsao de '{nome_exibicao}' volta a usar a coordenada da propria fazenda."
     return _save_response(message, "fazendas")
 
 
@@ -3111,7 +3121,7 @@ def save_site_country():
         return _save_response(f"Pais invalido: '{country_code}'.", "fazendas", ok=False)
     models.set_site_country(site_name, country_code)
     nome_pais = countries.get_country(country_code)["nome"]
-    return _save_response(f"'{site_name}' marcada como {nome_pais}.", "fazendas")
+    return _save_response(f"'{_nome_exibicao(site_name)}' marcada como {nome_pais}.", "fazendas")
 
 
 @app.route("/fazendas/nome/save", methods=["POST"])
@@ -3154,7 +3164,7 @@ def save_farm_produtos():
             ativos = request.form.getlist(f"ia_{momento}_{tipo}")
             linhas = list(zip(datas, nomes, ativos))
             models.set_farm_produtos(site_name, safra, momento, tipo, linhas)
-    return _save_response(f"Produtos de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
+    return _save_response(f"Produtos de '{_nome_exibicao(site_name)}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
 
 
 @app.route("/fazendas/plantio/save", methods=["POST"])
@@ -3172,7 +3182,7 @@ def save_farm_plantio():
     ciclos = request.form.getlist("ciclo_dias")
     linhas = list(zip(datas, talhoes, variedades, ciclos))
     models.set_farm_plantio(site_name, safra, linhas)
-    return _save_response(f"Dados de plantio de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
+    return _save_response(f"Dados de plantio de '{_nome_exibicao(site_name)}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
 
 
 @app.route("/fazendas/espacamento/save", methods=["POST"])
@@ -3186,7 +3196,7 @@ def save_farm_espacamento():
     safra = _safra_or_default(request.form)
     espacamento = request.form.get("espacamento", "")
     models.set_farm_espacamento_plantio(site_name, safra, espacamento)
-    return _save_response(f"Espacamento de plantio de '{site_name}' ({SAFRA_LABELS[safra]}) salvo.", "fazendas")
+    return _save_response(f"Espacamento de plantio de '{_nome_exibicao(site_name)}' ({SAFRA_LABELS[safra]}) salvo.", "fazendas")
 
 
 @app.route("/fazendas/aplicacoes/save", methods=["POST"])
@@ -3204,7 +3214,7 @@ def save_farm_aplicacoes():
     biologicos = request.form.getlist("fungicidas_biologicos")
     linhas = list(zip(datas, talhoes, quimicos, biologicos))
     models.set_farm_aplicacoes(site_name, safra, linhas)
-    return _save_response(f"Dados de aplicacoes de '{site_name}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
+    return _save_response(f"Dados de aplicacoes de '{_nome_exibicao(site_name)}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
 
 
 @app.route("/recommendations/estoque/save", methods=["POST"])
@@ -3221,7 +3231,7 @@ def save_estoque_rapido():
         nomes = request.form.getlist(f"nome_{tipo}")
         linhas = [(data, nome, "") for data, nome in zip(datas, nomes)]
         models.set_farm_produtos(site_name, safra, models.MOMENTO_ESTOQUE_RAPIDO, tipo, linhas)
-    return _save_response(f"Estoque de '{site_name}' salvo.", "recommendations", safra=safra)
+    return _save_response(f"Estoque de '{_nome_exibicao(site_name)}' salvo.", "recommendations", safra=safra)
 
 
 @app.route("/recommendations/save", methods=["POST"])
@@ -3738,7 +3748,9 @@ def admin_users():
     for u in users:
         subs = models.get_owner_subordinados(u["id"])
         for sub in subs:
-            sub["fazendas"] = "; ".join(sorted(site_name_by_id[sid] for sid in sub["site_ids"] if sid in site_name_by_id))
+            sub["fazendas"] = "; ".join(sorted(
+                _nome_exibicao(site_name_by_id[sid]) for sid in sub["site_ids"] if sid in site_name_by_id
+            ))
         subordinados_by_owner[u["id"]] = subs
     subordinado_counts = {uid: len(subs) for uid, subs in subordinados_by_owner.items() if subs}
     return render_template(
@@ -4039,14 +4051,17 @@ def admin_relatorio_whatsapp():
     site_name = request.args.get("site") or None
     apenas_falhas = request.args.get("falhas") == "1"
     logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas)
+    for l in logs:
+        l["site_nome"] = _nome_exibicao(l["site_name"])
     sites = sorted(set(read_sites()) | models.virtual_farm_site_names())
+    nomes_exibicao = {s: _nome_exibicao(s) for s in sites}
     todos_destinos = models.get_all_sites_whatsapp_recipients()
     cadastro = []
     for site in ([site_name] if site_name else sites):
         for r in todos_destinos.get(site, []):
-            cadastro.append({"site": site, "destinatario": r["username"], "telefone": r["telefone"]})
+            cadastro.append({"site": site, "site_nome": _nome_exibicao(site), "destinatario": r["username"], "telefone": r["telefone"]})
     return render_template(
-        "admin_relatorio_whatsapp.html", logs=logs, sites=sites, cadastro=cadastro,
+        "admin_relatorio_whatsapp.html", logs=logs, sites=sites, nomes_exibicao=nomes_exibicao, cadastro=cadastro,
         site_selecionado=site_name or "", apenas_falhas=apenas_falhas,
     )
 

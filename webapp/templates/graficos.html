@@ -667,7 +667,7 @@
             var corFazenda = CORES_FAZENDA[idx % CORES_FAZENDA.length];
             var excedido = s.esporos_excedido;
             return {
-                label: 'Esporos - ' + s.estacao,
+                label: 'Esporos - ' + (s.estacao_nome || s.estacao),
                 data: s.esporos,
                 borderColor: corFazenda,
                 backgroundColor: corFazenda,

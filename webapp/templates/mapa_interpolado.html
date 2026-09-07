@@ -107,7 +107,7 @@
 <div class="ponto-virtual-card">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
         <strong>{{ ponto.nome }}</strong>
-        <span class="badge bg-secondary">{{ countries[ponto.country_code].nome if ponto.country_code in countries else ponto.country_code }}</span>
+        <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
         {% if ponto.tipo == 'clima' %}
         <span class="badge bg-info text-dark">☁️ So clima</span>
         {% endif %}
