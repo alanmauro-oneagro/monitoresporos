@@ -284,8 +284,14 @@ def _relatorio_diario_rows():
     device_by_site = data_reader.read_site_device_ids()
     device_to_site = {device: site for site, device in device_by_site.items()}
 
-    # (site, dia) -> lista de (nome_pt, concentracao, risco_pct), ordenada
-    # por nome de doenca -- montada uma vez so', fora do loop principal.
+    # (site, dia) -> lista de (nome_pt, concentracao, risco_pct, warn,
+    # danger, maximo), ordenada por nome de doenca -- montada uma vez so',
+    # fora do loop principal. warn/danger/maximo sao os limites de
+    # concentracao daquele MODELO de doenca (mesmos 3 usados pra colorir
+    # o grafico de esporos da aba Graficos e decidir o status Atencao/
+    # Perigo do dashboard) -- vem junto de cada leitura porque a BioScout
+    # manda o limiar vigente em cada amostra (pode mudar se o modelo for
+    # recalibrado), nao e' um valor fixo por doenca.
     doencas_por_site_dia = {}
     for (site, doenca_en), pontos in spore_lookup.items():
         info = translations.get(doenca_en, {})
@@ -295,9 +301,10 @@ def _relatorio_diario_rows():
             horas = hourly_lookup.get((device, p["data"]))
             risco_pct = _calc_risco_diario_pct(info, horas) if horas else None
             conc = p["concentracao"]
-            doencas_por_site_dia.setdefault((site, p["data"]), []).append(
-                (nome_pt, round(conc, 1) if conc is not None else None, risco_pct)
-            )
+            doencas_por_site_dia.setdefault((site, p["data"]), []).append((
+                nome_pt, round(conc, 1) if conc is not None else None, risco_pct,
+                p.get("warn"), p.get("danger"), p.get("maximo"),
+            ))
     for lista in doencas_por_site_dia.values():
         lista.sort(key=lambda t: t[0].lower())
 
@@ -310,10 +317,10 @@ def _relatorio_diario_rows():
         site = device_to_site.get(r["estacao"])
         doencas = doencas_por_site_dia.get((site, r["data"]), []) if site else []
         if not doencas:
-            rows.append(base + [None, None, None])
+            rows.append(base + [None, None, None, None, None, None])
             continue
-        for nome_pt, conc, risco_pct in doencas:
-            rows.append(base + [nome_pt, conc, risco_pct])
+        for nome_pt, conc, risco_pct, warn, danger, maximo in doencas:
+            rows.append(base + [nome_pt, conc, risco_pct, warn, danger, maximo])
     return rows
 
 
@@ -447,7 +454,10 @@ def build_workbook():
         wb, "Relatorio Diario",
         ["Data", "Estacao", "Temp min (C)", "Temp max (C)"]
         + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
-        + ["Vento predominante", "Doenca", "Concentracao (esporos/m3)", "Risco de Infeccao (%)"],
+        + [
+            "Vento predominante", "Doenca", "Concentracao (esporos/m3)", "Risco de Infeccao (%)",
+            "Limite Atencao (esporos/m3)", "Limite Perigo (esporos/m3)", "Limite Maximo (esporos/m3)",
+        ],
         _relatorio_diario_rows,
     )
 
