@@ -515,10 +515,14 @@ def desenhar_informacoes(imagem_bytes, data, chuva_acumulada_mm=None, vento_pred
     (fazenda sem device BioScout mapeado, ou sem leitura na janela de 30
     dias) simplesmente OMITE aquele item, em vez de mostrar "None".
 
-    Texto preto direto sobre a faixa branca, numa linha so' -- pedido
+    Texto preto direto sobre a faixa branca, uma linha por item -- pedido
     explicito do usuario pra' essas informacoes NUNCA ficarem em cima da
     foto (nem com contorno, versao anterior): sempre numa faixa
     dedicada, abaixo, que nunca cobre pixel nenhum do NDVI de verdade.
+    Cada item numa linha propria (em vez de tudo numa linha so') porque
+    o rotulo de vento por extenso ("Sentido Vento ultimo mes: Nordeste")
+    e' longo demais pra caber ao lado dos outros na largura da imagem
+    (512px tipico) sem cortar na borda.
 
     A Process API sempre devolve a imagem "norte pra cima" (bounds em
     CRS84/lon-lat, sem nenhuma rotacao -- linha 0 da imagem = maior
@@ -533,20 +537,21 @@ def desenhar_informacoes(imagem_bytes, data, chuva_acumulada_mm=None, vento_pred
 
     extras = []
     if chuva_acumulada_mm is not None:
-        extras.append(f"Chuva 30d: {chuva_acumulada_mm:.1f}mm")
+        extras.append(f"Chuva acum, 30d: {chuva_acumulada_mm:.1f}mm")
     if vento_predominante:
-        extras.append(f"Vento 30d: {vento_predominante}")
+        extras.append(f"Sentido Vento ultimo mes: {vento_predominante}")
 
     medidor = ImageDraw.Draw(foto)
     bbox_ref = medidor.textbbox((0, 0), "Ag", font=fonte)
     altura_linha = bbox_ref[3] - bbox_ref[1]
     largura_seta = altura_linha * 0.7
     espaco_seta_texto = 4
-    espaco_entre_itens = 16
-    margem_vertical = 10
+    espaco_entre_linhas = 4
+    margem_vertical = 8
     margem_horizontal = 8
 
-    altura_faixa = altura_linha + margem_vertical * 2
+    n_linhas = 1 + len(extras)  # linha 1 = data + Norte, depois 1 por extra
+    altura_faixa = n_linhas * altura_linha + (n_linhas - 1) * espaco_entre_linhas + margem_vertical * 2
     nova = Image.new("RGB", (foto.width, foto.height + altura_faixa), (255, 255, 255))
     nova.paste(foto, (0, 0))
     desenho = ImageDraw.Draw(nova)
@@ -558,16 +563,18 @@ def desenhar_informacoes(imagem_bytes, data, chuva_acumulada_mm=None, vento_pred
         nonlocal x
         bbox = desenho.textbbox((0, 0), texto, font=fonte)
         desenho.text((x - bbox[0], y - bbox[1]), texto, font=fonte, fill=(0, 0, 0, 255))
-        x += (bbox[2] - bbox[0]) + espaco_entre_itens
+        x += (bbox[2] - bbox[0]) + 16
 
     _item_texto(data.strftime("%d/%m/%Y"))
-
     _desenhar_seta_norte(desenho, x + largura_seta / 2, y, y + altura_linha, largura_seta)
     x += largura_seta + espaco_seta_texto
     _item_texto("N")
+    y += altura_linha + espaco_entre_linhas
 
     for extra in extras:
+        x = margem_horizontal
         _item_texto(extra)
+        y += altura_linha + espaco_entre_linhas
 
     saida = io.BytesIO()
     nova.save(saida, format="PNG", optimize=True)

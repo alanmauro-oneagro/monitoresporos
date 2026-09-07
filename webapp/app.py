@@ -2945,10 +2945,21 @@ def delete_ndvi_car():
     return _save_response(f"CAR removido de '{_nome_exibicao(site_name)}'.", "ndvi")
 
 
+# Nome por extenso (pt-BR) de cada uma das 8 direcoes bucketadas em
+# `data_reader._DIRECOES_VENTO` -- so' pro quadro desenhado na imagem
+# NDVI (`ndvi_service.desenhar_informacoes`), que mostra o nome completo
+# em vez da abreviacao (pedido explicito do usuario).
+_NOME_DIRECAO_VENTO = {
+    "N": "Norte", "NE": "Nordeste", "E": "Leste", "SE": "Sudeste",
+    "S": "Sul", "SW": "Sudoeste", "W": "Oeste", "NW": "Noroeste",
+}
+
+
 def _chuva_vento_ultimos_30_dias(site_name, data_final):
-    """Chuva acumulada (mm) e direcao de vento predominante nos 30 dias
-    ATE `data_final` (inclusive) -- pras linhas desenhadas na imagem NDVI
-    (ver `ndvi_service.desenhar_informacoes`). Usa a leitura do device
+    """Chuva acumulada (mm) e direcao de vento predominante (nome por
+    extenso, ver `_NOME_DIRECAO_VENTO`) nos 30 dias ATE `data_final`
+    (inclusive) -- pras linhas desenhadas na imagem NDVI (ver
+    `ndvi_service.desenhar_informacoes`). Usa a leitura do device
     BioScout da propria fazenda (mesma fonte do Relatorio Diario/aba
     Graficos, `data_reader.read_site_device_ids`/`build_hourly_weather_lookup`),
     NAO a estacao de referencia escolhida pra previsao (essa e' so' pra
@@ -2965,7 +2976,8 @@ def _chuva_vento_ultimos_30_dias(site_name, data_final):
     horas = [h for dia in dias_janela for h in hourly_lookup.get((device, dia), [])]
     chuva_acumulada = round(sum(h.get("chuva") or 0 for h in horas), 1) if horas else None
     contagem = data_reader.contar_direcoes_vento(hourly_lookup, [device], dias_janela)
-    vento_predominante = max(contagem, key=contagem.get) if any(contagem.values()) else None
+    codigo_vento = max(contagem, key=contagem.get) if any(contagem.values()) else None
+    vento_predominante = _NOME_DIRECAO_VENTO.get(codigo_vento, codigo_vento)
     return chuva_acumulada, vento_predominante
 
 
