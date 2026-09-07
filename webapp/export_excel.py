@@ -64,8 +64,15 @@ def _try_sheet(wb, title, headers, rows_fn):
 
 
 def _usuarios_rows():
+    """Uma aba so' com usuario (login de verdade) e subordinado (contato
+    leve -- nome + telefone, sem login, ver `models.get_owner_subordinados`)
+    mesclados -- cada subordinado aparece logo abaixo do seu "dono", com
+    "Tipo"/"Dono" marcando a diferenca, em vez de duas abas separadas
+    (pedido explicito do usuario)."""
     site_names_by_id = {s["id"]: s["site_name"] for s in models.get_all_sites()}
     rows = []
+    # Admin primeiro (entre eles, ordem alfabetica), depois os demais --
+    # mesma ordem de `models.get_all_users` (pedido explicito do usuario).
     for u in models.get_all_users():
         if u["is_admin"]:
             fazendas = "Todas (admin)"
@@ -74,26 +81,16 @@ def _usuarios_rows():
         report_ids = models.get_user_report_site_ids(u["id"])
         relatorios = ", ".join(sorted(site_names_by_id[sid] for sid in report_ids if sid in site_names_by_id)) or "-"
         rows.append([
-            u["username"], u["email"] or "", models.fmt_telefone_br(u["telefone"]) or "",
+            u["username"], "Usuario", "-", u["email"] or "", models.fmt_telefone_br(u["telefone"]) or "",
             "Sim" if u["is_admin"] else "Nao", fazendas, relatorios,
         ])
-    # Admin primeiro (entre eles, ordem alfabetica), depois os demais --
-    # mesma ordem de `models.get_all_users` (pedido explicito do usuario).
-    rows.sort(key=lambda r: (0 if r[3] == "Sim" else 1, r[0].lower()))
-    return rows
-
-
-def _subordinados_rows():
-    """Contato leve (nome + telefone, sem login) cadastrado por um
-    usuario "dono" pra dividir o recebimento de relatorio de WhatsApp
-    entre uma equipe -- ver `models.get_owner_subordinados`."""
-    site_names_by_id = {s["id"]: s["site_name"] for s in models.get_all_sites()}
-    rows = []
-    for u in models.get_all_users():
-        for s in models.get_owner_subordinados(u["id"]):
-            fazendas = ", ".join(sorted(site_names_by_id[sid] for sid in s["site_ids"] if sid in site_names_by_id)) or "-"
-            rows.append([u["username"], s["nome"], models.fmt_telefone_br(s["telefone"]) or "", fazendas])
-    rows.sort(key=lambda r: (r[0].lower(), r[1].lower()))
+        subs = sorted(models.get_owner_subordinados(u["id"]), key=lambda s: s["nome"].lower())
+        for s in subs:
+            fazendas_sub = ", ".join(sorted(site_names_by_id[sid] for sid in s["site_ids"] if sid in site_names_by_id)) or "-"
+            rows.append([
+                s["nome"], "Subordinado", u["username"], "-", models.fmt_telefone_br(s["telefone"]) or "",
+                "-", "-", fazendas_sub,
+            ])
     return rows
 
 
@@ -358,8 +355,11 @@ def build_workbook():
     wb = Workbook()
     wb.remove(wb.active)
 
-    _try_sheet(wb, "Usuarios", ["Usuario", "Email", "Telefone", "Admin", "Fazendas liberadas", "Recebe relatorio"], _usuarios_rows)
-    _try_sheet(wb, "Subordinados", ["Dono (usuario)", "Subordinado", "Telefone", "Fazendas (recebe relatorio)"], _subordinados_rows)
+    _try_sheet(
+        wb, "Usuarios",
+        ["Usuario", "Tipo", "Dono (se subordinado)", "Email", "Telefone", "Admin", "Fazendas liberadas", "Recebe relatorio"],
+        _usuarios_rows,
+    )
     _try_sheet(
         wb, "Fazendas - Cadastro",
         ["Fazenda (site_name)", "Nome de exibicao", "Tipo", "Pais", "Latitude", "Longitude",
