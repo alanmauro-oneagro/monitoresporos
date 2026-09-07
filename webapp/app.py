@@ -161,19 +161,44 @@ _weather_cache = {}  # site_name -> (timestamp, latlon, dados)
 _ndvi_preview_cache = {}  # site_name -> (timestamp, {"imagem":..., "data":..., "cobertura_nuvens":...})
 
 
+def _rotulo_estacao_clima(site, latlon):
+    """Cidade/UF (regiao) pra mostrar como referencia do clima de uma
+    fazenda -- so' rotulo, o valor numerico do clima sempre vem da
+    Open-Meteo. Usa a estacao REALMENTE escolhida em
+    `weather_station_overrides` quando houver, pra o nome mostrado no
+    relatorio NUNCA divergir do que a aba Fazendas/Alertas Clima marca
+    como selecionado -- antes recalculava "estacao mais proxima dessa
+    coordenada" de novo aqui, que podia devolver um nome DIFERENTE do
+    escolhido quando o catalogo tem mais de uma estacao bem perto uma da
+    outra (bug real relatado: estacao marcada como Diamantino, relatorio
+    mostrando outro nome). So' cai pra "mais proxima da coordenada" (via
+    `estacao_mais_proxima`, so' INMET/Brasil) quando a fazenda usa a
+    coordenada propria (sem override) -- ai' e' so' referencia
+    geografica mesmo, nao uma escolha do cliente pra' repetir."""
+    escolha = models.get_all_weather_station_overrides().get(site)
+    if escolha and escolha["codigo"]:
+        provider = countries.get_country(escolha["country_code"])["station_provider"]
+        estacao = next(
+            (e for e in provider.get_estacoes() if e["codigo"] == escolha["codigo"]), None
+        )
+        if estacao:
+            return estacao["cidade"], estacao["uf"]
+    estacao = inmet_stations.estacao_mais_proxima(*latlon)
+    return (estacao["cidade"], estacao["uf"]) if estacao else (None, None)
+
+
 def _get_weather_for_site(site, coords):
     """Cache simples em memoria por fazenda -- evita bater na Open-Meteo a
     cada carregamento da pagina de Recomendacoes. Alem do clima em si,
-    marca de onde veio (`fonte`) e a cidade da estacao oficial do INMET
-    mais proxima (`cidade`/`uf`, so como referencia geografica -- o valor
-    numerico continua sendo o da Open-Meteo, ver `inmet_stations.py`).
-    O cache guarda TAMBEM o `latlon` que gerou aquele dado -- nao so'
-    tempo decorrido -- pra um chamador que (por engano, ex. bug ja visto
-    em `graficos_dados`) passar a coordenada ERRADA de uma fazenda (a
-    propria em vez da estacao escolhida em `weather_station_overrides`,
-    ver `_weather_coords_all`) nunca "vazar" esse dado errado pros
-    chamadores CORRETOS -- cada combinacao (site, latlon) tem sua propria
-    entrada logica, uma simplesmente nao invalida a outra."""
+    marca de onde veio (`fonte`) e a cidade/UF de referencia
+    (`cidade`/`uf`, ver `_rotulo_estacao_clima`). O cache guarda TAMBEM o
+    `latlon` que gerou aquele dado -- nao so' tempo decorrido -- pra um
+    chamador que (por engano, ex. bug ja visto em `graficos_dados`)
+    passar a coordenada ERRADA de uma fazenda (a propria em vez da
+    estacao escolhida em `weather_station_overrides`, ver
+    `_weather_coords_all`) nunca "vazar" esse dado errado pros chamadores
+    CORRETOS -- cada combinacao (site, latlon) tem sua propria entrada
+    logica, uma simplesmente nao invalida a outra."""
     latlon = coords.get(site)
     if not latlon:
         return None
@@ -183,9 +208,7 @@ def _get_weather_for_site(site, coords):
         return cached[2]
     data = weather_forecast.get_weather_forecast(*latlon)
     if data:
-        estacao = inmet_stations.estacao_mais_proxima(*latlon)
-        data["cidade"] = estacao["cidade"] if estacao else None
-        data["uf"] = estacao["uf"] if estacao else None
+        data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
         data["fonte"] = "Open-Meteo"
         _weather_cache[site] = (now, latlon, data)
     return data
