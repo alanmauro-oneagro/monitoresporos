@@ -47,9 +47,14 @@ const AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || "./auth_info";
 // disso porque nao passa por esse mecanismo de "linked device". Isso e'
 // o que estava acontecendo no envio automatico dos relatorios (varias
 // fazendas seguidas, mensagens parecidas, ritmo constante de 2s) mas
-// nao no envio manual pelo app do WhatsApp do administrador.
-const MIN_DELAY_MS = 8000;
-const JITTER_MS = 5000;
+// nao no envio manual pelo app do WhatsApp do administrador. 8-13s
+// (primeira tentativa desse espacamento) ainda deixou passar retencao
+// num envio de imagem NDVI reenviada 3x seguidas pro mesmo numero em 3
+// minutos -- aumentado pra 15-25s pra dar mais folga, mas isso reduz o
+// risco, nao elimina (a decisao de segurar e' inteiramente do
+// WhatsApp, sem sinal nenhum que o bridge possa consultar antes).
+const MIN_DELAY_MS = 15000;
+const JITTER_MS = 10000;
 
 let sock = null;
 let lastQrDataUrl = null;
