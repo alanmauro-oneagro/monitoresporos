@@ -125,9 +125,7 @@
                     <td><em class="text-muted">{{ d.cientifico }}</em></td>
                     {% for slot in range(12) %}
                     <td class="text-center">
-                        {% if culturas[slot] %}
-                        <input type="checkbox" class="form-check-input" name="culturas__{{ doenca_loop.index0 }}" value="{{ slot }}" {% if culturas[slot] in d.marcadas %}checked{% endif %}>
-                        {% endif %}
+                        <input type="checkbox" class="form-check-input" name="culturas__{{ doenca_loop.index0 }}" value="{{ slot }}" {% if culturas[slot] in d.marcadas %}checked{% endif %} {% if not culturas[slot] %}disabled{% endif %}>
                     </td>
                     {% endfor %}
                 </tr>
@@ -178,9 +176,7 @@
                     <td><em class="text-muted">{{ d.cientifico }}</em></td>
                     {% for slot in range(12) %}
                     <td class="text-center">
-                        {% if paises[slot] %}
-                        <input type="checkbox" class="form-check-input" name="paises__{{ doenca_loop.index0 }}" value="{{ slot }}" {% if paises[slot] in d.marcadas %}checked{% endif %}>
-                        {% endif %}
+                        <input type="checkbox" class="form-check-input" name="paises__{{ doenca_loop.index0 }}" value="{{ slot }}" {% if paises[slot] in d.marcadas %}checked{% endif %} {% if not paises[slot] %}disabled{% endif %}>
                     </td>
                     {% endfor %}
                 </tr>
@@ -225,6 +221,24 @@ document.querySelectorAll('.excluir-doenca-btn').forEach(function (btn) {
             .then(function () { location.reload(); })
             .catch(function () { alert('Falha ao excluir -- tente de novo.'); });
     });
+});
+
+// Habilita/desabilita as caixas de marcacao de uma coluna (Doencas x
+// Culturas/Paises) conforme o nome daquela coluna esta preenchido ou
+// nao -- sem isso, digitar o nome de uma cultura/pais nova so' liberava
+// as caixas depois de recarregar a pagina (o autosave desse form nao
+// recarrega), obrigando a salvar o nome, dar F5 e so' entao marcar as
+// doencas -- agora da' pra fazer tudo numa passada so'.
+document.querySelectorAll('.cultura-nome-input').forEach(function (input) {
+    var slot = input.name.split('__')[1];
+    var tabela = input.closest('table');
+    if (!tabela || slot === undefined) return;
+    var checkboxes = tabela.querySelectorAll('input[type="checkbox"][value="' + slot + '"]');
+    var atualizar = function () {
+        var habilitado = input.value.trim() !== '';
+        checkboxes.forEach(function (chk) { chk.disabled = !habilitado; });
+    };
+    input.addEventListener('input', atualizar);
 });
 </script>
 {% endblock %}
