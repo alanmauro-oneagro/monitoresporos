@@ -60,7 +60,7 @@ if hasattr(time, "tzset"):
 # (America/Santiago) -- decisao consciente, nao esquecimento: a
 # diferenca real e' so' ~0-1h (Chile tem horario de verao, o Brasil nao
 # desde 2019), entao o impacto pratico e' pequeno. Afeta hora do envio
-# agendado de WhatsApp (`WHATSAPP_SEND_HOUR`), timestamps de log e
+# agendado de WhatsApp (`models.get_whatsapp_send_hour`), timestamps de log e
 # rodape de relatorio pra TODOS os paises igual -- nao (ainda) por
 # fazenda/pais. Um ajuste fino por pais e' possivel depois se isso vier
 # a importar de verdade; ver `data_reader._offset_america_santiago` pro
@@ -69,7 +69,7 @@ if hasattr(time, "tzset"):
 # timestamp).
 
 WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda ... 6=Domingo (Python date.weekday())
-WHATSAPP_SEND_HOUR = 7  # hora do dia (0-23) em que o envio automatico roda
+NDVI_AGENDAMENTO_COBERTURA_MAXIMA = 3  # % -- mais estrito que o preview manual (5%), pedido explicito do usuario pro envio automatico
 WEATHER_CACHE_TTL_SECONDS = 30 * 60  # nao busca de novo na Open-Meteo antes disso, por fazenda
 NDVI_PREVIEW_TTL_SECONDS = 30 * 60  # pre-visualizacao de NDVI expira sozinha se ninguem confirmar/descartar
 DADOS_AVISO_DIAS = 7  # ate isso = verde (ok); acima = aviso (amarelo)
@@ -1366,7 +1366,7 @@ def _salvar_scheduler_enviados(today, enviados):
 
 
 def _run_scheduled_whatsapp_sends():
-    """Roda a cada minuto durante a hora `WHATSAPP_SEND_HOUR`
+    """Roda a cada minuto durante a hora `models.get_whatsapp_send_hour()`
     (`_whatsapp_scheduler_loop`) -- texto e PDF tem cada um sua propria
     agenda de dias da semana (aba Fazendas), entao uma fazenda pode, por
     exemplo, so mandar o PDF as segundas e so o texto as sextas. So chama
@@ -1401,14 +1401,98 @@ def _run_scheduled_whatsapp_sends():
         _salvar_scheduler_enviados(today, ja_enviados)
 
 
+_NDVI_SCHEDULER_STATE_KEY = "ndvi_scheduler_state"
+
+
+def _load_ndvi_scheduler_tentados(today):
+    """Mesmo padrao de `_load_scheduler_enviados` (fazendas ja' TENTADAS
+    hoje pelo agendamento de NDVI, sucesso ou nao -- ver
+    `_run_scheduled_ndvi_sends`), so' que numa chave de settings
+    separada, pra' nao interferir no dedupe do envio de relatorio."""
+    bruto = models.get_setting(_NDVI_SCHEDULER_STATE_KEY)
+    if bruto:
+        try:
+            estado = json.loads(bruto)
+        except ValueError:
+            estado = {}
+        if estado.get("date") == today.isoformat():
+            return set(estado.get("tentados", []))
+    return set()
+
+
+def _salvar_ndvi_scheduler_tentados(today, tentados):
+    models.set_setting(_NDVI_SCHEDULER_STATE_KEY, json.dumps({"date": today.isoformat(), "tentados": sorted(tentados)}))
+
+
+def _run_scheduled_ndvi_sends():
+    """Roda a cada minuto durante a hora `models.get_whatsapp_send_hour()`
+    (`_whatsapp_scheduler_loop`, mesmo horario do envio de relatorio) --
+    pra cada fazenda com agendamento de NDVI ativo (`models.get_all_ndvi_agendamentos`,
+    aba NDVI) cuja `proxima_execucao` ja' chegou, busca a melhor cena
+    disponivel (nuvens <= `NDVI_AGENDAMENTO_COBERTURA_MAXIMA`%, mais
+    estrito que o preview manual) e, se for uma cena NOVA (data ainda
+    nao salva no historico dessa fazenda -- `models.ndvi_historico_tem_data`,
+    evita reenviar a MESMA foto quando nenhuma cena nova apareceu desde
+    o ultimo ciclo, comum dado o revisit de ~5 dias do Sentinel-2), salva
+    na galeria/fazenda (mesma sequencia de `confirmar_ndvi_preview`) e
+    manda por WhatsApp pros telefones marcados como ativos
+    (`models.get_ndvi_ativos`). Sempre avanca `proxima_execucao` no
+    final (sucesso, erro ou "nada novo") -- nunca fica preso tentando
+    todo dia, retoma o ciclo normal na proxima data agendada. Tentativa
+    (nao envio) e' marcada uma vez por dia (`_load_ndvi_scheduler_tentados`),
+    igual ao agendador de relatorio, pra' sobreviver a reinicio no meio
+    da hora sem reprocessar quem ja' foi tentado hoje."""
+    hoje = datetime.now(timezone.utc).date()
+    tentados = _load_ndvi_scheduler_tentados(hoje)
+    for site, agendamento in models.get_all_ndvi_agendamentos().items():
+        if site in tentados or agendamento["proxima_execucao"] > hoje:
+            continue
+        try:
+            cars_kml = models.get_farm_ndvi_cars_kml(site)
+            if cars_kml:
+                lista_de_aneis_por_car = [ndvi_service.parse_kml_poligono(kml) for kml in cars_kml]
+                resultado, erro = ndvi_service.buscar_ndvi(
+                    lista_de_aneis_por_car, data_alvo=hoje, cobertura_maxima=NDVI_AGENDAMENTO_COBERTURA_MAXIMA
+                )
+                if resultado and not models.ndvi_historico_tem_data(site, resultado["data"].isoformat()):
+                    chuva, vento = _chuva_vento_ultimos_30_dias(site, resultado["data"])
+                    imagem = ndvi_service.desenhar_informacoes(
+                        resultado["imagem"], resultado["data"], chuva_acumulada_mm=chuva, vento_predominante=vento
+                    )
+                    thumbnail = ndvi_service.gerar_thumbnail(imagem)
+                    models.add_farm_ndvi_historico(
+                        site, resultado["data"].isoformat(), imagem, resultado["cobertura_nuvens"], thumbnail
+                    )
+                    models.save_farm_ndvi_image(site, imagem)
+                    nome_exibicao = _nome_exibicao(site)
+                    data_br = resultado["data"].strftime("%d/%m/%Y")
+                    legenda = f"🛰️ NDVI - {nome_exibicao} - {data_br} (envio automatico)"
+                    ativos = models.get_ndvi_ativos(site)
+                    for phone, rotulo in _site_whatsapp_destinations(site):
+                        if phone not in ativos:
+                            continue
+                        ok, mensagem = whatsapp.send_whatsapp_image(phone, imagem, caption=legenda)
+                        models.log_whatsapp_envio(site, rotulo, phone, ok, f"NDVI agendado {data_br}: {mensagem}")
+        except Exception:
+            pass  # nunca deixa o loop do agendador morrer -- tenta de novo no proximo ciclo
+        finally:
+            models.avancar_ndvi_agendamento(site, hoje)
+            tentados.add(site)
+            _salvar_ndvi_scheduler_tentados(hoje, tentados)
+
+
 def _whatsapp_scheduler_loop():
     while True:
         now = datetime.now()
-        if now.hour == WHATSAPP_SEND_HOUR:
+        if now.hour == models.get_whatsapp_send_hour():
             try:
                 _run_scheduled_whatsapp_sends()
             except Exception:
                 pass  # nunca deixa o loop do agendador morrer
+            try:
+                _run_scheduled_ndvi_sends()
+            except Exception:
+                pass
         time.sleep(60)
 
 
@@ -2845,6 +2929,7 @@ def fazendas():
         "fazendas.html", sites_data=sites_data, no_access=False,
         weekday_labels=list(enumerate(WEEKDAY_LABELS)),
         countries=countries.COUNTRIES,
+        whatsapp_send_hour=models.get_whatsapp_send_hour(),
     )
 
 
@@ -2875,11 +2960,14 @@ def ndvi():
 
     cars_by_site = models.get_all_farm_ndvi_cars()
     coords = _coords_all()
+    agendamentos = models.get_all_ndvi_agendamentos()
     sites_data = [
         {
             "site": site,
             "nome_exibicao": _nome_exibicao(site),
             "cars": cars_by_site.get(site, []),
+            "ndvi_agendamento": agendamentos.get(site),
+            "ndvi_ativos": models.get_ndvi_ativos(site),
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
             "preview": _get_ndvi_preview(site),
@@ -2902,6 +2990,48 @@ def _checar_acesso_site(site_name):
         allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
         if site_name not in allowed:
             abort(403)
+
+
+@app.route("/ndvi/agendamento/save", methods=["POST"])
+@login_required
+def save_ndvi_agendamento():
+    """Ativa/desativa o envio automatico de NDVI dessa fazenda (data de
+    inicio + frequencia semanal/quinzenal/mensal -- ver
+    `app._run_scheduled_ndvi_sends`). Frequencia vazia (opcao
+    "Desativado" no seletor) apaga o agendamento."""
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    frequencia = request.form.get("frequencia", "").strip()
+    if frequencia:
+        data_texto = request.form.get("data_inicio", "").strip()
+        try:
+            data_inicio = datetime.strptime(data_texto, "%Y-%m-%d").date()
+        except ValueError:
+            return _save_response("Data de inicio invalida.", "ndvi", ok=False)
+        models.set_ndvi_agendamento(site_name, data_inicio, frequencia)
+        mensagem = f"Envio automatico de NDVI de '{_nome_exibicao(site_name)}' ativado ({frequencia}, a partir de {data_inicio.strftime('%d/%m/%Y')})."
+    else:
+        models.set_ndvi_agendamento(site_name, None, "")
+        mensagem = f"Envio automatico de NDVI de '{_nome_exibicao(site_name)}' desativado."
+    return _save_response(mensagem, "ndvi")
+
+
+@app.route("/ndvi/destinatario/toggle", methods=["POST"])
+@login_required
+def toggle_ndvi_ativo():
+    """Marca/desmarca um destinatario como "ativo" pra NDVI dessa
+    fazenda -- persistido (`models.set_ndvi_ativo`), usado tanto pra
+    pre-marcar a caixa no envio manual quanto pra decidir quem recebe o
+    envio automatico agendado. Comeca desmarcado por padrao (pedido
+    explicito do usuario) -- so' fica ativo depois de marcado aqui."""
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    telefone = request.form.get("telefone", "")
+    ativo = request.form.get("ativo") == "1"
+    if telefone not in {p for p, _ in _site_whatsapp_destinations(site_name)}:
+        return {"ok": False, "error": "Destinatario invalido pra essa fazenda."}, 400
+    models.set_ndvi_ativo(site_name, telefone, ativo)
+    return {"ok": True}
 
 
 @app.route("/ndvi/car/save", methods=["POST"])
@@ -4210,7 +4340,22 @@ def admin_whatsapp():
     """Tela de pareamento do WhatsApp corporativo (QR code/codigo de
     pareamento, teste de envio, trocar numero) -- so' `ALAN_MAURO_USERNAME`
     tem acesso, ja que controla o remetente usado por TODAS as fazendas."""
-    return render_template("admin_whatsapp.html", status=whatsapp.get_status())
+    return render_template(
+        "admin_whatsapp.html", status=whatsapp.get_status(), whatsapp_send_hour=models.get_whatsapp_send_hour()
+    )
+
+
+@app.route("/admin/whatsapp/send-hour", methods=["POST"])
+@alan_mauro_required
+def save_whatsapp_send_hour():
+    """Horario (0-23) em que o envio agendado roda -- relatorio (texto/
+    PDF) e NDVI agendado usam o mesmo horario (`_whatsapp_scheduler_loop`).
+    Era fixo em 7h no codigo; editavel aqui pra' quem quiser mandar mais
+    cedo/tarde."""
+    models.set_whatsapp_send_hour(request.form.get("hora"))
+    return _save_response(
+        f"Horario de envio automatico salvo: {models.get_whatsapp_send_hour():02d}h.", "admin_whatsapp"
+    )
 
 
 @app.route("/admin/whatsapp/status")

@@ -67,6 +67,23 @@
             </div>
         </div>
 
+        <div class="card shadow-sm mt-3">
+            <div class="card-body">
+                <h6 class="mb-2">Horario do envio automatico</h6>
+                <form method="post" action="{{ url_for('save_whatsapp_send_hour') }}" data-autosave class="d-flex align-items-center gap-2">
+                    <input type="number" name="hora" min="0" max="23" value="{{ whatsapp_send_hour }}"
+                           class="form-control form-control-sm" style="width: 80px;">
+                    <span class="small text-muted">h -- relatorio (texto/PDF) e NDVI agendado</span>
+                    <span class="autosave-status small ms-2"></span>
+                </form>
+                <p class="text-muted small mt-2 mb-0">
+                    Hora do dia (0-23) em que o envio agendado roda -- vale
+                    tanto pro relatorio de texto/PDF (aba Fazendas) quanto pro
+                    envio automatico de NDVI (aba NDVI). Padrao: 7h.
+                </p>
+            </div>
+        </div>
+
         {% if status.connected %}
         <div class="card shadow-sm mt-3">
             <div class="card-body">

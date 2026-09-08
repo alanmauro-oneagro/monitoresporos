@@ -599,10 +599,13 @@ def gerar_thumbnail(imagem_bytes, tamanho=200):
     return saida.getvalue()
 
 
-def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_px=512):
+def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_px=512, cobertura_maxima=None):
     """Busca a cena Sentinel-2 mais proxima de `data_alvo` (ou de hoje, se
     nao informada) dentro de uma janela de +/-`janela_dias`, descartando
-    cenas com mais de `COBERTURA_NUVENS_MAXIMA`% de nuvens -- com o limite
+    cenas com mais de `cobertura_maxima`% de nuvens (default
+    `COBERTURA_NUVENS_MAXIMA`, usado pela pre-visualizacao manual -- o
+    envio automatico agendado passa um limite mais estrito, ver
+    `app._run_scheduled_ndvi_sends`) -- com o limite
     tao baixo (5%), a janela precisa ser mais larga que antes pra ter chance
     de achar alguma cena boa o suficiente. Primeiro
     consulta a Catalog API (metadado leve) pra escolher a melhor cena, so'
@@ -623,6 +626,8 @@ def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_
     `geometria_combinada` sobre por que a correcao de ruido de
     digitalizacao precisa ver cada CAR separado antes de juntar. Uma
     fazenda com 1 CAR so' passa `[aneis_desse_car]`."""
+    limite_nuvem = COBERTURA_NUVENS_MAXIMA if cobertura_maxima is None else cobertura_maxima
+
     token, erro = _obter_token()
     if not token:
         return None, f"Nao foi possivel autenticar na Copernicus Data Space Ecosystem: {erro}."
@@ -647,11 +652,11 @@ def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_
 
     boas = [
         c for c in cenas
-        if c.get("properties", {}).get("eo:cloud_cover", 100) <= COBERTURA_NUVENS_MAXIMA
+        if c.get("properties", {}).get("eo:cloud_cover", 100) <= limite_nuvem
     ]
     if not boas:
         return None, (
-            f"Nenhuma imagem Sentinel-2 com {COBERTURA_NUVENS_MAXIMA}% de nuvens ou menos "
+            f"Nenhuma imagem Sentinel-2 com {limite_nuvem}% de nuvens ou menos "
             f"encontrada entre {desde.isoformat()} e {ate.isoformat()}. Tente uma data diferente."
         )
 

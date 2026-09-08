@@ -69,6 +69,30 @@
                     Pode anexar mais de um CAR pra mesma fazenda (ex.: propriedades vizinhas manejadas juntas) --
                     o NDVI gerado combina a area de todos os CAR anexados numa imagem so'.
                 </div>
+                {% if site_group.cars %}
+                <div class="mt-3 pt-3 border-top">
+                    <div class="small text-muted mb-1">Envio automatico de NDVI por WhatsApp:</div>
+                    <form method="post" action="{{ url_for('save_ndvi_agendamento') }}" data-autosave
+                          class="d-flex align-items-center flex-wrap gap-2">
+                        <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                        <input type="date" class="form-control form-control-sm" style="width: auto;"
+                               id="ndvi_ag_data_{{ site_idx }}" name="data_inicio" min="{{ hoje }}"
+                               value="{{ site_group.ndvi_agendamento.proxima_execucao.isoformat() if site_group.ndvi_agendamento else hoje }}">
+                        <select class="form-select form-select-sm" style="width: auto;" name="frequencia">
+                            <option value="">Desativado</option>
+                            <option value="semanal" {% if site_group.ndvi_agendamento and site_group.ndvi_agendamento.frequencia == 'semanal' %}selected{% endif %}>Semanal</option>
+                            <option value="quinzenal" {% if site_group.ndvi_agendamento and site_group.ndvi_agendamento.frequencia == 'quinzenal' %}selected{% endif %}>Quinzenal</option>
+                            <option value="mensal" {% if site_group.ndvi_agendamento and site_group.ndvi_agendamento.frequencia == 'mensal' %}selected{% endif %}>Mensal</option>
+                        </select>
+                        <span class="autosave-status small ms-2"></span>
+                    </form>
+                    <p class="text-muted small mt-1 mb-0">
+                        Busca sozinho a cena mais recente (nuvens ate 3%) e manda pros
+                        destinatarios marcados ao lado, no horario configurado (aba WhatsApp).
+                        {% if site_group.ndvi_agendamento %}Proximo envio automatico: {{ site_group.ndvi_agendamento.proxima_execucao | data_br }}.{% endif %}
+                    </p>
+                </div>
+                {% endif %}
             </div>
             <div class="col-12 col-lg-6">
                 {% if site_group.cars %}
@@ -104,19 +128,24 @@
                     </div>
                 </div>
                 {% endif %}
-                {% if site_group.historico %}
-                <form method="post" action="{{ url_for('enviar_ndvi_historico_whatsapp') }}" id="ndvi_whats_{{ site_idx }}">
-                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                    {% if site_group.whatsapp_destinatarios %}
-                    <div class="small text-muted mb-1">Enviar pra (desmarque quem nao deve receber dessa vez):</div>
+                {% if site_group.whatsapp_destinatarios %}
+                <div class="mb-2">
+                    <div class="small text-muted mb-1">Destinatarios ativos pra NDVI dessa fazenda (envio manual e agendamento automatico):</div>
                     {% for destinatario in site_group.whatsapp_destinatarios %}
                     <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="destino_telefones"
-                               value="{{ destinatario.telefone }}" id="ndvi_dest_{{ site_idx }}_{{ loop.index0 }}" checked>
+                        <input class="form-check-input ndvi-ativo-check" type="checkbox" form="ndvi_whats_{{ site_idx }}"
+                               name="destino_telefones" value="{{ destinatario.telefone }}"
+                               data-site="{{ site_group.site }}"
+                               id="ndvi_dest_{{ site_idx }}_{{ loop.index0 }}"
+                               {% if destinatario.telefone in site_group.ndvi_ativos %}checked{% endif %}>
                         <label class="form-check-label small" for="ndvi_dest_{{ site_idx }}_{{ loop.index0 }}">{{ destinatario.rotulo }}</label>
                     </div>
                     {% endfor %}
-                    {% endif %}
+                </div>
+                {% endif %}
+                {% if site_group.historico %}
+                <form method="post" action="{{ url_for('enviar_ndvi_historico_whatsapp') }}" id="ndvi_whats_{{ site_idx }}">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 </form>
                 <div class="d-flex gap-2 overflow-auto pb-1" style="max-width: 100%;">
                     {% for item in site_group.historico %}
@@ -160,4 +189,20 @@
 </div>
 {% endfor %}
 {% endif %}
+<script>
+// Persiste marcar/desmarcar destinatario ativo pra NDVI (default
+// desmarcado, ver `site_group.ndvi_ativos`) -- independente do form de
+// envio manual (que continua lendo o mesmo checkbox via o atributo
+// form="ndvi_whats_..."), pra nao precisar de um botao "Salvar" a parte
+// e pro agendamento automatico sempre ver a escolha mais recente.
+document.querySelectorAll('.ndvi-ativo-check').forEach(function (chk) {
+    chk.addEventListener('change', function () {
+        var fd = new FormData();
+        fd.append('site_name', chk.dataset.site);
+        fd.append('telefone', chk.value);
+        fd.append('ativo', chk.checked ? '1' : '0');
+        fetch('{{ url_for("toggle_ndvi_ativo") }}', { method: 'POST', body: fd }).catch(function () {});
+    });
+});
+</script>
 {% endblock %}

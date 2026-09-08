@@ -330,6 +330,18 @@ def init_db():
             gerado_em TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_farm_ndvi_historico_site ON farm_ndvi_historico(site_name);
+
+        CREATE TABLE IF NOT EXISTS ndvi_agendamento (
+            site_name TEXT PRIMARY KEY,
+            frequencia TEXT NOT NULL,
+            proxima_execucao TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS ndvi_whatsapp_ativos (
+            site_name TEXT NOT NULL,
+            telefone TEXT NOT NULL,
+            PRIMARY KEY (site_name, telefone)
+        );
         """
     )
     # farm_sulco_plantio (campo unico de texto livre pro sulco de plantio)
@@ -603,6 +615,33 @@ def set_setting(key, value):
     )
     conn.commit()
     conn.close()
+
+
+_WHATSAPP_SEND_HOUR_KEY = "whatsapp_send_hour"
+_WHATSAPP_SEND_HOUR_DEFAULT = "7"
+
+
+def get_whatsapp_send_hour():
+    """Hora do dia (0-23, como string) em que o envio agendado roda --
+    relatorio (texto/PDF) e NDVI agendado usam o MESMO horario (ver
+    `app._whatsapp_scheduler_loop`). Editavel na aba WhatsApp (admin);
+    "7" e' o valor de sempre, mantido como default pra quem nunca mexeu
+    nessa configuracao."""
+    valor = get_setting(_WHATSAPP_SEND_HOUR_KEY, _WHATSAPP_SEND_HOUR_DEFAULT)
+    try:
+        hora = int(valor)
+    except (TypeError, ValueError):
+        return int(_WHATSAPP_SEND_HOUR_DEFAULT)
+    return hora if 0 <= hora <= 23 else int(_WHATSAPP_SEND_HOUR_DEFAULT)
+
+
+def set_whatsapp_send_hour(hora):
+    try:
+        hora_int = int(hora)
+    except (TypeError, ValueError):
+        return
+    if 0 <= hora_int <= 23:
+        set_setting(_WHATSAPP_SEND_HOUR_KEY, str(hora_int))
 
 
 def get_whatsapp_days(site_name):
@@ -1468,6 +1507,111 @@ def add_farm_ndvi_historico(site_name, data_alvo, imagem_bytes, cobertura_nuvens
     conn.close()
 
 
+def ndvi_historico_tem_data(site_name, data_alvo):
+    """True se ja existe uma entrada no historico dessa fazenda pra essa
+    `data_alvo` exata -- `farm_ndvi_historico` nao tem constraint unica
+    nesse par, entao quem gera automaticamente (ver
+    `app._run_scheduled_ndvi_sends`) precisa checar isso na mao antes de
+    inserir, senao duplica a MESMA cena todo ciclo em que nenhuma cena
+    nova aparecer (comum, dado o revisit de ~5 dias do Sentinel-2)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT 1 FROM farm_ndvi_historico WHERE site_name = ? AND data_alvo = ? LIMIT 1",
+        (site_name, data_alvo),
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
+_NDVI_FREQUENCIA_DIAS = {"semanal": 7, "quinzenal": 14, "mensal": 30}
+
+
+def get_all_ndvi_agendamentos():
+    """{site_name: {"frequencia":, "proxima_execucao": date}} -- so'
+    fazendas com agendamento automatico ativo aparecem aqui (ver
+    `set_ndvi_agendamento`)."""
+    conn = get_db()
+    rows = conn.execute("SELECT site_name, frequencia, proxima_execucao FROM ndvi_agendamento").fetchall()
+    conn.close()
+    return {
+        r["site_name"]: {
+            "frequencia": r["frequencia"],
+            "proxima_execucao": datetime.strptime(r["proxima_execucao"], "%Y-%m-%d").date(),
+        }
+        for r in rows
+    }
+
+
+def set_ndvi_agendamento(site_name, data_inicio, frequencia):
+    """Ativa (ou substitui) o agendamento automatico de NDVI dessa
+    fazenda -- `data_inicio` (date) vira a primeira `proxima_execucao`.
+    `frequencia` vazio/None APAGA a linha (desativa o agendamento),
+    mesma semantica de `set_weather_station_override`."""
+    conn = get_db()
+    if not frequencia:
+        conn.execute("DELETE FROM ndvi_agendamento WHERE site_name = ?", (site_name,))
+    else:
+        conn.execute(
+            """
+            INSERT INTO ndvi_agendamento (site_name, frequencia, proxima_execucao) VALUES (?, ?, ?)
+            ON CONFLICT(site_name) DO UPDATE SET frequencia = excluded.frequencia,
+                proxima_execucao = excluded.proxima_execucao
+            """,
+            (site_name, frequencia, data_inicio.isoformat()),
+        )
+    conn.commit()
+    conn.close()
+
+
+def avancar_ndvi_agendamento(site_name, a_partir_de):
+    """Empurra `proxima_execucao` pra frente a partir de `a_partir_de`
+    (a data REAL da tentativa, hoje -- nao a data agendada anterior),
+    pelo intervalo da frequencia dessa fazenda. Ancorar em "hoje" (em vez
+    de acumular a partir do ciclo perdido) evita uma rajada de tentativas
+    em atraso se o servidor ficar fora do ar por varios dias -- so'
+    retoma o ciclo normal a partir de quando rodar de novo. Nao faz nada
+    se a fazenda nao tiver agendamento ativo (ja foi desativado no meio
+    do processamento, por exemplo)."""
+    conn = get_db()
+    row = conn.execute("SELECT frequencia FROM ndvi_agendamento WHERE site_name = ?", (site_name,)).fetchone()
+    if row:
+        dias = _NDVI_FREQUENCIA_DIAS.get(row["frequencia"], 7)
+        proxima = a_partir_de + timedelta(days=dias)
+        conn.execute(
+            "UPDATE ndvi_agendamento SET proxima_execucao = ? WHERE site_name = ?",
+            (proxima.isoformat(), site_name),
+        )
+        conn.commit()
+    conn.close()
+
+
+def get_ndvi_ativos(site_name):
+    """Telefones marcados como "ativos" pra NDVI dessa fazenda -- usado
+    tanto pra pre-marcar a caixa no envio manual (aba NDVI) quanto pra
+    decidir quem recebe o envio automatico agendado (ver
+    `app._run_scheduled_ndvi_sends`). Vazio por padrao (nenhuma linha
+    ainda) -- comeca desmarcado ate' o usuario marcar e salvar."""
+    conn = get_db()
+    rows = conn.execute("SELECT telefone FROM ndvi_whatsapp_ativos WHERE site_name = ?", (site_name,)).fetchall()
+    conn.close()
+    return {r["telefone"] for r in rows}
+
+
+def set_ndvi_ativo(site_name, telefone, ativo):
+    conn = get_db()
+    if ativo:
+        conn.execute(
+            "INSERT OR IGNORE INTO ndvi_whatsapp_ativos (site_name, telefone) VALUES (?, ?)",
+            (site_name, telefone),
+        )
+    else:
+        conn.execute(
+            "DELETE FROM ndvi_whatsapp_ativos WHERE site_name = ? AND telefone = ?", (site_name, telefone)
+        )
+    conn.commit()
+    conn.close()
+
+
 def get_farm_ndvi_historico(site_name):
     """Lista (sem os bytes da imagem, que pode ser grande) ordenada da mais
     recente pra mais antiga -- usada pra montar a galeria de miniaturas."""
@@ -1828,7 +1972,7 @@ _VIRTUAL_FARM_RENAME_TABLES = (
     "sites", "recommendation_notes", "whatsapp_schedule", "whatsapp_schedule_pdf",
     "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
     "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_car", "farm_ndvi_historico",
-    "site_country_overrides", "site_climate_notes",
+    "site_country_overrides", "site_climate_notes", "ndvi_agendamento", "ndvi_whatsapp_ativos",
 )
 
 
@@ -1936,6 +2080,8 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM farm_ndvi_historico WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM site_country_overrides WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM site_climate_notes WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM ndvi_agendamento WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM ndvi_whatsapp_ativos WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 
