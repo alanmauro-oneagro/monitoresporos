@@ -84,12 +84,17 @@
                             <option value="quinzenal" {% if site_group.ndvi_agendamento and site_group.ndvi_agendamento.frequencia == 'quinzenal' %}selected{% endif %}>Quinzenal</option>
                             <option value="mensal" {% if site_group.ndvi_agendamento and site_group.ndvi_agendamento.frequencia == 'mensal' %}selected{% endif %}>Mensal</option>
                         </select>
+                        <label class="small text-muted mb-0" for="ndvi_ag_hora_{{ site_idx }}">as</label>
+                        <input type="number" class="form-control form-control-sm" style="width: 62px;" min="0" max="23"
+                               id="ndvi_ag_hora_{{ site_idx }}" name="hora"
+                               value="{{ site_group.ndvi_agendamento.hora if site_group.ndvi_agendamento else hora_padrao }}">
+                        <label class="small text-muted mb-0" for="ndvi_ag_hora_{{ site_idx }}">h</label>
                         <span class="autosave-status small ms-2"></span>
                     </form>
                     <p class="text-muted small mt-1 mb-0">
                         Busca sozinho a cena mais recente (nuvens ate 3%) e manda pros
-                        destinatarios marcados ao lado, no horario configurado (aba WhatsApp).
-                        {% if site_group.ndvi_agendamento %}Proximo envio automatico: {{ site_group.ndvi_agendamento.proxima_execucao | data_br }}.{% endif %}
+                        destinatarios marcados ao lado, no dia/horario configurados acima.
+                        {% if site_group.ndvi_agendamento %}Proximo envio automatico: {{ site_group.ndvi_agendamento.proxima_execucao | data_br }}, as {{ '%02d'|format(site_group.ndvi_agendamento.hora) }}h.{% endif %}
                     </p>
                 </div>
                 {% endif %}

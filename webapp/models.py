@@ -334,7 +334,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS ndvi_agendamento (
             site_name TEXT PRIMARY KEY,
             frequencia TEXT NOT NULL,
-            proxima_execucao TEXT NOT NULL
+            proxima_execucao TEXT NOT NULL,
+            hora INTEGER NOT NULL DEFAULT 7
         );
 
         CREATE TABLE IF NOT EXISTS ndvi_whatsapp_ativos (
@@ -342,8 +343,18 @@ def init_db():
             telefone TEXT NOT NULL,
             PRIMARY KEY (site_name, telefone)
         );
+
+        CREATE TABLE IF NOT EXISTS whatsapp_schedule_horarios (
+            site_name TEXT PRIMARY KEY,
+            hora_texto INTEGER NOT NULL DEFAULT 7,
+            hora_pdf INTEGER NOT NULL DEFAULT 7
+        );
         """
     )
+    try:
+        conn.execute("ALTER TABLE ndvi_agendamento ADD COLUMN hora INTEGER NOT NULL DEFAULT 7")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao, ou pela CREATE TABLE acima)
     # farm_sulco_plantio (campo unico de texto livre pro sulco de plantio)
     # foi substituida por "sulco" virar um momento normal de farm_produtos
     # (mesma grade de TS/Folha, com produtos quimicos/biologicos) -- essa
@@ -642,6 +653,57 @@ def set_whatsapp_send_hour(hora):
         return
     if 0 <= hora_int <= 23:
         set_setting(_WHATSAPP_SEND_HOUR_KEY, str(hora_int))
+
+
+def get_all_whatsapp_schedule_horarios():
+    """{site_name: {"texto": hora, "pdf": hora}} -- horario individual
+    por fazenda do envio agendado de relatorio (texto e PDF podem ter
+    horarios diferentes entre si, cada um do seu jeito -- pedido
+    explicito do usuario, pra poder espalhar os envios ao longo do dia
+    em vez de todas as fazendas mandarem no mesmo horario). So' tem
+    linha pra fazenda que ja teve o horario customizado alguma vez --
+    `get_whatsapp_schedule_horarios` cobre o default pra quem nunca
+    mexeu."""
+    conn = get_db()
+    rows = conn.execute("SELECT site_name, hora_texto, hora_pdf FROM whatsapp_schedule_horarios").fetchall()
+    conn.close()
+    return {r["site_name"]: {"texto": r["hora_texto"], "pdf": r["hora_pdf"]} for r in rows}
+
+
+def get_whatsapp_schedule_horarios(site_name):
+    """Horario (0-23) do envio agendado de texto/PDF dessa fazenda --
+    `get_whatsapp_send_hour()` (default global) pra quem nunca
+    customizou, ver `get_all_whatsapp_schedule_horarios`."""
+    default = get_whatsapp_send_hour()
+    conn = get_db()
+    row = conn.execute(
+        "SELECT hora_texto, hora_pdf FROM whatsapp_schedule_horarios WHERE site_name = ?", (site_name,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return {"texto": default, "pdf": default}
+    return {"texto": row["hora_texto"], "pdf": row["hora_pdf"]}
+
+
+def set_whatsapp_schedule_hora(site_name, tipo, hora):
+    """Atualiza SO' o horario de um tipo (`tipo` = 'texto' ou 'pdf') pra
+    essa fazenda, sem mexer no outro -- os dois campos ficam em telas/
+    forms separados (aba Fazendas), entao salvar um nao pode sobrescrever
+    o outro com o default. Cria a linha com o default global
+    (`get_whatsapp_send_hour()`) no campo ainda nao customizado, se for
+    a primeira vez que essa fazenda tem qualquer horario customizado."""
+    coluna = "hora_texto" if tipo == "texto" else "hora_pdf"
+    default = get_whatsapp_send_hour()
+    conn = get_db()
+    conn.execute(
+        f"""
+        INSERT INTO whatsapp_schedule_horarios (site_name, hora_texto, hora_pdf) VALUES (?, ?, ?)
+        ON CONFLICT(site_name) DO UPDATE SET {coluna} = excluded.{coluna}
+        """,
+        (site_name, hora if tipo == "texto" else default, hora if tipo == "pdf" else default),
+    )
+    conn.commit()
+    conn.close()
 
 
 def get_whatsapp_days(site_name):
@@ -1527,37 +1589,45 @@ _NDVI_FREQUENCIA_DIAS = {"semanal": 7, "quinzenal": 14, "mensal": 30}
 
 
 def get_all_ndvi_agendamentos():
-    """{site_name: {"frequencia":, "proxima_execucao": date}} -- so'
-    fazendas com agendamento automatico ativo aparecem aqui (ver
-    `set_ndvi_agendamento`)."""
+    """{site_name: {"frequencia":, "proxima_execucao": date, "hora": int}}
+    -- so' fazendas com agendamento automatico ativo aparecem aqui (ver
+    `set_ndvi_agendamento`). `hora` e' individual por fazenda (pedido
+    explicito do usuario, pra poder espalhar os envios ao longo do dia
+    em vez de todos saindo no mesmo horario -- ver
+    `app._run_scheduled_ndvi_sends`)."""
     conn = get_db()
-    rows = conn.execute("SELECT site_name, frequencia, proxima_execucao FROM ndvi_agendamento").fetchall()
+    rows = conn.execute("SELECT site_name, frequencia, proxima_execucao, hora FROM ndvi_agendamento").fetchall()
     conn.close()
     return {
         r["site_name"]: {
             "frequencia": r["frequencia"],
             "proxima_execucao": datetime.strptime(r["proxima_execucao"], "%Y-%m-%d").date(),
+            "hora": r["hora"],
         }
         for r in rows
     }
 
 
-def set_ndvi_agendamento(site_name, data_inicio, frequencia):
+def set_ndvi_agendamento(site_name, data_inicio, frequencia, hora=None):
     """Ativa (ou substitui) o agendamento automatico de NDVI dessa
     fazenda -- `data_inicio` (date) vira a primeira `proxima_execucao`.
     `frequencia` vazio/None APAGA a linha (desativa o agendamento),
-    mesma semantica de `set_weather_station_override`."""
+    mesma semantica de `set_weather_station_override`. `hora` (0-23,
+    individual por fazenda) usa `get_whatsapp_send_hour()` como default
+    quando nao informado (mesmo valor que ja preenche o campo na tela)."""
     conn = get_db()
     if not frequencia:
         conn.execute("DELETE FROM ndvi_agendamento WHERE site_name = ?", (site_name,))
     else:
+        if hora is None:
+            hora = get_whatsapp_send_hour()
         conn.execute(
             """
-            INSERT INTO ndvi_agendamento (site_name, frequencia, proxima_execucao) VALUES (?, ?, ?)
+            INSERT INTO ndvi_agendamento (site_name, frequencia, proxima_execucao, hora) VALUES (?, ?, ?, ?)
             ON CONFLICT(site_name) DO UPDATE SET frequencia = excluded.frequencia,
-                proxima_execucao = excluded.proxima_execucao
+                proxima_execucao = excluded.proxima_execucao, hora = excluded.hora
             """,
-            (site_name, frequencia, data_inicio.isoformat()),
+            (site_name, frequencia, data_inicio.isoformat(), hora),
         )
     conn.commit()
     conn.close()
@@ -1973,6 +2043,7 @@ _VIRTUAL_FARM_RENAME_TABLES = (
     "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
     "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_car", "farm_ndvi_historico",
     "site_country_overrides", "site_climate_notes", "ndvi_agendamento", "ndvi_whatsapp_ativos",
+    "whatsapp_schedule_horarios",
 )
 
 
@@ -2082,6 +2153,7 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM site_climate_notes WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM ndvi_agendamento WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM ndvi_whatsapp_ativos WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM whatsapp_schedule_horarios WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 

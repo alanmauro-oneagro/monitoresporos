@@ -1342,14 +1342,17 @@ _SCHEDULER_STATE_KEY = "whatsapp_scheduler_state"
 
 
 def _load_scheduler_enviados(today):
-    """Conjunto de fazendas que ja' receberam o envio agendado HOJE --
-    persistido no banco (`models.get_setting`/`app_settings`), nao numa
-    variavel em memoria. Uma variavel em memoria zera sozinha se o
-    processo reiniciar (deploy, crash, worker reciclado) no MEIO da hora
-    de envio, fazendo o agendador reenviar o relatorio do dia inteiro de
-    novo pra fazendas que ja' tinham recebido -- por isso o estado precisa
-    sobreviver a reinicio. Reseta sozinho quando o dia muda (registro
-    salvo de um dia anterior e' ignorado)."""
+    """Conjunto de "site::texto"/"site::pdf" que ja' receberam o envio
+    agendado HOJE -- persistido no banco (`models.get_setting`/
+    `app_settings`), nao numa variavel em memoria. Uma variavel em
+    memoria zera sozinha se o processo reiniciar (deploy, crash, worker
+    reciclado) no MEIO do dia, fazendo o agendador reenviar de novo pra
+    quem ja' tinha recebido -- por isso o estado precisa sobreviver a
+    reinicio. Chave por (site, tipo) e nao so' site, porque texto e PDF
+    agora podem ter horarios diferentes (`models.get_whatsapp_schedule_horarios`)
+    -- uma fazenda pode ja' ter recebido o texto as 7h e ainda estar
+    esperando o PDF as 15h no MESMO dia. Reseta sozinho quando o dia muda
+    (registro salvo de um dia anterior e' ignorado)."""
     bruto = models.get_setting(_SCHEDULER_STATE_KEY)
     if bruto:
         try:
@@ -1366,38 +1369,56 @@ def _salvar_scheduler_enviados(today, enviados):
 
 
 def _run_scheduled_whatsapp_sends():
-    """Roda a cada minuto durante a hora `models.get_whatsapp_send_hour()`
-    (`_whatsapp_scheduler_loop`) -- texto e PDF tem cada um sua propria
-    agenda de dias da semana (aba Fazendas), entao uma fazenda pode, por
-    exemplo, so mandar o PDF as segundas e so o texto as sextas. So chama
-    `_send_site_whatsapp` (que de fato manda) quando pelo menos um dos
-    dois bate com o dia de hoje pra essa fazenda, E essa fazenda ainda
-    nao esta' no conjunto "ja' enviado hoje" (`_load_scheduler_enviados`)
-    -- marca e PERSISTE a fazenda como enviada logo apos cada envio (nao
-    so' no final do lote), entao um crash/reinicio no meio da lista
-    retoma so' das fazendas que faltam, nunca reenvia as que ja' foram."""
+    """Roda a cada minuto (`_whatsapp_scheduler_loop`) -- texto e PDF tem
+    cada um sua propria agenda de dias da semana E seu proprio horario
+    (aba Fazendas, `models.get_all_whatsapp_schedule_horarios` --
+    individual por fazenda, pedido explicito do usuario pra poder
+    espalhar os envios ao longo do dia em vez de todo mundo mandar no
+    mesmo horario e parecer um robo). Uma fazenda pode, por exemplo, so
+    mandar o PDF as segundas 15h e o texto as sextas 7h. So chama
+    `_send_site_whatsapp` (que de fato manda) quando o dia da semana E a
+    hora atual batem com a agenda daquele TIPO especifico pra essa
+    fazenda, E esse (site, tipo) ainda nao esta' no conjunto "ja' enviado
+    hoje" (`_load_scheduler_enviados`) -- marca e PERSISTE logo apos cada
+    envio (nao so' no final do lote), entao um crash/reinicio no meio da
+    lista retoma so' do que falta, nunca reenvia o que ja' foi."""
     today = datetime.now().date()
     weekday = today.weekday()
+    hora_atual = datetime.now().hour
     schedule_texto = models.get_all_whatsapp_days()
     schedule_pdf = models.get_all_whatsapp_days_pdf()
+    horarios = models.get_all_whatsapp_schedule_horarios()
+    hora_default = models.get_whatsapp_send_hour()
     ja_enviados = _load_scheduler_enviados(today)
-    sites_do_dia = [
-        site for site in set(schedule_texto) | set(schedule_pdf)
-        if site not in ja_enviados
-        and (weekday in schedule_texto.get(site, set()) or weekday in schedule_pdf.get(site, set()))
-    ]
-    if not sites_do_dia:
+
+    pendentes = []  # (site, enviar_texto, enviar_pdf)
+    for site in set(schedule_texto) | set(schedule_pdf):
+        hora_site = horarios.get(site, {"texto": hora_default, "pdf": hora_default})
+        enviar_texto = (
+            weekday in schedule_texto.get(site, set())
+            and hora_atual == hora_site["texto"]
+            and f"{site}::texto" not in ja_enviados
+        )
+        enviar_pdf = (
+            weekday in schedule_pdf.get(site, set())
+            and hora_atual == hora_site["pdf"]
+            and f"{site}::pdf" not in ja_enviados
+        )
+        if enviar_texto or enviar_pdf:
+            pendentes.append((site, enviar_texto, enviar_pdf))
+    if not pendentes:
         return
-    # Aquece o cache de clima de todas as fazendas do dia em paralelo antes
-    # de mandar -- sem isso, `_send_site_whatsapp` buscava o clima de cada
-    # fazenda um de cada vez (rede, ~1-1.5s cada), somando varios segundos
-    # so' de espera sequencial toda vez que o agendador roda.
-    _prefetch_weather(sites_do_dia, _weather_coords_all())
-    for site in sites_do_dia:
-        enviar_texto = weekday in schedule_texto.get(site, set())
-        enviar_pdf = weekday in schedule_pdf.get(site, set())
+    # Aquece o cache de clima de todas as fazendas pendentes em paralelo
+    # antes de mandar -- sem isso, `_send_site_whatsapp` buscava o clima
+    # de cada fazenda um de cada vez (rede, ~1-1.5s cada), somando varios
+    # segundos so' de espera sequencial toda vez que o agendador roda.
+    _prefetch_weather([site for site, _, _ in pendentes], _weather_coords_all())
+    for site, enviar_texto, enviar_pdf in pendentes:
         _send_site_whatsapp(site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
-        ja_enviados.add(site)
+        if enviar_texto:
+            ja_enviados.add(f"{site}::texto")
+        if enviar_pdf:
+            ja_enviados.add(f"{site}::pdf")
         _salvar_scheduler_enviados(today, ja_enviados)
 
 
@@ -1425,27 +1446,33 @@ def _salvar_ndvi_scheduler_tentados(today, tentados):
 
 
 def _run_scheduled_ndvi_sends():
-    """Roda a cada minuto durante a hora `models.get_whatsapp_send_hour()`
-    (`_whatsapp_scheduler_loop`, mesmo horario do envio de relatorio) --
-    pra cada fazenda com agendamento de NDVI ativo (`models.get_all_ndvi_agendamentos`,
-    aba NDVI) cuja `proxima_execucao` ja' chegou, busca a melhor cena
-    disponivel (nuvens <= `NDVI_AGENDAMENTO_COBERTURA_MAXIMA`%, mais
-    estrito que o preview manual) e, se for uma cena NOVA (data ainda
-    nao salva no historico dessa fazenda -- `models.ndvi_historico_tem_data`,
-    evita reenviar a MESMA foto quando nenhuma cena nova apareceu desde
-    o ultimo ciclo, comum dado o revisit de ~5 dias do Sentinel-2), salva
-    na galeria/fazenda (mesma sequencia de `confirmar_ndvi_preview`) e
-    manda por WhatsApp pros telefones marcados como ativos
-    (`models.get_ndvi_ativos`). Sempre avanca `proxima_execucao` no
-    final (sucesso, erro ou "nada novo") -- nunca fica preso tentando
-    todo dia, retoma o ciclo normal na proxima data agendada. Tentativa
-    (nao envio) e' marcada uma vez por dia (`_load_ndvi_scheduler_tentados`),
-    igual ao agendador de relatorio, pra' sobreviver a reinicio no meio
-    da hora sem reprocessar quem ja' foi tentado hoje."""
+    """Roda a cada minuto (`_whatsapp_scheduler_loop`) -- pra cada
+    fazenda com agendamento de NDVI ativo (`models.get_all_ndvi_agendamentos`,
+    aba NDVI) cuja `proxima_execucao` ja' chegou E a hora atual bate com
+    o horario individual dessa fazenda (`agendamento["hora"]` -- pedido
+    explicito do usuario, pra poder espalhar os envios ao longo do dia
+    em vez de todas as fazendas mandarem no mesmo horario), busca a
+    melhor cena disponivel (nuvens <= `NDVI_AGENDAMENTO_COBERTURA_MAXIMA`%,
+    mais estrito que o preview manual) e, se for uma cena NOVA (data
+    ainda nao salva no historico dessa fazenda --
+    `models.ndvi_historico_tem_data`, evita reenviar a MESMA foto quando
+    nenhuma cena nova apareceu desde o ultimo ciclo, comum dado o
+    revisit de ~5 dias do Sentinel-2), salva na galeria/fazenda (mesma
+    sequencia de `confirmar_ndvi_preview`) e manda por WhatsApp pros
+    telefones marcados como ativos (`models.get_ndvi_ativos`). Sempre
+    avanca `proxima_execucao` no final (sucesso, erro ou "nada novo") --
+    nunca fica preso tentando todo dia, retoma o ciclo normal na proxima
+    data agendada. Tentativa (nao envio) e' marcada uma vez por dia
+    (`_load_ndvi_scheduler_tentados`), igual ao agendador de relatorio,
+    pra' sobreviver a reinicio no meio da hora sem reprocessar quem ja'
+    foi tentado hoje -- so' marca DEPOIS que a hora certa chegar (senao
+    ficaria preso "tentado" o dia inteiro antes mesmo do horario
+    configurado)."""
     hoje = datetime.now(timezone.utc).date()
+    hora_atual = datetime.now().hour
     tentados = _load_ndvi_scheduler_tentados(hoje)
     for site, agendamento in models.get_all_ndvi_agendamentos().items():
-        if site in tentados or agendamento["proxima_execucao"] > hoje:
+        if site in tentados or agendamento["proxima_execucao"] > hoje or agendamento["hora"] != hora_atual:
             continue
         try:
             cars_kml = models.get_farm_ndvi_cars_kml(site)
@@ -1482,17 +1509,23 @@ def _run_scheduled_ndvi_sends():
 
 
 def _whatsapp_scheduler_loop():
+    """Roda a cada minuto, o dia inteiro -- o horario de cada envio
+    (relatorio texto/PDF e NDVI agendado) agora e' individual por
+    fazenda (`models.get_all_whatsapp_schedule_horarios`,
+    `models.get_all_ndvi_agendamentos`), entao a checagem de "e' a hora
+    certa?" mora DENTRO de cada uma dessas duas funcoes, nao mais aqui
+    (antes havia um unico horario global pra tudo -- `models.get_whatsapp_send_hour()`
+    continua existindo so' como default pra quem nunca customizou o
+    horario de uma fazenda especifica)."""
     while True:
-        now = datetime.now()
-        if now.hour == models.get_whatsapp_send_hour():
-            try:
-                _run_scheduled_whatsapp_sends()
-            except Exception:
-                pass  # nunca deixa o loop do agendador morrer
-            try:
-                _run_scheduled_ndvi_sends()
-            except Exception:
-                pass
+        try:
+            _run_scheduled_whatsapp_sends()
+        except Exception:
+            pass  # nunca deixa o loop do agendador morrer
+        try:
+            _run_scheduled_ndvi_sends()
+        except Exception:
+            pass
         time.sleep(60)
 
 
@@ -2822,6 +2855,9 @@ def save_whatsapp_days():
         abort(403)
     days = {int(v) for v in request.form.getlist("weekday")}
     models.set_whatsapp_days(site_name, days)
+    hora = request.form.get("hora")
+    if hora and hora.isdigit() and 0 <= int(hora) <= 23:
+        models.set_whatsapp_schedule_hora(site_name, "texto", int(hora))
     return _save_response(f"Agenda de WhatsApp (texto) de '{_nome_exibicao(site_name)}' salva.", "fazendas")
 
 
@@ -2838,6 +2874,9 @@ def save_whatsapp_days_pdf():
         abort(403)
     days = {int(v) for v in request.form.getlist("weekday")}
     models.set_whatsapp_days_pdf(site_name, days)
+    hora = request.form.get("hora")
+    if hora and hora.isdigit() and 0 <= int(hora) <= 23:
+        models.set_whatsapp_schedule_hora(site_name, "pdf", int(hora))
     return _save_response(f"Agenda de WhatsApp (PDF) de '{_nome_exibicao(site_name)}' salva.", "fazendas")
 
 
@@ -2923,13 +2962,13 @@ def fazendas():
             "estacoes_proximas": estacoes_proximas,
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "country_code": country_code,
+            "horarios": models.get_whatsapp_schedule_horarios(site),
         })
 
     return render_template(
         "fazendas.html", sites_data=sites_data, no_access=False,
         weekday_labels=list(enumerate(WEEKDAY_LABELS)),
         countries=countries.COUNTRIES,
-        whatsapp_send_hour=models.get_whatsapp_send_hour(),
     )
 
 
@@ -2982,6 +3021,7 @@ def ndvi():
         "ndvi.html", sites_data=sites_data, no_access=False,
         credenciais_ok=ndvi_service.credenciais_configuradas(),
         hoje=datetime.now(timezone.utc).date().isoformat(),
+        hora_padrao=models.get_whatsapp_send_hour(),
     )
 
 
@@ -3008,7 +3048,9 @@ def save_ndvi_agendamento():
             data_inicio = datetime.strptime(data_texto, "%Y-%m-%d").date()
         except ValueError:
             return _save_response("Data de inicio invalida.", "ndvi", ok=False)
-        models.set_ndvi_agendamento(site_name, data_inicio, frequencia)
+        hora_texto = request.form.get("hora", "")
+        hora = int(hora_texto) if hora_texto.isdigit() and 0 <= int(hora_texto) <= 23 else None
+        models.set_ndvi_agendamento(site_name, data_inicio, frequencia, hora=hora)
         mensagem = f"Envio automatico de NDVI de '{_nome_exibicao(site_name)}' ativado ({frequencia}, a partir de {data_inicio.strftime('%d/%m/%Y')})."
     else:
         models.set_ndvi_agendamento(site_name, None, "")

@@ -168,7 +168,7 @@
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_whatsapp_days') }}" data-autosave>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                    <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- Texto -- nestes dias (as {{ '%02d'|format(whatsapp_send_hour) }}h):</label>
+                    <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- Texto -- nestes dias:</label>
                     {% for idx, label in weekday_labels %}
                     <div class="form-check form-check-inline">
                         <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
@@ -176,11 +176,17 @@
                         <label class="form-check-label small" for="wd_{{ farm_idx }}_{{ idx }}">{{ label }}</label>
                     </div>
                     {% endfor %}
+                    <span class="d-inline-flex align-items-center gap-1 ms-2">
+                        <label class="small text-muted mb-0" for="hora_texto_{{ farm_idx }}">as</label>
+                        <input type="number" class="form-control form-control-sm" style="width: 62px;" min="0" max="23"
+                               id="hora_texto_{{ farm_idx }}" name="hora" value="{{ site_group.horarios.texto }}">
+                        <label class="small text-muted mb-0" for="hora_texto_{{ farm_idx }}">h</label>
+                    </span>
                     <span class="autosave-status small ms-2"></span>
                 </form>
                 <form method="post" action="{{ url_for('save_whatsapp_days_pdf') }}" data-autosave class="mt-2">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                    <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- PDF -- nestes dias (as {{ '%02d'|format(whatsapp_send_hour) }}h):</label>
+                    <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- PDF -- nestes dias:</label>
                     {% for idx, label in weekday_labels %}
                     <div class="form-check form-check-inline">
                         <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
@@ -188,6 +194,12 @@
                         <label class="form-check-label small" for="wdpdf_{{ farm_idx }}_{{ idx }}">{{ label }}</label>
                     </div>
                     {% endfor %}
+                    <span class="d-inline-flex align-items-center gap-1 ms-2">
+                        <label class="small text-muted mb-0" for="hora_pdf_{{ farm_idx }}">as</label>
+                        <input type="number" class="form-control form-control-sm" style="width: 62px;" min="0" max="23"
+                               id="hora_pdf_{{ farm_idx }}" name="hora" value="{{ site_group.horarios.pdf }}">
+                        <label class="small text-muted mb-0" for="hora_pdf_{{ farm_idx }}">h</label>
+                    </span>
                     <span class="autosave-status small ms-2"></span>
                 </form>
             </div>
