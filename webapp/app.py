@@ -4387,6 +4387,17 @@ def admin_user_whatsapp_pausado(user_id):
     return {"ok": True}
 
 
+@app.route("/admin/subordinados/<int:subordinado_id>/whatsapp-pausado", methods=["POST"])
+@admin_required
+def admin_subordinado_whatsapp_pausado(subordinado_id):
+    """Mesmo padrao de `admin_user_whatsapp_pausado`, pra' subordinado --
+    checkbox direto na linha da aba Usuarios (sem precisar abrir a tela
+    dedicada de Subordinados so' pra isso)."""
+    pausado = request.form.get("pausado") == "1"
+    models.set_subordinado_whatsapp_pausado(subordinado_id, pausado)
+    return {"ok": True}
+
+
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
 @admin_required
 def admin_delete_user(user_id):

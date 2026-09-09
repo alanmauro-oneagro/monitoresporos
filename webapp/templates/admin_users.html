@@ -68,7 +68,13 @@
             <td class="text-muted small">
                 {{ sub.fazendas or '-' }}
             </td>
-            <td class="text-muted small">{{ 'Pausado' if sub.whatsapp_pausado else '-' }}</td>
+            <td>
+                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp desse subordinado em TODAS as fazendas de uma vez, sem apagar as marcacoes dele">
+                    <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-subordinado-id="{{ sub.id }}"
+                        id="pausado_sub_{{ sub.id }}" {% if sub.whatsapp_pausado %}checked{% endif %}>
+                    <label class="form-check-label small" for="pausado_sub_{{ sub.id }}">Pausado</label>
+                </div>
+            </td>
             <td class="text-muted small">-</td>
             <td>
                 <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
@@ -123,9 +129,12 @@
 <script>
 document.querySelectorAll('.pausar-whatsapp-check').forEach(function (chk) {
     chk.addEventListener('change', function () {
+        var url = chk.dataset.userId
+            ? '/admin/users/' + chk.dataset.userId + '/whatsapp-pausado'
+            : '/admin/subordinados/' + chk.dataset.subordinadoId + '/whatsapp-pausado';
         var fd = new FormData();
         fd.append('pausado', chk.checked ? '1' : '0');
-        fetch('/admin/users/' + chk.dataset.userId + '/whatsapp-pausado', { method: 'POST', body: fd })
+        fetch(url, { method: 'POST', body: fd })
             .catch(function () { alert('Falha ao salvar -- tente de novo.'); });
     });
 });
