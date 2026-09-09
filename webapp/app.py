@@ -72,6 +72,7 @@ if hasattr(time, "tzset"):
 
 WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda ... 6=Domingo (Python date.weekday())
 NDVI_AGENDAMENTO_COBERTURA_MAXIMA = 3  # % -- mais estrito que o preview manual (5%), pedido explicito do usuario pro envio automatico
+INTERPOLACAO_SENTINEL = "__interp3__"  # valor especial de weather_station_overrides.estacao_codigo -- "media das 3 estacoes mais proximas" em vez de uma estacao so (ver _weather_coords_all/_get_weather_for_site)
 WEATHER_CACHE_TTL_SECONDS = 30 * 60  # nao busca de novo na Open-Meteo antes disso, por fazenda
 NDVI_PREVIEW_TTL_SECONDS = 30 * 60  # pre-visualizacao de NDVI expira sozinha se ninguem confirmar/descartar
 DADOS_AVISO_DIAS = 7  # ate isso = verde (ok); acima = aviso (amarelo)
@@ -208,6 +209,24 @@ def _get_weather_for_site(site, coords):
     now = time.time()
     if cached and cached[1] == latlon and now - cached[0] < WEATHER_CACHE_TTL_SECONDS:
         return cached[2]
+    if latlon[0] == INTERPOLACAO_SENTINEL:
+        # "Interpolacao das 3 estacoes mais proximas" (ver _weather_coords_all)
+        # -- `latlon` aqui NAO e' uma coordenada, e' (SENTINEL, "pais:codigo" x3).
+        estacoes_info = []
+        for par in latlon[1:]:
+            country_code, codigo = par.split(":", 1)
+            provider = countries.get_country(country_code)["station_provider"]
+            estacao = next((e for e in provider.get_estacoes() if e["codigo"] == codigo), None)
+            if estacao:
+                estacoes_info.append(estacao)
+        data = weather_forecast.get_weather_forecast_interpolado([(e["lat"], e["lon"]) for e in estacoes_info])
+        if data:
+            nomes = ", ".join(f"{e['cidade']}/{e['uf']}" for e in estacoes_info)
+            data["cidade"] = f"Media de {len(estacoes_info)} estacoes: {nomes}"
+            data["uf"] = None
+            data["fonte"] = "Open-Meteo (media de estacoes proximas)"
+            _weather_cache[site] = (now, latlon, data)
+        return data
     data = weather_forecast.get_weather_forecast(*latlon)
     if data:
         data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
@@ -247,13 +266,39 @@ def _weather_coords_all():
         return coords
     catalogos = {}
     resultado = dict(coords)
+    site_countries = None
     for site, escolha in overrides.items():
+        if site not in resultado:
+            continue
+        if escolha["codigo"] == INTERPOLACAO_SENTINEL:
+            # "Interpolacao das 3 estacoes mais proximas" -- nao e' uma
+            # coordenada de verdade, e' um marcador que `_get_weather_for_site`
+            # reconhece pra' buscar e MEDIAR as 3 (ver weather_forecast.
+            # get_weather_forecast_interpolado). Recalculado a partir do
+            # pais REAL da fazenda (nao do country_code guardado no
+            # override, que nao tem sentido pra' esse sentinel). Sem
+            # nenhuma estacao por perto (pais sem catalogo ainda), cai de
+            # volta pra' coordenada da propria fazenda -- mesma
+            # degradacao graciosa de sempre.
+            if site_countries is None:
+                site_countries = models.get_all_site_countries()
+            pais = site_countries.get(site, countries.DEFAULT_COUNTRY)
+            estacoes = countries.estacoes_mais_proximas_global(*resultado[site], pais, n=3)
+            if estacoes:
+                # "pais:codigo" por estacao (mesma convencao ja usada no
+                # radio da tela, ver save_weather_station_override) -- nao
+                # da' pra assumir que as 3 sao sempre do mesmo provedor
+                # (fazenda perto de fronteira pode misturar paises).
+                resultado[site] = (INTERPOLACAO_SENTINEL,) + tuple(
+                    f"{e['country_code']}:{e['codigo']}" for e in estacoes
+                )
+            continue
         code = escolha["country_code"]
         if code not in catalogos:
             provider = countries.get_country(code)["station_provider"]
             catalogos[code] = {e["codigo"]: e for e in provider.get_estacoes()}
         estacao = catalogos[code].get(escolha["codigo"])
-        if estacao and site in resultado:
+        if estacao:
             resultado[site] = (estacao["lat"], estacao["lon"])
     return resultado
 

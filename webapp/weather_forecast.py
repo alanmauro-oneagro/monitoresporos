@@ -97,6 +97,82 @@ def get_weather_forecast(lat, lon):
     }
 
 
+def _media(valores):
+    valores = [v for v in valores if v is not None]
+    return round(sum(valores) / len(valores), 1) if valores else None
+
+
+def _media_por_horario(listas_de_pontos, campos):
+    """`listas_de_pontos` = uma lista de listas (uma por estacao), cada
+    uma com pontos horarios {"hora":, campo1:, campo2:, ...}. Casa por
+    `"hora"` (nao por indice -- uma estacao pode ter um ponto a mais/
+    menos que outra, ex. uma chamada que demorou um pouco mais e pegou
+    uma hora nova) e devolve uma lista so', ordenada, com cada campo
+    sendo a media das estacoes que tinham aquele horario."""
+    por_hora = {}
+    for pontos in listas_de_pontos:
+        for p in pontos:
+            por_hora.setdefault(p["hora"], []).append(p)
+    saida = []
+    for hora in sorted(por_hora):
+        pontos = por_hora[hora]
+        item = {"hora": hora}
+        for campo in campos:
+            item[campo] = _media([p.get(campo) for p in pontos])
+        saida.append(item)
+    return saida
+
+
+def get_weather_forecast_interpolado(coords_list):
+    """Chama `get_weather_forecast` pra cada (lat, lon) de `coords_list`
+    (as 3 estacoes oficiais mais proximas de uma fazenda, ver
+    `app._weather_coords_all`/aba Fazendas > "Interpolacao das 3
+    estacoes mais proximas") e MEDIA os campos correspondentes -- uma
+    estacao que falhar (rede, coordenada invalida etc.) e' simplesmente
+    ignorada, a media sai so' das que responderam; None se NENHUMA
+    responder. Mesmo formato de retorno de `get_weather_forecast`, pra
+    quem chama (`app._get_weather_for_site`) nao precisar saber a
+    diferenca."""
+    resultados = [get_weather_forecast(lat, lon) for lat, lon in coords_list]
+    resultados = [r for r in resultados if r]
+    if not resultados:
+        return None
+
+    previsao_5_dias = []
+    n_dias = min(len(r["previsao_5_dias"]) for r in resultados)
+    for i in range(n_dias):
+        dias_i = [r["previsao_5_dias"][i] for r in resultados]
+        previsao_5_dias.append({
+            "data": dias_i[0]["data"],
+            "chuva_mm": _media([d["chuva_mm"] for d in dias_i]),
+            "temp_max": _media([d["temp_max"] for d in dias_i]),
+            "temp_min": _media([d["temp_min"] for d in dias_i]),
+            "nuvens_pct": _media([d["nuvens_pct"] for d in dias_i]),
+        })
+
+    ultimas_24h = _media_por_horario([r["ultimas_24h"] for r in resultados], ["temp", "umidade", "chuva"])
+
+    todas_datas = set()
+    for r in resultados:
+        todas_datas.update(r["previsao_horaria_por_dia"].keys())
+    previsao_horaria_por_dia = {
+        data: _media_por_horario(
+            [r["previsao_horaria_por_dia"].get(data, []) for r in resultados], ["temp", "umidade", "chuva"]
+        )
+        for data in todas_datas
+    }
+
+    return {
+        "temperatura_atual": _media([r["temperatura_atual"] for r in resultados]),
+        "umidade_atual": _media([r["umidade_atual"] for r in resultados]),
+        "chuva_atual_mm": _media([r["chuva_atual_mm"] for r in resultados]),
+        "chuva_24h_mm": _media([r["chuva_24h_mm"] for r in resultados]),
+        "previsao_5_dias": previsao_5_dias,
+        "ultimas_24h": ultimas_24h,
+        "previsao_horaria_por_dia": previsao_horaria_por_dia,
+    }
+
+
 def get_cloud_forecast_grid(lats, lons):
     """Versao em lote, so' com cobertura de nuvens -- usada pela camada de
     nuvens do Mapa Interpolado, que cobre uma grade de pontos espalhada

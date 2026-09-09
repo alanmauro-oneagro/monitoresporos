@@ -62,6 +62,15 @@
                 </label>
             </div>
             {% endfor %}
+            {% if ponto.estacoes_proximas %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="estacao_codigo" value="__interp3__"
+                    id="ac_est_{{ ponto_idx }}_interp3" {% if ponto.estacao_selecionada == '__interp3__' %}checked{% endif %}>
+                <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_interp3">
+                    🔀 Interpolacao (media) das 3 estacoes oficiais mais proximas
+                </label>
+            </div>
+            {% endif %}
             <span class="autosave-status small ms-2"></span>
         </form>
     </div>
