@@ -6,7 +6,7 @@
 <div class="table-responsive">
 <table class="table table-sm bg-white shadow-sm" style="font-size: 0.85rem;">
     <thead>
-        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Admin</th><th>Permissoes</th><th>Receber relatorios</th><th>Subordinados</th><th></th></tr>
+        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Admin</th><th>Permissoes</th><th>Receber relatorios</th><th>WhatsApp</th><th>Subordinados</th><th></th></tr>
     </thead>
     <tbody>
     {% for u in users %}
@@ -28,6 +28,13 @@
                 <a href="{{ url_for('admin_user_reports', user_id=u.id) }}">
                     Localidades{% if report_counts.get(u.id) %} ({{ report_counts[u.id] }}){% endif %}
                 </a>
+            </td>
+            <td>
+                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp em TODAS as fazendas de uma vez, sem apagar as marcacoes de Localidades">
+                    <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-user-id="{{ u.id }}"
+                        id="pausado_user_{{ u.id }}" {% if u.whatsapp_pausado %}checked{% endif %}>
+                    <label class="form-check-label small" for="pausado_user_{{ u.id }}">Pausado</label>
+                </div>
             </td>
             <td>
                 {% if subordinado_counts.get(u.id) %}
@@ -61,6 +68,7 @@
             <td class="text-muted small">
                 {{ sub.fazendas or '-' }}
             </td>
+            <td class="text-muted small">{{ 'Pausado' if sub.whatsapp_pausado else '-' }}</td>
             <td class="text-muted small">-</td>
             <td>
                 <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
@@ -113,6 +121,14 @@
 </div>
 
 <script>
+document.querySelectorAll('.pausar-whatsapp-check').forEach(function (chk) {
+    chk.addEventListener('change', function () {
+        var fd = new FormData();
+        fd.append('pausado', chk.checked ? '1' : '0');
+        fetch('/admin/users/' + chk.dataset.userId + '/whatsapp-pausado', { method: 'POST', body: fd })
+            .catch(function () { alert('Falha ao salvar -- tente de novo.'); });
+    });
+});
 document.querySelectorAll('.sub-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {
         var rows = document.querySelectorAll('tr[data-owner-rows="' + btn.dataset.owner + '"]');

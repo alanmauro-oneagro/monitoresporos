@@ -4374,6 +4374,19 @@ def meu_whatsapp():
     return render_template("meu_whatsapp.html", codigo_pais=codigo_pais, numero_telefone=numero_telefone)
 
 
+@app.route("/admin/users/<int:user_id>/whatsapp-pausado", methods=["POST"])
+@admin_required
+def admin_user_whatsapp_pausado(user_id):
+    """Pausa/retoma o recebimento de WhatsApp desse usuario em TODAS as
+    fazendas de uma vez (ver `models.set_user_whatsapp_pausado`) --
+    checkbox na aba Usuarios, sem precisar desmarcar fazenda por fazenda
+    em Localidades. Fetch direto (nao um form autosave da tabela
+    inteira), resposta JSON pura."""
+    pausado = request.form.get("pausado") == "1"
+    models.set_user_whatsapp_pausado(user_id, pausado)
+    return {"ok": True}
+
+
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
 @admin_required
 def admin_delete_user(user_id):
@@ -4639,6 +4652,7 @@ def admin_user_subordinados(user_id):
             models.update_subordinado(sub_id, nome, codigo + numero)
             site_ids = {int(v) for v in request.form.getlist(f"site_ids__{sub_id}")}
             models.set_subordinado_report_sites(sub_id, site_ids)
+            models.set_subordinado_whatsapp_pausado(sub_id, request.form.get(f"whatsapp_pausado__{sub_id}") == "1")
         return _save_response("Subordinados atualizados.", "admin_user_subordinados", user_id=user_id)
 
     owner_report_ids = models.get_user_report_site_ids(user_id)

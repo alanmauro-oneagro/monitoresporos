@@ -97,7 +97,8 @@ def init_db():
             is_admin INTEGER NOT NULL DEFAULT 0,
             email TEXT,
             telefone TEXT,
-            whatsapp_apikey TEXT  -- vestigio da epoca do CallMeBot, sem uso desde o whatsapp-bridge
+            whatsapp_apikey TEXT,  -- vestigio da epoca do CallMeBot, sem uso desde o whatsapp-bridge
+            whatsapp_pausado INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS sites (
@@ -126,7 +127,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             nome TEXT NOT NULL,
-            telefone TEXT NOT NULL
+            telefone TEXT NOT NULL,
+            whatsapp_pausado INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS subordinado_report_permissions (
@@ -436,6 +438,14 @@ def init_db():
         # mesmo sem fazenda real por perto (ver `mapa_interpolado` em
         # app.py, pedido explicito do usuario).
         conn.execute("ALTER TABLE virtual_farms ADD COLUMN tipo TEXT NOT NULL DEFAULT 'doenca'")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN whatsapp_pausado INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        conn.execute("ALTER TABLE subordinados ADD COLUMN whatsapp_pausado INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
 
@@ -2222,7 +2232,7 @@ def get_all_users():
     quem administra o site aparecer sempre no topo da aba Usuarios."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, username, is_admin, email, telefone FROM users ORDER BY is_admin DESC, username COLLATE NOCASE"
+        "SELECT id, username, is_admin, email, telefone, whatsapp_pausado FROM users ORDER BY is_admin DESC, username COLLATE NOCASE"
     ).fetchall()
     conn.close()
     return rows
@@ -2265,8 +2275,12 @@ def get_site_whatsapp_recipients(site_name):
     acesso normal a fazenda) e subordinado (contato leve ligado a um
     usuario "dono", aba Usuarios > Subordinados --
     `subordinado_report_permissions`). Em ambos os casos so entra quem ja
-    tenha telefone cadastrado. Nao depende de ser admin nem de ter acesso
-    pra VER a fazenda -- sao coisas separadas de proposito."""
+    tenha telefone cadastrado E nao esteja com `whatsapp_pausado` ativo
+    (pedido explicito do usuario -- pausa TODAS as fazendas de uma vez,
+    sem apagar as marcacoes individuais de "Receber relatorios", ver
+    `set_user_whatsapp_pausado`/`set_subordinado_whatsapp_pausado`). Nao
+    depende de ser admin nem de ter acesso pra VER a fazenda -- sao
+    coisas separadas de proposito."""
     conn = get_db()
     rows = conn.execute(
         """
@@ -2277,6 +2291,7 @@ def get_site_whatsapp_recipients(site_name):
             JOIN sites s ON s.id = r.site_id
             WHERE s.site_name = ?
               AND u.telefone IS NOT NULL AND u.telefone != ''
+              AND u.whatsapp_pausado = 0
             UNION
             SELECT DISTINCT sub.nome AS username, sub.telefone AS telefone
             FROM subordinados sub
@@ -2284,6 +2299,7 @@ def get_site_whatsapp_recipients(site_name):
             JOIN sites s ON s.id = sr.site_id
             WHERE s.site_name = ?
               AND sub.telefone IS NOT NULL AND sub.telefone != ''
+              AND sub.whatsapp_pausado = 0
         )
         ORDER BY username
         """,
@@ -2306,13 +2322,13 @@ def get_all_sites_whatsapp_recipients():
             FROM users u
             JOIN user_report_permissions r ON r.user_id = u.id
             JOIN sites s ON s.id = r.site_id
-            WHERE u.telefone IS NOT NULL AND u.telefone != ''
+            WHERE u.telefone IS NOT NULL AND u.telefone != '' AND u.whatsapp_pausado = 0
             UNION
             SELECT DISTINCT s.site_name AS site_name, sub.nome AS username, sub.telefone AS telefone
             FROM subordinados sub
             JOIN subordinado_report_permissions sr ON sr.subordinado_id = sub.id
             JOIN sites s ON s.id = sr.site_id
-            WHERE sub.telefone IS NOT NULL AND sub.telefone != ''
+            WHERE sub.telefone IS NOT NULL AND sub.telefone != '' AND sub.whatsapp_pausado = 0
         )
         ORDER BY site_name, username
         """
@@ -2327,6 +2343,18 @@ def get_all_sites_whatsapp_recipients():
 def delete_user(user_id):
     conn = get_db()
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def set_user_whatsapp_pausado(user_id, pausado):
+    """Pausa/retoma o recebimento de WhatsApp desse usuario em TODAS as
+    fazendas de uma vez (`get_site_whatsapp_recipients` passa a ignorar
+    ele enquanto pausado) -- sem apagar as marcacoes individuais de
+    "Receber relatorios" (`user_report_permissions`), que continuam
+    intactas pra' quando ele voltar a receber."""
+    conn = get_db()
+    conn.execute("UPDATE users SET whatsapp_pausado = ? WHERE id = ?", (1 if pausado else 0, user_id))
     conn.commit()
     conn.close()
 
@@ -2429,10 +2457,10 @@ def get_owner_subordinados(owner_user_id):
     recebe relatorio de WhatsApp de um subconjunto das fazendas que o
     proprio "dono" (owner_user_id) ja recebe -- pensado pra dividir uma
     equipe de campo entre varias fazendas do mesmo proprietario. Cada
-    dict tem {id, nome, telefone, site_ids}."""
+    dict tem {id, nome, telefone, site_ids, whatsapp_pausado}."""
     conn = get_db()
     subs = conn.execute(
-        "SELECT id, nome, telefone FROM subordinados WHERE owner_user_id = ? ORDER BY nome", (owner_user_id,)
+        "SELECT id, nome, telefone, whatsapp_pausado FROM subordinados WHERE owner_user_id = ? ORDER BY nome", (owner_user_id,)
     ).fetchall()
     resultado = []
     for s in subs:
@@ -2441,7 +2469,10 @@ def get_owner_subordinados(owner_user_id):
                 "SELECT site_id FROM subordinado_report_permissions WHERE subordinado_id = ?", (s["id"],)
             )
         }
-        resultado.append({"id": s["id"], "nome": s["nome"], "telefone": s["telefone"], "site_ids": site_ids})
+        resultado.append({
+            "id": s["id"], "nome": s["nome"], "telefone": s["telefone"], "site_ids": site_ids,
+            "whatsapp_pausado": bool(s["whatsapp_pausado"]),
+        })
     conn.close()
     return resultado
 
@@ -2470,6 +2501,18 @@ def update_subordinado(subordinado_id, nome, telefone):
 def delete_subordinado(subordinado_id):
     conn = get_db()
     conn.execute("DELETE FROM subordinados WHERE id = ?", (subordinado_id,))
+    conn.commit()
+    conn.close()
+
+
+def set_subordinado_whatsapp_pausado(subordinado_id, pausado):
+    """Mesmo padrao de `set_user_whatsapp_pausado`, pra' subordinado --
+    pausa em todas as fazendas dele de uma vez, sem apagar
+    `subordinado_report_permissions`."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE subordinados SET whatsapp_pausado = ? WHERE id = ?", (1 if pausado else 0, subordinado_id)
+    )
     conn.commit()
     conn.close()
 
