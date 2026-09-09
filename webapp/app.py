@@ -990,9 +990,7 @@ def _format_whatsapp_message(
                     for p in previsao_risco
                 )
                 linhas.append(f"Risco de infecção: {dias_txt}")
-            if d.get("germinacao"):
-                linhas.append(f"({d['cientifico']} — condições para germinação de esporos: {d['germinacao']})")
-            elif d.get("cientifico"):
+            if d.get("cientifico"):
                 linhas.append(f"({d['cientifico']})")
         return linhas
 
@@ -1032,10 +1030,7 @@ def _format_whatsapp_message(
     for d in diseases:
         lines.append("")
         emoji_status = _STATUS_EMOJI.get(d["status"], "")
-        cabecalho = (
-            f"{emoji_status} *{d['rotulo'].upper()}* - {_status_label(d['status'])} - "
-            f"Contagem: {d['concentracao']} esporos/m³"
-        )
+        cabecalho = f"{emoji_status} *{d['rotulo'].upper()}* - {_status_label(d['status'])}"
         previsao_risco = d.get("previsao_risco")
         if not previsao_risco:
             # Sem previsao (falha da Open-Meteo, ou doenca sem limite
@@ -1051,9 +1046,7 @@ def _format_whatsapp_message(
                 for p in previsao_risco
             )
             lines.append(f"Risco de infecção: {dias_txt}")
-        if d.get("germinacao"):
-            lines.append(f"({d['cientifico']} — condições para germinação de esporos: {d['germinacao']})")
-        elif d.get("cientifico"):
+        if d.get("cientifico"):
             lines.append(f"({d['cientifico']})")
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
         quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None

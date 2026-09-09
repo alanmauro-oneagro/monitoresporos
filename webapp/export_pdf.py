@@ -286,7 +286,7 @@ def build_recommendation_pdf(
             cor_hex = "#ff6b6b" if d["status"] == "Perigo" else "#e6ac00"
             cabecalho.append(Paragraph(
                 f'<font color="{cor_hex}">●</font> <b>{d["rotulo"].upper()}</b> — '
-                f'{_STATUS_LABELS.get(d["status"], d["status"])} — Contagem: {d["concentracao"]} esporos/m³',
+                f'{_STATUS_LABELS.get(d["status"], d["status"])}',
                 _ESTILO_DOENCA,
             ))
             previsao_risco = d.get("previsao_risco")
@@ -351,9 +351,7 @@ def build_recommendation_pdf(
                     f'{titulo_txt} — <font color="{cor_risco}">●</font> Risco de infecção: <b>{risco_label}</b>',
                     _ESTILO_RISCO_CLIMATICO,
                 ))
-            if d.get("germinacao"):
-                cabecalho.append(Paragraph(f'{d.get("cientifico", "")} — condições para germinação de esporos: {d["germinacao"]}', _ESTILO_GERMINACAO))
-            elif d.get("cientifico"):
+            if d.get("cientifico"):
                 cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
             story.append(KeepTogether(cabecalho))
             story.append(Spacer(1, 3))
