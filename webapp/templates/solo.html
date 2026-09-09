@@ -111,10 +111,20 @@
         );
     });
 
-    if (sites.length) {
-        var bounds = L.latLngBounds(sites.map(function (s) { return [s.lat, s.lon]; }));
-        map.fitBounds(bounds.pad(0.3));
+    // `invalidateSize` antes do fitBounds -- o container pode ainda nao
+    // ter o tamanho final no exato instante em que o Leaflet inicializa
+    // (troca de aba, layout ainda assentando), e sem isso o mapa fica
+    // preso no zoom minimo (mundo inteiro) pra sempre, mesmo depois do
+    // container ganhar o tamanho certo.
+    function ajustarZoom() {
+        map.invalidateSize();
+        if (sites.length) {
+            var bounds = L.latLngBounds(sites.map(function (s) { return [s.lat, s.lon]; }));
+            map.fitBounds(bounds.pad(0.3));
+        }
     }
+    ajustarZoom();
+    setTimeout(ajustarZoom, 300);
 })();
 </script>
 {% endblock %}
