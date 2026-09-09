@@ -40,6 +40,14 @@
         attribution: 'Imagens &copy; Esri -- Source: Esri, Maxar, Earthstar Geographics',
         maxZoom: 19,
     }).addTo(map);
+    // Nomes de cidade por cima da imagem de satelite -- capitais/cidades
+    // grandes aparecem em zoom baixo, cidades menores vao surgindo
+    // conforme da' zoom (densidade de rotulo ja vem pronta desse servico
+    // da Esri, feito pra usar em cima do World_Imagery).
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri',
+        maxZoom: 19,
+    }).addTo(map);
 
     // Contorno do Brasil (IBGE, ao vivo) -- so' contexto visual, mesmo
     // padrao ja usado no Mapa/Mapa Interpolado.
