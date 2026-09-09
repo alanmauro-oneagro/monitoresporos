@@ -43,6 +43,11 @@
     </span>
     {% endif %}
 </div>
+{% if status and status.nivel_dados == 'bloqueado' %}
+<div class="text-muted small mb-3">
+    Sem leitura ha {{ status.dias_sem_leitura }} dias -- caixas de doenca ocultas ate a estacao voltar a enviar dados novos (dado velho demais pra confiar).
+</div>
+{% else %}
 <div class="row">
     {% for card in cards %}
     <div class="col-disease-5">
@@ -54,5 +59,6 @@
     </div>
     {% endfor %}
 </div>
+{% endif %}
 {% endfor %}
 {% endblock %}

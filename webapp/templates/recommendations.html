@@ -91,6 +91,11 @@ html { font-size: 14px; }
         <div class="alert alert-info small mb-3">Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.</div>
         {% endif %}
 
+        {% if site_group.nivel_dados == 'bloqueado' %}
+        <div class="text-muted small mb-2">
+            Sem leitura ha {{ site_group.dias_sem_leitura }} dias -- caixas de doenca ocultas ate a estacao voltar a enviar dados novos (dado velho demais pra confiar).
+        </div>
+        {% else %}
         <div class="mini-thumbs">
             {% for t in site_group.thumbnails %}
             <div class="mini-card card-{{ 'perigo' if t.status == 'Perigo' else ('atencao' if t.status == 'Atencao' else 'normal') }}">
@@ -99,6 +104,7 @@ html { font-size: 14px; }
             </div>
             {% endfor %}
         </div>
+        {% endif %}
 
         {% if site_group.weather %}
         {% set origem = (site_group.weather.cidade ~ '/' ~ site_group.weather.uf ~ ' · ' if site_group.weather.cidade else '') ~ 'Fonte: ' ~ site_group.weather.fonte %}
