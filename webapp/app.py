@@ -42,6 +42,8 @@ import inmet_stations
 import virtual_farms
 import ndvi_service
 import countries
+import soil_service
+import soilgrids_service
 from data_reader import read_sites, get_dashboard_data
 
 # Fuso horario do site: Cuiaba-MT (America/Cuiaba, UTC-4 o ano todo -- Brasil
@@ -1575,6 +1577,7 @@ def _ensure_sites_synced():
         pass
     _auto_detectar_paises_novos()
     _auto_detectar_estacoes_novas()
+    _auto_detectar_solos_novos()
 
 
 def _auto_detectar_estacoes_novas():
@@ -1607,6 +1610,30 @@ def _auto_detectar_estacoes_novas():
             continue
         estacao = candidatas[0]
         models.set_weather_station_override(site, estacao["codigo"], estacao["country_code"])
+
+
+def _auto_detectar_solos_novos():
+    """Fazenda com coordenada mas ainda sem tipo de solo resolvido tem o
+    tipo de solo detectado sozinho e GRAVADO (`models.set_site_solo`) --
+    mesmo padrao de `_auto_detectar_paises_novos`, so' que aqui NAO ha'
+    escolha manual nenhuma pra sobrepor depois (solo e' um fato fisico
+    do local, nao uma preferencia do cliente). Tenta primeiro o Mapa de
+    Solos do Brasil (`soil_service.tipo_solo_embrapa`, so' cobre o
+    Brasil); se nao achar nada (fora do Brasil, ou area de agua), cai
+    pro fallback global (`soilgrids_service.tipo_solo_soilgrids`).
+    Grava o resultado mesmo quando os dois devolvem None ("sem dado
+    disponivel"), pra marcar como ja' tentado e nunca mais refazer esse
+    calculo (que envolve testar contra ~2852 poligonos) a cada request."""
+    try:
+        coords = _coords_all()
+    except FileNotFoundError:
+        return
+    site_solos = models.get_all_site_solos()
+    for site, (lat, lon) in coords.items():
+        if site in site_solos:
+            continue
+        resultado = soil_service.tipo_solo_embrapa(lat, lon) or soilgrids_service.tipo_solo_soilgrids(lat, lon)
+        models.set_site_solo(site, resultado)
 
 
 def _auto_detectar_paises_novos():
@@ -2414,6 +2441,38 @@ def mapa_interpolado():
     )
 
 
+@app.route("/solo")
+@admin_required
+def solo():
+    """Tipo de solo de cada fazenda (real ou virtual/estimada) + mapa com
+    as zonas de solo do Brasil coloridas por cima -- mesmo esqueleto do
+    Mapa Interpolado (fronteiras/tiles reaproveitados via
+    `_country_map_context()`). O tipo de solo em si e' resolvido sozinho
+    pela coordenada (`_auto_detectar_solos_novos`, hook em
+    `_ensure_sites_synced`) -- essa rota so' le' o que ja' foi resolvido
+    e cacheado (`models.get_all_site_solos`), nunca recalcula na hora."""
+    coords = _coords_all()
+    virtual_names = models.virtual_farm_site_names()
+    site_solos = models.get_all_site_solos()
+
+    sites_data = []
+    for site, (lat, lon) in coords.items():
+        sites_data.append({
+            "site": site,
+            "nome_exibicao": _nome_exibicao(site),
+            "lat": lat, "lon": lon,
+            "virtual": site in virtual_names,
+            "solo": site_solos.get(site),
+        })
+    sites_data.sort(key=lambda s: s["site"])
+
+    return render_template(
+        "solo.html", sites_data=sites_data,
+        soil_geojson_url=url_for("static", filename="soils/br_solos.geojson"),
+        cores_por_ordem=soil_service.CORES_POR_ORDEM, cor_default=soil_service.COR_DEFAULT,
+    )
+
+
 @app.route("/mapa-interpolado/detectar-pais")
 @admin_required
 def detectar_pais_ponto_virtual():
@@ -2899,6 +2958,7 @@ def fazendas():
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
     site_countries = models.get_all_site_countries()
+    site_solos = models.get_all_site_solos()
     grades = [
         ("ts", "TS (Tratamento de Sementes)"),
         ("sulco", "Sulco (aplicacao no sulco de plantio)"),
@@ -2956,6 +3016,7 @@ def fazendas():
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "country_code": country_code,
             "horarios": models.get_whatsapp_schedule_horarios(site),
+            "solo": site_solos.get(site),
         })
 
     return render_template(

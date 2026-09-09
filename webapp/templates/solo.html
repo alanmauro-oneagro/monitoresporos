@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Solo - OneAgro{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #solo-map { height: 85vh; min-height: 520px; width: 100%; border-radius: 0.5rem; }
+    .solo-legend { background: #fff; padding: 0.6rem 0.8rem; border-radius: 0.4rem; box-shadow: 0 1px 5px rgba(0,0,0,0.4); font-size: 0.75rem; max-height: 60vh; overflow-y: auto; }
+    .solo-legend-item { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; }
+    .solo-legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; display: inline-block; }
+</style>
+{% endblock %}
+{% block content %}
+<h4 class="mb-2">Solo</h4>
+<p class="text-muted small mb-3">
+    Tipo de solo por fazenda, resolvido automaticamente pela coordenada --
+    <strong>Embrapa/PronaSolos</strong> (Mapa de Solos do Brasil, classificacao SiBCS)
+    dentro do Brasil, ou <strong>SoilGrids</strong> (textura estimada por %
+    areia/silte/argila -- classificacao diferente, nao equivalente a uma
+    ordem SiBCS) fora do Brasil. As zonas coloridas no mapa sao as ordens
+    de solo do Brasil; clique numa area pra ver a classe especifica.
+</p>
+<div id="solo-map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+    var sites = {{ sites_data | tojson }};
+    var soilGeojsonUrl = {{ soil_geojson_url | tojson }};
+    var coresPorOrdem = {{ cores_por_ordem | tojson }};
+    var corDefault = {{ cor_default | tojson }};
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    var map = L.map('solo-map').setView([-14.5, -55], 4);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Imagens &copy; Esri -- Source: Esri, Maxar, Earthstar Geographics',
+        maxZoom: 19,
+    }).addTo(map);
+
+    // Contorno do Brasil (IBGE, ao vivo) -- so' contexto visual, mesmo
+    // padrao ja usado no Mapa/Mapa Interpolado.
+    fetch('https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?formato=application/vnd.geo+json')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (geojson) {
+            if (!geojson) return;
+            L.geoJSON(geojson, { style: { color: '#ffe100', weight: 2, fill: false, opacity: 0.8 }, interactive: false }).addTo(map);
+        })
+        .catch(function () {});
+
+    // Zonas de solo (Embrapa/PronaSolos, estatico -- ver soil_service.py).
+    fetch(soilGeojsonUrl)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (geojson) {
+            if (!geojson) return;
+            L.geoJSON(geojson, {
+                style: function (feature) {
+                    var ordem = feature.properties.ordem;
+                    return {
+                        color: coresPorOrdem[ordem] || corDefault,
+                        weight: 0.5,
+                        fillColor: coresPorOrdem[ordem] || corDefault,
+                        fillOpacity: 0.45,
+                    };
+                },
+                onEachFeature: function (feature, layer) {
+                    var p = feature.properties;
+                    layer.bindPopup(
+                        '<strong>' + escapeHtml(p.legenda || p.classe || p.ordem) + '</strong><br>' +
+                        '<span class="text-muted small">' + escapeHtml(p.ordem) + '</span>'
+                    );
+                },
+            }).addTo(map);
+
+            var legend = L.control({ position: 'bottomright' });
+            legend.onAdd = function () {
+                var div = L.DomUtil.create('div', 'solo-legend');
+                var html = '<div class="fw-bold mb-1">Ordens de solo</div>';
+                Object.keys(coresPorOrdem).sort().forEach(function (ordem) {
+                    html += '<div class="solo-legend-item"><span class="solo-legend-swatch" style="background:' +
+                        coresPorOrdem[ordem] + ';"></span>' + escapeHtml(ordem) + '</div>';
+                });
+                div.innerHTML = html;
+                return div;
+            };
+            legend.addTo(map);
+        })
+        .catch(function () {});
+
+    // Marcadores de fazenda -- circulo simples com popup mostrando o tipo
+    // de solo ja resolvido (nao recalcula nada aqui, so' le' o que
+    // `app._auto_detectar_solos_novos` ja deixou cacheado).
+    sites.forEach(function (site) {
+        var solo = site.solo;
+        var textoSolo;
+        if (solo && solo.classe) {
+            textoSolo = '🌱 ' + escapeHtml(solo.classe) + ' <span class="text-muted">(' + escapeHtml(solo.fonte) + ')</span>';
+        } else if (solo) {
+            textoSolo = '<span class="text-muted">Sem dado de solo disponivel.</span>';
+        } else {
+            textoSolo = '<span class="text-muted">Ainda nao resolvido.</span>';
+        }
+        L.circleMarker([site.lat, site.lon], {
+            radius: 6, color: '#0a1f44', weight: 2,
+            fillColor: site.virtual ? '#fff3bf' : '#ffffff', fillOpacity: 0.95,
+        }).addTo(map).bindPopup(
+            '<strong>' + escapeHtml(site.nome_exibicao) + '</strong><br>' + textoSolo
+        );
+    });
+
+    if (sites.length) {
+        var bounds = L.latLngBounds(sites.map(function (s) { return [s.lat, s.lon]; }));
+        map.fitBounds(bounds.pad(0.3));
+    }
+})();
+</script>
+{% endblock %}

@@ -141,6 +141,18 @@
             </div>
 
             <div class="mt-3 pt-3 border-top">
+                <label class="form-label small text-muted d-block mb-1">Tipo de solo (resolvido automaticamente pela coordenada -- aba Solo):</label>
+                {% if site_group.solo and site_group.solo.classe %}
+                <span class="small">🌱 {{ site_group.solo.classe }}</span>
+                <span class="small text-muted">({{ site_group.solo.fonte }})</span>
+                {% elif site_group.solo %}
+                <span class="small text-muted">Sem dado de solo disponivel pra essa coordenada.</span>
+                {% else %}
+                <span class="small text-muted">Ainda nao resolvido -- aparece na proxima vez que a pagina carregar.</span>
+                {% endif %}
+            </div>
+
+            <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <label class="form-label small text-muted d-block mb-1">Estacao meteorologica de referencia para a previsao (clima da fazenda vem da Open-Meteo, na coordenada escolhida aqui):</label>

@@ -349,6 +349,14 @@ def init_db():
             hora_texto INTEGER NOT NULL DEFAULT 7,
             hora_pdf INTEGER NOT NULL DEFAULT 7
         );
+
+        CREATE TABLE IF NOT EXISTS site_solo_cache (
+            site_name TEXT PRIMARY KEY,
+            classe TEXT,
+            ordem TEXT,
+            fonte TEXT,
+            resolvido_em TEXT NOT NULL
+        );
         """
     )
     try:
@@ -1409,6 +1417,41 @@ def set_site_country(site_name, country_code):
     conn.close()
 
 
+def get_all_site_solos():
+    """site_name -> {"classe":, "ordem":, "fonte":} (tipo de solo
+    RESOLVIDO SOZINHO pela coordenada da fazenda -- Embrapa/PronaSolos
+    ou, fora do Brasil, SoilGrids; ver `app._auto_detectar_solos_novos`
+    e `soil_service`/`soilgrids_service`). Diferente do pais/estacao,
+    NAO e' escolhido a mao -- e' um fato fisico do local. `classe` None
+    significa "ja tentou resolver, mas nao ha' dado disponivel" (fora do
+    Brasil sem SoilGrids acessivel, ou caiu em area de agua) -- ainda
+    assim aparece aqui (com `classe` None), pra nao tentar de novo a
+    cada request."""
+    conn = get_db()
+    rows = conn.execute("SELECT site_name, classe, ordem, fonte FROM site_solo_cache").fetchall()
+    conn.close()
+    return {r["site_name"]: {"classe": r["classe"], "ordem": r["ordem"], "fonte": r["fonte"]} for r in rows}
+
+
+def set_site_solo(site_name, resultado):
+    """`resultado` e' o dict devolvido por `soil_service.tipo_solo_embrapa`/
+    `soilgrids_service.tipo_solo_soilgrids` (classe/ordem/fonte), ou None
+    quando nenhuma das duas fontes achou dado pra essa coordenada --
+    grava mesmo assim (com campos None), pra marcar como ja' tentado."""
+    resultado = resultado or {}
+    conn = get_db()
+    conn.execute(
+        """
+        INSERT INTO site_solo_cache (site_name, classe, ordem, fonte, resolvido_em) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(site_name) DO UPDATE SET classe = excluded.classe, ordem = excluded.ordem,
+            fonte = excluded.fonte, resolvido_em = excluded.resolvido_em
+        """,
+        (site_name, resultado.get("classe"), resultado.get("ordem"), resultado.get("fonte"), _agora_cuiaba()),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_all_site_display_names():
     """site_name -> nome de exibicao escolhido na aba Fazendas, pra
     fazenda REAL (vinda do BioScout) -- so' os sites com escolha manual
@@ -2043,7 +2086,7 @@ _VIRTUAL_FARM_RENAME_TABLES = (
     "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
     "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_car", "farm_ndvi_historico",
     "site_country_overrides", "site_climate_notes", "ndvi_agendamento", "ndvi_whatsapp_ativos",
-    "whatsapp_schedule_horarios",
+    "whatsapp_schedule_horarios", "site_solo_cache",
 )
 
 
@@ -2154,6 +2197,7 @@ def delete_virtual_farm(site_name):
     conn.execute("DELETE FROM ndvi_agendamento WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM ndvi_whatsapp_ativos WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM whatsapp_schedule_horarios WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM site_solo_cache WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 
