@@ -47,9 +47,10 @@
     mostram a localizacao, sem precisar de linhas de divisa ou rodovia.
     Os pinos azuis 📡 sao so as estacoes do
     INMET que estao realmente sendo usadas como base pra alguma fazenda
-    (a mais proxima de cada uma, ou a escolhida manualmente na aba
-    Fazendas) -- so como referencia de localizacao/cidade, os dados de
-    clima do app vem da Open-Meteo.
+    (a mais proxima de cada uma, a escolhida manualmente na aba Fazendas,
+    ou as 3 usadas por quem estiver na opcao "Interpolacao das 3 estacoes
+    mais proximas") -- so como referencia de localizacao/cidade, os dados
+    de clima do app vem da Open-Meteo.
 </p>
 {% endif %}
 {% endblock %}
@@ -150,7 +151,10 @@
                 '<span class="mapa-tt-valor">' + escapeHtml(f.distancia_km) + ' km</span>' +
                 '</div>';
         }).join('');
-        return titulo + '<div class="mapa-tt-data">Estacao INMET ' + escapeHtml(estacao.codigo) + ' -- mais proxima de:</div>' + fazendasHtml + '</div>';
+        // "usada por" (nao "mais proxima de") porque numa fazenda com
+        // "Interpolacao das 3 estacoes" essa pode ser a 2a ou 3a mais
+        // perto, nao necessariamente a mais proxima -- ver _plotar_site.
+        return titulo + '<div class="mapa-tt-data">Estacao INMET ' + escapeHtml(estacao.codigo) + ' -- usada por:</div>' + fazendasHtml + '</div>';
     }
 
     var map = L.map('farm-map');

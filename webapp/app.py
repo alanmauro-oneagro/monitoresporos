@@ -2441,7 +2441,22 @@ def mapa():
         provider = countries.get_country(site_countries.get(site, countries.DEFAULT_COUNTRY))["station_provider"]
         escolha = overrides.get(site)
         codigo_escolhido = escolha["codigo"] if escolha else None
-        if codigo_escolhido and codigo_escolhido in estacoes_catalogo:
+        estacao = None
+        if codigo_escolhido == INTERPOLACAO_SENTINEL:
+            # "Interpolacao (media) das 3 estacoes mais proximas" (aba
+            # Fazendas) -- mostra as 3 estacoes de VERDADE usadas (nao so'
+            # a mais perto), cada uma com essa fazenda entre quem ela
+            # alimenta (mesmo calculo de `_weather_coords_all`).
+            pais = site_countries.get(site, countries.DEFAULT_COUNTRY)
+            for e in countries.estacoes_mais_proximas_global(lat, lon, pais, n=3):
+                entry = estacoes_by_codigo.setdefault(e["codigo"], {
+                    "codigo": e["codigo"], "cidade": e["cidade"], "uf": e["uf"],
+                    "lat": e["lat"], "lon": e["lon"], "fazendas": [],
+                })
+                entry["fazendas"].append({
+                    "site": site, "nome_exibicao": _nome_exibicao(site), "distancia_km": e["distancia_km"],
+                })
+        elif codigo_escolhido and codigo_escolhido in estacoes_catalogo:
             # Estacao escolhida na aba Fazendas (ou aqui, Pontos Criados) como
             # referencia de previsao -- essa, e nao a mais proxima, e' quem
             # realmente alimenta o clima dessa fazenda/ponto.
