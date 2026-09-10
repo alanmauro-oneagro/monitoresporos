@@ -39,11 +39,11 @@
 <div id="farm-map"></div>
 <p class="text-muted small mt-3 pt-3 border-top">
     Passe o mouse sobre um pino para ver os alertas daquela estacao, ou
-    clique para abrir direto aquela fazenda na aba Fazendas. As
-    linhas amarelas mostram as divisas de pais e estado, as linhas brancas
-    mostram as divisas de municipio (fonte: IBGE -- pode levar alguns
-    segundos para carregar) e as linhas laranjas sao as rodovias BR-163,
-    BR-364, BR-070 e BR-158 (fonte: OpenStreetMap). Os pinos azuis 📡 sao so as estacoes do
+    clique para abrir direto aquela fazenda na aba Fazendas. Os nomes de
+    cidade que aparecem por cima da imagem de satelite (capitais e cidades
+    grandes com zoom baixo, cidades menores conforme vai dando zoom) ja
+    mostram a localizacao, sem precisar de linhas de divisa ou rodovia.
+    Os pinos azuis 📡 sao so as estacoes do
     INMET que estao realmente sendo usadas como base pra alguma fazenda
     (a mais proxima de cada uma, ou a escolhida manualmente na aba
     Fazendas) -- so como referencia de localizacao/cidade, os dados de
@@ -176,13 +176,15 @@
         maxZoom: 19,
     }).addTo(map);
 
-    var BOUNDARY_COLOR = '#ffe100';
-    var MUNICIPIO_COLOR = '#ffffff';
     var IBGE_BASE = 'https://servicodados.ibge.gov.br/api/v3/malhas';
 
-    // Divisas do IBGE quase nunca mudam -- guarda no localStorage por 30
-    // dias pra nao rebaixar o mesmo geojson (pais/estados/municipios) toda
-    // vez que a pagina abre.
+    // Divisas do IBGE/paises quase nunca mudam -- guarda no localStorage por
+    // 30 dias pra nao rebaixar o mesmo geojson toda vez que a pagina abre.
+    // Nesta aba (Mapa) o contorno so' e' usado pra recortar a grade de
+    // nuvens no formato de cada pais -- NAO e' mais desenhado no mapa (a
+    // camada de nomes de cidade da Esri, logo acima, ja da' a mesma
+    // referencia visual sem deixar o mapa poluido). As linhas de divisa e
+    // rodovia continuam aparecendo normalmente na aba Mapa Interpolado.
     var BOUNDARY_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     function boundaryFromCache(url) {
         try {
@@ -198,28 +200,20 @@
             localStorage.setItem('ibge_boundary:' + url, JSON.stringify({ t: Date.now(), g: geojson }));
         } catch (e) { /* quota cheia ou localStorage indisponivel -- so perde o cache, sem quebrar nada */ }
     }
-    function addBoundaryLayer(url, weight, color) {
+    function fetchBoundaryGeojson(url) {
         var cached = boundaryFromCache(url);
-        var promise = cached ? Promise.resolve(cached) : fetch(url)
+        if (cached) return Promise.resolve(cached);
+        return fetch(url)
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (geojson) {
                 if (geojson) boundaryToCache(url, geojson);
                 return geojson;
             })
-            .catch(function () { return null; /* IBGE fora do ar ou sem internet -- so nao mostra essa camada */ });
-        return promise.then(function (geojson) {
-            if (!geojson) return null;
-            L.geoJSON(geojson, {
-                style: { color: color || BOUNDARY_COLOR, weight: weight, fill: false, opacity: 0.9 },
-                interactive: false,
-            }).addTo(map);
-            return geojson;
-        });
+            .catch(function () { return null; /* fonte fora do ar ou sem internet -- so perde o recorte da grade de nuvens desse pais */ });
     }
 
-    // Ray casting simples (Polygon/MultiPolygon) so pra descobrir em qual
-    // estado cada fazenda esta, usando o mesmo geojson de estados que ja
-    // baixamos pra desenhar as divisas -- evita depender de geocoding externo.
+    // Ray casting simples (Polygon/MultiPolygon) so pra recortar a grade de
+    // nuvens no contorno de cada pais (ver gerarGradePais mais abaixo).
     function pointInRing(pt, ring) {
         var x = pt[0], y = pt[1], inside = false;
         for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -241,90 +235,29 @@
         if (geom.type === 'MultiPolygon') return geom.coordinates.some(function (poly) { return pointInRings(pt, poly); });
         return false;
     }
-    // Pontos de referencia pra descobrir quais estados precisam de
-    // divisas de municipio: fazendas E estacoes INMET -- assim, se uma
-    // estacao nova entrar num estado que ainda nao tem fazenda nenhuma,
-    // esse estado ja aparece com os mesmos elementos (linhas brancas de
-    // municipio) automaticamente, sem precisar tocar em nada aqui.
     var estacoes = {{ estacoes | tojson }};
-    var ufReferencePoints = sites.map(function (s) { return [s.lon, s.lat]; })
-        .concat(estacoes.map(function (e) { return [e.lon, e.lat]; }));
-
-    function findUfCodes(ufGeojson, points) {
-        var codes = {};
-        points.forEach(function (pt) {
-            var feature = ufGeojson.features.find(function (f) { return pointInGeometry(pt, f.geometry); });
-            if (feature) codes[feature.properties.codarea] = true;
-        });
-        return Object.keys(codes);
-    }
 
     // Pais de cada fazenda (aba Fazendas > Pais -- ver models.get_all_site_countries),
     // sem entrada = 'BR' (padrao). Decide quais paises alem do Brasil tem
-    // fronteira/grade de nuvens desenhada -- 'BR' sempre entra, mesmo sem
-    // fazenda nenhuma, pra manter o comportamento de sempre.
+    // contorno buscado pra recortar a grade de nuvens -- 'BR' sempre entra,
+    // mesmo sem fazenda nenhuma, pra manter o comportamento de sempre.
     var siteCountries = {{ country_by_site | tojson }};
     var COUNTRY_BOUNDARIES = {{ country_boundary_urls | tojson }};  // {"CL": {adm0, adm1, adm2}, ...}
     var CLOUD_BBOXES = {{ cloud_bboxes | tojson }};  // {"BR": {...}, "CL": {...}}
     var activeCountries = { BR: true };
     sites.forEach(function (s) { activeCountries[siteCountries[s.site] || 'BR'] = true; });
     // Pais com integracao de estacao oficial de verdade funcionando (hoje
-    // Chile via DMC) aparece com fronteira mesmo sem fazenda ainda la' --
-    // ver `active_country_codes_mapa` na rota /mapa.
+    // Chile via DMC) entra mesmo sem fazenda ainda la' -- ver
+    // `active_country_codes_mapa` na rota /mapa.
     {{ active_country_codes_mapa | tojson }}.forEach(function (code) { activeCountries[code] = true; });
 
-    // Rodovias federais (BR-163/364/070/158) -- lidas de um arquivo
-    // estatico proprio (webapp/static/rodovias_br.json), NAO mais buscadas
-    // ao vivo no Overpass a cada carregamento da pagina. O Overpass publico
-    // se mostrou instavel demais pra depender dele em tempo real (mesma
-    // consulta ora funcionava, ora dava 502/504/timeout, inclusive em mais
-    // de um servidor espelho) -- os dados foram baixados uma unica vez e
-    // salvos localmente, entao a pagina sempre mostra as rodovias na hora,
-    // sem depender de nenhum servico externo estar de pe.
-    function buscarRodovias() {
-        fetch('{{ url_for("static", filename="rodovias_br.json") }}')
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (dados) {
-                if (!dados || !dados.trechos) return;
-                dados.trechos.forEach(function (trecho) {
-                    L.polyline(trecho.pontos, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
-                });
-            })
-            .catch(function () { /* arquivo estatico local -- so' falha se o proprio site estiver fora do ar */ });
-    }
-    buscarRodovias();
-
-    // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
-    // (leve, um pedido so) e municipios (pesado -- so busca dos estados
-    // onde realmente tem fazenda ou estacao, senao seria o Brasil inteiro).
+    // Contorno de cada pais ativo -- so' pra recortar a grade de nuvens
+    // (gerarGradePais mais abaixo), NAO desenhado no mapa nesta aba.
     var paisGeojsonPromises = {};
-    paisGeojsonPromises.BR = addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
-    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
-        .then(function (ufGeojson) {
-            if (!ufGeojson) return;
-            findUfCodes(ufGeojson, ufReferencePoints).forEach(function (codarea) {
-                addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
-            });
-        });
-
-    // Fronteiras dos demais paises ativos -- arquivos estaticos proprios
-    // (webapp/static/boundaries/, gerados uma unica vez a partir do
-    // geoBoundaries.org, mesmo motivo do rodovias_br.json: nao depender de
-    // nenhuma API ao vivo pra desenhar um contorno que praticamente nunca
-    // muda). Como e' um arquivo ja baixado (sem custo por request), pais +
-    // regiao + comuna sao carregados juntos, sem a logica de "so busca
-    // onde tem fazenda" que o municipio do IBGE precisa (essa existe so
-    // pra poupar a API ao vivo do IBGE).
+    paisGeojsonPromises.BR = fetchBoundaryGeojson(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json');
     Object.keys(COUNTRY_BOUNDARIES).forEach(function (code) {
         if (!activeCountries[code]) return;
-        var urls = COUNTRY_BOUNDARIES[code];
-        paisGeojsonPromises[code] = addBoundaryLayer(urls.adm0, 3);
-        addBoundaryLayer(urls.adm1, 2);
-        // So os 10 paises "so fronteira" (sem estacao integrada ainda, ver
-        // `_pais_sem_estacoes`) nao tem adm2 (comuna/municipio) cadastrado
-        // -- sem esse if, `addBoundaryLayer(undefined, ...)` disparava um
-        // fetch pra "/undefined" (404 inofensivo, mas sujava o console).
-        if (urls.adm2) addBoundaryLayer(urls.adm2, 1, MUNICIPIO_COLOR);
+        paisGeojsonPromises[code] = fetchBoundaryGeojson(COUNTRY_BOUNDARIES[code].adm0);
     });
 
     // Camada de nuvens cobrindo o Brasil inteiro -- mesma logica do Mapa
