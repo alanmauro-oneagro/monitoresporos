@@ -15,6 +15,9 @@ from shapely.geometry import Point, shape
 import inmet_stations
 import dmc_stations
 import smn_stations
+import senamhi_stations
+import inumet_stations
+import dmh_paraguay_stations
 import sem_estacoes
 
 DEFAULT_COUNTRY = "BR"
@@ -76,10 +79,41 @@ COUNTRIES = {
     "CO": _pais_sem_estacoes("Colombia", "co", {"lat_min": -4, "lat_max": 13, "lon_min": -79, "lon_max": -66}),
     "EC": _pais_sem_estacoes("Equador", "ec", {"lat_min": -5, "lat_max": 1.5, "lon_min": -81, "lon_max": -75}),
     "GY": _pais_sem_estacoes("Guiana", "gy", {"lat_min": 1, "lat_max": 9, "lon_min": -61, "lon_max": -56}),
-    "PY": _pais_sem_estacoes("Paraguai", "py", {"lat_min": -27.5, "lat_max": -19, "lon_min": -63, "lon_max": -54}),
-    "PE": _pais_sem_estacoes("Peru", "pe", {"lat_min": -18.5, "lat_max": 0, "lon_min": -81.5, "lon_max": -68.5}),
+    "PY": {
+        "nome": "Paraguai",
+        "boundary_mode": "static_geoboundaries",
+        "boundary_files": {
+            "adm0": "boundaries/py_adm0.geojson",
+            "adm1": "boundaries/py_adm1.geojson",
+        },
+        # DMH -- ver dmh_paraguay_stations.py: fonte confirmada por
+        # snapshot arquivado, mas o servidor estava fora do ar no
+        # momento da integracao (degradacao graciosa -- sem estacao
+        # nenhuma ate o servico voltar, sem quebrar nada).
+        "station_provider": dmh_paraguay_stations,
+        "cloud_grid_bbox": {"lat_min": -27.5, "lat_max": -19, "lon_min": -63, "lon_max": -54},
+    },
+    "PE": {
+        "nome": "Peru",
+        "boundary_mode": "static_geoboundaries",
+        "boundary_files": {
+            "adm0": "boundaries/pe_adm0.geojson",
+            "adm1": "boundaries/pe_adm1.geojson",
+        },
+        "station_provider": senamhi_stations,  # SENAMHI Peru -- ver senamhi_stations.py
+        "cloud_grid_bbox": {"lat_min": -18.5, "lat_max": 0, "lon_min": -81.5, "lon_max": -68.5},
+    },
     "SR": _pais_sem_estacoes("Suriname", "sr", {"lat_min": 1.8, "lat_max": 6, "lon_min": -58, "lon_max": -54}),
-    "UY": _pais_sem_estacoes("Uruguai", "uy", {"lat_min": -35, "lat_max": -30, "lon_min": -58.5, "lon_max": -53}),
+    "UY": {
+        "nome": "Uruguai",
+        "boundary_mode": "static_geoboundaries",
+        "boundary_files": {
+            "adm0": "boundaries/uy_adm0.geojson",
+            "adm1": "boundaries/uy_adm1.geojson",
+        },
+        "station_provider": inumet_stations,  # INUMET -- ver inumet_stations.py (nao confundir com o INMET do Brasil)
+        "cloud_grid_bbox": {"lat_min": -35, "lat_max": -30, "lon_min": -58.5, "lon_max": -53},
+    },
     "VE": _pais_sem_estacoes("Venezuela", "ve", {"lat_min": 0.5, "lat_max": 12.5, "lon_min": -73.5, "lon_max": -59.5}),
 }
 
@@ -146,11 +180,12 @@ def detectar_pais_por_coordenada(lat, lon):
 # qualquer pais em `sem_estacoes.py`) deixava a "mais proxima entre as
 # poucas que sobraram" vencer por padrao, nao importa a distancia real
 # -- bug real ja visto em producao (fazenda no Chile herdou uma
-# estacao INMET a mais de 1500km, no Rio Grande do Sul). 150km cobre
-# folgado qualquer fronteira de verdade (INMET tem estacao bem mais
-# densa que isso perto de area povoada) sem deixar um pais "vazio"
-# roubar a escolha de um continente inteiro de distancia.
-DISTANCIA_MAXIMA_ESTACAO_VIZINHA_KM = 150
+# estacao INMET a mais de 1500km, no Rio Grande do Sul). Reduzido de
+# 150 pra 50km (pedido explicito do usuario) -- com mais paises vizinhos
+# ja tendo estacao propria integrada (Argentina, e os que entrarem a
+# seguir), faz mais sentido so' cruzar fronteira pra uma estacao BEM
+# perto, e nao um raio tao largo.
+DISTANCIA_MAXIMA_ESTACAO_VIZINHA_KM = 50
 
 
 def estacoes_mais_proximas_global(lat, lon, site_country, n=2):
