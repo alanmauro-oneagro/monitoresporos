@@ -2352,6 +2352,12 @@ def mapa():
             estacao = {**base, "distancia_km": round(distancia, 1)}
         else:
             estacao = provider.estacao_mais_proxima(lat, lon)
+        # Mesmo limiar que ja esconde as caixas de doenca no Painel (ver
+        # _nivel_dados_defasados/DADOS_BLOQUEIO_DIAS) -- fazenda sem leitura
+        # nova ha mais de 15 dias entra como "inativa" no mapa: pino menor
+        # e tooltip so' com o nome (ver mapa.html), pra nao passar uma falsa
+        # impressao de leitura recente.
+        inativo = _nivel_dados_defasados(_dias_sem_leitura(cards)) == "bloqueado"
         sites_data.append({
             "site": site,
             "nome_exibicao": _nome_exibicao(site),
@@ -2361,6 +2367,7 @@ def mapa():
             "tipo": tipo,
             "cards": sorted(cards, key=lambda c: c["doenca"]),
             "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
+            "inativo": inativo,
         })
         if estacao:
             entry = estacoes_by_codigo.setdefault(estacao["codigo"], {

@@ -63,56 +63,39 @@
     // quadrada corta exatamente o quadrado da esquerda (a folha), sem
     // precisar de nenhum recorte manual da imagem.
     var LOGO_URL = '{{ url_for("static", filename="oneagro-logo.png") }}';
-    var PIN_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
-        '<defs><clipPath id="mapaPinClip"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
-        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#ffffff" stroke="#0a1f44" stroke-width="2.5"/>' +
-        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClip)"/>' +
-        '</svg>';
+    var PIN_COR_NORMAL = '#ffffff';
+    // Amarelo claro -- unica marca visual de que e' uma fazenda criada por
+    // interpolacao (o nome ja segue o padrao '"{nome}" - OneAgro', essa e'
+    // so uma pista extra rapida de identificar no mapa).
+    var PIN_COR_VIRTUAL = '#fff3bf';
+    // Azul claro -- ponto criado so' pra referencia de clima (tipo
+    // 'clima', ver mapa_interpolado.html), sem monitoramento de doenca.
+    var PIN_COR_CLIMA = '#a5d8ff';
+    // Fazenda sem leitura nova ha mais de 15 dias (site.inativo, ver
+    // app._nivel_dados_defasados/DADOS_BLOQUEIO_DIAS) -- pino reduzido pra
+    // 60% do tamanho normal, pra destacar visualmente que aquele dado esta
+    // velho demais sem precisar remover o pino do mapa.
+    var PIN_ESCALA_INATIVO = 0.6;
 
-    var farmIcon = L.divIcon({
-        html: PIN_SVG,
-        className: 'mapa-pin-icon',
-        iconSize: [40, 52],
-        iconAnchor: [20, 52],
-        tooltipAnchor: [0, -46],
-    });
+    function buildPinIcon(fillColor, escala) {
+        escala = escala || 1;
+        var w = Math.round(40 * escala), h = Math.round(52 * escala);
+        var svg =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="' + w + '" height="' + h + '">' +
+            '<defs><clipPath id="mapaPinClip"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
+            '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="' + fillColor + '" stroke="#0a1f44" stroke-width="2.5"/>' +
+            '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClip)"/>' +
+            '</svg>';
+        return L.divIcon({
+            html: svg,
+            className: 'mapa-pin-icon',
+            iconSize: [w, h],
+            iconAnchor: [Math.round(w / 2), h],
+            tooltipAnchor: [0, -Math.round(h * (46 / 52))],
+        });
+    }
 
-    // Mesmo pino, so que amarelo claro em vez de branco -- unica marca
-    // visual de que e' uma fazenda criada por interpolacao (o nome ja
-    // segue o padrao '"{nome}" - OneAgro', essa e' so uma pista extra
-    // rapida de identificar no mapa).
-    var VIRTUAL_PIN_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
-        '<defs><clipPath id="mapaPinClipVirtual"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
-        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#fff3bf" stroke="#0a1f44" stroke-width="2.5"/>' +
-        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClipVirtual)"/>' +
-        '</svg>';
-
-    var virtualIcon = L.divIcon({
-        html: VIRTUAL_PIN_SVG,
-        className: 'mapa-pin-icon',
-        iconSize: [40, 52],
-        iconAnchor: [20, 52],
-        tooltipAnchor: [0, -46],
-    });
-
-    // Mesmo pino, em azul claro -- ponto criado so' pra referencia de
-    // clima (tipo 'clima', ver mapa_interpolado.html), sem monitoramento
-    // de doenca nenhum.
-    var CLIMA_PIN_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="40" height="52">' +
-        '<defs><clipPath id="mapaPinClipClima"><circle cx="20" cy="18" r="14"/></clipPath></defs>' +
-        '<path d="M20 0C10.06 0 2 8.06 2 18c0 13.5 18 34 18 34s18-20.5 18-34C38 8.06 29.94 0 20 0z" fill="#a5d8ff" stroke="#0a1f44" stroke-width="2.5"/>' +
-        '<image href="' + LOGO_URL + '" x="6" y="4" width="28" height="28" preserveAspectRatio="xMinYMid slice" clip-path="url(#mapaPinClipClima)"/>' +
-        '</svg>';
-    var climaIcon = L.divIcon({
-        html: CLIMA_PIN_SVG,
-        className: 'mapa-pin-icon',
-        iconSize: [40, 52],
-        iconAnchor: [20, 52],
-        tooltipAnchor: [0, -46],
-    });
+    var climaIcon = buildPinIcon(PIN_COR_CLIMA);
 
     var stationIcon = L.divIcon({
         html: '<div style="background:#1971c2;border:2px solid #ffffff;border-radius:50%;' +
@@ -134,6 +117,12 @@
         if (site.tipo === 'clima') {
             return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
                 '<div class="mapa-tt-data">☁️ Ponto de referencia de clima (sem monitoramento de doenca)</div></div>';
+        }
+        if (site.inativo) {
+            // Sem leitura nova ha mais de 15 dias -- nao mostra leitura
+            // antiga nem concentracao de doenca (dado velho demais pra
+            // confiar, mesma regra do Painel), so' o nome do pino.
+            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div></div>';
         }
         var rows = site.cards.map(function (c) {
             var cls = c.status === 'Perigo' ? 'perigo' : (c.status === 'Atencao' ? 'atencao' : 'normal');
@@ -434,7 +423,13 @@
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
     var latlngs = sites.map(function (s) { return [s.lat, s.lon]; });
     sites.forEach(function (site) {
-        var icone = site.tipo === 'clima' ? climaIcon : (site.virtual ? virtualIcon : farmIcon);
+        var icone;
+        if (site.tipo === 'clima') {
+            icone = climaIcon;
+        } else {
+            var cor = site.virtual ? PIN_COR_VIRTUAL : PIN_COR_NORMAL;
+            icone = buildPinIcon(cor, site.inativo ? PIN_ESCALA_INATIVO : 1);
+        }
         L.marker([site.lat, site.lon], { icon: icone })
             .addTo(map)
             .bindTooltip(buildTooltipHtml(site), { direction: 'top', sticky: true, opacity: 0.95 })
