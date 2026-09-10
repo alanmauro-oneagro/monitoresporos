@@ -530,13 +530,25 @@
             pontosHeat.push([ponto.lat, ponto.lon, Math.min(mm, CHUVA_ESCALA_MAX_MM) / CHUVA_ESCALA_MAX_MM]);
         });
         if (!pontosHeat.length) return;
+        // Garante que o container do mapa ja tem tamanho valido antes do
+        // Leaflet.heat desenhar (mesmo cuidado ja tomado em solo.html) --
+        // sem isso, um redesenho logo apos abrir a aba (container ainda
+        // sem layout) faz o canvas interno da biblioteca nascer 0x0 e
+        // lancar erro ao tentar ler os pixels de volta.
+        map.invalidateSize();
         // radius/blur em pixels de tela (fixo, nao acompanha o zoom --
         // limitacao conhecida do Leaflet.heat) -- valores calibrados pra
         // visao regional/nacional, o uso tipico dessa camada.
-        chuvaLayer = L.heatLayer(pontosHeat, {
-            radius: 70, blur: 55, max: 1.0, minOpacity: 0.15,
-            gradient: CHUVA_GRADIENTE,
-        }).addTo(map);
+        try {
+            chuvaLayer = L.heatLayer(pontosHeat, {
+                radius: 70, blur: 55, max: 1.0, minOpacity: 0.15,
+                gradient: CHUVA_GRADIENTE,
+            }).addTo(map);
+        } catch (e) {
+            // Container ainda sem tamanho valido, mesmo apos invalidateSize
+            // (ex. aba aberta em segundo plano) -- so' pula esse redesenho,
+            // a proxima troca de dia/zoom tenta de novo.
+        }
     }
 
     function gerarGradePais(bbox, paisGeojson) {

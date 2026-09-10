@@ -15,7 +15,10 @@
     .mapa-tt-normal .mapa-tt-dot { background: #51cf66; }
     .mapa-tt-doenca { flex: 1 1 auto; }
     .mapa-tt-valor { font-weight: 700; margin-left: 0.5rem; }
-    .mapa-nuvem-icon { background: transparent; border: none; pointer-events: none; }
+    /* Legenda da camada de chuva -- mesmo padrao visual de solo.html/mapa_interpolado.html. */
+    .solo-legend { background: #fff; padding: 0.6rem 0.8rem; border-radius: 0.4rem; box-shadow: 0 1px 5px rgba(0,0,0,0.4); font-size: 0.75rem; max-height: 60vh; overflow-y: auto; }
+    .solo-legend-item { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; }
+    .solo-legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; display: inline-block; }
 </style>
 {% endblock %}
 {% block content %}
@@ -31,10 +34,10 @@
 {% else %}
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
     <div class="form-check form-switch mb-0">
-        <input class="form-check-input" type="checkbox" role="switch" id="nuvens-toggle">
-        <label class="form-check-label small fw-bold" for="nuvens-toggle">☁️ Previsao de nuvens (troca de dia automatica)</label>
+        <input class="form-check-input" type="checkbox" role="switch" id="chuva-toggle">
+        <label class="form-check-label small fw-bold" for="chuva-toggle">🌧️ Previsao de chuva (acumulado 24h, troca de dia automatica)</label>
     </div>
-    <span id="nuvens-status" class="small text-muted d-none"></span>
+    <span id="chuva-status" class="small text-muted d-none"></span>
 </div>
 <div id="farm-map"></div>
 <p class="text-muted small mt-3 pt-3 border-top">
@@ -56,6 +59,7 @@
 {% endblock %}
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 {% if sites_data %}
 <script>
 (function () {
@@ -175,8 +179,8 @@
 
     // Divisas do IBGE/paises quase nunca mudam -- guarda no localStorage por
     // 30 dias pra nao rebaixar o mesmo geojson toda vez que a pagina abre.
-    // Nesta aba (Mapa) o contorno so' e' usado pra recortar a grade de
-    // nuvens no formato de cada pais -- NAO e' mais desenhado no mapa (a
+    // Nesta aba (Mapa) o contorno so' e' usado pra recortar a grade da
+    // camada de chuva no formato de cada pais -- NAO e' mais desenhado no mapa (a
     // camada de nomes de cidade da Esri, logo acima, ja da' a mesma
     // referencia visual sem deixar o mapa poluido). As linhas de divisa e
     // rodovia continuam aparecendo normalmente na aba Mapa Interpolado.
@@ -204,11 +208,11 @@
                 if (geojson) boundaryToCache(url, geojson);
                 return geojson;
             })
-            .catch(function () { return null; /* fonte fora do ar ou sem internet -- so perde o recorte da grade de nuvens desse pais */ });
+            .catch(function () { return null; /* fonte fora do ar ou sem internet -- so perde o recorte da grade de chuva desse pais */ });
     }
 
     // Ray casting simples (Polygon/MultiPolygon) so pra recortar a grade de
-    // nuvens no contorno de cada pais (ver gerarGradePais mais abaixo).
+    // chuva no contorno de cada pais (ver gerarGradePais mais abaixo).
     function pointInRing(pt, ring) {
         var x = pt[0], y = pt[1], inside = false;
         for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -234,7 +238,7 @@
 
     // Pais de cada fazenda (aba Fazendas > Pais -- ver models.get_all_site_countries),
     // sem entrada = 'BR' (padrao). Decide quais paises alem do Brasil tem
-    // contorno buscado pra recortar a grade de nuvens -- 'BR' sempre entra,
+    // contorno buscado pra recortar a grade de chuva -- 'BR' sempre entra,
     // mesmo sem fazenda nenhuma, pra manter o comportamento de sempre.
     var siteCountries = {{ country_by_site | tojson }};
     var COUNTRY_BOUNDARIES = {{ country_boundary_urls | tojson }};  // {"CL": {adm0, adm1, adm2}, ...}
@@ -246,7 +250,7 @@
     // `active_country_codes_mapa` na rota /mapa.
     {{ active_country_codes_mapa | tojson }}.forEach(function (code) { activeCountries[code] = true; });
 
-    // Contorno de cada pais ativo -- so' pra recortar a grade de nuvens
+    // Contorno de cada pais ativo -- so' pra recortar a grade de chuva
     // (gerarGradePais mais abaixo), NAO desenhado no mapa nesta aba.
     var paisGeojsonPromises = {};
     paisGeojsonPromises.BR = fetchBoundaryGeojson(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json');
@@ -255,17 +259,16 @@
         paisGeojsonPromises[code] = fetchBoundaryGeojson(COUNTRY_BOUNDARIES[code].adm0);
     });
 
-    // Camada de nuvens cobrindo o Brasil inteiro -- mesma logica do Mapa
-    // Interpolado (grade de pontos recortada pelo contorno do IBGE,
-    // consulta em lote na Open-Meteo, icone de nuvem que acompanha o
-    // zoom, pane proprio abaixo das rodovias/divisas), so' que aqui o dia
-    // mostrado avanca sozinho a cada 2s em vez de ter botao de dia --
-    // pedido explicito pra essa tela ser "so olhar", sem interacao manual.
-    // Rotulo de cada dia como data real (dd/mm), calculada a partir de
-    // hoje -- em vez de "Hoje"/"+1"/"+2".../"+5" -- so' nessa tela (pedido
-    // explicito), o Mapa Interpolado continua com os rotulos relativos nos
-    // botoes de dia.
-    var DIAS_NUVENS = (function () {
+    // Camada de chuva acumulada (24h) cobrindo o Brasil inteiro -- mesma
+    // logica do Mapa Interpolado (grade de pontos recortada pelo contorno
+    // do IBGE, consulta em lote na Open-Meteo, heatmap via Leaflet.heat),
+    // so' que aqui o dia mostrado avanca sozinho a cada 2s em vez de ter
+    // botao de dia -- pedido explicito pra essa tela ser "so olhar", sem
+    // interacao manual. Rotulo de cada dia como data real (dd/mm),
+    // calculada a partir de hoje -- em vez de "Hoje"/"+1"/"+2".../"+5" --
+    // so' nessa tela (pedido explicito), o Mapa Interpolado continua com
+    // os rotulos relativos nos botoes de dia.
+    var DIAS_CHUVA = (function () {
         var hoje = new Date();
         var rotulos = [];
         for (var i = 0; i <= 5; i++) {
@@ -278,67 +281,67 @@
         return rotulos;
     })();
     var GRADE_PASSO_GRAUS = 1.5;
-    var NUVEM_COBERTURA_MINIMA = 10; // % -- abaixo disso nem desenha
-    var circulosNuvens = [];
     var diaSelecionado = 0;
-    var gradeNuvens = null;
+    var gradeChuva = null;
+    var chuvaLayer = null;
     var cicloAutomatico = null;
 
-    map.createPane('nuvensPane');
-    map.getPane('nuvensPane').style.zIndex = 350;
-    map.getPane('nuvensPane').style.pointerEvents = 'none';
+    // Escala em mm calcada na legenda de referencia (boletim de
+    // agronegocio: <01, 05, 10, 13, 17, 20, 30, 40, 50, 70, 120, 180,
+    // 220, 270+) -- mesma tabela usada no Mapa Interpolado.
+    var CHUVA_ESCALA_MAX_MM = 270;
+    var CHUVA_MINIMA_MM = 1; // abaixo disso nem entra no heatmap -- fica transparente (sem chuva)
+    var CHUVA_FAIXAS = [
+        { mm: 1, cor: '#c8e6a0' },
+        { mm: 5, cor: '#8fd47a' },
+        { mm: 10, cor: '#4fae4a' },
+        { mm: 17, cor: '#1f7a5a' },
+        { mm: 20, cor: '#2f9fd6' },
+        { mm: 30, cor: '#1f6fd0' },
+        { mm: 50, cor: '#123f9e' },
+        { mm: 70, cor: '#f5e34d' },
+        { mm: 120, cor: '#f2942f' },
+        { mm: 180, cor: '#e5432f' },
+        { mm: 220, cor: '#b8236e' },
+        { mm: 270, cor: '#7a2ea6' },
+    ];
+    var CHUVA_GRADIENTE = {};
+    CHUVA_FAIXAS.forEach(function (faixa) { CHUVA_GRADIENTE[faixa.mm / CHUVA_ESCALA_MAX_MM] = faixa.cor; });
 
-    var NUVEM_SVG_NORMAL =
-        '<ellipse cx="30" cy="38" rx="22" ry="18" fill="#ffffff"/>' +
-        '<ellipse cx="58" cy="24" rx="27" ry="24" fill="#ffffff"/>' +
-        '<ellipse cx="78" cy="37" rx="20" ry="17" fill="#ffffff"/>' +
-        '<ellipse cx="50" cy="45" rx="38" ry="17" fill="#ffffff"/>';
-    var NUVEM_SVG_ESPELHADA =
-        '<ellipse cx="70" cy="38" rx="22" ry="18" fill="#ffffff"/>' +
-        '<ellipse cx="42" cy="24" rx="27" ry="24" fill="#ffffff"/>' +
-        '<ellipse cx="22" cy="37" rx="20" ry="17" fill="#ffffff"/>' +
-        '<ellipse cx="50" cy="45" rx="38" ry="17" fill="#ffffff"/>';
-
-    function tamanhoBaseEmPixels() {
-        var zoom = map.getZoom();
-        var lat = map.getCenter().lat;
-        var metrosPorPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
-        var passoMetros = GRADE_PASSO_GRAUS * 111320;
-        return Math.min(passoMetros / metrosPorPixel, 220);
+    function limparCamadaChuva() {
+        if (chuvaLayer) { map.removeLayer(chuvaLayer); chuvaLayer = null; }
     }
 
-    function iconeNuvem(pct, espelhada, tamanhoBase) {
-        var p = Math.max(0, Math.min(100, pct));
-        var largura = tamanhoBase * (0.7 + (p / 100) * 0.8);
-        var altura = largura * 0.6;
-        var opacidade = 0.08 + (p / 100) * 0.42;
-        var miolo = espelhada ? NUVEM_SVG_ESPELHADA : NUVEM_SVG_NORMAL;
-        var html = '<svg viewBox="0 0 100 60" width="' + largura + '" height="' + altura +
-            '" style="opacity:' + opacidade + ';">' + miolo + '</svg>';
-        return L.divIcon({
-            html: html, className: 'mapa-nuvem-icon',
-            iconSize: [largura, altura], iconAnchor: [largura / 2, altura / 2],
+    function desenharCamadaChuva() {
+        limparCamadaChuva();
+        if (!gradeChuva) return;
+        var pontosHeat = [];
+        gradeChuva.forEach(function (ponto) {
+            var mm = (ponto.chuva_mm_por_dia || [])[diaSelecionado];
+            if (mm === null || mm === undefined || mm < CHUVA_MINIMA_MM) return;
+            pontosHeat.push([ponto.lat, ponto.lon, Math.min(mm, CHUVA_ESCALA_MAX_MM) / CHUVA_ESCALA_MAX_MM]);
         });
-    }
-
-    function limparCamadaNuvens() {
-        circulosNuvens.forEach(function (c) { map.removeLayer(c); });
-        circulosNuvens = [];
-    }
-
-    function desenharCamadaNuvens() {
-        limparCamadaNuvens();
-        if (!gradeNuvens) return;
-        var tamanhoBase = tamanhoBaseEmPixels();
-        gradeNuvens.forEach(function (ponto, indice) {
-            var pct = (ponto.nuvens_pct_por_dia || [])[diaSelecionado];
-            if (pct === null || pct === undefined || pct < NUVEM_COBERTURA_MINIMA) return;
-            var marcador = L.marker([ponto.lat, ponto.lon], {
-                icon: iconeNuvem(pct, indice % 2 === 1, tamanhoBase),
-                pane: 'nuvensPane', interactive: false, keyboard: false,
+        if (!pontosHeat.length) return;
+        // Garante que o container do mapa ja tem tamanho valido antes do
+        // Leaflet.heat desenhar (mesmo cuidado ja tomado em solo.html) --
+        // sem isso, um redesenho logo apos abrir a aba (container ainda
+        // sem layout) faz o canvas interno da biblioteca nascer 0x0 e
+        // lancar erro ao tentar ler os pixels de volta.
+        map.invalidateSize();
+        // radius/blur fixos em pixels de tela (nao acompanham o zoom --
+        // limitacao conhecida do Leaflet.heat, mas o heatmap em si
+        // reescala/reposiciona sozinho, sem precisar de listener de
+        // zoomend como o icone de nuvem antigo precisava).
+        try {
+            chuvaLayer = L.heatLayer(pontosHeat, {
+                radius: 70, blur: 55, max: 1.0, minOpacity: 0.15,
+                gradient: CHUVA_GRADIENTE,
             }).addTo(map);
-            circulosNuvens.push(marcador);
-        });
+        } catch (e) {
+            // Container ainda sem tamanho valido, mesmo apos invalidateSize
+            // (ex. aba aberta em segundo plano) -- so' pula esse redesenho,
+            // a proxima troca de dia/zoom tenta de novo.
+        }
     }
 
     function gerarGradePais(bbox, paisGeojson) {
@@ -353,8 +356,30 @@
         return pontos;
     }
 
-    var nuvensToggle = document.getElementById('nuvens-toggle');
-    var nuvensStatus = document.getElementById('nuvens-status');
+    var chuvaToggle = document.getElementById('chuva-toggle');
+    var chuvaStatus = document.getElementById('chuva-status');
+    var chuvaLegenda = null;
+
+    function mostrarLegendaChuva() {
+        if (chuvaLegenda) return;
+        chuvaLegenda = L.control({ position: 'bottomright' });
+        chuvaLegenda.onAdd = function () {
+            var div = L.DomUtil.create('div', 'solo-legend');
+            var html = '<div class="fw-bold mb-1">Chuva 24h (mm)</div>';
+            CHUVA_FAIXAS.forEach(function (faixa, i) {
+                var rotulo = (i === CHUVA_FAIXAS.length - 1) ? (faixa.mm + '+') : String(faixa.mm);
+                html += '<div class="solo-legend-item"><span class="solo-legend-swatch" style="background:' +
+                    faixa.cor + ';"></span>' + rotulo + '</div>';
+            });
+            div.innerHTML = html;
+            return div;
+        };
+        chuvaLegenda.addTo(map);
+    }
+
+    function esconderLegendaChuva() {
+        if (chuvaLegenda) { map.removeControl(chuvaLegenda); chuvaLegenda = null; }
+    }
 
     function pararCicloAutomatico() {
         if (cicloAutomatico) { clearInterval(cicloAutomatico); cicloAutomatico = null; }
@@ -363,16 +388,16 @@
     function iniciarCicloAutomatico() {
         pararCicloAutomatico();
         cicloAutomatico = setInterval(function () {
-            diaSelecionado = (diaSelecionado + 1) % DIAS_NUVENS.length;
-            nuvensStatus.textContent = 'Mostrando: ' + DIAS_NUVENS[diaSelecionado];
-            nuvensStatus.classList.remove('d-none');
-            desenharCamadaNuvens();
+            diaSelecionado = (diaSelecionado + 1) % DIAS_CHUVA.length;
+            chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
+            chuvaStatus.classList.remove('d-none');
+            desenharCamadaChuva();
         }, 2000);
     }
 
-    function buscarGradeNuvens() {
-        nuvensStatus.textContent = 'Carregando previsao de nuvens...';
-        nuvensStatus.classList.remove('d-none');
+    function buscarGradeChuva() {
+        chuvaStatus.textContent = 'Carregando previsao de chuva...';
+        chuvaStatus.classList.remove('d-none');
         var codigosAtivos = Object.keys(activeCountries);
         Promise.all(codigosAtivos.map(function (code) { return paisGeojsonPromises[code]; })).then(function (geojsons) {
             var pontosGrade = [];
@@ -381,7 +406,7 @@
                 if (bbox && geojsons[i]) pontosGrade = pontosGrade.concat(gerarGradePais(bbox, geojsons[i]));
             });
             if (!pontosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
-            return fetch('{{ url_for("nuvens_grade") }}', {
+            return fetch('{{ url_for("chuva_grade") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -391,38 +416,34 @@
             });
         }).then(function (r) { return r.ok ? r.json() : []; })
             .then(function (dados) {
-                gradeNuvens = dados;
-                if (nuvensToggle.checked) {
-                    desenharCamadaNuvens();
-                    nuvensStatus.textContent = 'Mostrando: ' + DIAS_NUVENS[diaSelecionado];
+                gradeChuva = dados;
+                if (chuvaToggle.checked) {
+                    desenharCamadaChuva();
+                    chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
                     iniciarCicloAutomatico();
                 }
             })
             .catch(function () {
-                nuvensStatus.textContent = 'Nao foi possivel buscar a previsao de nuvens agora -- tente de novo.';
+                chuvaStatus.textContent = 'Nao foi possivel buscar a previsao de chuva agora -- tente de novo.';
             });
     }
 
-    // Reescala os icones quando o zoom muda, sem esperar o proximo passo
-    // do ciclo automatico.
-    map.on('zoomend', function () {
-        if (nuvensToggle.checked && gradeNuvens) desenharCamadaNuvens();
-    });
-
-    nuvensToggle.addEventListener('change', function () {
-        if (!nuvensToggle.checked) {
+    chuvaToggle.addEventListener('change', function () {
+        if (!chuvaToggle.checked) {
             pararCicloAutomatico();
-            limparCamadaNuvens();
-            nuvensStatus.classList.add('d-none');
+            limparCamadaChuva();
+            esconderLegendaChuva();
+            chuvaStatus.classList.add('d-none');
             return;
         }
-        if (gradeNuvens) {
-            desenharCamadaNuvens();
-            nuvensStatus.textContent = 'Mostrando: ' + DIAS_NUVENS[diaSelecionado];
-            nuvensStatus.classList.remove('d-none');
+        mostrarLegendaChuva();
+        if (gradeChuva) {
+            desenharCamadaChuva();
+            chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
+            chuvaStatus.classList.remove('d-none');
             iniciarCicloAutomatico();
         } else {
-            buscarGradeNuvens();
+            buscarGradeChuva();
         }
     });
 
