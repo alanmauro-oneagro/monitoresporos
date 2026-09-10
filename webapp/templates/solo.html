@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Solo - OneAgro{% endblock %}
+{% block title %}Mapa de Solos - OneAgro{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
@@ -7,10 +7,15 @@
     .solo-legend { background: #fff; padding: 0.6rem 0.8rem; border-radius: 0.4rem; box-shadow: 0 1px 5px rgba(0,0,0,0.4); font-size: 0.75rem; max-height: 60vh; overflow-y: auto; }
     .solo-legend-item { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; }
     .solo-legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; display: inline-block; }
+    /* "multiply" faz o cinza do sombreamento escurecer/clarear a imagem
+       de satelite por baixo (relevo em 3D), sem cobrir as cores --
+       diferente de so empilhar a camada normal por cima (que ficaria
+       cinza solido, escondendo o satelite e as zonas de solo). */
+    .solo-relevo-tile { mix-blend-mode: multiply; }
 </style>
 {% endblock %}
 {% block content %}
-<h4 class="mb-2">Solo</h4>
+<h4 class="mb-2">Mapa de Solos</h4>
 <p class="text-muted small mb-3">
     Tipo de solo por fazenda, resolvido automaticamente pela coordenada --
     <strong>Embrapa/PronaSolos</strong> (Mapa de Solos do Brasil, classificacao SiBCS)
@@ -39,6 +44,16 @@
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Imagens &copy; Esri -- Source: Esri, Maxar, Earthstar Geographics',
         maxZoom: 19,
+    }).addTo(map);
+    // Sombreamento de relevo (hillshade) da Esri -- gratis, sem chave,
+    // mesmo padrao dos outros tiles. Vem ANTES dos nomes de cidade/zonas
+    // de solo de proposito (essas ficam por cima, legiveis) e usa
+    // mix-blend-mode:multiply (classe .solo-relevo-tile) pra sombrear o
+    // satelite revelando morros/vales, sem cobrir a imagem nem as cores.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri',
+        maxZoom: 19,
+        className: 'solo-relevo-tile',
     }).addTo(map);
     // Nomes de cidade por cima da imagem de satelite -- capitais/cidades
     // grandes aparecem em zoom baixo, cidades menores vao surgindo

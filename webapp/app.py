@@ -2529,6 +2529,10 @@ def mapa_interpolado():
             "site": site, "nome_exibicao": _nome_exibicao(site), "lat": lat, "lon": lon, "virtual": False,
             "cards": sorted(cards, key=lambda c: c["doenca"]),
             "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)),
+            # Mesmo padrao de pino do Mapa normal (ver mapa.html/app.mapa):
+            # sem leitura nova ha mais de 15 dias = pino menor e tooltip so
+            # com o nome, ver _nivel_dados_defasados/DADOS_BLOQUEIO_DIAS.
+            "inativo": _nivel_dados_defasados(_dias_sem_leitura(cards)) == "bloqueado",
         })
 
     site_countries = models.get_all_site_countries()
@@ -2565,6 +2569,7 @@ def mapa_interpolado():
                 "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
                 "raio_km": vf["raio_km"],
                 "estacoes_usadas": estacoes_usadas,
+                "inativo": _nivel_dados_defasados(_dias_sem_leitura(cards)) == "bloqueado",
             })
 
     sites_data.sort(key=lambda s: s["site"])
