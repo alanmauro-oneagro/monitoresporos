@@ -286,30 +286,64 @@
     var chuvaLayer = null;
     var cicloAutomatico = null;
 
-    // Escala em mm calcada na legenda de referencia (boletim de
-    // agronegocio: <01, 05, 10, 13, 17, 20, 30, 40, 50, 70, 120, 180,
-    // 220, 270+) -- mesma tabela usada no Mapa Interpolado.
-    var CHUVA_ESCALA_MAX_MM = 270;
+    // Escala em mm -- topo em 90mm/dia (pedido explicito do usuario,
+    // mais util pro dia a dia agricola que a faixa ate 270+ usada antes
+    // pra eventos extremos). Cores escolhidas pra SEGREGAR bem cada
+    // faixa (matizes bem diferentes entre si, nao so' tons de uma mesma
+    // cor) e evitar vermelho/laranja (pedido explicito) -- mesma tabela
+    // usada no Mapa Interpolado.
+    var CHUVA_ESCALA_MAX_MM = 90;
     var CHUVA_MINIMA_MM = 1; // abaixo disso nem entra no heatmap -- fica transparente (sem chuva)
     var CHUVA_FAIXAS = [
-        { mm: 1, cor: '#c8e6a0' },
-        { mm: 5, cor: '#8fd47a' },
+        { mm: 1, cor: '#e8f5a3' },
+        { mm: 5, cor: '#a4d86b' },
         { mm: 10, cor: '#4fae4a' },
-        { mm: 17, cor: '#1f7a5a' },
-        { mm: 20, cor: '#2f9fd6' },
-        { mm: 30, cor: '#1f6fd0' },
-        { mm: 50, cor: '#123f9e' },
-        { mm: 70, cor: '#f5e34d' },
-        { mm: 120, cor: '#f2942f' },
-        { mm: 180, cor: '#e5432f' },
-        { mm: 220, cor: '#b8236e' },
-        { mm: 270, cor: '#7a2ea6' },
+        { mm: 20, cor: '#1f9e8f' },
+        { mm: 30, cor: '#2f7fd6' },
+        { mm: 45, cor: '#3955c4' },
+        { mm: 60, cor: '#6a3fb5' },
+        { mm: 75, cor: '#9c3fa8' },
+        { mm: 90, cor: '#c23f9e' },
     ];
-    var CHUVA_GRADIENTE = {};
-    CHUVA_FAIXAS.forEach(function (faixa) { CHUVA_GRADIENTE[faixa.mm / CHUVA_ESCALA_MAX_MM] = faixa.cor; });
+    // Gradiente EM DEGRAUS (nao suave) -- o Leaflet.heat normalmente
+    // mistura as cores entre uma faixa e outra, o que juntava tudo numa
+    // mancha so' dificil de distinguir (pedido explicito do usuario pra
+    // "segregar melhor as cores"). Cada faixa fica com um key de INICIO
+    // e um de FIM (quase no mesmo ponto onde a proxima comeca) com a
+    // MESMA cor -- assim o Leaflet.heat interpola dentro da faixa (fica
+    // constante, ja que e' a mesma cor nas duas pontas) e so' troca de
+    // cor de verdade no saltinho entre uma faixa e a proxima.
+    var CHUVA_GRADIENTE = (function () {
+        var EPS = 0.0015;
+        var grad = {};
+        var inicio = 0;
+        CHUVA_FAIXAS.forEach(function (faixa) {
+            var fim = Math.min(faixa.mm / CHUVA_ESCALA_MAX_MM, 1);
+            grad[inicio] = faixa.cor;
+            grad[Math.max(inicio, fim - EPS)] = faixa.cor;
+            inicio = fim;
+        });
+        grad[1] = CHUVA_FAIXAS[CHUVA_FAIXAS.length - 1].cor; // fecha explicito em 1.0 (ultima faixa)
+        return grad;
+    })();
 
     function limparCamadaChuva() {
         if (chuvaLayer) { map.removeLayer(chuvaLayer); chuvaLayer = null; }
+    }
+
+    // Pixels de tela equivalentes ao passo da grade (~1.5 grau) no
+    // zoom/latitude atual -- mesmo calculo do icone de nuvem antigo
+    // (tamanhoBaseEmPixels), reaproveitado aqui pro raio do heatmap
+    // acompanhar o zoom. Sem isso, um raio fixo em pixels faz pontos
+    // vizinhos se sobrepor demais em alguns niveis de zoom (tudo vira
+    // uma mancha so' -- exatamente o problema relatado) e ficar solto/
+    // pontilhado em outros.
+    function tamanhoBaseEmPixels() {
+        var zoom = map.getZoom();
+        var lat = map.getCenter().lat;
+        var metrosPorPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+        var passoMetros = GRADE_PASSO_GRAUS * 111320;
+        return Math.min(passoMetros / metrosPorPixel, 220);
     }
 
     function desenharCamadaChuva() {
@@ -328,13 +362,15 @@
         // sem layout) faz o canvas interno da biblioteca nascer 0x0 e
         // lancar erro ao tentar ler os pixels de volta.
         map.invalidateSize();
-        // radius/blur fixos em pixels de tela (nao acompanham o zoom --
-        // limitacao conhecida do Leaflet.heat, mas o heatmap em si
-        // reescala/reposiciona sozinho, sem precisar de listener de
-        // zoomend como o icone de nuvem antigo precisava).
+        // Raio proporcional ao espacamento REAL da grade no zoom atual
+        // (~55% do passo, pra os pontos vizinhos se tocarem sem exagerar
+        // a sobreposicao) em vez de um valor fixo -- ver
+        // tamanhoBaseEmPixels acima.
+        var passoPx = tamanhoBaseEmPixels();
+        var raio = Math.max(18, Math.min(passoPx * 0.55, 90));
         try {
             chuvaLayer = L.heatLayer(pontosHeat, {
-                radius: 70, blur: 55, max: 1.0, minOpacity: 0.15,
+                radius: raio, blur: raio * 0.85, max: 1.0, minOpacity: 0.15,
                 gradient: CHUVA_GRADIENTE,
             }).addTo(map);
         } catch (e) {
@@ -343,6 +379,12 @@
             // a proxima troca de dia/zoom tenta de novo.
         }
     }
+
+    // Reescala o raio quando o zoom muda -- nao espera o proximo passo
+    // do ciclo automatico (a cada 2s) pra corrigir o tamanho.
+    map.on('zoomend', function () {
+        if (chuvaToggle.checked && gradeChuva) desenharCamadaChuva();
+    });
 
     function gerarGradePais(bbox, paisGeojson) {
         var pontos = [];
