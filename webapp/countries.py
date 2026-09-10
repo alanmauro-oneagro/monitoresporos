@@ -16,6 +16,7 @@ import inmet_stations
 import dmc_stations
 import smn_stations
 import senamhi_stations
+import senamhi_bolivia_stations
 import inumet_stations
 import dmh_paraguay_stations
 import sem_estacoes
@@ -75,7 +76,19 @@ COUNTRIES = {
     # -- cada uma precisa de uma API de agencia meteorologica nacional
     # propria, um trabalho por pais que so' acontece quando/se uma fazenda
     # de verdade aparecer la'.
-    "BO": _pais_sem_estacoes("Bolivia", "bo", {"lat_min": -23, "lat_max": -9, "lon_min": -69, "lon_max": -57}),
+    "BO": {
+        "nome": "Bolivia",
+        "boundary_mode": "static_geoboundaries",
+        "boundary_files": {
+            "adm0": "boundaries/bo_adm0.geojson",
+            "adm1": "boundaries/bo_adm1.geojson",
+        },
+        # SENAMHI Bolivia -- ver senamhi_bolivia_stations.py (achado via
+        # GeoNode do Ministerio de Planificacion, nao confundir com
+        # senamhi_stations.py, que e' o SENAMHI do Peru).
+        "station_provider": senamhi_bolivia_stations,
+        "cloud_grid_bbox": {"lat_min": -23, "lat_max": -9, "lon_min": -69, "lon_max": -57},
+    },
     "CO": _pais_sem_estacoes("Colombia", "co", {"lat_min": -4, "lat_max": 13, "lon_min": -79, "lon_max": -66}),
     "EC": _pais_sem_estacoes("Equador", "ec", {"lat_min": -5, "lat_max": 1.5, "lon_min": -81, "lon_max": -75}),
     "GY": _pais_sem_estacoes("Guiana", "gy", {"lat_min": 1, "lat_max": 9, "lon_min": -61, "lon_max": -56}),
