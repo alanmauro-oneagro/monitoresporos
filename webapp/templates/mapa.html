@@ -39,7 +39,9 @@
 <div id="farm-map"></div>
 <p class="text-muted small mt-3 pt-3 border-top">
     Passe o mouse sobre um pino para ver os alertas daquela estacao, ou
-    clique para abrir direto aquela fazenda na aba Fazendas. Os nomes de
+    clique/toque para abrir direto aquela fazenda na aba Fazendas (no
+    celular, o 1o toque so mostra os alertas -- toque de novo pra abrir).
+    Os nomes de
     cidade que aparecem por cima da imagem de satelite (capitais e cidades
     grandes com zoom baixo, cidades menores conforme vai dando zoom) ja
     mostram a localizacao, sem precisar de linhas de divisa ou rodovia.
@@ -422,6 +424,14 @@
 
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
     var latlngs = sites.map(function (s) { return [s.lat, s.lon]; });
+    // No celular nao existe hover -- so' toque. Sem esse controle, o
+    // primeiro toque ja navegava direto pra fazenda, sem o usuario ver o
+    // tooltip de alertas antes (pedido explicito pra mudar isso). Agora o
+    // clique/toque so' navega se o tooltip DAQUELE pino ja estiver aberto
+    // -- no desktop isso nao muda nada (o hover ja abre o tooltip antes do
+    // clique chegar a acontecer, entao 1 clique continua bastando), e no
+    // celular passa a precisar de 2 toques (1o abre o tooltip, 2o navega).
+    var ultimoTooltipAberto = null;
     sites.forEach(function (site) {
         var icone;
         if (site.tipo === 'clima') {
@@ -430,13 +440,18 @@
             var cor = site.virtual ? PIN_COR_VIRTUAL : PIN_COR_NORMAL;
             icone = buildPinIcon(cor, site.inativo ? PIN_ESCALA_INATIVO : 1);
         }
-        L.marker([site.lat, site.lon], { icon: icone })
+        var marcador = L.marker([site.lat, site.lon], { icon: icone })
             .addTo(map)
             .bindTooltip(buildTooltipHtml(site), { direction: 'top', sticky: true, opacity: 0.95 })
-            // Clique no pino leva direto pra aquela fazenda na aba
-            // Fazendas (ja aberta e com scroll ate ela) -- hover continua
-            // so mostrando o tooltip de alertas, sem navegar.
             .on('click', function () {
+                if (!marcador.isTooltipOpen()) {
+                    if (ultimoTooltipAberto && ultimoTooltipAberto !== marcador) {
+                        ultimoTooltipAberto.closeTooltip();
+                    }
+                    marcador.openTooltip();
+                    ultimoTooltipAberto = marcador;
+                    return;
+                }
                 window.location.href = FAZENDAS_URL + '?site=' + encodeURIComponent(site.site);
             });
     });
