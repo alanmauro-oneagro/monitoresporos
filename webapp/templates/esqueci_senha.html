@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Esqueci minha senha - OneAgro{% endblock %}
+{% block extra_head %}
+<style>
+    body {
+        background-image: linear-gradient(rgba(10, 31, 68, 0.25), rgba(10, 31, 68, 0.25)), url("{{ url_for('static', filename='login-bg-mobile.jpg') }}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        min-height: 100vh;
+    }
+    @media (min-width: 768px) {
+        body {
+            background-image: linear-gradient(rgba(10, 31, 68, 0.25), rgba(10, 31, 68, 0.25)), url("{{ url_for('static', filename='login-bg-desktop.jpg') }}");
+            background-position: 95% center;
+        }
+    }
+    .login-card { background-color: rgba(255, 255, 255, 0.5); }
+    @media (max-width: 767.98px) {
+        .login-card { background-color: rgba(255, 255, 255, 0.65); }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-sm-8 col-md-5">
+        <div class="card shadow-sm mt-4 login-card">
+            <div class="card-body p-4">
+                <h4 class="mb-3">Esqueci minha senha</h4>
+                <p class="text-muted small">
+                    Informe seu usuario -- se ele tiver um WhatsApp cadastrado, enviamos
+                    uma senha temporaria por la (valida por 30 minutos, so' pra esse
+                    primeiro acesso).
+                </p>
+                <form method="post">
+                    <div class="mb-3">
+                        <label class="form-label">Usuario</label>
+                        <input type="text" name="username" class="form-control" required autofocus>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Enviar senha temporaria</button>
+                </form>
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('login') }}" class="small">Voltar pro login</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

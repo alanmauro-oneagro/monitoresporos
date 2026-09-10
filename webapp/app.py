@@ -14,6 +14,7 @@ import io
 import json
 import os
 import re
+import secrets
 import sqlite3
 import subprocess
 import threading
@@ -21,7 +22,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
     current_user,
@@ -78,6 +79,9 @@ NDVI_PREVIEW_TTL_SECONDS = 30 * 60  # pre-visualizacao de NDVI expira sozinha se
 DADOS_AVISO_DIAS = 7  # ate isso = verde (ok); acima = aviso (amarelo)
 DADOS_BLOQUEIO_DIAS = 15  # acima disso (16+ dias) = vermelho, WhatsApp/PDF/copia da recomendacao viram so' clima (sem doenca)
 CULTURA_TODOS = "Todos"  # valor especial do seletor "Cultura atual" -- mostra toda doenca, sem filtrar pela matriz (ver _filter_cards_by_cultura)
+SENHA_TEMPORARIA_VALIDADE_MINUTOS = 30  # "Esqueci a senha" -- ver models.set_user_temp_password/rota esqueci_senha
+ESQUECI_SENHA_COOLDOWN_SEGUNDOS = 5 * 60  # nao reenvia WhatsApp pro mesmo usuario antes disso -- protege o numero dele de spam e o bridge de abuso
+_esqueci_senha_ultima_solicitacao = {}  # {username.lower(): datetime} -- em memoria, mesmo padrao do _weather_cache
 
 
 def _dias_sem_leitura(cards):
@@ -1729,8 +1733,102 @@ def login():
         if row and check_password_hash(row["password_hash"], password):
             login_user(User(row))
             return redirect(url_for("mapa"))
+        if row and row["temp_password_hash"] and _senha_temporaria_valida(row) \
+                and check_password_hash(row["temp_password_hash"], password):
+            # Senha de "esqueci a senha" -- uso unico, apaga na hora (nao
+            # da' pra logar de novo com ela) e forca definir uma senha
+            # definitiva antes de liberar o resto do app (ver
+            # _forcar_definir_senha, o before_request logo abaixo).
+            models.clear_user_temp_password(row["id"])
+            login_user(User(row))
+            session["deve_definir_senha"] = True
+            return redirect(url_for("definir_nova_senha"))
         flash("Usuario ou senha invalidos.", "error")
     return render_template("login.html")
+
+
+def _senha_temporaria_valida(row):
+    if not row["temp_password_expires_at"]:
+        return False
+    return datetime.now() < datetime.fromisoformat(row["temp_password_expires_at"])
+
+
+def _gerar_senha_temporaria(tamanho=8):
+    # Sem 0/O, 1/l/I -- caracteres que se confundem facil lendo no
+    # celular (a senha e' recebida por WhatsApp, digitada de cabeca).
+    alfabeto = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alfabeto) for _ in range(tamanho))
+
+
+@app.route("/esqueci-senha", methods=["GET", "POST"])
+def esqueci_senha():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        chave = username.lower()
+        agora = datetime.now()
+        ultima = _esqueci_senha_ultima_solicitacao.get(chave)
+        em_cooldown = ultima and (agora - ultima).total_seconds() < ESQUECI_SENHA_COOLDOWN_SEGUNDOS
+        if not em_cooldown:
+            row = models.get_user_by_username(username)
+            if row and row["telefone"]:
+                _esqueci_senha_ultima_solicitacao[chave] = agora
+                senha_temporaria = _gerar_senha_temporaria()
+                models.set_user_temp_password(row["id"], senha_temporaria, SENHA_TEMPORARIA_VALIDADE_MINUTOS)
+                texto = (
+                    f"OneAgro Monitor: recebemos uma solicitacao para redefinir sua senha.\n\n"
+                    f"Sua senha temporaria e': *{senha_temporaria}*\n\n"
+                    f"Ela vale por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos e so' funciona uma vez -- "
+                    f"assim que voce entrar com ela, o sistema vai pedir pra criar uma senha nova.\n\n"
+                    f"Se voce nao pediu isso, pode ignorar esta mensagem -- sua senha continua a mesma."
+                )
+                ok, msg = whatsapp.send_whatsapp(row["telefone"], texto)
+                if not ok:
+                    # So' fica registrado pro admin conferir depois -- nunca
+                    # aparece pra quem pediu (evitaria vazar se o username
+                    # existe/tem telefone por diferenca de resposta).
+                    print(f"[esqueci-senha] falha ao enviar WhatsApp pra {username}: {msg}")
+        # Mensagem SEMPRE igual, exista o usuario ou nao, tenha telefone ou
+        # nao, funcione o envio ou nao -- de proposito, pra nao dar pra
+        # descobrir se um username existe so' pela resposta.
+        flash(
+            f"Se esse usuario existir e tiver WhatsApp cadastrado, enviamos uma senha "
+            f"temporaria por la (valida por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos).",
+            "success",
+        )
+        return redirect(url_for("login"))
+    return render_template("esqueci_senha.html")
+
+
+@app.before_request
+def _forcar_definir_senha():
+    # Quem logou com a senha temporaria de "esqueci a senha" precisa
+    # definir uma senha definitiva antes de usar o resto do app -- estado
+    # guardado na SESSION (nao no banco) de proposito: se o usuario fechar
+    # o navegador antes de trocar, na proxima vez ele so' pede "esqueci a
+    # senha" de novo e recomeca limpo, sem "flag" nenhuma grudada no banco.
+    if current_user.is_authenticated and session.get("deve_definir_senha") \
+            and request.endpoint not in ("definir_nova_senha", "logout", "static"):
+        return redirect(url_for("definir_nova_senha"))
+
+
+@app.route("/definir-nova-senha", methods=["GET", "POST"])
+@login_required
+def definir_nova_senha():
+    if not session.get("deve_definir_senha"):
+        return redirect(url_for("mapa"))
+    if request.method == "POST":
+        nova = request.form.get("senha_nova", "")
+        confirmar = request.form.get("senha_confirmar", "")
+        if not nova or len(nova) < 6:
+            flash("A nova senha precisa ter pelo menos 6 caracteres.", "error")
+        elif nova != confirmar:
+            flash("A confirmacao nao bate com a nova senha.", "error")
+        else:
+            models.set_user_password(int(current_user.id), nova)
+            session.pop("deve_definir_senha", None)
+            flash("Senha definida com sucesso.", "success")
+            return redirect(url_for("mapa"))
+    return render_template("definir_nova_senha.html")
 
 
 @app.route("/logout")

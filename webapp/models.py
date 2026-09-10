@@ -98,7 +98,9 @@ def init_db():
             email TEXT,
             telefone TEXT,
             whatsapp_apikey TEXT,  -- vestigio da epoca do CallMeBot, sem uso desde o whatsapp-bridge
-            whatsapp_pausado INTEGER NOT NULL DEFAULT 0
+            whatsapp_pausado INTEGER NOT NULL DEFAULT 0,
+            temp_password_hash TEXT,  -- senha temporaria de "esqueci a senha" (ver set_user_temp_password) -- NAO substitui password_hash, so' um 2o jeito de entrar ate' ser usada ou expirar
+            temp_password_expires_at TEXT
         );
 
         CREATE TABLE IF NOT EXISTS sites (
@@ -442,6 +444,14 @@ def init_db():
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
         conn.execute("ALTER TABLE users ADD COLUMN whatsapp_pausado INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN temp_password_hash TEXT")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN temp_password_expires_at TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
@@ -2364,6 +2374,38 @@ def set_user_password(user_id, password):
     conn.execute(
         "UPDATE users SET password_hash = ? WHERE id = ?",
         (generate_password_hash(password), user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_user_temp_password(user_id, senha_temporaria, validade_minutos=30):
+    """Senha de "esqueci a senha" (aba de login > Esqueci minha senha) --
+    guardada em colunas SEPARADAS de `password_hash` de proposito: a
+    senha de verdade do usuario continua valendo normalmente ate' essa
+    temporaria ser de fato usada pra logar (`app.login`, que so' cai pra
+    comparar com ela se a senha normal nao bater) ou expirar sozinha.
+    Isso evita que pedir "esqueci a senha" pro username de outra pessoa
+    derrube o acesso dela na hora -- so' manda uma mensagem de WhatsApp
+    indesejada, que ela pode ignorar."""
+    conn = get_db()
+    expira_em = (datetime.now() + timedelta(minutes=validade_minutos)).isoformat()
+    conn.execute(
+        "UPDATE users SET temp_password_hash = ?, temp_password_expires_at = ? WHERE id = ?",
+        (generate_password_hash(senha_temporaria), expira_em, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def clear_user_temp_password(user_id):
+    """Apaga a senha temporaria -- chamado assim que ela e' usada pra
+    logar com sucesso (`app.login`), garantindo uso unico (nao da' pra
+    logar duas vezes com a mesma temporaria)."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE users SET temp_password_hash = NULL, temp_password_expires_at = NULL WHERE id = ?",
+        (user_id,),
     )
     conn.commit()
     conn.close()
