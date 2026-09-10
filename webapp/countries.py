@@ -14,6 +14,7 @@ from shapely.geometry import Point, shape
 
 import inmet_stations
 import dmc_stations
+import smn_stations
 import sem_estacoes
 
 DEFAULT_COUNTRY = "BR"
@@ -55,13 +56,22 @@ COUNTRIES = {
         "station_provider": dmc_stations,
         "cloud_grid_bbox": {"lat_min": -56, "lat_max": -17, "lon_min": -76, "lon_max": -66},
     },
+    "AR": {
+        "nome": "Argentina",
+        "boundary_mode": "static_geoboundaries",
+        "boundary_files": {
+            "adm0": "boundaries/ar_adm0.geojson",
+            "adm1": "boundaries/ar_adm1.geojson",
+        },
+        "station_provider": smn_stations,  # SMN -- API publica, sem conta/token (ver smn_stations.py)
+        "cloud_grid_bbox": {"lat_min": -55, "lat_max": -21, "lon_min": -73, "lon_max": -53},
+    },
     # Resto da America do Sul -- fronteira (pais + regiao/provincia) ja'
     # pronta (geoBoundaries, mesmo processo do Chile), mas SEM estacao
     # oficial integrada ainda (ver `_pais_sem_estacoes`/`sem_estacoes.py`)
     # -- cada uma precisa de uma API de agencia meteorologica nacional
     # propria, um trabalho por pais que so' acontece quando/se uma fazenda
     # de verdade aparecer la'.
-    "AR": _pais_sem_estacoes("Argentina", "ar", {"lat_min": -55, "lat_max": -21, "lon_min": -73, "lon_max": -53}),
     "BO": _pais_sem_estacoes("Bolivia", "bo", {"lat_min": -23, "lat_max": -9, "lon_min": -69, "lon_max": -57}),
     "CO": _pais_sem_estacoes("Colombia", "co", {"lat_min": -4, "lat_max": 13, "lon_min": -79, "lon_max": -66}),
     "EC": _pais_sem_estacoes("Equador", "ec", {"lat_min": -5, "lat_max": 1.5, "lon_min": -81, "lon_max": -75}),
