@@ -9,8 +9,8 @@ Open-Meteo (`weather_forecast.py`), que ja e' global.
 Fonte: `https://www.meteorologia.gov.py/emas/data.json` (dominio proprio
 da DMH, distinto do site institucional da DINAC) -- JSON publico,
 SEM autenticacao, referenciado pela propria pagina publica de mapa de
-estacoes do orgao. Formato (confirmado via snapshot arquivado do Wayback
-Machine, 2026-06-07 -- ver ressalva abaixo):
+estacoes do orgao. Formato (confirmado com uma chamada de verdade em
+2026-09, 99 estacoes reais):
 {
   "estaciones": {
     "<codigo>": {
@@ -26,18 +26,17 @@ Machine, 2026-06-07 -- ver ressalva abaixo):
 E' o UNICO dos provedores da regiao cuja fonte ja' traz "departamento"
 nativamente (Argentina/Peru/Uruguai nao tem esse campo na fonte deles).
 
-RESSALVA IMPORTANTE: o dominio `meteorologia.gov.py` estava FORA DO AR
-(timeout de conexao, nao bloqueio de rede -- confirmado testando de duas
-redes diferentes) no momento em que este modulo foi escrito -- a
-estrutura acima foi confirmada contra um snapshot arquivado, nao uma
-chamada ao vivo. O modulo segue o mesmo padrao de degradacao graciosa de
-todo provedor aqui (`get_estacoes()` devolve [] / mantem cache antigo se
-a busca falhar) -- se o servidor continuar fora do ar, o Paraguai
-simplesmente continua funcionando como ate agora (fronteira + Open-Meteo,
-sem pino de estacao oficial), sem quebrar nada. Assim que o servico
-voltar, o catalogo passa a aparecer sozinho, sem precisar mudar nada
-aqui -- mas vale reconferir o formato real numa proxima chamada bem-
-sucedida, por garantia."""
+O dominio `meteorologia.gov.py` ficou fora do ar por um tempo durante o
+desenvolvimento deste modulo (timeout de conexao, nao bloqueio de rede
+-- confirmado testando de duas redes diferentes) -- a integracao foi
+escrita e testada contra um snapshot arquivado nesse periodo, e depois
+CONFIRMADA ao vivo assim que o servico voltou (formato bateu exatamente
+com o documentado, nomes com acento/til saem corretos via UTF-8 padrao,
+sem precisar de nenhum ajuste). Mesmo assim, segue o mesmo padrao de
+degradacao graciosa de todo provedor aqui (`get_estacoes()` devolve [] /
+mantem cache antigo se a busca falhar) -- se o servidor cair nao vai
+quebrar nada, o Paraguai so' volta a ficar sem pino de estacao oficial
+ate' o servico voltar."""
 import json
 import time
 import urllib.request

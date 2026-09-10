@@ -86,10 +86,9 @@ COUNTRIES = {
             "adm0": "boundaries/py_adm0.geojson",
             "adm1": "boundaries/py_adm1.geojson",
         },
-        # DMH -- ver dmh_paraguay_stations.py: fonte confirmada por
-        # snapshot arquivado, mas o servidor estava fora do ar no
-        # momento da integracao (degradacao graciosa -- sem estacao
-        # nenhuma ate o servico voltar, sem quebrar nada).
+        # DMH -- ver dmh_paraguay_stations.py: confirmado ao vivo (o
+        # servidor esteve fora do ar durante a integracao, mas ja voltou
+        # e o formato bateu exatamente com o documentado no modulo).
         "station_provider": dmh_paraguay_stations,
         "cloud_grid_bbox": {"lat_min": -27.5, "lat_max": -19, "lon_min": -63, "lon_max": -54},
     },
