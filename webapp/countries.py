@@ -47,6 +47,7 @@ COUNTRIES = {
         "nome": "Brasil",
         "boundary_mode": "live_ibge",  # busca ao vivo na API do IBGE, ver mapa.html/mapa_interpolado.html
         "station_provider": inmet_stations,
+        "agencia_estacoes": "INMET",  # rotulo mostrado no tooltip da estacao, ver mapa.html/mapa_interpolado.html
         "cloud_grid_bbox": {"lat_min": -34, "lat_max": 6, "lon_min": -74, "lon_max": -34},
     },
     "CL": {
@@ -58,6 +59,7 @@ COUNTRIES = {
             "adm2": "boundaries/cl_adm2.geojson",
         },
         "station_provider": dmc_stations,
+        "agencia_estacoes": "DMC",
         "cloud_grid_bbox": {"lat_min": -56, "lat_max": -17, "lon_min": -76, "lon_max": -66},
     },
     "AR": {
@@ -68,6 +70,7 @@ COUNTRIES = {
             "adm1": "boundaries/ar_adm1.geojson",
         },
         "station_provider": smn_stations,  # SMN -- API publica, sem conta/token (ver smn_stations.py)
+        "agencia_estacoes": "SMN",
         "cloud_grid_bbox": {"lat_min": -55, "lat_max": -21, "lon_min": -73, "lon_max": -53},
     },
     # Resto da America do Sul -- fronteira (pais + regiao/provincia) ja'
@@ -87,6 +90,7 @@ COUNTRIES = {
         # GeoNode do Ministerio de Planificacion, nao confundir com
         # senamhi_stations.py, que e' o SENAMHI do Peru).
         "station_provider": senamhi_bolivia_stations,
+        "agencia_estacoes": "SENAMHI",
         "cloud_grid_bbox": {"lat_min": -23, "lat_max": -9, "lon_min": -69, "lon_max": -57},
     },
     "CO": _pais_sem_estacoes("Colombia", "co", {"lat_min": -4, "lat_max": 13, "lon_min": -79, "lon_max": -66}),
@@ -103,6 +107,7 @@ COUNTRIES = {
         # servidor esteve fora do ar durante a integracao, mas ja voltou
         # e o formato bateu exatamente com o documentado no modulo).
         "station_provider": dmh_paraguay_stations,
+        "agencia_estacoes": "DMH",
         "cloud_grid_bbox": {"lat_min": -27.5, "lat_max": -19, "lon_min": -63, "lon_max": -54},
     },
     "PE": {
@@ -113,6 +118,7 @@ COUNTRIES = {
             "adm1": "boundaries/pe_adm1.geojson",
         },
         "station_provider": senamhi_stations,  # SENAMHI Peru -- ver senamhi_stations.py
+        "agencia_estacoes": "SENAMHI",
         "cloud_grid_bbox": {"lat_min": -18.5, "lat_max": 0, "lon_min": -81.5, "lon_max": -68.5},
     },
     "SR": _pais_sem_estacoes("Suriname", "sr", {"lat_min": 1.8, "lat_max": 6, "lon_min": -58, "lon_max": -54}),
@@ -124,6 +130,7 @@ COUNTRIES = {
             "adm1": "boundaries/uy_adm1.geojson",
         },
         "station_provider": inumet_stations,  # INUMET -- ver inumet_stations.py (nao confundir com o INMET do Brasil)
+        "agencia_estacoes": "INUMET",
         "cloud_grid_bbox": {"lat_min": -35, "lat_max": -30, "lon_min": -58.5, "lon_max": -53},
     },
     "VE": _pais_sem_estacoes("Venezuela", "ve", {"lat_min": 0.5, "lat_max": 12.5, "lon_min": -73.5, "lon_max": -59.5}),

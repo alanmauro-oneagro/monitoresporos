@@ -146,8 +146,9 @@
 
     function buildStationTooltipHtml(estacao) {
         var titulo = '<div class="mapa-tooltip"><div class="mapa-tt-title">📡 ' + escapeHtml(estacao.cidade) + '/' + escapeHtml(estacao.uf) + '</div>';
+        var agencia = agenciaDaEstacao(estacao);
         if (!estacao.fazendas.length) {
-            return titulo + '<div class="mapa-tt-data">Estacao INMET ' + escapeHtml(estacao.codigo) + ' -- referencia da regiao</div></div>';
+            return titulo + '<div class="mapa-tt-data">Estacao ' + escapeHtml(agencia) + ' ' + escapeHtml(estacao.codigo) + ' -- referencia da regiao</div></div>';
         }
         var fazendasHtml = estacao.fazendas.map(function (f) {
             return '<div class="mapa-tt-row">' +
@@ -158,7 +159,7 @@
         // "usada por" (nao "mais proxima de") porque numa fazenda com
         // "Interpolacao das 3 estacoes" essa pode ser a 2a ou 3a mais
         // perto, nao necessariamente a mais proxima -- ver _plotar_site.
-        return titulo + '<div class="mapa-tt-data">Estacao INMET ' + escapeHtml(estacao.codigo) + ' -- usada por:</div>' + fazendasHtml + '</div>';
+        return titulo + '<div class="mapa-tt-data">Estacao ' + escapeHtml(agencia) + ' ' + escapeHtml(estacao.codigo) + ' -- usada por:</div>' + fazendasHtml + '</div>';
     }
 
     var map = L.map('farm-map');
@@ -235,6 +236,13 @@
         return false;
     }
     var estacoes = {{ estacoes | tojson }};
+    // Nome da agencia por pais (INMET, DMC, SMN...) -- so' pro rotulo do
+    // tooltip de estacao, ver buildStationTooltipHtml. Vem de
+    // countries.py (agencia_estacoes), nao hardcoded aqui.
+    var AGENCIA_POR_PAIS = {{ agencia_por_pais | tojson }};
+    function agenciaDaEstacao(estacao) {
+        return AGENCIA_POR_PAIS[estacao.country_code] || 'Estacao oficial';
+    }
 
     // Pais de cada fazenda (aba Fazendas > Pais -- ver models.get_all_site_countries),
     // sem entrada = 'BR' (padrao). Decide quais paises alem do Brasil tem

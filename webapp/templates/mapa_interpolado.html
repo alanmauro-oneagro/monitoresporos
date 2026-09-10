@@ -192,6 +192,13 @@
 (function () {
     var sites = {{ sites_data | tojson }};
     var estacoes = {{ estacoes | tojson }};
+    // Nome da agencia por pais (INMET, DMC, SMN...) -- so' pro rotulo do
+    // tooltip de estacao, ver buildStationTooltipHtml. Vem de
+    // countries.py (agencia_estacoes), nao hardcoded aqui.
+    var AGENCIA_POR_PAIS = {{ agencia_por_pais | tojson }};
+    function agenciaDaEstacao(estacao) {
+        return AGENCIA_POR_PAIS[estacao.country_code] || 'Estacao oficial';
+    }
     var LOGO_URL = '{{ url_for("static", filename="oneagro-logo.png") }}';
     var PIN_COR_NORMAL = '#ffffff';
     // Amarelo claro -- unica marca visual de que e' uma fazenda criada
@@ -278,7 +285,7 @@
 
     function buildStationTooltipHtml(estacao) {
         return '<div class="mapa-tooltip"><div class="mapa-tt-title">📡 ' + escapeHtml(estacao.cidade) + '/' + escapeHtml(estacao.uf) + '</div>' +
-            '<div class="mapa-tt-data">Estacao INMET ' + escapeHtml(estacao.codigo) + '</div></div>';
+            '<div class="mapa-tt-data">Estacao ' + escapeHtml(agenciaDaEstacao(estacao)) + ' ' + escapeHtml(estacao.codigo) + '</div></div>';
     }
 
     var map = L.map('farm-map');

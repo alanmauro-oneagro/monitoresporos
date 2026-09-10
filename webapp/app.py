@@ -2398,10 +2398,19 @@ def _country_map_context():
             for nivel, caminho in info["boundary_files"].items()
         }
     cloud_bboxes = {code: info["cloud_grid_bbox"] for code, info in countries.COUNTRIES.items()}
+    # Nome da agencia de cada pais (INMET, DMC, SMN...) -- so' pro rotulo
+    # do tooltip de estacao no mapa (ver mapa.html/mapa_interpolado.html),
+    # nao muda nenhuma logica de escolha/distancia. Pais sem provedor de
+    # estacoes de verdade (`sem_estacoes.py`) nunca aparece aqui, ja que
+    # nunca gera uma estacao pra rotular.
+    agencia_por_pais = {
+        code: info["agencia_estacoes"] for code, info in countries.COUNTRIES.items() if "agencia_estacoes" in info
+    }
     return {
         "country_by_site": models.get_all_site_countries(),
         "country_boundary_urls": country_boundary_urls,
         "cloud_bboxes": cloud_bboxes,
+        "agencia_por_pais": agencia_por_pais,
         # Todo pais do registro (nao so os ativos) -- usado pra restringir
         # a busca de localidade (Nominatim) do Mapa Interpolado aos paises
         # que o app atende, sem travar num so' -- precisa incluir um pais
@@ -2433,12 +2442,17 @@ def mapa():
     active_countries = countries.active_country_codes(site_countries)
     estacoes_catalogo = {}
     for code in active_countries:
-        estacoes_catalogo.update({e["codigo"]: e for e in countries.get_country(code)["station_provider"].get_estacoes()})
+        # "country_code" carimbado em cada estacao aqui -- usado so' pra
+        # rotular a agencia certa no tooltip (ver mapa.html), nao muda
+        # nenhuma logica de escolha/distancia.
+        for e in countries.get_country(code)["station_provider"].get_estacoes():
+            estacoes_catalogo[e["codigo"]] = {**e, "country_code": code}
     sites_data = []
     estacoes_by_codigo = {}
 
     def _plotar_site(site, lat, lon, cards, tipo=""):
-        provider = countries.get_country(site_countries.get(site, countries.DEFAULT_COUNTRY))["station_provider"]
+        pais_da_fazenda = site_countries.get(site, countries.DEFAULT_COUNTRY)
+        provider = countries.get_country(pais_da_fazenda)["station_provider"]
         escolha = overrides.get(site)
         codigo_escolhido = escolha["codigo"] if escolha else None
         estacao = None
@@ -2447,11 +2461,10 @@ def mapa():
             # Fazendas) -- mostra as 3 estacoes de VERDADE usadas (nao so'
             # a mais perto), cada uma com essa fazenda entre quem ela
             # alimenta (mesmo calculo de `_weather_coords_all`).
-            pais = site_countries.get(site, countries.DEFAULT_COUNTRY)
-            for e in countries.estacoes_mais_proximas_global(lat, lon, pais, n=3):
+            for e in countries.estacoes_mais_proximas_global(lat, lon, pais_da_fazenda, n=3):
                 entry = estacoes_by_codigo.setdefault(e["codigo"], {
                     "codigo": e["codigo"], "cidade": e["cidade"], "uf": e["uf"],
-                    "lat": e["lat"], "lon": e["lon"], "fazendas": [],
+                    "lat": e["lat"], "lon": e["lon"], "country_code": e["country_code"], "fazendas": [],
                 })
                 entry["fazendas"].append({
                     "site": site, "nome_exibicao": _nome_exibicao(site), "distancia_km": e["distancia_km"],
@@ -2465,6 +2478,8 @@ def mapa():
             estacao = {**base, "distancia_km": round(distancia, 1)}
         else:
             estacao = provider.estacao_mais_proxima(lat, lon)
+            if estacao:
+                estacao = {**estacao, "country_code": pais_da_fazenda}
         # Mesmo limiar que ja esconde as caixas de doenca no Painel (ver
         # _nivel_dados_defasados/DADOS_BLOQUEIO_DIAS) -- fazenda sem leitura
         # nova ha mais de 15 dias entra como "inativa" no mapa: pino menor
@@ -2485,7 +2500,7 @@ def mapa():
         if estacao:
             entry = estacoes_by_codigo.setdefault(estacao["codigo"], {
                 "codigo": estacao["codigo"], "cidade": estacao["cidade"], "uf": estacao["uf"],
-                "lat": estacao["lat"], "lon": estacao["lon"], "fazendas": [],
+                "lat": estacao["lat"], "lon": estacao["lon"], "country_code": estacao.get("country_code"), "fazendas": [],
             })
             entry["fazendas"].append({
                 "site": site, "nome_exibicao": _nome_exibicao(site), "distancia_km": estacao["distancia_km"],
@@ -2602,7 +2617,9 @@ def mapa_interpolado():
     active_interpolado = countries.active_country_codes(site_countries) | countries.paises_com_estacoes()
     estacoes = []
     for code in active_interpolado:
-        estacoes.extend(countries.get_country(code)["station_provider"].get_estacoes())
+        # "country_code" carimbado em cada estacao -- so' pra rotular a
+        # agencia certa no tooltip (ver mapa_interpolado.html).
+        estacoes.extend({**e, "country_code": code} for e in countries.get_country(code)["station_provider"].get_estacoes())
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, estacoes=estacoes,
