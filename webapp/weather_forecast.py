@@ -206,6 +206,38 @@ def get_cloud_forecast_grid(lats, lons):
     return saida
 
 
+def get_rain_forecast_grid(lats, lons):
+    """Igual `get_cloud_forecast_grid`, so' que chuva acumulada (mm) em
+    vez de cobertura de nuvens -- usada pela camada de chuva do Mapa
+    Interpolado (ver `/mapa-interpolado/chuva-grade`), mesmo campo
+    `precipitation_sum` que `get_weather_forecast` ja usa como
+    `chuva_mm` por dia."""
+    params = {
+        "latitude": ",".join(str(v) for v in lats),
+        "longitude": ",".join(str(v) for v in lons),
+        "daily": "precipitation_sum",
+        "forecast_days": 6,
+        "timezone": "auto",
+    }
+    url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
+    try:
+        with urllib.request.urlopen(url, timeout=45) as resp:
+            resultados = json.load(resp)
+    except Exception:
+        return []
+    if not isinstance(resultados, list):
+        resultados = [resultados]
+    saida = []
+    for r in resultados:
+        daily = r.get("daily", {})
+        saida.append({
+            "lat": r.get("latitude"),
+            "lon": r.get("longitude"),
+            "chuva_mm_por_dia": daily.get("precipitation_sum", [])[:6],
+        })
+    return saida
+
+
 def get_historico_por_dia(lat, lon, data_inicio, data_fim):
     """Chuva (mm) e direcao de vento (graus) hora a hora, de verdade (nao
     previsao), entre `data_inicio` e `data_fim` (inclusive, "YYYY-MM-DD"),

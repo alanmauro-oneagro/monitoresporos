@@ -2684,6 +2684,23 @@ def nuvens_grade():
     return jsonify(weather_forecast.get_cloud_forecast_grid(lats, lons))
 
 
+@app.route("/mapa-interpolado/chuva-grade", methods=["POST"])
+@login_required
+def chuva_grade():
+    """Mesma mecanica de `nuvens_grade` (grade em lote, uma unica chamada
+    Open-Meteo), so' que chuva acumulada (mm) em vez de nuvens -- usada
+    pelo heatmap de chuva do Mapa Interpolado (ver
+    weather_forecast.get_rain_forecast_grid)."""
+    corpo = request.get_json(silent=True) or {}
+    lats = corpo.get("lats") or []
+    lons = corpo.get("lons") or []
+    if not lats or len(lats) != len(lons):
+        abort(400)
+    if len(lats) > 600:
+        abort(400)
+    return jsonify(weather_forecast.get_rain_forecast_grid(lats, lons))
+
+
 @app.route("/mapa-interpolado/adicionar", methods=["POST"])
 @admin_required
 def adicionar_ponto_virtual():
