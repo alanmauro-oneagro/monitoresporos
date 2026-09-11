@@ -4653,14 +4653,68 @@ def _save_export_copy_local(conteudo, filename):
 @app.route("/admin/exportar")
 @alan_mauro_required
 def admin_exportar():
+    """Pagina "Exportar" -- reune num lugar so' o download do Excel
+    completo (ver `admin_exportar_download`) e os 2 relatorios que antes
+    eram abas separadas no menu (Rel. WhatsApp/Rel. Fungicidas, pedido
+    explicito do usuario pra reduzir de 3 abas pra 1): historico de
+    envios de WhatsApp (com os mesmos filtros de fazenda/so-falhas de
+    antes) e a visao consolidada de fungicidas por cultura. So'
+    `ALAN_MAURO_USERNAME` tem acesso (aba escondida no menu pra qualquer
+    outra conta -- ver base.html)."""
+    site_name = request.args.get("site") or None
+    apenas_falhas = request.args.get("falhas") == "1"
+    logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas)
+    for l in logs:
+        l["site_nome"] = _nome_exibicao(l["site_name"])
+    sites = sorted(set(read_sites()) | models.virtual_farm_site_names())
+    nomes_exibicao = {s: _nome_exibicao(s) for s in sites}
+    todos_destinos = models.get_all_sites_whatsapp_recipients()
+    cadastro = []
+    for site in ([site_name] if site_name else sites):
+        for r in todos_destinos.get(site, []):
+            cadastro.append({"site": site, "site_nome": _nome_exibicao(site), "destinatario": r["username"], "telefone": r["telefone"]})
+
+    overrides = models.get_all_fungicida_overrides()
+    registro_bloqueado = models.get_all_fungicida_registro_bloqueado()
+    culturas_ativas = models.get_culturas_ativas()
+    translations = _load_translations()
+    linhas_fungicidas = []
+    for doenca_en, info in sorted(translations.items(), key=lambda kv: kv[1]["nome_pt"]):
+        rec = fungicida_data.get_recomendacao(doenca_en)
+        if not rec:
+            continue
+        grupo = rec["quimicos"]
+        n = len(grupo["itens"])
+        ordem = models.get_fungicida_ordem(doenca_en, "quimico", n)
+        for idx in ordem:
+            item = grupo["itens"][idx]
+            override = overrides.get((doenca_en, "quimico", idx))
+            ingrediente = override["ingrediente"] if override else item["ingrediente"]
+            culturas_bloqueadas = registro_bloqueado.get((doenca_en, "quimico", idx), set())
+            linhas_fungicidas.append({
+                "doenca": info["nome_pt"],
+                "ingrediente": ingrediente,
+                "culturas": [(c, c not in culturas_bloqueadas) for c in culturas_ativas],
+            })
+
+    return render_template(
+        "admin_exportar.html",
+        logs=logs, sites=sites, nomes_exibicao=nomes_exibicao, cadastro=cadastro,
+        site_selecionado=site_name or "", apenas_falhas=apenas_falhas,
+        linhas_fungicidas=linhas_fungicidas, culturas_ativas=culturas_ativas,
+    )
+
+
+@app.route("/admin/exportar/download")
+@alan_mauro_required
+def admin_exportar_download():
     """Relatorio Excel com o maximo de informacao possivel do site --
     usuarios/subordinados, cadastro de fazendas (pais/estacao/nome de
     exibicao), Fazendas/Manejo das 3 safras, doencas (traducao/
     germinacao/culturas/paises), culturas, leituras atuais, WhatsApp
     (historico/destinatarios/agenda), fungicidas (biblioteca completa) e
-    relatorio diario de clima (ver `export_excel.build_workbook`). So
-    `ALAN_MAURO_USERNAME` tem acesso (aba escondida no menu pra qualquer
-    outra conta -- ver base.html)."""
+    relatorio diario de clima (ver `export_excel.build_workbook`) --
+    botao "Baixar Excel completo" na pagina `admin_exportar`."""
     buffer = export_excel.build_workbook()
     filename = f"OneAgro_Export_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     conteudo = buffer.getvalue()
@@ -4738,67 +4792,6 @@ def admin_whatsapp_reset():
     return _save_response(
         "Numero desconectado -- escaneie o novo QR code pra conectar outro." if ok else f"Falha ao desconectar: {mensagem}",
         "admin_whatsapp", ok=ok,
-    )
-
-
-@app.route("/admin/relatorios/whatsapp")
-@alan_mauro_required
-def admin_relatorio_whatsapp():
-    """Historico de envios de WhatsApp (data/hora, fazenda, destinatario,
-    sucesso ou falha) -- um log por numero, alimentado por
-    `_send_site_whatsapp` (manual, "selecionados" e agendado, ver
-    `models.log_whatsapp_envio`)."""
-    site_name = request.args.get("site") or None
-    apenas_falhas = request.args.get("falhas") == "1"
-    logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas)
-    for l in logs:
-        l["site_nome"] = _nome_exibicao(l["site_name"])
-    sites = sorted(set(read_sites()) | models.virtual_farm_site_names())
-    nomes_exibicao = {s: _nome_exibicao(s) for s in sites}
-    todos_destinos = models.get_all_sites_whatsapp_recipients()
-    cadastro = []
-    for site in ([site_name] if site_name else sites):
-        for r in todos_destinos.get(site, []):
-            cadastro.append({"site": site, "site_nome": _nome_exibicao(site), "destinatario": r["username"], "telefone": r["telefone"]})
-    return render_template(
-        "admin_relatorio_whatsapp.html", logs=logs, sites=sites, nomes_exibicao=nomes_exibicao, cadastro=cadastro,
-        site_selecionado=site_name or "", apenas_falhas=apenas_falhas,
-    )
-
-
-@app.route("/admin/relatorios/fungicidas")
-@alan_mauro_required
-def admin_relatorio_fungicidas():
-    """Visao consolidada de todo quimico da biblioteca de Fungicidas e
-    quais culturas ativas estao marcadas como "Registrado para" --
-    mesmo dado da aba Fungicidas (checkboxes), so' que todo mundo numa
-    tabela so' em vez de abrir card por card."""
-    overrides = models.get_all_fungicida_overrides()
-    registro_bloqueado = models.get_all_fungicida_registro_bloqueado()
-    culturas_ativas = models.get_culturas_ativas()
-    translations = _load_translations()
-
-    linhas = []
-    for doenca_en, info in sorted(translations.items(), key=lambda kv: kv[1]["nome_pt"]):
-        rec = fungicida_data.get_recomendacao(doenca_en)
-        if not rec:
-            continue
-        grupo = rec["quimicos"]
-        n = len(grupo["itens"])
-        ordem = models.get_fungicida_ordem(doenca_en, "quimico", n)
-        for idx in ordem:
-            item = grupo["itens"][idx]
-            override = overrides.get((doenca_en, "quimico", idx))
-            ingrediente = override["ingrediente"] if override else item["ingrediente"]
-            culturas_bloqueadas = registro_bloqueado.get((doenca_en, "quimico", idx), set())
-            linhas.append({
-                "doenca": info["nome_pt"],
-                "ingrediente": ingrediente,
-                "culturas": [(c, c not in culturas_bloqueadas) for c in culturas_ativas],
-            })
-
-    return render_template(
-        "admin_relatorio_fungicidas.html", linhas=linhas, culturas_ativas=culturas_ativas,
     )
 
 

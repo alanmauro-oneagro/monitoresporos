@@ -116,7 +116,7 @@
         <button type="button" class="navbar-toggler" id="navToggleBtn" aria-label="Abrir menu">
             <span class="navbar-toggler-icon"></span>
         </button>
-        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'alertas_clima', 'admin_whatsapp', 'admin_relatorio_whatsapp', 'admin_relatorio_fungicidas', 'admin_exportar'] %}
+        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'alertas_clima', 'admin_whatsapp', 'admin_exportar', 'admin_exportar_download'] %}
         <div class="d-none d-lg-flex flex-column flex-lg-row gap-2 gap-lg-3 align-items-lg-center justify-content-lg-end w-100" id="mainNavMenu">
             <a class="nav-link text-white{% if request.endpoint == 'mapa' %} tab-ativa{% endif %}" href="{{ url_for('mapa') }}">Mapa</a>
             <a class="nav-link text-white{% if request.endpoint == 'fazendas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas') }}">Fazendas</a>
@@ -141,8 +141,6 @@
                     {% if current_user.username == 'Alan Mauro' %}
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'alertas_clima' %} tab-ativa{% endif %}" href="{{ url_for('alertas_clima') }}">Alertas Clima</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('admin_whatsapp') }}">WhatsApp</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_relatorio_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('admin_relatorio_whatsapp') }}">Rel. WhatsApp</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_relatorio_fungicidas' %} tab-ativa{% endif %}" href="{{ url_for('admin_relatorio_fungicidas') }}">Rel. Fungicidas</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_exportar' %} tab-ativa{% endif %}" href="{{ url_for('admin_exportar') }}">Exportar</a>
                     {% endif %}
                 </div>

@@ -1,7 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Relatorios - OneAgro{% endblock %}
+{% block title %}Exportar - OneAgro{% endblock %}
 {% block content %}
-<h4 class="mb-2">Relatorio de Envios por WhatsApp</h4>
+<h4 class="mb-2">Exportar</h4>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+        <a href="{{ url_for('admin_exportar_download') }}" class="btn btn-success">📊 Baixar Excel completo</a>
+        <p class="text-muted small mb-0">
+            Usuarios/subordinados, cadastro de fazendas, Fazendas/Manejo
+            das 3 safras, doencas, culturas, leituras atuais, WhatsApp
+            (historico/destinatarios/agenda), fungicidas (biblioteca
+            completa) e relatorio diario de clima -- tudo numa planilha
+            so'.
+        </p>
+    </div>
+</div>
+
+<h5 class="mb-2">Relatorio de Envios por WhatsApp</h5>
 
 <form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
     <div>
@@ -63,7 +78,7 @@
     </div>
 </div>
 
-<div class="card shadow-sm">
+<div class="card shadow-sm mb-4">
     <div class="card-body">
         <h6 class="mb-2">Quem esta cadastrado pra receber</h6>
         {% if not cadastro %}
@@ -89,7 +104,7 @@
     </div>
 </div>
 
-<p class="text-muted small mt-4 pt-3 border-top">
+<p class="text-muted small mb-4 pt-3 border-top">
     O historico registra toda tentativa de envio -- manual (botao "Enviar
     por WhatsApp" ou "Enviar selecionados") ou agendado (dias marcados na
     aba Fazendas). Estacao com leitura velha demais nao bloqueia mais o
@@ -99,5 +114,56 @@
     detalhe explica o motivo. A tabela "Quem esta cadastrado pra receber"
     mostra o cadastro atual (aba Usuarios), independente de ja ter
     recebido algo ou nao.
+</p>
+
+<h5 class="mb-2">Relatorio de Registro por Cultura (Fungicidas)</h5>
+
+{% if not linhas_fungicidas %}
+<div class="alert alert-info">Nenhum quimico cadastrado ainda na biblioteca de Fungicidas.</div>
+{% else %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Doenca</th>
+                        <th>Quimico</th>
+                        {% for c in culturas_ativas %}
+                        <th class="text-center">{{ c }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in linhas_fungicidas %}
+                    <tr>
+                        <td class="text-nowrap">{{ l.doenca }}</td>
+                        <td>{{ l.ingrediente }}</td>
+                        {% for cultura, registrado in l.culturas %}
+                        <td class="text-center">
+                            {% if registrado %}
+                            <span class="text-success" title="Registrado para {{ cultura }}">✅</span>
+                            {% else %}
+                            <span class="text-danger" title="Sem registro confirmado para {{ cultura }}">⛔</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<p class="text-muted small mt-4 pt-3 border-top">
+    Uma linha por quimico da biblioteca (aba Fungicidas), com o mesmo
+    estado dos checkboxes "Registrado para" de cada item -- ✅ = marcado
+    (aparece nas Recomendacoes/PDF/WhatsApp pra fazendas com aquela
+    cultura), ⛔ = desmarcado (sem registro confirmado, some pra essa
+    cultura). Culturas sem nenhuma doenca associada ainda vem todas ✅ por
+    padrao (ninguem desmarcou). Pra editar, va na aba
+    <strong>Fungicidas</strong>.
 </p>
 {% endblock %}
