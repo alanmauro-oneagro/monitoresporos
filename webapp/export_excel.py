@@ -530,6 +530,21 @@ def build_workbook():
     wb = Workbook()
     wb.remove(wb.active)
 
+    # Primeira aba de proposito (pedido explicito do usuario) -- e' a
+    # que junta clima/doenca/atividades de safra, a mais util de abrir
+    # primeiro.
+    _try_sheet(
+        wb, "Relatorio Diario",
+        ["Fazenda", "Data", "Estacao", "Temp min (C)", "Temp max (C)"]
+        + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
+        + [
+            "Vento predominante", "Doenca", "Concentracao (esporos/m3)", "Risco de Infeccao (%)",
+            "Limite Atencao (esporos/m3)", "Limite Perigo (esporos/m3)", "Limite Maximo (esporos/m3)",
+            "Atividade", "Detalhe da Atividade",
+        ],
+        _relatorio_diario_rows,
+    )
+
     _try_sheet(
         wb, "Usuarios",
         ["Usuario", "Tipo", "Dono (se subordinado)", "Email", "Telefone", "Admin", "Fazendas liberadas", "Recebe relatorio"],
@@ -563,17 +578,6 @@ def build_workbook():
         _add_fungicidas_sheet(wb, models.get_culturas_ativas())
     except Exception as exc:
         _write_sheet(wb, "Fungicidas (erro)", ["Erro"], [[str(exc)]])
-    _try_sheet(
-        wb, "Relatorio Diario",
-        ["Fazenda", "Data", "Estacao", "Temp min (C)", "Temp max (C)"]
-        + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
-        + [
-            "Vento predominante", "Doenca", "Concentracao (esporos/m3)", "Risco de Infeccao (%)",
-            "Limite Atencao (esporos/m3)", "Limite Perigo (esporos/m3)", "Limite Maximo (esporos/m3)",
-            "Atividade", "Detalhe da Atividade",
-        ],
-        _relatorio_diario_rows,
-    )
 
     buffer = io.BytesIO()
     wb.save(buffer)
