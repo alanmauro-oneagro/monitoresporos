@@ -38,35 +38,25 @@ mantem cache antigo se a busca falhar) -- se o servidor cair nao vai
 quebrar nada, o Paraguai so' volta a ficar sem pino de estacao oficial
 ate' o servico voltar."""
 import json
-import time
 import urllib.request
 
 import inmet_stations  # reaproveita a mesma matematica de distancia (_haversine_km)
+import estacoes_cache_util
 
 ESTACOES_URL = "https://www.meteorologia.gov.py/emas/data.json"
-CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
 
-_cache = {"timestamp": 0, "estacoes": []}
+_cache = {"timestamp": 0, "estacoes": [], "ultima_tentativa": 0}
 
 
 def _fetch_estacoes_raw():
     req = urllib.request.Request(ESTACOES_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         data = json.load(resp)
     return data.get("estaciones", {})
 
 
-def get_estacoes():
-    """Lista de estacoes da DMH (codigo, cidade, uf/departamento, lat,
-    lon) -- cache em memoria por 24h; mantem o cache antigo se a busca
-    falhar (servidor fora do ar, ver ressalva no docstring do modulo)."""
-    now = time.time()
-    if _cache["estacoes"] and now - _cache["timestamp"] < CACHE_TTL_SECONDS:
-        return _cache["estacoes"]
-    try:
-        raw = _fetch_estacoes_raw()
-    except Exception:
-        return _cache["estacoes"]
+def _fetch_estacoes():
+    raw = _fetch_estacoes_raw()
     estacoes = []
     codigos_vistos = set()
     for item in raw.values():
@@ -85,11 +75,15 @@ def get_estacoes():
             "lat": lat,
             "lon": lon,
         })
-    if not estacoes:
-        return _cache["estacoes"]
-    _cache["estacoes"] = estacoes
-    _cache["timestamp"] = now
     return estacoes
+
+
+def get_estacoes():
+    """Lista de estacoes da DMH (codigo, cidade, uf/departamento, lat,
+    lon) -- cache em memoria por 24h (ou o catalogo antigo, com backoff,
+    se a busca falhar -- servidor ja visto fora do ar, ver ressalva no
+    docstring do modulo e estacoes_cache_util.cached_fetch)."""
+    return estacoes_cache_util.cached_fetch(_cache, _fetch_estacoes)
 
 
 def estacoes_mais_proximas(lat, lon, n=2):

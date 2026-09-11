@@ -2440,13 +2440,22 @@ def mapa():
     # de um pais (ex. DMC) se realmente tiver fazenda la', pra nao gastar
     # a chamada (e exigir credencial) sem necessidade.
     active_countries = countries.active_country_codes(site_countries)
+    # Busca em paralelo (thread por pais) -- sequencial somaria o timeout
+    # de cada provedor sempre que o cache de 24h expirasse (bug real de
+    # performance, aba Mapa chegando a levar 40+ segundos com um pais
+    # fora do ar, ver estacoes_cache_util.py).
     estacoes_catalogo = {}
-    for code in active_countries:
+
+    def _catalogo_do_pais(code):
         # "country_code" carimbado em cada estacao aqui -- usado so' pra
         # rotular a agencia certa no tooltip (ver mapa.html), nao muda
         # nenhuma logica de escolha/distancia.
-        for e in countries.get_country(code)["station_provider"].get_estacoes():
-            estacoes_catalogo[e["codigo"]] = {**e, "country_code": code}
+        return [(e["codigo"], {**e, "country_code": code}) for e in countries.get_country(code)["station_provider"].get_estacoes()]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(active_countries), 1)) as executor:
+        for lista in executor.map(_catalogo_do_pais, active_countries):
+            for codigo, estacao in lista:
+                estacoes_catalogo[codigo] = estacao
     sites_data = []
     estacoes_by_codigo = {}
 
@@ -2615,11 +2624,18 @@ def mapa_interpolado():
     # cadastrados so' com fronteira pronta (sem estacao/uso ainda), isso
     # baixaria ~14MB de contorno por visita a toa.
     active_interpolado = countries.active_country_codes(site_countries) | countries.paises_com_estacoes()
-    estacoes = []
-    for code in active_interpolado:
+
+    # Busca em paralelo (thread por pais) -- mesmo motivo do /mapa (ver
+    # comentario la'): sequencial somaria o timeout de cada provedor.
+    def _catalogo_do_pais(code):
         # "country_code" carimbado em cada estacao -- so' pra rotular a
         # agencia certa no tooltip (ver mapa_interpolado.html).
-        estacoes.extend({**e, "country_code": code} for e in countries.get_country(code)["station_provider"].get_estacoes())
+        return [{**e, "country_code": code} for e in countries.get_country(code)["station_provider"].get_estacoes()]
+
+    estacoes = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(active_interpolado), 1)) as executor:
+        for lista in executor.map(_catalogo_do_pais, active_interpolado):
+            estacoes.extend(lista)
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, estacoes=estacoes,

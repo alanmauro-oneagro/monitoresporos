@@ -22,14 +22,13 @@ ignoradas -- 118 de 120 estacoes reais parseiam certo (confirmado numa
 chamada de verdade em 2026-09)."""
 import io
 import re
-import time
 import urllib.request
 import zipfile
 
 import inmet_stations  # reaproveita a mesma matematica de distancia (_haversine_km)
+import estacoes_cache_util
 
 ESTACOES_URL = "https://ssl.smn.gob.ar/dpd/zipopendata.php?dato=estaciones"
-CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
 
 # Ancora os 6 numeros (gr/min da latitude, gr/min da longitude, altura,
 # numero da estacao) + o codigo OACI opcional (algumas estacoes, ex.
@@ -42,12 +41,12 @@ _LINHA_RE = re.compile(
     r"(?P<altura>-?\d+)\s+(?P<nro>\d+)\s*(?P<oaci>[A-Za-z]{4})?\s*$"
 )
 
-_cache = {"timestamp": 0, "estacoes": []}
+_cache = {"timestamp": 0, "estacoes": [], "ultima_tentativa": 0}
 
 
 def _fetch_texto():
     req = urllib.request.Request(ESTACOES_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         raw = resp.read()
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
         conteudo = zf.read(zf.namelist()[0])
@@ -78,24 +77,18 @@ def _parse_linha(linha):
     }
 
 
+def _fetch_estacoes():
+    texto = _fetch_texto()
+    linhas = texto.splitlines()[2:]  # pula as 2 linhas de cabecalho (nomes + unidades)
+    return [e for e in (_parse_linha(l) for l in linhas if l.strip()) if e]
+
+
 def get_estacoes():
     """Lista de estacoes do SMN (codigo, cidade, uf/provincia, lat, lon)
-    -- cache em memoria por 24h; mantem o cache antigo se a busca falhar
-    (rede fora do ar, servidor do SMN instavel -- ja visto acontecer)."""
-    now = time.time()
-    if _cache["estacoes"] and now - _cache["timestamp"] < CACHE_TTL_SECONDS:
-        return _cache["estacoes"]
-    try:
-        texto = _fetch_texto()
-    except Exception:
-        return _cache["estacoes"]
-    linhas = texto.splitlines()[2:]  # pula as 2 linhas de cabecalho (nomes + unidades)
-    estacoes = [e for e in (_parse_linha(l) for l in linhas if l.strip()) if e]
-    if not estacoes:
-        return _cache["estacoes"]
-    _cache["estacoes"] = estacoes
-    _cache["timestamp"] = now
-    return estacoes
+    -- cache em memoria por 24h (ou o catalogo antigo, com backoff, se a
+    busca falhar -- servidor do SMN ja visto instavel -- ver
+    estacoes_cache_util.cached_fetch)."""
+    return estacoes_cache_util.cached_fetch(_cache, _fetch_estacoes)
 
 
 def estacoes_mais_proximas(lat, lon, n=2):

@@ -28,10 +28,10 @@ antigo que os outros provedores da regiao, mas e' o unico catalogo
 nacional publico encontrado; nao ha' indicio de uma fonte mais recente
 com API aberta."""
 import json
-import time
 import urllib.request
 
 import inmet_stations  # reaproveita a mesma matematica de distancia (_haversine_km)
+import estacoes_cache_util
 
 ESTACOES_URL = (
     "https://geonode.planificacion.gob.bo/geoserver/ows"
@@ -39,29 +39,19 @@ ESTACOES_URL = (
     "&typename=geonode%3Aestaciones_meteorologicas_4bbbdeee"
     "&outputFormat=json&srs=EPSG%3A4326&srsName=EPSG%3A4326"
 )
-CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
 
-_cache = {"timestamp": 0, "estacoes": []}
+_cache = {"timestamp": 0, "estacoes": [], "ultima_tentativa": 0}
 
 
 def _fetch_estacoes_raw():
     req = urllib.request.Request(ESTACOES_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:
         data = json.load(resp)
     return data.get("features", [])
 
 
-def get_estacoes():
-    """Lista de estacoes do SENAMHI Bolivia (codigo, cidade, uf/
-    departamento, lat, lon) -- cache em memoria por 24h; mantem o cache
-    antigo se a busca falhar."""
-    now = time.time()
-    if _cache["estacoes"] and now - _cache["timestamp"] < CACHE_TTL_SECONDS:
-        return _cache["estacoes"]
-    try:
-        raw = _fetch_estacoes_raw()
-    except Exception:
-        return _cache["estacoes"]
+def _fetch_estacoes():
+    raw = _fetch_estacoes_raw()
     estacoes = []
     codigos_vistos = set()
     for feature in raw:
@@ -81,11 +71,15 @@ def get_estacoes():
             "lat": lat,
             "lon": lon,
         })
-    if not estacoes:
-        return _cache["estacoes"]
-    _cache["estacoes"] = estacoes
-    _cache["timestamp"] = now
     return estacoes
+
+
+def get_estacoes():
+    """Lista de estacoes do SENAMHI Bolivia (codigo, cidade, uf/
+    departamento, lat, lon) -- cache em memoria por 24h (ou o catalogo
+    antigo, com backoff, se a busca falhar -- ver
+    estacoes_cache_util.cached_fetch)."""
+    return estacoes_cache_util.cached_fetch(_cache, _fetch_estacoes)
 
 
 def estacoes_mais_proximas(lat, lon, n=2):

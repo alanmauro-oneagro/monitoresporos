@@ -7,6 +7,7 @@ precisar mexer nas rotas/templates que ja iteram sobre `COUNTRIES`.
 `station_provider` e' uma referencia direta ao modulo (nao uma string),
 pra `/mapa` e `/mapa-interpolado` chamarem `.get_estacoes()`/
 `.estacao_mais_proxima()` genericamente sem if/elif por pais."""
+import concurrent.futures
 import json
 from pathlib import Path
 
@@ -225,11 +226,22 @@ def estacoes_mais_proximas_global(lat, lon, site_country, n=2):
     PROVEDOR daquela estacao especifica -- usado por
     `set_weather_station_override` pra saber em qual catalogo procurar
     o codigo de novo depois; pode ser igual ou diferente de
-    `site_country`)."""
+    `site_country`).
+
+    Busca em PARALELO (thread por pais) -- com 7+ provedores reais, cada
+    um uma chamada de rede (com o proprio timeout e cache/backoff, ver
+    `estacoes_cache_util.py`), fazer sequencial somaria o tempo de todos;
+    em paralelo, o tempo total fica limitado ao mais lento so' (bug real
+    de performance descoberto medindo o site -- aba Mapa levando 40+
+    segundos com um pais fora do ar)."""
+    def _buscar(item):
+        code, info = item
+        return [{**e, "country_code": code} for e in info["station_provider"].estacoes_mais_proximas(lat, lon, n=n)]
+
     candidatas = []
-    for code, info in COUNTRIES.items():
-        for e in info["station_provider"].estacoes_mais_proximas(lat, lon, n=n):
-            candidatas.append({**e, "country_code": code})
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(COUNTRIES)) as executor:
+        for lista in executor.map(_buscar, COUNTRIES.items()):
+            candidatas.extend(lista)
     candidatas = [
         e for e in candidatas
         if e["country_code"] == site_country or e["distancia_km"] <= DISTANCIA_MAXIMA_ESTACAO_VIZINHA_KM
@@ -262,5 +274,17 @@ def paises_com_estacoes():
     de verdade la (`active_country_codes`). Usado junto com
     `active_country_codes` pra decidir quais paises mostrar mesmo sem
     fazenda ainda: "mostra se ja tem estacao oficial de verdade pra
-    referenciar", pedido explicito do usuario."""
-    return {code for code, info in COUNTRIES.items() if info["station_provider"].get_estacoes()}
+    referenciar", pedido explicito do usuario.
+
+    Busca em PARALELO (thread por pais) -- mesmo motivo de
+    `estacoes_mais_proximas_global`: sequencial somaria o timeout de
+    cada provedor (chega a acontecer todo dia -- o cache de 24h expira
+    e essa funcao e' chamada de novo em toda visita a /mapa e
+    /mapa-interpolado)."""
+    def _tem_estacoes(item):
+        code, info = item
+        return code if info["station_provider"].get_estacoes() else None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(COUNTRIES)) as executor:
+        resultados = executor.map(_tem_estacoes, COUNTRIES.items())
+    return {code for code in resultados if code}

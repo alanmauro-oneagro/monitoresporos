@@ -14,37 +14,32 @@ interior/Norte tem so' estacao convencional por perto, entao usar so' "T"
 deixava essas fazendas sem estacao oficial de referencia dentro da distancia
 razoavel. Isso NAO muda de onde vem o dado de clima (continua 100%
 Open-Meteo) -- so' aumenta a densidade do catalogo usado pro rotulo/mapa."""
-import json
 import math
-import time
+import json
 import urllib.request
+
+import estacoes_cache_util
 
 ESTACOES_URL = "https://apitempo.inmet.gov.br/estacoes/{tipo}"
 TIPOS_REDE = ("T", "M")
-CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
-_cache = {"timestamp": 0, "estacoes": []}
+_cache = {"timestamp": 0, "estacoes": [], "ultima_tentativa": 0}
 
 
 def _fetch_estacoes(tipo):
     req = urllib.request.Request(
         ESTACOES_URL.format(tipo=tipo), headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
     )
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         return json.load(resp)
 
 
-def get_estacoes():
-    """Lista de estacoes do INMET em operacao, automaticas + convencionais
-    (codigo, cidade, uf, lat, lon) -- cache em memoria por 24h; mantem o
-    cache antigo se AS DUAS redes falharem na busca. Se so' uma rede
-    falhar, devolve o catalogo so' com a outra (parcial e' melhor que
-    nenhum), sem descartar o que ja' tinha em cache."""
-    now = time.time()
-    if _cache["estacoes"] and now - _cache["timestamp"] < CACHE_TTL_SECONDS:
-        return _cache["estacoes"]
-
+def _fetch_todas_redes():
+    """Junta as duas redes (T/M) -- se so' uma responder, o catalogo
+    parcial ja' conta como sucesso (fica em cache normal); so' lanca
+    excecao (vira "sem sucesso", ver estacoes_cache_util) se NENHUMA
+    rede responder."""
     estacoes = []
     codigos_vistos = set()
     alguma_rede_respondeu = False
@@ -73,13 +68,17 @@ def get_estacoes():
                 "lat": lat,
                 "lon": lon,
             })
-
     if not alguma_rede_respondeu:
-        return _cache["estacoes"]
-
-    _cache["estacoes"] = estacoes
-    _cache["timestamp"] = now
+        raise RuntimeError("nenhuma rede do INMET respondeu")
     return estacoes
+
+
+def get_estacoes():
+    """Lista de estacoes do INMET em operacao, automaticas + convencionais
+    (codigo, cidade, uf, lat, lon) -- cache em memoria por 24h (ou o
+    catalogo antigo, com backoff, se a busca falhar -- ver
+    estacoes_cache_util.cached_fetch)."""
+    return estacoes_cache_util.cached_fetch(_cache, _fetch_todas_redes)
 
 
 def _haversine_km(lat1, lon1, lat2, lon2):

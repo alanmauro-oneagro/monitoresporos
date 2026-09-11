@@ -34,14 +34,13 @@ entre a documentacao (que usa camelCase minusculo) e a resposta real:
   "Metropolitana de Santiago" -- no unico exemplo que ela mostra)."""
 import json
 import os
-import time
 import urllib.parse
 import urllib.request
 
 import inmet_stations  # reaproveita a mesma matemática de distância (_haversine_km)
+import estacoes_cache_util
 
 ESTACOES_URL = "https://climatologia.meteochile.gob.cl/application/geoservicios/getCatastroEstacionesGeo"
-CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
 
 # As 16 regioes oficiais do Chile, por numero -- ver nota no docstring
 # do modulo sobre o campo "region" da API vir sempre vazio.
@@ -54,20 +53,20 @@ _NOME_REGIAO = {
     14: "Los Ríos", 15: "Arica y Parinacota", 16: "Ñuble",
 }
 
-_cache = {"timestamp": 0, "estacoes": []}
+_cache = {"timestamp": 0, "estacoes": [], "ultima_tentativa": 0}
 
 
 def credenciais_configuradas():
     return bool(os.environ.get("METEOCHILE_USUARIO") and os.environ.get("METEOCHILE_TOKEN"))
 
 
-def _fetch_estacoes():
+def _fetch_estacoes_raw():
     params = urllib.parse.urlencode({
         "usuario": os.environ["METEOCHILE_USUARIO"],
         "token": os.environ["METEOCHILE_TOKEN"],
     })
     req = urllib.request.Request(f"{ESTACOES_URL}?{params}", headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         return json.load(resp)
 
 
@@ -81,23 +80,8 @@ def _propriedades_de(feature):
     return (feature.get("features") or {}).get("properties") or {}
 
 
-def get_estacoes():
-    """Lista de estacoes da DMC (codigo, cidade, uf, lat, lon -- mesmo
-    formato do INMET; "cidade" guarda o nome da propria estacao
-    (nombreEstacion, ex. "Quinta Normal, Santiago") e "uf" guarda o nome
-    da regiao chilena, reaproveitando as chaves do INMET pra nao precisar
-    mudar os templates que ja leem `estacao.cidade`/`estacao.uf`). Cache
-    em memoria por 24h. Sem credencial configurada, devolve [] direto,
-    sem tentar rede."""
-    if not credenciais_configuradas():
-        return []
-    now = time.time()
-    if _cache["estacoes"] and now - _cache["timestamp"] < CACHE_TTL_SECONDS:
-        return _cache["estacoes"]
-    try:
-        raw = _fetch_estacoes()
-    except Exception:
-        return _cache["estacoes"]
+def _fetch_estacoes():
+    raw = _fetch_estacoes_raw()
     estacoes = []
     for feature in raw.get("features", []):
         props = _propriedades_de(feature)
@@ -126,9 +110,21 @@ def get_estacoes():
             "lat": lat,
             "lon": lon,
         })
-    _cache["estacoes"] = estacoes
-    _cache["timestamp"] = now
     return estacoes
+
+
+def get_estacoes():
+    """Lista de estacoes da DMC (codigo, cidade, uf, lat, lon -- mesmo
+    formato do INMET; "cidade" guarda o nome da propria estacao
+    (nombreEstacion, ex. "Quinta Normal, Santiago") e "uf" guarda o nome
+    da regiao chilena, reaproveitando as chaves do INMET pra nao precisar
+    mudar os templates que ja leem `estacao.cidade`/`estacao.uf`). Cache
+    em memoria por 24h (ou o catalogo antigo, com backoff, se a busca
+    falhar -- ver estacoes_cache_util.cached_fetch). Sem credencial
+    configurada, devolve [] direto, sem tentar rede."""
+    if not credenciais_configuradas():
+        return []
+    return estacoes_cache_util.cached_fetch(_cache, _fetch_estacoes)
 
 
 def estacoes_mais_proximas(lat, lon, n=2):

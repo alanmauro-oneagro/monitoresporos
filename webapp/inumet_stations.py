@@ -32,35 +32,25 @@ NAO ha' campo de departamento nessa fonte -- "uf" fica vazio (mesma
 degradacao graciosa ja aceita em `smn_stations.py`/`senamhi_stations.py`
 quando a fonte nao tem esse dado)."""
 import json
-import time
 import urllib.request
 
 import inmet_stations  # reaproveita a mesma matematica de distancia (_haversine_km) -- modulo do BRASIL, so' a funcao utilitaria
+import estacoes_cache_util
 
 DADOS_URL = "https://www.inumet.gub.uy/reportes/estadoActual/datos_inumet_ui_publica.mch"
-CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
 
-_cache = {"timestamp": 0, "estacoes": []}
+_cache = {"timestamp": 0, "estacoes": [], "ultima_tentativa": 0}
 
 
 def _fetch_estacoes_raw():
     req = urllib.request.Request(DADOS_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         data = json.load(resp)
     return data.get("estaciones", [])
 
 
-def get_estacoes():
-    """Lista de estacoes do INUMET (codigo, cidade, uf, lat, lon -- "uf"
-    sempre vazio, ver docstring do modulo) -- cache em memoria por 24h;
-    mantem o cache antigo se a busca falhar."""
-    now = time.time()
-    if _cache["estacoes"] and now - _cache["timestamp"] < CACHE_TTL_SECONDS:
-        return _cache["estacoes"]
-    try:
-        raw = _fetch_estacoes_raw()
-    except Exception:
-        return _cache["estacoes"]
+def _fetch_estacoes():
+    raw = _fetch_estacoes_raw()
     estacoes = []
     codigos_vistos = set()
     for item in raw:
@@ -80,11 +70,15 @@ def get_estacoes():
             "lat": lat,
             "lon": lon,
         })
-    if not estacoes:
-        return _cache["estacoes"]
-    _cache["estacoes"] = estacoes
-    _cache["timestamp"] = now
     return estacoes
+
+
+def get_estacoes():
+    """Lista de estacoes do INUMET (codigo, cidade, uf, lat, lon -- "uf"
+    sempre vazio, ver docstring do modulo) -- cache em memoria por 24h
+    (ou o catalogo antigo, com backoff, se a busca falhar -- ver
+    estacoes_cache_util.cached_fetch)."""
+    return estacoes_cache_util.cached_fetch(_cache, _fetch_estacoes)
 
 
 def estacoes_mais_proximas(lat, lon, n=2):

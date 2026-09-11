@@ -28,44 +28,34 @@ geografico (point-in-polygon contra limites departamentais) so' pra um
 rotulo cosmetico no tooltip do mapa."""
 import json
 import re
-import time
 import urllib.request
 
 import inmet_stations  # reaproveita a mesma matematica de distancia (_haversine_km)
+import estacoes_cache_util
 
 PAGINA_URL = "https://www.senamhi.gob.pe/mapas/mapa-estaciones-2/"
-CACHE_TTL_SECONDS = 24 * 60 * 60  # catalogo de estacoes quase nunca muda
 
 _ARRAY_RE = re.compile(r"var\s+PruebaTest\s*=\s*(\[.*?\]);", re.S)
 # Insere o "0" que falta antes de ".NNN" (ex. "-.1172" -> "-0.1172",
 # "[.5" -> "[0.5") -- ver nota no docstring do modulo.
 _NUMERO_SEM_ZERO_RE = re.compile(r"([:\[,]\s*-?)\.(\d)")
 
-_cache = {"timestamp": 0, "estacoes": []}
+_cache = {"timestamp": 0, "estacoes": [], "ultima_tentativa": 0}
 
 
 def _fetch_estacoes_raw():
     req = urllib.request.Request(PAGINA_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:
         html = resp.read().decode("utf-8", errors="replace")
     m = _ARRAY_RE.search(html)
     if not m:
-        return []
+        raise RuntimeError("array PruebaTest nao encontrado na pagina do SENAMHI")
     texto_corrigido = _NUMERO_SEM_ZERO_RE.sub(r"\g<1>0.\2", m.group(1))
     return json.loads(texto_corrigido)
 
 
-def get_estacoes():
-    """Lista de estacoes METEOROLOGICAS do SENAMHI (codigo, cidade, uf,
-    lat, lon -- "uf" sempre vazio, ver docstring do modulo) -- cache em
-    memoria por 24h; mantem o cache antigo se a busca falhar."""
-    now = time.time()
-    if _cache["estacoes"] and now - _cache["timestamp"] < CACHE_TTL_SECONDS:
-        return _cache["estacoes"]
-    try:
-        raw = _fetch_estacoes_raw()
-    except Exception:
-        return _cache["estacoes"]
+def _fetch_estacoes():
+    raw = _fetch_estacoes_raw()
     estacoes = []
     codigos_vistos = set()
     for item in raw:
@@ -79,11 +69,15 @@ def get_estacoes():
             continue
         codigos_vistos.add(codigo)
         estacoes.append({"codigo": codigo, "cidade": item.get("nom") or codigo, "uf": "", "lat": lat, "lon": lon})
-    if not estacoes:
-        return _cache["estacoes"]
-    _cache["estacoes"] = estacoes
-    _cache["timestamp"] = now
     return estacoes
+
+
+def get_estacoes():
+    """Lista de estacoes METEOROLOGICAS do SENAMHI (codigo, cidade, uf,
+    lat, lon -- "uf" sempre vazio, ver docstring do modulo) -- cache em
+    memoria por 24h (ou o catalogo antigo, com backoff, se a busca falhar
+    -- ver estacoes_cache_util.cached_fetch)."""
+    return estacoes_cache_util.cached_fetch(_cache, _fetch_estacoes)
 
 
 def estacoes_mais_proximas(lat, lon, n=2):
