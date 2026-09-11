@@ -250,6 +250,55 @@ def estacoes_mais_proximas_global(lat, lon, site_country, n=2):
     return candidatas[:n]
 
 
+def _todos_catalogos_estacoes():
+    """Catalogo de estacoes de TODO pais cadastrado, buscado uma unica
+    vez (em paralelo, thread por pais) -- separado de
+    `estacoes_mais_proximas_global` pra' `estacoes_mais_proximas_global_lote`
+    poder reaproveitar o mesmo catalogo pra' varias fazendas sem recriar
+    um pool de threads inteiro por fazenda (bug de performance real: a
+    aba Fazendas com 11 fazendas cadastradas criava 11 pools de thread
+    so' pra' repetir a mesma busca -- o catalogo de cada pais ja vinha
+    cacheado, `estacoes_cache_util.cached_fetch`, mas o overhead de
+    criar/destruir threads 11x ainda pesava)."""
+    def _buscar(item):
+        code, info = item
+        return code, info["station_provider"].get_estacoes()
+
+    catalogos = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(COUNTRIES)) as executor:
+        for code, estacoes in executor.map(_buscar, COUNTRIES.items()):
+            catalogos[code] = estacoes
+    return catalogos
+
+
+def estacoes_mais_proximas_global_lote(pontos, n=2):
+    """Versao em lote de `estacoes_mais_proximas_global` -- `pontos` e'
+    uma lista de (lat, lon, site_country); busca o catalogo de estacoes
+    de cada pais UMA UNICA VEZ (`_todos_catalogos_estacoes`, so' esse
+    passo usa threads) e depois calcula a distancia pra cada ponto em
+    Python puro (sem thread nenhuma -- e' so' matematica sobre um
+    catalogo ja em memoria, rapido mesmo pra dezenas de fazendas x
+    centenas de estacoes). Mesma regra de filtro/corte da versao
+    original (distancia maxima pra estacao de pais diferente da
+    fazenda, top `n` por distancia), so' devolvida como uma lista
+    PARALELA a `pontos` (resultado[i] corresponde a pontos[i])."""
+    catalogos = _todos_catalogos_estacoes()
+    resultados = []
+    for lat, lon, site_country in pontos:
+        candidatas = []
+        for code, estacoes in catalogos.items():
+            for e in estacoes:
+                distancia_km = round(inmet_stations._haversine_km(lat, lon, e["lat"], e["lon"]), 1)
+                candidatas.append({**e, "country_code": code, "distancia_km": distancia_km})
+        candidatas = [
+            e for e in candidatas
+            if e["country_code"] == site_country or e["distancia_km"] <= DISTANCIA_MAXIMA_ESTACAO_VIZINHA_KM
+        ]
+        candidatas.sort(key=lambda e: e["distancia_km"])
+        resultados.append(candidatas[:n])
+    return resultados
+
+
 def active_country_codes(site_country_map):
     """Codigos de pais realmente em uso (valores de `site_country_map`,
     ver `models.get_all_site_countries`) -- sempre inclui 'BR', mesmo sem

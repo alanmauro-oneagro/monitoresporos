@@ -22,7 +22,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
     current_user,
@@ -887,11 +887,23 @@ def _nome_exibicao(site):
     chave de casamento com o CSV do BioScout) usa a escolha manual da aba
     Fazendas (`site_display_names`) quando existir, senao cai no nome
     derivado do proprio site_name (tira o prefixo 'OneAgro - ', mesmo
-    padrao de sempre)."""
-    vf = models.get_virtual_farm(site)
+    padrao de sempre). Chamada em loop sobre varias fazendas em quase
+    toda tela -- em vez de reler as 2 tabelas inteiras do banco a cada
+    fazenda, cacheia as duas em `flask.g` (reiniciado a cada
+    requisicao, nunca serve dado de uma requisicao anterior) na
+    primeira chamada dessa requisicao."""
+    virtual_farms_by_site = getattr(g, "_virtual_farms_by_site", None)
+    if virtual_farms_by_site is None:
+        virtual_farms_by_site = {vf["site_name"]: vf for vf in models.get_all_virtual_farms()}
+        g._virtual_farms_by_site = virtual_farms_by_site
+    vf = virtual_farms_by_site.get(site)
     if vf:
         return vf["nome"]
-    override = models.get_all_site_display_names().get(site)
+    site_display_names = getattr(g, "_site_display_names", None)
+    if site_display_names is None:
+        site_display_names = models.get_all_site_display_names()
+        g._site_display_names = site_display_names
+    override = site_display_names.get(site)
     if override:
         return override
     return site.split(" - ", 1)[1] if " - " in site else site
@@ -3214,12 +3226,26 @@ def fazendas():
     overrides = models.get_all_weather_station_overrides()
     site_countries = models.get_all_site_countries()
     site_solos = models.get_all_site_solos()
+    # Em lote (uma unica query) em vez de get_whatsapp_schedule_horarios(site)
+    # dentro do loop -- essa versao "get_all" ja existia mas nao era usada
+    # aqui, cada fazenda reabria uma conexao/query so' pra ler o horario dela.
+    default_hora_envio = models.get_whatsapp_send_hour()
+    horarios_by_site = models.get_all_whatsapp_schedule_horarios()
     grades = [
         ("ts", "TS (Tratamento de Sementes)"),
         ("sulco", "Sulco (aplicacao no sulco de plantio)"),
         ("folha", "Folha (aplicacao foliar)"),
     ]
     tipos = [("quimico", "Fungicidas quimicos"), ("biologico", "Biologicos")]
+
+    # Estacao mais proxima de TODAS as fazendas, calculada em LOTE (uma
+    # unica busca de catalogo por pais, nao um pool de threads por
+    # fazenda -- bug de performance real, ver
+    # `countries.estacoes_mais_proximas_global_lote`).
+    sites_com_coords = [s for s in sites if coords.get(s)]
+    pontos = [(*coords[s], site_countries.get(s, countries.DEFAULT_COUNTRY)) for s in sites_com_coords]
+    resultados_lote = countries.estacoes_mais_proximas_global_lote(pontos, n=2) if pontos else []
+    estacoes_proximas_por_site = dict(zip(sites_com_coords, resultados_lote))
 
     sites_data = []
     for site in sites:
@@ -3263,13 +3289,12 @@ def fazendas():
                 "plantio": plantio_linhas, "aplicacoes": aplicacoes_linhas,
                 "espacamento": espacamento_by_site.get((site, safra)) or "",
             })
-        latlon = coords.get(site)
         country_code = site_countries.get(site, countries.DEFAULT_COUNTRY)
-        # Mistura todo provedor cadastrado (nao so' o do pais da propria
-        # fazenda) -- deixa escolher a estacao de referencia realmente
-        # mais perto, mesmo que seja de outro pais (fazenda perto de
-        # fronteira, por exemplo).
-        estacoes_proximas = countries.estacoes_mais_proximas_global(*latlon, country_code, n=2) if latlon else []
+        # Ja calculado em lote acima (mistura todo provedor cadastrado,
+        # nao so' o do pais da propria fazenda -- deixa escolher a
+        # estacao de referencia realmente mais perto, mesmo que seja de
+        # outro pais, fazenda perto de fronteira por exemplo).
+        estacoes_proximas = estacoes_proximas_por_site.get(site, [])
         escolha = overrides.get(site)
         sites_data.append({
             "site": site, "nome_exibicao": _nome_exibicao(site), "safras": safras_data,
@@ -3279,7 +3304,7 @@ def fazendas():
             "estacoes_proximas": estacoes_proximas,
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "country_code": country_code,
-            "horarios": models.get_whatsapp_schedule_horarios(site),
+            "horarios": horarios_by_site.get(site) or {"texto": default_hora_envio, "pdf": default_hora_envio},
             "solo": site_solos.get(site),
         })
 
