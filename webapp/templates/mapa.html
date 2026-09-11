@@ -303,15 +303,13 @@
     var CHUVA_ESCALA_MAX_MM = 90;
     var CHUVA_MINIMA_MM = 1; // abaixo disso nem entra no heatmap -- fica transparente (sem chuva)
     var CHUVA_FAIXAS = [
-        { mm: 1, cor: '#e8f5a3' },
-        { mm: 5, cor: '#a4d86b' },
-        { mm: 10, cor: '#4fae4a' },
-        { mm: 20, cor: '#1f9e8f' },
-        { mm: 30, cor: '#2f7fd6' },
-        { mm: 45, cor: '#3955c4' },
-        { mm: 60, cor: '#6a3fb5' },
-        { mm: 75, cor: '#9c3fa8' },
-        { mm: 90, cor: '#c23f9e' },
+        { mm: 5, cor: '#e3f2a8' },
+        { mm: 15, cor: '#5fbb68' },
+        { mm: 30, cor: '#12a4a4' },
+        { mm: 45, cor: '#1f6fd6' },
+        { mm: 60, cor: '#4a3fc4' },
+        { mm: 75, cor: '#9631c9' },
+        { mm: 90, cor: '#c31f8f' },
     ];
     // Gradiente EM DEGRAUS (nao suave) -- o Leaflet.heat normalmente
     // mistura as cores entre uma faixa e outra, o que juntava tudo numa
@@ -417,7 +415,13 @@
             var div = L.DomUtil.create('div', 'solo-legend');
             var html = '<div class="fw-bold mb-1">Chuva 24h (mm)</div>';
             CHUVA_FAIXAS.forEach(function (faixa, i) {
-                var rotulo = (i === CHUVA_FAIXAS.length - 1) ? (faixa.mm + '+') : String(faixa.mm);
+                // "<5" na primeira faixa e ">90" na ultima (pedido
+                // explicito) -- deixa claro que sao faixas abertas nas
+                // pontas, nao um limite superior/inferior exato.
+                var rotulo;
+                if (i === 0) { rotulo = '<' + faixa.mm; }
+                else if (i === CHUVA_FAIXAS.length - 1) { rotulo = '>' + faixa.mm; }
+                else { rotulo = String(faixa.mm); }
                 html += '<div class="solo-legend-item"><span class="solo-legend-swatch" style="background:' +
                     faixa.cor + ';"></span>' + rotulo + '</div>';
             });
