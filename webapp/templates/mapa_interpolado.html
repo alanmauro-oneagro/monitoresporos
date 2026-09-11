@@ -212,9 +212,13 @@
     // app._nivel_dados_defasados/DADOS_BLOQUEIO_DIAS) usa pino reduzido a
     // 60% do tamanho normal.
     var PIN_ESCALA_INATIVO = 0.6;
+    // No celular o mesmo pino (em pixels) ocupa proporcionalmente bem mais
+    // tela -- reduz todo pino pela metade so' nesse caso (pedido explicito
+    // do usuario, testado ja' no viewport mobile desta sessao).
+    var ESCALA_MOBILE = window.innerWidth < 768 ? 0.5 : 1;
 
     function buildPinIcon(fillColor, escala) {
-        escala = escala || 1;
+        escala = (escala || 1) * ESCALA_MOBILE;
         var w = Math.round(40 * escala), h = Math.round(52 * escala);
         var svg =
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="' + w + '" height="' + h + '">' +
