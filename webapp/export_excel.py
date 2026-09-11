@@ -7,6 +7,7 @@ completa) e Relatorio Diario (clima + concentracao de esporos e risco
 de infeccao, dia a dia) -- exportacao restrita a `ALAN_MAURO_USERNAME`,
 ver `admin_exportar` em `app.py`."""
 import io
+from datetime import date
 
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -273,18 +274,77 @@ def _calc_risco_diario_pct(disease, horas_do_dia):
     return round(min(100, favoraveis / limiar * 100))
 
 
+def _atividades_por_site_dia():
+    """(site_name, data ISO) -> lista de (rotulo_atividade, detalhe) --
+    Plantio/Aplicacoes/Produtos correlacionados por fazenda+data, pra'
+    entrar na aba "Relatorio Diario" assim que uma data de verdade for
+    preenchida numa dessas 3 telas (pedido explicito do usuario: comecar
+    um historico de atividades de safra ao lado do dado de estacao, pra'
+    no futuro dar pra' cruzar os dois). So' entra quem tem uma data que
+    o `models.parse_data_flexivel` reconhece (ISO ou dd/mm/aaaa/aa,
+    string inteira) -- em Produtos isso deixa de fora a maioria das
+    linhas de proposito, ja' que `data_anotacao` tambem aceita anotacao
+    livre (nao vira campo de data obrigatorio, so' correlaciona quando
+    o que foi digitado realmente parece uma data)."""
+    atividades = {}
+
+    def _add(site, data_raw, rotulo, detalhe):
+        data_iso = models.parse_data_flexivel(data_raw)
+        if data_iso:
+            atividades.setdefault((site, data_iso), []).append((rotulo, detalhe))
+
+    for site, por_safra in models.get_all_farm_plantio().items():
+        for safra, linhas in por_safra.items():
+            for l in linhas:
+                detalhe = (
+                    f"{SAFRA_LABELS.get(safra, safra)} - Talhao {l['talhao'] or '-'} - "
+                    f"{l['variedade'] or '-'} - Ciclo {l['ciclo_dias'] or '-'} dias"
+                )
+                _add(site, l["data_plantio"], "Plantio", detalhe)
+
+    for site, por_safra in models.get_all_farm_aplicacoes().items():
+        for safra, linhas in por_safra.items():
+            for l in linhas:
+                detalhe = (
+                    f"{SAFRA_LABELS.get(safra, safra)} - Talhao {l['talhao'] or '-'} - "
+                    f"Quimicos: {l['fungicidas_quimicos'] or '-'} - Biologicos: {l['fungicidas_biologicos'] or '-'}"
+                )
+                _add(site, l["data_aplicacao"], "Aplicacao", detalhe)
+
+    for site, buckets in models.get_all_farm_produtos().items():
+        for (safra, momento, tipo), linhas in buckets.items():
+            if momento not in models.MOMENTOS:
+                continue  # estoque rapido nao entra (mesmo criterio de _fazendas_produtos_rows)
+            for l in linhas:
+                rotulo = f"Produto ({MOMENTO_LABELS.get(momento, momento)})"
+                detalhe = f"{SAFRA_LABELS.get(safra, safra)} - {TIPO_LABELS.get(tipo, tipo)}: {l['nome'] or '-'} ({l['ingrediente_ativo'] or '-'})"
+                _add(site, l["data_anotacao"], rotulo, detalhe)
+
+    for lista in atividades.values():
+        lista.sort(key=lambda t: t[0])
+    return atividades
+
+
 def _relatorio_diario_rows():
-    """Uma linha por (estacao/fazenda, dia, doenca) -- clima do dia (temp,
-    UR, vento, igual sempre) MAIS a concentracao de esporos (leitura real
-    do BioScout, mesma fonte da aba Graficos) e o risco de infeccao
-    calculado daquele dia (so' clima x germinacao, 0-100%, mesma conta do
-    grafico de Risco de Infeccao da aba Graficos) pra' cada doenca com
-    leitura naquele dia -- pedido explicito do usuario de ter doenca e
-    clima juntos na mesma aba, nao numa aba separada. Fazenda/dia sem
-    NENHUMA leitura de doenca ainda vira 1 linha so' com essas 3 colunas
-    em branco (nao perde o clima so' por falta de doenca cadastrada);
-    fazenda/dia com N doencas com leitura vira N linhas (clima repetido),
-    ordenadas por nome de doenca dentro do mesmo dia."""
+    """Uma linha por (estacao/fazenda, dia, doenca OU atividade de
+    safra) -- clima do dia (temp, UR, vento, igual sempre) MAIS a
+    concentracao de esporos/risco de infeccao (pra cada doenca com
+    leitura naquele dia) E as atividades de Plantio/Aplicacoes/Produtos
+    datadas naquele dia (ver `_atividades_por_site_dia`) -- pedido
+    explicito do usuario de ter tudo isso correlacionado na mesma aba,
+    formando um historico (fazenda+data) que uma futura combinacao
+    "atividades de safra + dados das estacoes" possa aproveitar.
+    Fazenda/dia sem NENHUMA doenca/atividade vira 1 linha so' com essas
+    colunas em branco (nao perde o clima); fazenda/dia com N doencas E M
+    atividades vira N+M linhas (clima repetido em cada uma, NUNCA um
+    produto cartesiano N*M -- doenca e atividade sao fatos
+    independentes do mesmo dia, nao uma ligada a outra). Fazenda/dia com
+    atividade mas SEM NENHUMA leitura de clima (fazenda nova/virtual sem
+    estacao mapeada ainda, ou doenca de um device que nunca foi "o
+    primeiro" daquele site em `read_site_device_ids` -- esse 2o caso ja'
+    era um bug antes desta funcao ganhar atividades: a doenca
+    simplesmente sumia da aba, sem nenhum fallback) tambem ganha
+    linha(s), so' com o clima em branco."""
     report = data_reader.build_daily_weather_report(data_reader.read_weather(), UR_LIMIARES)
     translations = models.get_all_disease_translations()
     spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
@@ -316,20 +376,62 @@ def _relatorio_diario_rows():
     for lista in doencas_por_site_dia.values():
         lista.sort(key=lambda t: t[0].lower())
 
-    rows = []
+    # Atividades de safra -- protegido em try/except PROPRIO (nao o
+    # _try_sheet la' de fora, que e' por aba inteira): um bug nessas 3
+    # fontes novas nao pode derrubar as linhas de clima/doenca que ja
+    # funcionavam antes desta funcao ganhar atividades.
+    try:
+        atividades_por_site_dia = _atividades_por_site_dia()
+    except Exception:
+        atividades_por_site_dia = {}
+
+    entries = []  # (sort_key, row)
+    consumidos = set()
+
+    def _sort_key(fazenda, data_iso):
+        try:
+            ordinal = date.fromisoformat(data_iso).toordinal()
+        except ValueError:
+            ordinal = 0
+        return (fazenda.lower(), -ordinal)
+
     for r in report:
-        base = [
-            models.fmt_data_br(r["data"]) or r["data"], r["estacao"],
-            r["temp_min"], r["temp_max"],
-        ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [r["vento_predominante"] or "-"]
         site = device_to_site.get(r["estacao"])
-        doencas = doencas_por_site_dia.get((site, r["data"]), []) if site else []
-        if not doencas:
-            rows.append(base + [None, None, None, None, None, None])
+        fazenda = site or r["estacao"]
+        data_iso = r["data"]
+        data_br = models.fmt_data_br(data_iso) or data_iso
+        base = [
+            fazenda, data_br, r["estacao"], r["temp_min"], r["temp_max"],
+        ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [r["vento_predominante"] or "-"]
+        doencas = doencas_por_site_dia.get((site, data_iso), []) if site else []
+        atividades = atividades_por_site_dia.get((site, data_iso), []) if site else []
+        if site:
+            consumidos.add((site, data_iso))
+        if not doencas and not atividades:
+            entries.append((_sort_key(fazenda, data_iso), base + [None, None, None, None, None, None, None, None]))
             continue
         for nome_pt, conc, risco_pct, warn, danger, maximo in doencas:
-            rows.append(base + [nome_pt, conc, risco_pct, warn, danger, maximo])
-    return rows
+            entries.append((_sort_key(fazenda, data_iso), base + [nome_pt, conc, risco_pct, warn, danger, maximo, None, None]))
+        for rotulo, detalhe in atividades:
+            entries.append((_sort_key(fazenda, data_iso), base + [None, None, None, None, None, None, rotulo, detalhe]))
+
+    # Fazenda/dia com doenca OU atividade que nenhuma linha de clima
+    # acima cobriu (site sem device mapeado, ou device que nunca virou
+    # "o primeiro" daquele site) -- clima em branco (None, nunca 0 --
+    # 0 sugeriria "UR nunca passou do limite", que nao e' o caso, e'
+    # so' dado ausente), Estacao/Vento como "-".
+    faltantes = (set(doencas_por_site_dia) | set(atividades_por_site_dia)) - consumidos
+    for site, data_iso in faltantes:
+        fazenda = site
+        data_br = models.fmt_data_br(data_iso) or data_iso
+        base = [fazenda, data_br, "-", None, None, None, None, None, None, "-"]
+        for nome_pt, conc, risco_pct, warn, danger, maximo in doencas_por_site_dia.get((site, data_iso), []):
+            entries.append((_sort_key(fazenda, data_iso), base + [nome_pt, conc, risco_pct, warn, danger, maximo, None, None]))
+        for rotulo, detalhe in atividades_por_site_dia.get((site, data_iso), []):
+            entries.append((_sort_key(fazenda, data_iso), base + [None, None, None, None, None, None, rotulo, detalhe]))
+
+    entries.sort(key=lambda e: e[0])
+    return [row for _, row in entries]
 
 
 def _add_whatsapp_sheet(wb):
@@ -460,11 +562,12 @@ def build_workbook():
         _write_sheet(wb, "Fungicidas (erro)", ["Erro"], [[str(exc)]])
     _try_sheet(
         wb, "Relatorio Diario",
-        ["Data", "Estacao", "Temp min (C)", "Temp max (C)"]
+        ["Fazenda", "Data", "Estacao", "Temp min (C)", "Temp max (C)"]
         + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
         + [
             "Vento predominante", "Doenca", "Concentracao (esporos/m3)", "Risco de Infeccao (%)",
             "Limite Atencao (esporos/m3)", "Limite Perigo (esporos/m3)", "Limite Maximo (esporos/m3)",
+            "Atividade", "Detalhe da Atividade",
         ],
         _relatorio_diario_rows,
     )

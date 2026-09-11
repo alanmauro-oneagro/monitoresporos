@@ -3230,11 +3230,20 @@ def fazendas():
                 secoes.append({"momento": momento, "titulo": momento_label, "grupos": grupos})
 
             plantio_linhas = list(plantio_existente.get(safra, []))
+            # So' de exibicao -- um <input type="date"> fica em branco pra
+            # qualquer valor que nao seja ISO, entao uma data antiga salva
+            # em outro formato (ex. "10/09/2025") precisa ser normalizada
+            # aqui pra' aparecer certa no seletor. O banco NAO e' reescrito
+            # -- dado novo ja' sai ISO direto do proprio input nativo.
+            for linha in plantio_linhas:
+                linha["data_plantio"] = models.parse_data_flexivel(linha["data_plantio"]) or ""
             plantio_min = max(1, len(plantio_linhas) + 1)
             while len(plantio_linhas) < plantio_min:
                 plantio_linhas.append({"data_plantio": "", "talhao": "", "variedade": "", "ciclo_dias": ""})
 
             aplicacoes_linhas = list(aplicacoes_existente.get(safra, []))
+            for linha in aplicacoes_linhas:
+                linha["data_aplicacao"] = models.parse_data_flexivel(linha["data_aplicacao"]) or ""
             aplicacoes_min = max(1, len(aplicacoes_linhas) + 1)
             while len(aplicacoes_linhas) < aplicacoes_min:
                 aplicacoes_linhas.append({"data_aplicacao": "", "talhao": "", "fungicidas_quimicos": "", "fungicidas_biologicos": ""})

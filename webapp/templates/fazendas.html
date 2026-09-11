@@ -95,10 +95,33 @@
                                 <tbody>
                                     {% for linha in safra_group.plantio %}
                                     <tr>
-                                        <td><input type="text" name="data_plantio" class="form-control form-control-sm" value="{{ linha.data_plantio }}"></td>
+                                        <td><input type="date" name="data_plantio" class="form-control form-control-sm" value="{{ linha.data_plantio }}"></td>
                                         <td><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
                                         <td><input type="text" name="variedade" class="form-control form-control-sm" value="{{ linha.variedade }}"></td>
                                         <td><input type="text" name="ciclo_dias" class="form-control form-control-sm" value="{{ linha.ciclo_dias }}"></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <span class="autosave-status small ms-2"></span>
+                    </form>
+                    <div class="fw-bold mb-2">Dados de Aplicacoes</div>
+                    <form method="post" action="{{ url_for('save_farm_aplicacoes') }}" data-autosave>
+                        <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                        <input type="hidden" name="safra" value="{{ safra_group.safra }}">
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-2 produtos-table">
+                                <thead>
+                                    <tr><th>Data aplicacao</th><th>Talhao</th><th>Fungicidas quimicos</th><th>Fungicidas biologicos</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% for linha in safra_group.aplicacoes %}
+                                    <tr>
+                                        <td><input type="date" name="data_aplicacao" class="form-control form-control-sm" value="{{ linha.data_aplicacao }}"></td>
+                                        <td><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
+                                        <td><input type="text" name="fungicidas_quimicos" class="form-control form-control-sm" value="{{ linha.fungicidas_quimicos }}"></td>
+                                        <td><input type="text" name="fungicidas_biologicos" class="form-control form-control-sm" value="{{ linha.fungicidas_biologicos }}"></td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>

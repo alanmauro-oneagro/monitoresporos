@@ -46,6 +46,35 @@ def fmt_data_br(value):
     return value
 
 
+def parse_data_flexivel(value):
+    """Tenta reconhecer `value` como uma data (ISO `YYYY-MM-DD`, ou
+    formato brasileiro `dd/mm/aaaa`/`dd/mm/aa`) e devolve sempre em ISO
+    -- ou `None` se nao for nenhum desses formatos. A STRING INTEIRA
+    precisa bater com o formato (nao extrai uma data de dentro de um
+    texto maior, tipo "12/03 - comprado atrasado" -- de proposito, pra
+    nao criar falso positivo). Usado em dois lugares: (1) normalizar pra
+    ISO um valor antigo salvo como texto livre antes de mostrar num
+    `<input type="date">` (que so' aceita ISO, senao fica em branco); e
+    (2) decidir se uma linha de Plantio/Aplicacoes/Produtos entra na
+    correlacao de atividades da aba "Relatorio Diario" do Excel (ver
+    `export_excel._atividades_por_site_dia`) -- so' produtos com uma
+    data DE VERDADE em `data_anotacao` entram (esse campo tambem aceita
+    anotacao livre, de proposito, entao a maioria nao vai bater aqui, o
+    que e' o comportamento certo). Ano de 2 digitos (`dd/mm/aa`) segue a
+    regra padrao do Python: 00-68 vira 2000-2068, 69-99 vira 1969-1999."""
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt_in in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(text, fmt_in).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
 def fmt_telefone_br(value):
     """Formata um telefone salvo como so' digitos (DDI+DDD+numero, ex.:
     '5566996319500') no padrao "(55)66-99631-9500" -- usado em toda
