@@ -563,8 +563,8 @@
         var giMax = Math.round((bbox.lat_max - bbox.lat_min) / GRADE_PASSO_GRAUS);
         var gjMax = Math.round((bbox.lon_max - bbox.lon_min) / GRADE_PASSO_GRAUS);
         if (giMax < 1 || gjMax < 1) return null;
-        var PX_POR_CELULA = 24;
-        var MAX_DIM = 800;
+        var PX_POR_CELULA = 48;
+        var MAX_DIM = 1600;
         var largura = (gjMax + 1) * PX_POR_CELULA;
         var altura = (giMax + 1) * PX_POR_CELULA;
         var escala = Math.min(1, MAX_DIM / Math.max(largura, altura));
