@@ -230,8 +230,21 @@ def read_weather():
     return _read_csv_cached(DATA_DIR / "weather.csv")
 
 
+_weather_lookup_cache = {}
+
+
 def build_weather_lookup(weather_rows):
-    """chave: (deviceUserFriendlyId, data-yyyy-mm-dd) -> {umidade, chuva}"""
+    """chave: (deviceUserFriendlyId, data-yyyy-mm-dd) -> {umidade, chuva}.
+    Cacheado pelo mtime de weather.csv -- mesmo padrao/motivo de
+    `_read_csv_cached` (`weather_rows` ja' vem cacheado por mtime, mas
+    essa funcao reprocessava o CSV inteiro do zero em CADA chamada
+    mesmo assim; medido no Mapa: sozinha gastava mais de 1s por
+    requisicao, chamada em toda pagina que mostra card de doenca --
+    Mapa/Dashboard/Graficos/NDVI -- e o site inteiro sentia "pesado")."""
+    mtime = (DATA_DIR / "weather.csv").stat().st_mtime
+    cached = _weather_lookup_cache.get(mtime)
+    if cached is not None:
+        return cached
     grouped = {}
     for row in weather_rows:
         try:
@@ -252,7 +265,12 @@ def build_weather_lookup(weather_rows):
         umidade = round(sum(vals["humidity"]) / len(vals["humidity"])) if vals["humidity"] else None
         chuva = round(sum(vals["rain"]), 1) if vals["rain"] else 0
         lookup[key] = {"umidade": umidade, "chuva": chuva}
+    _weather_lookup_cache.clear()  # so' guarda o mtime mais recente, nao acumula versoes antigas pra sempre
+    _weather_lookup_cache[mtime] = lookup
     return lookup
+
+
+_disease_concentration_lookup_cache = {}
 
 
 def build_disease_concentration_lookup(spore_rows):
@@ -262,7 +280,12 @@ def build_disease_concentration_lookup(spore_rows):
     leitura -- mesma logica de `get_site_disease_history`, mas numa unica
     passada sobre o CSV inteiro (usado pelo grafico da aba Graficos, que
     precisa disso pra TODAS as fazendas x doencas de uma vez, nao so uma
-    fazenda por vez como o PDF)."""
+    fazenda por vez como o PDF). Cacheado pelo mtime de spore_counts.csv
+    -- mesmo motivo de `build_weather_lookup` acima."""
+    mtime = (DATA_DIR / "spore_counts.csv").stat().st_mtime
+    cached = _disease_concentration_lookup_cache.get(mtime)
+    if cached is not None:
+        return cached
     grouped = {}
     for row in spore_rows:
         site, doenca = row.get("siteName"), row.get("displayName")
@@ -287,6 +310,8 @@ def build_disease_concentration_lookup(spore_rows):
     for key, por_dia in grouped.items():
         dias_ordenados = sorted(por_dia.values(), key=lambda r: r["_dt"])
         lookup[key] = [{k: v for k, v in r.items() if k != "_dt"} for r in dias_ordenados]
+    _disease_concentration_lookup_cache.clear()
+    _disease_concentration_lookup_cache[mtime] = lookup
     return lookup
 
 
@@ -319,6 +344,9 @@ def _bucket_direcao_vento(graus):
     return _DIRECOES_VENTO[idx]
 
 
+_hourly_weather_lookup_cache = {}
+
+
 def build_hourly_weather_lookup(weather_rows):
     """(deviceUserFriendlyId, dia local da estacao) -> lista de leituras
     horarias [{"temp", "umidade", "chuva", "vento"}] daquele dia -- usado
@@ -328,7 +356,13 @@ def build_hourly_weather_lookup(weather_rows):
     `app._calc_risco_germinacao`) e nao so' de agregados diarios como
     `build_daily_weather_report`. `vento` (graus, 0-360) alimenta
     `vento_predominante_do_dia`, pro rotulo de direcao do vento no ponto
-    de risco do grafico."""
+    de risco do grafico. Cacheado pelo mtime de weather.csv (chamada em
+    3 lugares diferentes -- Alertas Clima, NDVI, Excel -- mesmo motivo
+    de `build_weather_lookup` acima)."""
+    mtime = (DATA_DIR / "weather.csv").stat().st_mtime
+    cached = _hourly_weather_lookup_cache.get(mtime)
+    if cached is not None:
+        return cached
     grouped = {}
     for row in weather_rows:
         try:
@@ -346,6 +380,8 @@ def build_hourly_weather_lookup(weather_rows):
             "chuva": _to_float(row.get("rainFall")) or 0,
             "vento": _to_float(row.get("windDirection")),
         })
+    _hourly_weather_lookup_cache.clear()
+    _hourly_weather_lookup_cache[mtime] = grouped
     return grouped
 
 
@@ -405,6 +441,9 @@ def contar_direcoes_vento(hourly_lookup, devices, dias):
     return contagem
 
 
+_daily_weather_report_cache = {}
+
+
 def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_molhamento=90):
     """Agrupa as leituras horarias do weather.csv por (estacao, dia
     local da estacao) e calcula, por dia: temp min/max, quantas horas
@@ -413,7 +452,14 @@ def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_mo
     "molhamento foliar" (proxy: UR >= `ur_molhamento` -- a rede nao tem
     sensor de molhamento real, ver nota em app.py junto de
     `_PESQUISA_GERMINACAO_2026_08_27`) e a direcao de vento predominante
-    (moda das leituras do dia, em 8 direcoes)."""
+    (moda das leituras do dia, em 8 direcoes). Cacheado pelo mtime de
+    weather.csv (+ os parametros, que na pratica sao sempre os mesmos
+    valores default -- so' por seguranca caso um dia alguem chame com
+    limiares diferentes) -- mesmo motivo de `build_weather_lookup` acima."""
+    chave = ((DATA_DIR / "weather.csv").stat().st_mtime, ur_limiares, ur_molhamento)
+    cached = _daily_weather_report_cache.get(chave)
+    if cached is not None:
+        return cached
     grouped = {}
     for row in weather_rows:
         try:
@@ -464,6 +510,8 @@ def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_mo
     # dentro de cada dia.
     rows.sort(key=lambda r: (r["estacao"] or "").lower())
     rows.sort(key=lambda r: r["data"], reverse=True)
+    _daily_weather_report_cache.clear()
+    _daily_weather_report_cache[chave] = rows
     return rows
 
 
