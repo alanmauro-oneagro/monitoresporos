@@ -19,6 +19,14 @@
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda cadastrada ainda.</div>
 {% else %}
+<!-- Catalogo de autocompletar (Produtos/Aplicacoes/Plantio) -- renderizado
+     UMA VEZ so', compartilhado entre todas as fazendas/safras da pagina
+     (cresce sozinho a cada save, ver models._catalogar_produto/_catalogar_variedade). -->
+<datalist id="catalogo-nomes-quimico">{% for nome in catalogo_produtos.quimico | map(attribute='nome') | unique %}<option value="{{ nome }}">{% endfor %}</datalist>
+<datalist id="catalogo-ia-quimico">{% for p in catalogo_produtos.quimico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
+<datalist id="catalogo-nomes-biologico">{% for nome in catalogo_produtos.biologico | map(attribute='nome') | unique %}<option value="{{ nome }}">{% endfor %}</datalist>
+<datalist id="catalogo-ia-biologico">{% for p in catalogo_produtos.biologico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
+<datalist id="catalogo-variedades">{% for v in catalogo_variedades %}<option value="{{ v }}">{% endfor %}</datalist>
 {% for site_group in sites_data %}
 {% set farm_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
@@ -56,8 +64,8 @@
                                             {% for linha in grupo.linhas %}
                                             <tr>
                                                 <td><input type="text" name="data_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.data_anotacao }}"></td>
-                                                <td><input type="text" name="nome_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.nome }}"></td>
-                                                <td><input type="text" name="ia_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.ingrediente_ativo }}"></td>
+                                                <td><input type="text" name="nome_{{ secao.momento }}_{{ grupo.tipo }}" list="catalogo-nomes-{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.nome }}"></td>
+                                                <td><input type="text" name="ia_{{ secao.momento }}_{{ grupo.tipo }}" list="catalogo-ia-{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.ingrediente_ativo }}"></td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>
@@ -97,7 +105,7 @@
                                     <tr>
                                         <td><input type="date" name="data_plantio" class="form-control form-control-sm" value="{{ linha.data_plantio }}"></td>
                                         <td><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
-                                        <td><input type="text" name="variedade" class="form-control form-control-sm" value="{{ linha.variedade }}"></td>
+                                        <td><input type="text" name="variedade" list="catalogo-variedades" class="form-control form-control-sm" value="{{ linha.variedade }}"></td>
                                         <td><input type="text" name="ciclo_dias" class="form-control form-control-sm" value="{{ linha.ciclo_dias }}"></td>
                                     </tr>
                                     {% endfor %}
@@ -120,8 +128,8 @@
                                     <tr>
                                         <td><input type="date" name="data_aplicacao" class="form-control form-control-sm" value="{{ linha.data_aplicacao }}"></td>
                                         <td><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
-                                        <td><input type="text" name="fungicidas_quimicos" class="form-control form-control-sm" value="{{ linha.fungicidas_quimicos }}"></td>
-                                        <td><input type="text" name="fungicidas_biologicos" class="form-control form-control-sm" value="{{ linha.fungicidas_biologicos }}"></td>
+                                        <td><input type="text" name="fungicidas_quimicos" list="catalogo-nomes-quimico" class="form-control form-control-sm" value="{{ linha.fungicidas_quimicos }}"></td>
+                                        <td><input type="text" name="fungicidas_biologicos" list="catalogo-nomes-biologico" class="form-control form-control-sm" value="{{ linha.fungicidas_biologicos }}"></td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -271,6 +279,46 @@ document.querySelectorAll('table.produtos-table tbody').forEach(function (tbody)
         clone.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
         tbody.appendChild(clone);
     });
+});
+
+// Autopreenchimento bidirecional Produto <-> Ingrediente ativo (catalogo
+// que cresce sozinho a cada save, ver models._catalogar_produto) --
+// escolher/digitar um nome ja' conhecido preenche o ingrediente ativo
+// (e vice-versa), so' quando o campo contrario ainda estiver vazio
+// (nunca sobrescreve o que a pessoa ja' digitou). Delegado no document
+// (mesmo padrao do autosave em base.html) em vez de ligar em cada
+// campo -- assim funciona tambem nas linhas novas que o bloco de "grow"
+// acima clona depois do carregamento da pagina, sem precisar religar
+// nada.
+var CATALOGO_PRODUTOS = {{ catalogo_produtos | tojson }};
+function _catalogoTipoDoNome(nomeAtributo) {
+    if (nomeAtributo.endsWith('_quimico')) return 'quimico';
+    if (nomeAtributo.endsWith('_biologico')) return 'biologico';
+    return null;
+}
+document.addEventListener('change', function (e) {
+    var field = e.target;
+    var row = field.closest('tr');
+    if (!row || !field.name) return;
+    if (field.name.indexOf('nome_') === 0) {
+        var tipo = _catalogoTipoDoNome(field.name);
+        var ia = row.querySelector('input[name^="ia_"]');
+        if (!tipo || !ia || ia.value.trim()) return;
+        var par = (CATALOGO_PRODUTOS[tipo] || []).find(function (p) { return p.nome === field.value.trim(); });
+        if (par && par.ingrediente_ativo) {
+            ia.value = par.ingrediente_ativo;
+            ia.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    } else if (field.name.indexOf('ia_') === 0) {
+        var tipo = _catalogoTipoDoNome(field.name);
+        var nome = row.querySelector('input[name^="nome_"]');
+        if (!tipo || !nome || nome.value.trim()) return;
+        var par = (CATALOGO_PRODUTOS[tipo] || []).find(function (p) { return p.ingrediente_ativo === field.value.trim(); });
+        if (par && par.nome) {
+            nome.value = par.nome;
+            nome.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
 });
 document.querySelectorAll('.safra-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {

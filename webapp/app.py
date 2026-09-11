@@ -3187,12 +3187,22 @@ def fazendas():
     # pra configurar tudo que ele precisa (estacao de referencia, agenda
     # de WhatsApp). Pedido explicito do usuario.
     virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
+    # Catalogo de produtos/variedades pra autocompletar (Produtos,
+    # Aplicacoes, Plantio -- cresce sozinho a cada save, ver
+    # models._catalogar_produto/_catalogar_variedade) -- buscado uma
+    # unica vez, compartilhado entre todas as fazendas da pagina (pedido
+    # explicito do usuario: catalogo unico, nao por fazenda).
+    catalogo_produtos = models.get_all_catalogo_produtos()
+    catalogo_variedades = models.get_all_catalogo_variedades()
     if current_user.is_admin:
         sites = sorted((set(read_sites()) | virtual_names) - virtual_clima_names)
     else:
         sites = sorted(set(models.get_user_permitted_site_names(int(current_user.id))) - virtual_clima_names)
         if not sites:
-            return render_template("fazendas.html", sites_data=[], no_access=True)
+            return render_template(
+                "fazendas.html", sites_data=[], no_access=True,
+                catalogo_produtos=catalogo_produtos, catalogo_variedades=catalogo_variedades,
+            )
 
     produtos_by_site = models.get_all_farm_produtos()
     plantio_by_site = models.get_all_farm_plantio()
@@ -3277,6 +3287,7 @@ def fazendas():
         "fazendas.html", sites_data=sites_data, no_access=False,
         weekday_labels=list(enumerate(WEEKDAY_LABELS)),
         countries=countries.COUNTRIES,
+        catalogo_produtos=catalogo_produtos, catalogo_variedades=catalogo_variedades,
     )
 
 

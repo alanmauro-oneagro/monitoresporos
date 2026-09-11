@@ -288,6 +288,27 @@ def init_db():
             fungicidas_biologicos TEXT
         );
 
+        -- Catalogo de produtos/variedades pra autocompletar (Produtos,
+        -- Aplicacoes, Plantio -- ver _catalogar_produto/_catalogar_variedade)
+        -- cresce sozinho a cada save, nao tem tela de administracao propria.
+        -- ingrediente_ativo nunca fica NULL (sempre '' se nao informado) --
+        -- evita a semantica "NULL != NULL" do SQLite quebrar o UNIQUE.
+        CREATE TABLE IF NOT EXISTS catalogo_produtos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL,
+            nome TEXT NOT NULL,
+            ingrediente_ativo TEXT NOT NULL DEFAULT '',
+            atualizado_em TEXT NOT NULL,
+            UNIQUE (tipo, nome, ingrediente_ativo)
+        );
+        CREATE INDEX IF NOT EXISTS idx_catalogo_produtos_tipo ON catalogo_produtos(tipo);
+
+        CREATE TABLE IF NOT EXISTS catalogo_variedades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL UNIQUE,
+            atualizado_em TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS farm_espacamento_plantio (
             site_name TEXT NOT NULL,
             safra TEXT NOT NULL,
@@ -661,8 +682,38 @@ def init_db():
         if {row["country_code"], pais_fazenda} == {"BR", "CL"}:
             conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (row["site_name"],))
 
+    try:
+        _backfill_catalogos(conn)
+    except Exception:
+        # Nunca impede o app de subir por causa disso -- na pior das
+        # hipoteses o catalogo so' fica vazio ate' o proximo save de
+        # cada tela (que alimenta o catalogo normalmente de qualquer
+        # jeito, ver _catalogar_produto/_catalogar_variedade).
+        pass
+
     conn.commit()
     conn.close()
+
+
+def _backfill_catalogos(conn):
+    """Preenche catalogo_produtos/catalogo_variedades com tudo que ja
+    foi salvo em Produtos/Aplicacoes/Plantio ANTES desses catalogos
+    existirem -- roda em toda subida (custo irrelevante, tabelas
+    pequenas, so' um INSERT...ON CONFLICT por linha ja existente) pra
+    garantir que nada precisa ser redigitado so' pra "ensinar" o
+    catalogo. Le direto da MESMA conexao/transacao de init_db (nao abre
+    conexao propria -- get_all_farm_* abrem a sua, o que funcionaria
+    igual gracas ao WAL, mas ler direto daqui evita qualquer duvida
+    sobre 2 conexoes se cruzando no meio de uma migracao)."""
+    for row in conn.execute("SELECT site_name, safra, momento, tipo, nome, ingrediente_ativo FROM farm_produtos"):
+        if row["momento"] not in MOMENTOS:
+            continue
+        _catalogar_produto(conn, row["tipo"], row["nome"], row["ingrediente_ativo"])
+    for row in conn.execute("SELECT fungicidas_quimicos, fungicidas_biologicos FROM farm_aplicacoes"):
+        _catalogar_produto(conn, "quimico", row["fungicidas_quimicos"], "")
+        _catalogar_produto(conn, "biologico", row["fungicidas_biologicos"], "")
+    for row in conn.execute("SELECT variedade FROM farm_plantio"):
+        _catalogar_variedade(conn, row["variedade"])
 
 
 def get_setting(key, default=None):
@@ -1214,6 +1265,72 @@ SAFRAS = [("safra1", "Safra"), ("safra2", "2ª Safra"), ("safra3", "3ª Safra")]
 MOMENTO_ESTOQUE_RAPIDO = "geral"
 
 
+def _catalogar_produto(conn, tipo, nome, ingrediente_ativo):
+    """Alimenta `catalogo_produtos` (autocompletar de Produtos/
+    Aplicacoes, ver templates/fazendas.html) -- chamado de dentro de
+    `set_farm_produtos`/`set_farm_aplicacoes` (e do backfill em
+    `init_db`) sempre que uma linha nao-vazia e' salva. Recebe a conexao
+    JA ABERTA da funcao chamadora (nao abre/fecha/commita sozinha).
+    Ignora silenciosamente se `nome` vier vazio -- nao ha nada pra
+    catalogar."""
+    nome = (nome or "").strip()
+    if not nome:
+        return
+    ingrediente_ativo = (ingrediente_ativo or "").strip()
+    conn.execute(
+        """
+        INSERT INTO catalogo_produtos (tipo, nome, ingrediente_ativo, atualizado_em)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (tipo, nome, ingrediente_ativo) DO UPDATE SET atualizado_em = excluded.atualizado_em
+        """,
+        (tipo, nome, ingrediente_ativo, _agora_cuiaba()),
+    )
+
+
+def _catalogar_variedade(conn, nome):
+    """Mesma ideia de `_catalogar_produto`, pro campo Variedade (aba
+    Plantio) -- sem par (nao tem um "ingrediente ativo" equivalente)."""
+    nome = (nome or "").strip()
+    if not nome:
+        return
+    conn.execute(
+        """
+        INSERT INTO catalogo_variedades (nome, atualizado_em) VALUES (?, ?)
+        ON CONFLICT (nome) DO UPDATE SET atualizado_em = excluded.atualizado_em
+        """,
+        (nome, _agora_cuiaba()),
+    )
+
+
+def get_all_catalogo_produtos():
+    """{"quimico": [{"nome","ingrediente_ativo"}, ...], "biologico": [...]}
+    -- catalogo pra autocompletar (Produtos/Aplicacoes, ver
+    templates/fazendas.html), cresce sozinho a cada save
+    (`_catalogar_produto`). Entradas COM ingrediente ativo preenchido
+    vem primeiro (garante que o autopreenchimento bidirecional ache o
+    par informativo antes de um nome cadastrado so' via Aplicacoes, que
+    nao tem campo de ingrediente ativo pra preencher), depois por nome."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT tipo, nome, ingrediente_ativo FROM catalogo_produtos "
+        "ORDER BY (ingrediente_ativo != '') DESC, nome"
+    ).fetchall()
+    conn.close()
+    resultado = {"quimico": [], "biologico": []}
+    for r in rows:
+        resultado.setdefault(r["tipo"], []).append({"nome": r["nome"], "ingrediente_ativo": r["ingrediente_ativo"]})
+    return resultado
+
+
+def get_all_catalogo_variedades():
+    """Lista de variedades ja cadastradas (pra autocompletar o campo
+    Variedade da aba Plantio), ordenada alfabeticamente."""
+    conn = get_db()
+    rows = conn.execute("SELECT nome FROM catalogo_variedades ORDER BY nome").fetchall()
+    conn.close()
+    return [r["nome"] for r in rows]
+
+
 def get_all_farm_produtos():
     """chave: site_name -> {(safra, momento, tipo): [{"data_anotacao", "nome", "ingrediente_ativo"}, ...]}
     (na ordem em que foram salvos -- usado pela aba Fazendas e Recomendacoes)."""
@@ -1255,6 +1372,7 @@ def set_farm_produtos(site_name, safra, momento, tipo, linhas):
                 """,
                 (site_name, safra, momento, tipo, data_anotacao, nome, ingrediente_ativo),
             )
+            _catalogar_produto(conn, tipo, nome, ingrediente_ativo)
     conn.commit()
     conn.close()
 
@@ -1293,6 +1411,7 @@ def set_farm_plantio(site_name, safra, linhas):
                 "INSERT INTO farm_plantio (site_name, safra, data_plantio, talhao, variedade, ciclo_dias) VALUES (?, ?, ?, ?, ?, ?)",
                 (site_name, safra, data_plantio, talhao, variedade, ciclo_dias),
             )
+            _catalogar_variedade(conn, variedade)
     conn.commit()
     conn.close()
 
@@ -1335,6 +1454,8 @@ def set_farm_aplicacoes(site_name, safra, linhas):
                 "fungicidas_quimicos, fungicidas_biologicos) VALUES (?, ?, ?, ?, ?, ?)",
                 (site_name, safra, data_aplicacao, talhao, fungicidas_quimicos, fungicidas_biologicos),
             )
+            _catalogar_produto(conn, "quimico", fungicidas_quimicos, "")
+            _catalogar_produto(conn, "biologico", fungicidas_biologicos, "")
     conn.commit()
     conn.close()
 
