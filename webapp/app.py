@@ -1282,7 +1282,13 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     envio -- em vez disso manda um relatorio SO' de clima, exatamente
     igual ao dos pontos "so clima" da aba Alertas Clima (`diseases=[]`,
     mesmo caminho curto de `_format_whatsapp_message`/`_build_site_pdf`),
-    pedido explicito do usuario (antes nao mandava nada nesse caso)."""
+    pedido explicito do usuario (antes nao mandava nada nesse caso).
+    Quando os dois formatos sao mandados juntos (texto E pdf True nessa
+    chamada) e o texto cabe na legenda do WhatsApp, manda os dois
+    COMBINADOS num unico envio (PDF com o texto como legenda) em vez de
+    2 mensagens separadas pro mesmo numero -- ver LEGENDA_MAX_CHARS mais
+    abaixo. Reduz o risco de o WhatsApp reter a entrega por padrao de
+    envio automatizado (2+ mensagens em sequencia pro mesmo numero)."""
     if not enviar_texto and not enviar_pdf:
         return False, "Nada a enviar (nem texto nem PDF agendado pra hoje)."
     translations = _load_translations()
@@ -1357,24 +1363,43 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
         except Exception as exc:
             models.log_whatsapp_envio(site, None, None, False, f"Falha ao gerar PDF pra WhatsApp: {exc}")
 
+    # Quando texto E PDF caem no mesmo envio, manda os dois JUNTOS (PDF
+    # com o texto inteiro como legenda) em vez de 2 mensagens separadas
+    # pro mesmo numero -- 2 mensagens automatizadas em sequencia pro
+    # mesmo destinatario e' exatamente o padrao que o WhatsApp penaliza
+    # retendo a entrega (ver comentario de MIN_DELAY_MS em
+    # whatsapp-bridge/index.js; aconteceu de novo em 2026-09-11 mesmo com
+    # o espacamento de 15-25s ja' em vigor). So' combina quando o texto
+    # cabe no limite de legenda do WhatsApp (~1024 caracteres) -- um
+    # relatorio maior que isso continua mandando os dois separados, pra
+    # nunca cortar/perder conteudo.
+    LEGENDA_MAX_CHARS = 1024
+    combinar = bool(text) and bool(pdf_bytes) and len(text) <= LEGENDA_MAX_CHARS
+
     sucesso, falha = [], []
     for phone, rotulo in destinos:
         erros = []
         ok_texto = True
-        if text is not None:
-            ok_texto, message = whatsapp.send_whatsapp(phone, text)
-            models.log_whatsapp_envio(site, rotulo, phone, ok_texto, message)
-            if not ok_texto:
-                erros.append(message)
         ok_pdf = True
-        if pdf_bytes:
-            ok_pdf, message_pdf = whatsapp.send_whatsapp_document(
-                phone, pdf_bytes, pdf_filename,
-                caption=f"📄 Relatório em PDF - {pdf_nome_fazenda} (mesmo conteudo, com grafico de concentracao)",
-            )
-            models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"PDF: {message_pdf}")
+        if combinar:
+            ok_pdf, message_pdf = whatsapp.send_whatsapp_document(phone, pdf_bytes, pdf_filename, caption=text)
+            models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"Texto+PDF combinado num so envio: {message_pdf}")
             if not ok_pdf:
                 erros.append(f"PDF: {message_pdf}")
+        else:
+            if text is not None:
+                ok_texto, message = whatsapp.send_whatsapp(phone, text)
+                models.log_whatsapp_envio(site, rotulo, phone, ok_texto, message)
+                if not ok_texto:
+                    erros.append(message)
+            if pdf_bytes:
+                ok_pdf, message_pdf = whatsapp.send_whatsapp_document(
+                    phone, pdf_bytes, pdf_filename,
+                    caption=f"📄 Relatório em PDF - {pdf_nome_fazenda} (mesmo conteudo, com grafico de concentracao)",
+                )
+                models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"PDF: {message_pdf}")
+                if not ok_pdf:
+                    erros.append(f"PDF: {message_pdf}")
         (sucesso if ok_texto and ok_pdf else falha).append(rotulo if (ok_texto and ok_pdf) else f"{rotulo} ({'; '.join(erros)})")
     resumo = f"{len(sucesso)}/{len(destinos)} numero(s)"
     if falha:
