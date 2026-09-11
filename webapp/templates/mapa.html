@@ -59,7 +59,6 @@
 {% endblock %}
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 {% if sites_data %}
 <script>
 (function () {
@@ -291,7 +290,7 @@
     var GRADE_PASSO_GRAUS = 1.5;
     var diaSelecionado = 0;
     var gradeChuva = null;
-    var chuvaLayer = null;
+    var chuvaLayers = [];
     var cicloAutomatico = null;
 
     // Escala em mm -- topo em 90mm/dia (pedido explicito do usuario,
@@ -311,86 +310,127 @@
         { mm: 75, cor: '#9631c9' },
         { mm: 90, cor: '#c31f8f' },
     ];
-    // Gradiente EM DEGRAUS (nao suave) -- o Leaflet.heat normalmente
-    // mistura as cores entre uma faixa e outra, o que juntava tudo numa
-    // mancha so' dificil de distinguir (pedido explicito do usuario pra
-    // "segregar melhor as cores"). Cada faixa fica com um key de INICIO
-    // e um de FIM (quase no mesmo ponto onde a proxima comeca) com a
-    // MESMA cor -- assim o Leaflet.heat interpola dentro da faixa (fica
-    // constante, ja que e' a mesma cor nas duas pontas) e so' troca de
-    // cor de verdade no saltinho entre uma faixa e a proxima.
-    var CHUVA_GRADIENTE = (function () {
-        var EPS = 0.0015;
-        var grad = {};
-        var inicio = 0;
-        CHUVA_FAIXAS.forEach(function (faixa) {
-            var fim = Math.min(faixa.mm / CHUVA_ESCALA_MAX_MM, 1);
-            grad[inicio] = faixa.cor;
-            grad[Math.max(inicio, fim - EPS)] = faixa.cor;
-            inicio = fim;
-        });
-        grad[1] = CHUVA_FAIXAS[CHUVA_FAIXAS.length - 1].cor; // fecha explicito em 1.0 (ultima faixa)
-        return grad;
-    })();
-
     function limparCamadaChuva() {
-        if (chuvaLayer) { map.removeLayer(chuvaLayer); chuvaLayer = null; }
+        chuvaLayers.forEach(function (layer) { map.removeLayer(layer); });
+        chuvaLayers = [];
     }
 
-    // Pixels de tela equivalentes ao passo da grade (~1.5 grau) no
-    // zoom/latitude atual -- mesmo calculo do icone de nuvem antigo
-    // (tamanhoBaseEmPixels), reaproveitado aqui pro raio do heatmap
-    // acompanhar o zoom. Sem isso, um raio fixo em pixels faz pontos
-    // vizinhos se sobrepor demais em alguns niveis de zoom (tudo vira
-    // uma mancha so' -- exatamente o problema relatado) e ficar solto/
-    // pontilhado em outros.
-    function tamanhoBaseEmPixels() {
-        var zoom = map.getZoom();
-        var lat = map.getCenter().lat;
-        var metrosPorPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
-        var passoMetros = GRADE_PASSO_GRAUS * 111320;
-        return Math.min(passoMetros / metrosPorPixel, 220);
+    function hexParaRgb(hex) {
+        var n = parseInt(hex.slice(1), 16);
+        return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    }
+
+    // mm -> cor da faixa (lookup direto na tabela discreta CHUVA_FAIXAS,
+    // sem gradiente/mistura) -- null quando abaixo do minimo (transparente,
+    // sem chuva). Substitui o antigo CHUVA_GRADIENTE (que era plumbing
+    // especifico do Leaflet.heat).
+    function corParaMm(mm) {
+        if (mm === null || mm === undefined || mm < CHUVA_MINIMA_MM) return null;
+        for (var i = 0; i < CHUVA_FAIXAS.length; i++) {
+            if (mm <= CHUVA_FAIXAS[i].mm || i === CHUVA_FAIXAS.length - 1) return CHUVA_FAIXAS[i].cor;
+        }
+    }
+
+    // Indexa os pontos da grade (ja recortados pelo contorno do pais) pelas
+    // linha/coluna inteiras da grade regular, usando o proprio bbox do pais
+    // como origem -- os mesmos indices usados por gerarGradePais pra' gerar
+    // esses pontos (Math.round protege de deriva de ponto flutuante do
+    // "+= GRADE_PASSO_GRAUS" repetido).
+    function construirGradeIndexada(pontosPais, bbox) {
+        var grade = {};
+        pontosPais.forEach(function (ponto) {
+            var mm = (ponto.chuva_mm_por_dia || [])[diaSelecionado];
+            if (mm === null || mm === undefined) return;
+            var gi = Math.round((ponto.lat - bbox.lat_min) / GRADE_PASSO_GRAUS);
+            var gj = Math.round((ponto.lon - bbox.lon_min) / GRADE_PASSO_GRAUS);
+            grade[gi + ',' + gj] = mm;
+        });
+        return grade;
+    }
+
+    // Desenha o raster de UM pais: interpola (bilinear, SEM somar) o valor
+    // de cada pixel a partir dos 4 nos da grade mais proximos (ignorando
+    // cantos sem dado, cortados pelo contorno do pais) e converte pra cor
+    // via corParaMm. O raster e' calculado uma unica vez em coordenadas
+    // geograficas fixas (bounds = bbox do pais) e mostrado via
+    // L.imageOverlay -- o Leaflet reescala a IMAGEM (nao os dados) ao
+    // navegar/dar zoom, entao a cor em qualquer coordenada real NUNCA muda
+    // so' por causa do zoom (o bug relatado pelo usuario em Manaus).
+    function desenharRasterPais(bbox, pontosPais) {
+        var grade = construirGradeIndexada(pontosPais, bbox);
+        var giMax = Math.round((bbox.lat_max - bbox.lat_min) / GRADE_PASSO_GRAUS);
+        var gjMax = Math.round((bbox.lon_max - bbox.lon_min) / GRADE_PASSO_GRAUS);
+        if (giMax < 1 || gjMax < 1) return null;
+        var PX_POR_CELULA = 24;
+        var MAX_DIM = 800;
+        var largura = (gjMax + 1) * PX_POR_CELULA;
+        var altura = (giMax + 1) * PX_POR_CELULA;
+        var escala = Math.min(1, MAX_DIM / Math.max(largura, altura));
+        largura = Math.max(2, Math.round(largura * escala));
+        altura = Math.max(2, Math.round(altura * escala));
+
+        var canvas = document.createElement('canvas');
+        canvas.width = largura;
+        canvas.height = altura;
+        var ctx = canvas.getContext('2d');
+        var imgData = ctx.createImageData(largura, altura);
+
+        for (var py = 0; py < altura; py++) {
+            // Linha 0 do canvas = topo = lat_max (imagem cresce pra baixo,
+            // latitude cresce pra cima -- eixo Y invertido).
+            var giFrac = (1 - py / (altura - 1)) * giMax;
+            var gi0 = Math.floor(giFrac);
+            var gi1 = Math.min(gi0 + 1, giMax);
+            var fy = giFrac - gi0;
+            for (var px = 0; px < largura; px++) {
+                var gjFrac = (px / (largura - 1)) * gjMax;
+                var gj0 = Math.floor(gjFrac);
+                var gj1 = Math.min(gj0 + 1, gjMax);
+                var fx = gjFrac - gj0;
+
+                var cantos = [
+                    { v: grade[gi0 + ',' + gj0], w: (1 - fx) * (1 - fy) },
+                    { v: grade[gi0 + ',' + gj1], w: fx * (1 - fy) },
+                    { v: grade[gi1 + ',' + gj0], w: (1 - fx) * fy },
+                    { v: grade[gi1 + ',' + gj1], w: fx * fy },
+                ];
+                var somaPeso = 0, somaValor = 0;
+                cantos.forEach(function (c) {
+                    if (c.v === undefined) return;
+                    somaPeso += c.w;
+                    somaValor += c.w * c.v;
+                });
+                var idx = (py * largura + px) * 4;
+                if (somaPeso <= 0) { imgData.data[idx + 3] = 0; continue; }
+                var cor = corParaMm(somaValor / somaPeso);
+                if (!cor) { imgData.data[idx + 3] = 0; continue; }
+                var rgb = hexParaRgb(cor);
+                imgData.data[idx] = rgb.r;
+                imgData.data[idx + 1] = rgb.g;
+                imgData.data[idx + 2] = rgb.b;
+                imgData.data[idx + 3] = 255;
+            }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        var bounds = L.latLngBounds([bbox.lat_min, bbox.lon_min], [bbox.lat_max, bbox.lon_max]);
+        return L.imageOverlay(canvas.toDataURL(), bounds, { opacity: 0.75, interactive: false }).addTo(map);
     }
 
     function desenharCamadaChuva() {
         limparCamadaChuva();
-        if (!gradeChuva) return;
-        var pontosHeat = [];
-        gradeChuva.forEach(function (ponto) {
-            var mm = (ponto.chuva_mm_por_dia || [])[diaSelecionado];
-            if (mm === null || mm === undefined || mm < CHUVA_MINIMA_MM) return;
-            pontosHeat.push([ponto.lat, ponto.lon, Math.min(mm, CHUVA_ESCALA_MAX_MM) / CHUVA_ESCALA_MAX_MM]);
+        if (!gradeChuva || !gradeChuva.length) return;
+        Object.keys(activeCountries).forEach(function (code) {
+            var bbox = CLOUD_BBOXES[code];
+            if (!bbox) return;
+            var pontosPais = gradeChuva.filter(function (p) {
+                return p.lat >= bbox.lat_min - 1e-6 && p.lat <= bbox.lat_max + 1e-6 &&
+                    p.lon >= bbox.lon_min - 1e-6 && p.lon <= bbox.lon_max + 1e-6;
+            });
+            if (!pontosPais.length) return;
+            var layer = desenharRasterPais(bbox, pontosPais);
+            if (layer) chuvaLayers.push(layer);
         });
-        if (!pontosHeat.length) return;
-        // Garante que o container do mapa ja tem tamanho valido antes do
-        // Leaflet.heat desenhar (mesmo cuidado ja tomado em solo.html) --
-        // sem isso, um redesenho logo apos abrir a aba (container ainda
-        // sem layout) faz o canvas interno da biblioteca nascer 0x0 e
-        // lancar erro ao tentar ler os pixels de volta.
-        map.invalidateSize();
-        // Raio proporcional ao espacamento REAL da grade no zoom atual
-        // (~55% do passo, pra os pontos vizinhos se tocarem sem exagerar
-        // a sobreposicao) em vez de um valor fixo -- ver
-        // tamanhoBaseEmPixels acima.
-        var passoPx = tamanhoBaseEmPixels();
-        var raio = Math.max(18, Math.min(passoPx * 0.55, 90));
-        try {
-            chuvaLayer = L.heatLayer(pontosHeat, {
-                radius: raio, blur: raio * 0.85, max: 1.0, minOpacity: 0.15,
-                gradient: CHUVA_GRADIENTE,
-            }).addTo(map);
-        } catch (e) {
-            // Container ainda sem tamanho valido, mesmo apos invalidateSize
-            // (ex. aba aberta em segundo plano) -- so' pula esse redesenho,
-            // a proxima troca de dia/zoom tenta de novo.
-        }
     }
-
-    // Reescala o raio quando o zoom muda -- nao espera o proximo passo
-    // do ciclo automatico (a cada 2s) pra corrigir o tamanho.
-    map.on('zoomend', function () {
-        if (chuvaToggle.checked && gradeChuva) desenharCamadaChuva();
-    });
 
     function gerarGradePais(bbox, paisGeojson) {
         var pontos = [];
