@@ -389,11 +389,14 @@ def _relatorio_diario_rows():
     consumidos = set()
 
     def _sort_key(fazenda, data_iso):
+        # Data mais antiga primeiro dentro de cada fazenda (pedido
+        # explicito do usuario -- lida como um historico cronologico,
+        # nao "o que aconteceu por ultimo" no topo).
         try:
             ordinal = date.fromisoformat(data_iso).toordinal()
         except ValueError:
             ordinal = 0
-        return (fazenda.lower(), -ordinal)
+        return (fazenda.lower(), ordinal)
 
     for r in report:
         site = device_to_site.get(r["estacao"])
