@@ -128,7 +128,6 @@
             <a class="nav-link text-white{% if request.endpoint == 'ndvi' %} tab-ativa{% endif %}" href="{{ url_for('ndvi') }}">NDVI</a>
             <a class="nav-link text-white" href="https://new.bioscout.com.au/" target="_blank" rel="noopener">BioScout</a>
             <a class="nav-link text-white{% if request.endpoint == 'change_password' %} tab-ativa{% endif %}" href="{{ url_for('change_password') }}" title="Trocar senha">Trocar senha</a>
-            <a class="nav-link text-white{% if request.endpoint == 'meu_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('meu_whatsapp') }}" title="Meu WhatsApp">Meu WhatsApp</a>
             <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>
             {% if current_user.is_admin %}
             <div class="position-relative">
@@ -213,7 +212,7 @@
     function formActionUrl(form) {
         // NAO usar form.action direto -- se o form tiver um campo/botao
         // chamado "action" (ex.: o botao "Enviar teste" em
-        // admin_edit_user.html/meu_whatsapp.html), ele sobrescreve essa
+        // admin_edit_user.html), ele sobrescreve essa
         // propriedade nativa (named-getter do HTMLFormElement), e
         // form.action deixa de ser a URL. getAttribute pega o valor do
         // atributo puro, sem esse problema; sem atributo action=, o

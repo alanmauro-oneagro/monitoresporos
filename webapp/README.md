@@ -76,8 +76,9 @@ público — ainda não configurado, combinamos deixar para depois.
   qualquer formatacao digitada (parenteses, tracos, espacos, +) e guarda
   so os digitos. Aparecem como colunas na lista de Usuarios. Esse
   telefone e' o numero que recebe os relatorios de WhatsApp das fazendas
-  marcadas pra essa pessoa (ver abaixo); ela mesma pode corrigi-lo depois
-  em **"📱 Meu WhatsApp"** (no menu, do lado de "Trocar senha"). O botao
+  marcadas pra essa pessoa (ver abaixo) -- so' um admin corrige/preenche
+  esse numero (aba Usuarios), nao existe mais autoatendimento pra isso
+  (a aba "Meu WhatsApp" foi removida por nunca ter sido usada). O botao
   **"Editar cadastro"** na lista de Usuarios abre uma tela pra corrigir ou
   preencher email/telefone de um usuario que ja existe (mesma validacao
   da criacao) -- necessario pros usuarios criados antes desse campo

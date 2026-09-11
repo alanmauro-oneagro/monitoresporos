@@ -4593,32 +4593,6 @@ def change_password():
     return render_template("change_password.html")
 
 
-@app.route("/meu-whatsapp", methods=["GET", "POST"])
-@login_required
-def meu_whatsapp():
-    if request.method == "POST":
-        action = request.form.get("action")
-        telefone = _telefone_from_form(request.form)
-        if not _is_valid_phone(telefone):
-            error = "Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999)."
-            if request.headers.get("X-Autosave") == "1":
-                return {"ok": False, "message": error}
-            flash(error, "error")
-            return redirect(url_for("meu_whatsapp"))
-        models.set_user_whatsapp(int(current_user.id), telefone)
-        if action == "test":
-            ok, message = whatsapp.send_whatsapp(
-                telefone, "OneAgro: mensagem de teste. Se voce recebeu isso, seu numero esta certo!",
-            )
-            flash(("Mensagem de teste enviada! Confira seu WhatsApp." if ok else f"Falha no teste: {message}"),
-                  "success" if ok else "error")
-            return redirect(url_for("meu_whatsapp"))
-        return _save_response("Seu telefone foi salvo.", "meu_whatsapp")
-    user_row = models.get_user_by_id(int(current_user.id))
-    codigo_pais, numero_telefone = _split_phone(user_row["telefone"] or "")
-    return render_template("meu_whatsapp.html", codigo_pais=codigo_pais, numero_telefone=numero_telefone)
-
-
 @app.route("/admin/users/<int:user_id>/whatsapp-pausado", methods=["POST"])
 @admin_required
 def admin_user_whatsapp_pausado(user_id):

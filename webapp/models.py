@@ -2263,19 +2263,6 @@ def create_user(username, password, is_admin=False, email="", telefone=""):
         conn.close()
 
 
-def set_user_whatsapp(user_id, telefone):
-    """Numero pessoal (aba 'Meu WhatsApp') pra onde vao os relatorios das
-    fazendas marcadas pra esse usuario -- ver `get_site_whatsapp_recipients`.
-    Desde que o envio passou a ser pelo WhatsApp do administrador (servico
-    whatsapp-bridge), o destinatario so precisa do proprio numero -- nao
-    tem mais API key pessoal (isso era exigencia do CallMeBot, que nao e'
-    mais usado)."""
-    conn = get_db()
-    conn.execute("UPDATE users SET telefone = ? WHERE id = ?", (telefone, user_id))
-    conn.commit()
-    conn.close()
-
-
 def get_site_whatsapp_recipients(site_name):
     """Todo usuario (e subordinado) que deve receber os relatorios de
     WhatsApp daquela fazenda -- uma fazenda pode ter varios numeros, a
