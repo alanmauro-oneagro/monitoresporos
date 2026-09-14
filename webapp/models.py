@@ -683,6 +683,15 @@ def init_db():
             conn.execute("DELETE FROM weather_station_overrides WHERE site_name = ?", (row["site_name"],))
 
     try:
+        _migrar_estoque_rapido_para_folha(conn)
+    except Exception:
+        # Nunca impede o app de subir por causa disso -- na pior das
+        # hipoteses a grade "Produtos Fazenda" da aba Manejo fica vazia
+        # ate' a proxima subida (o dado antigo continua no banco,
+        # so' nao migrado ainda).
+        pass
+
+    try:
         _backfill_catalogos(conn)
     except Exception:
         # Nunca impede o app de subir por causa disso -- na pior das
@@ -693,6 +702,22 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+
+def _migrar_estoque_rapido_para_folha(conn):
+    """A grade "Produtos Fazenda" da aba Manejo (Recomendacoes) tinha seu
+    proprio momento "geral" (`MOMENTO_ESTOQUE_RAPIDO`), duplicando a
+    secao Folha da aba Fazendas -- unificado num so lugar (usuario nao
+    precisa mais digitar o mesmo produto duas vezes, e a caixa de Manejo
+    agora E' a propria secao Folha, editavel dali tambem). Qualquer
+    linha ja salva em "geral" passa a fazer parte da Folha da mesma
+    fazenda/safra/tipo. Idempotente -- depois da primeira migracao nao
+    sobra nenhuma linha "geral" pra mover de novo. Roda na MESMA
+    conexao/transacao de init_db (nao abre/commita sozinha)."""
+    conn.execute(
+        "UPDATE farm_produtos SET momento = 'folha' WHERE momento = ?",
+        (MOMENTO_ESTOQUE_RAPIDO,),
+    )
 
 
 def _backfill_catalogos(conn):
@@ -1257,11 +1282,12 @@ TIPOS_PRODUTO = ("quimico", "biologico")
 # interna, rotulo exibido).
 SAFRAS = [("safra1", "Safra"), ("safra2", "2ª Safra"), ("safra3", "3ª Safra")]
 
-# Grade compacta de estoque mostrada na propria aba Recomendacoes -- usa a
-# mesma tabela farm_produtos, mas com seu proprio "momento" (nao aparece na
-# aba Fazendas, que so olha para MOMENTOS acima), ja que e' so um lembrete
-# rapido ao lado dos alertas (o cadastro completo por momento de aplicacao
-# continua sendo feito na aba Fazendas).
+# Momento antigo, RETIRADO -- a grade "Produtos Fazenda" da aba
+# Recomendacoes usava esse momento proprio (fora de MOMENTOS acima), em
+# vez de mostrar/editar a mesma secao Folha da aba Fazendas. Unificado:
+# a caixa de Recomendacoes agora le/escreve direto em momento="folha".
+# So' fica aqui pra' `_migrar_estoque_rapido_para_folha` (ver init_db)
+# achar e mover qualquer linha antiga ja salva com esse momento.
 MOMENTO_ESTOQUE_RAPIDO = "geral"
 
 

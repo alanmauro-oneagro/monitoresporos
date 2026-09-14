@@ -1202,16 +1202,16 @@ def _site_whatsapp_destinations(site):
 
 def _farm_produtos_estoque(site, safra):
     """{"quimico": [...], "biologico": [...]} com os itens que a fazenda
-    ja tem comprado (aba Recomendacoes > Produtos Fazenda, momento
-    "geral") -- sem `safra` (envio agendado), junta os itens das duas
-    safras."""
+    ja tem comprado (aba Recomendacoes > Produtos Fazenda -- mesma
+    secao Folha da aba Fazendas, momento "folha") -- sem `safra` (envio
+    agendado), junta os itens das duas safras."""
     existentes = models.get_all_farm_produtos().get(site, {})
     safras_a_considerar = [safra] if safra else [s for s, _ in models.SAFRAS]
     produtos = {}
     for tipo in models.TIPOS_PRODUTO:
         itens = []
         for s in safras_a_considerar:
-            itens.extend(existentes.get((s, models.MOMENTO_ESTOQUE_RAPIDO, tipo), []))
+            itens.extend(existentes.get((s, "folha", tipo), []))
         produtos[tipo] = itens
     return produtos
 
@@ -2984,6 +2984,7 @@ def recommendations(safra):
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
     virtual_names = models.virtual_farm_site_names()
     whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
+    catalogo_produtos = models.get_all_catalogo_produtos()
 
     sites_data = []
     for site, cards in cards_by_site.items():
@@ -2995,16 +2996,16 @@ def recommendations(safra):
             d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
         thumbnails = sorted(cards, key=lambda c: c["doenca"])
         existentes = produtos_by_site.get(site, {})
-        estoque_rapido = {}
+        produtos_folha = {}
         for tipo in models.TIPOS_PRODUTO:
-            linhas = list(existentes.get((safra, models.MOMENTO_ESTOQUE_RAPIDO, tipo), []))
+            linhas = list(existentes.get((safra, "folha", tipo), []))
             # Minimo de 2 linhas; sempre 1 linha em branco a mais que o
             # preenchido -- o resto e' criado sozinho no navegador (mesma
             # logica da aba Fazendas), sem limite fixo de linhas.
             linhas_min = max(2, len(linhas) + 1)
             while len(linhas) < linhas_min:
                 linhas.append({"data_anotacao": "", "nome": "", "ingrediente_ativo": ""})
-            estoque_rapido[tipo] = linhas
+            produtos_folha[tipo] = linhas
         dias_desde_atualizacao = None
         if cultura_info.get("updated_at"):
             try:
@@ -3048,7 +3049,7 @@ def recommendations(safra):
             "virtual": is_virtual,
             "weather": weather,
             "leitura_data": leitura_data,
-            "estoque_rapido": estoque_rapido,
+            "produtos_folha": produtos_folha,
             "cultura": cultura_info.get("cultura") or "",
             "dias_desde_atualizacao": dias_desde_atualizacao,
             "dias_sem_leitura": dias_sem_leitura,
@@ -3064,6 +3065,7 @@ def recommendations(safra):
         "recommendations.html", sites_data=sites_data, no_access=False,
         any_whatsapp_configured=any_whatsapp_configured,
         safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS, culturas_ativas=culturas_ativas,
+        catalogo_produtos=catalogo_produtos,
     )
 
 
@@ -3949,9 +3951,15 @@ def save_farm_aplicacoes():
     return _save_response(f"Dados de aplicacoes de '{_nome_exibicao(site_name)}' ({SAFRA_LABELS[safra]}) salvos.", "fazendas")
 
 
-@app.route("/recommendations/estoque/save", methods=["POST"])
+@app.route("/recommendations/produtos-folha/save", methods=["POST"])
 @login_required
-def save_estoque_rapido():
+def save_produtos_folha():
+    """Caixa "Folha (aplicacao foliar)" da aba Manejo -- escreve direto
+    em momento="folha" (a MESMA secao Folha da aba Fazendas, ver
+    `save_farm_produtos`), so' que restrita a esse unico momento: nunca
+    chama `models.set_farm_produtos` pra' 'ts'/'sulco' (ficariam
+    apagados, ja que esse form nao tem campos desses momentos pra'
+    reenviar)."""
     site_name = request.form.get("site_name")
     if not current_user.is_admin:
         allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
@@ -3961,9 +3969,10 @@ def save_estoque_rapido():
     for tipo in models.TIPOS_PRODUTO:
         datas = request.form.getlist(f"data_{tipo}")
         nomes = request.form.getlist(f"nome_{tipo}")
-        linhas = [(data, nome, "") for data, nome in zip(datas, nomes)]
-        models.set_farm_produtos(site_name, safra, models.MOMENTO_ESTOQUE_RAPIDO, tipo, linhas)
-    return _save_response(f"Estoque de '{_nome_exibicao(site_name)}' salvo.", "recommendations", safra=safra)
+        ativos = request.form.getlist(f"ia_{tipo}")
+        linhas = list(zip(datas, nomes, ativos))
+        models.set_farm_produtos(site_name, safra, "folha", tipo, linhas)
+    return _save_response(f"Produtos (Folha) de '{_nome_exibicao(site_name)}' salvos.", "recommendations", safra=safra)
 
 
 @app.route("/recommendations/save", methods=["POST"])

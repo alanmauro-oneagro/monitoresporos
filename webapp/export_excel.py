@@ -1,7 +1,7 @@
 """Gera o relatorio Excel (.xlsx) com o MAXIMO de informacao possivel do
 site: cadastro (usuarios/subordinados), Fazendas (cadastro/produtos/
-plantio/aplicacoes), Manejo das 3 safras (cultura, estoque rapido,
-anotacoes), Doencas (traducao/germinacao/culturas/paises), Culturas,
+plantio/aplicacoes), Manejo das 3 safras (cultura, anotacoes), Doencas
+(traducao/germinacao/culturas/paises), Culturas,
 WhatsApp (historico/destinatarios/agenda), Fungicidas (biblioteca
 completa) e Relatorio Diario (clima + concentracao de esporos e risco
 de infeccao, dia a dia) -- exportacao restrita a `ALAN_MAURO_USERNAME`,
@@ -154,7 +154,7 @@ def _fazendas_produtos_rows():
     for site_name, buckets in models.get_all_farm_produtos().items():
         for (safra, momento, tipo), linhas in buckets.items():
             if momento not in models.MOMENTOS:
-                continue  # momento "geral" (estoque rapido) vai na aba de Manejo
+                continue  # so' defesa -- todo momento valido ja e' TS/Sulco/Folha
             for linha in linhas:
                 rows.append([
                     site_name, SAFRA_LABELS.get(safra, safra), MOMENTO_LABELS.get(momento, momento),
@@ -195,21 +195,6 @@ def _manejo_cultura_rows():
     for (site_name, safra), info in models.get_all_farm_culturas().items():
         rows.append([site_name, SAFRA_LABELS.get(safra, safra), info["cultura"] or "", models.fmt_data_br(info["updated_at"]) or ""])
     rows.sort(key=lambda r: (r[0].lower(), r[1]))
-    return rows
-
-
-def _manejo_estoque_rows():
-    rows = []
-    for site_name, buckets in models.get_all_farm_produtos().items():
-        for (safra, momento, tipo), linhas in buckets.items():
-            if momento != models.MOMENTO_ESTOQUE_RAPIDO:
-                continue
-            for linha in linhas:
-                rows.append([
-                    site_name, SAFRA_LABELS.get(safra, safra), TIPO_LABELS.get(tipo, tipo),
-                    linha["data_anotacao"], linha["nome"],
-                ])
-    rows.sort(key=lambda r: (r[0].lower(), r[1], r[2]))
     return rows
 
 
@@ -314,7 +299,7 @@ def _atividades_por_site_dia():
     for site, buckets in models.get_all_farm_produtos().items():
         for (safra, momento, tipo), linhas in buckets.items():
             if momento not in models.MOMENTOS:
-                continue  # estoque rapido nao entra (mesmo criterio de _fazendas_produtos_rows)
+                continue  # so' defesa, mesmo criterio de _fazendas_produtos_rows
             for l in linhas:
                 rotulo = f"Produto ({MOMENTO_LABELS.get(momento, momento)})"
                 detalhe = f"{SAFRA_LABELS.get(safra, safra)} - {TIPO_LABELS.get(tipo, tipo)}: {l['nome'] or '-'} ({l['ingrediente_ativo'] or '-'})"
@@ -561,7 +546,6 @@ def build_workbook():
     _try_sheet(wb, "Fazendas - Plantio", ["Fazenda", "Safra", "Data plantio", "Talhao", "Variedade", "Ciclo (dias)"], _fazendas_plantio_rows)
     _try_sheet(wb, "Fazendas - Aplicacoes", ["Fazenda", "Safra", "Data aplicacao", "Talhao", "Fungicidas quimicos", "Fungicidas biologicos"], _fazendas_aplicacoes_rows)
     _try_sheet(wb, "Manejo - Cultura", ["Fazenda", "Safra", "Cultura", "Atualizado em"], _manejo_cultura_rows)
-    _try_sheet(wb, "Manejo - Estoque rapido", ["Fazenda", "Safra", "Tipo", "Data/Anotacao", "Nome do produto"], _manejo_estoque_rows)
     _try_sheet(wb, "Manejo - Anotacoes", ["Fazenda", "Doenca", "Nota"], _manejo_anotacoes_rows)
     _try_sheet(
         wb, "Doencas",

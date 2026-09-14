@@ -25,6 +25,13 @@ html { font-size: 14px; }
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda encontrada.</div>
 {% else %}
+<!-- Catalogo de autocompletar (mesmo de templates/fazendas.html) --
+     renderizado UMA VEZ so', compartilhado entre todas as fazendas da
+     pagina. -->
+<datalist id="catalogo-nomes-quimico">{% for nome in catalogo_produtos.quimico | map(attribute='nome') | unique %}<option value="{{ nome }}">{% endfor %}</datalist>
+<datalist id="catalogo-ia-quimico">{% for p in catalogo_produtos.quimico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
+<datalist id="catalogo-nomes-biologico">{% for nome in catalogo_produtos.biologico | map(attribute='nome') | unique %}<option value="{{ nome }}">{% endfor %}</datalist>
+<datalist id="catalogo-ia-biologico">{% for p in catalogo_produtos.biologico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
 <form method="post" action="{{ url_for('save_recommendations') }}" id="notesForm" data-autosave>
     <input type="hidden" name="safra" value="{{ safra }}">
 </form>
@@ -190,21 +197,30 @@ html { font-size: 14px; }
         </div>
 
         <div class="mt-3 pt-3 border-top">
-            <form method="post" action="{{ url_for('save_estoque_rapido') }}" data-autosave>
+            <form method="post" action="{{ url_for('save_produtos_folha') }}" data-autosave>
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <input type="hidden" name="safra" value="{{ safra }}">
-                <label class="form-label small fw-bold d-block mb-1">Produtos Fazenda</label>
-                <div class="row gx-3">
-                    {% for tipo, titulo in [('quimico', 'Químicos'), ('biologico', 'Biológicos')] %}
-                    <div class="col-12 col-md-6 mb-2">
-                        <div class="small fw-bold mb-1">{{ titulo }}</div>
-                        <div class="estoque-rapido-rows">
-                        {% for item in site_group.estoque_rapido[tipo] %}
-                        <div class="d-flex gap-1 mb-1 estoque-rapido-row">
-                            <input type="text" name="data_{{ tipo }}" class="form-control form-control-sm" style="max-width: 100px;" value="{{ item.data_anotacao }}" placeholder="Data/Anotacao">
-                            <input type="text" name="nome_{{ tipo }}" class="form-control form-control-sm" value="{{ item.nome }}" placeholder="Nome do produto">
-                        </div>
-                        {% endfor %}
+                <label class="form-label small fw-bold d-block mb-1">Folha (aplicação foliar)</label>
+                <div class="small text-muted mb-2">Mesmo dado da aba Fazendas — editar aqui atualiza lá também.</div>
+                <div class="row gx-4">
+                    {% for tipo, titulo in [('quimico', 'Fungicidas quimicos'), ('biologico', 'Biológicos')] %}
+                    <div class="col-12 col-lg-6 mb-2">
+                        <div class="small text-muted mb-1">{{ titulo }}</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0 produtos-table">
+                                <thead>
+                                    <tr><th>Data/Anotacao</th><th>Nome do produto</th><th>Ingrediente ativo</th></tr>
+                                </thead>
+                                <tbody>
+                                {% for item in site_group.produtos_folha[tipo] %}
+                                <tr>
+                                    <td><input type="text" name="data_{{ tipo }}" class="form-control form-control-sm" value="{{ item.data_anotacao }}"></td>
+                                    <td><input type="text" name="nome_{{ tipo }}" list="catalogo-nomes-{{ tipo }}" class="form-control form-control-sm" value="{{ item.nome }}"></td>
+                                    <td><input type="text" name="ia_{{ tipo }}" list="catalogo-ia-{{ tipo }}" class="form-control form-control-sm" value="{{ item.ingrediente_ativo }}"></td>
+                                </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                     {% endfor %}
@@ -284,16 +300,51 @@ document.querySelectorAll('.copy-recomendacao-btn').forEach(function (btn) {
         }
     });
 });
-document.querySelectorAll('.estoque-rapido-rows').forEach(function (container) {
-    container.addEventListener('input', function (e) {
-        var row = e.target.closest('.estoque-rapido-row');
-        if (!row || row !== container.lastElementChild || row.dataset.grown) return;
+document.querySelectorAll('table.produtos-table tbody').forEach(function (tbody) {
+    tbody.addEventListener('input', function (e) {
+        var row = e.target.closest('tr');
+        if (!row || row !== tbody.lastElementChild || row.dataset.grown) return;
         row.dataset.grown = '1';
         var clone = row.cloneNode(true);
         delete clone.dataset.grown;
         clone.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
-        container.appendChild(clone);
+        tbody.appendChild(clone);
     });
+});
+
+// Autopreenchimento bidirecional Produto <-> Ingrediente ativo (mesmo
+// catalogo/logica de templates/fazendas.html) -- delegado no document
+// pra' funcionar tambem nas linhas que o "grow" acima clona depois do
+// carregamento da pagina.
+var CATALOGO_PRODUTOS = {{ catalogo_produtos | tojson }};
+function _catalogoTipoDoNome(nomeAtributo) {
+    if (nomeAtributo.endsWith('_quimico')) return 'quimico';
+    if (nomeAtributo.endsWith('_biologico')) return 'biologico';
+    return null;
+}
+document.addEventListener('change', function (e) {
+    var field = e.target;
+    var row = field.closest('tr');
+    if (!row || !field.name) return;
+    if (field.name.indexOf('nome_') === 0) {
+        var tipo = _catalogoTipoDoNome(field.name);
+        var ia = row.querySelector('input[name^="ia_"]');
+        if (!tipo || !ia || ia.value.trim()) return;
+        var par = (CATALOGO_PRODUTOS[tipo] || []).find(function (p) { return p.nome === field.value.trim(); });
+        if (par && par.ingrediente_ativo) {
+            ia.value = par.ingrediente_ativo;
+            ia.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    } else if (field.name.indexOf('ia_') === 0) {
+        var tipo = _catalogoTipoDoNome(field.name);
+        var nome = row.querySelector('input[name^="nome_"]');
+        if (!tipo || !nome || nome.value.trim()) return;
+        var par = (CATALOGO_PRODUTOS[tipo] || []).find(function (p) { return p.ingrediente_ativo === field.value.trim(); });
+        if (par && par.nome) {
+            nome.value = par.nome;
+            nome.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
 });
 document.querySelectorAll('.farm-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {
