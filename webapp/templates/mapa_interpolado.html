@@ -454,12 +454,24 @@
     // clique), no celular passa a precisar de 2 toques.
     var ultimoTooltipAberto = null;
     // Mesmo pino da fazenda real, so que amarelo claro pra um ponto
-    // estimado -- sem circulo de raio nem outro icone uma vez que o
-    // ponto ja foi criado, so a cor do pino diferencia.
+    // estimado -- sem outro icone uma vez que o ponto ja foi criado, so
+    // a cor do pino diferencia (ponto "so clima" ganha tambem o circulo
+    // de raio abaixo, permanente).
     sites.forEach(function (site) {
         var icone;
         if (site.tipo === 'clima') {
             icone = climaIcon;
+            // Area de referencia do ponto -- mesmo raio configurado no
+            // formulario (so' visual, esse raio nao interpola doenca
+            // nenhuma pra esse tipo de ponto), fica sempre desenhada, nao
+            // so' durante a criacao/edicao. `interactive: false` pra nao
+            // atrapalhar o clique/tooltip do pino por cima.
+            if (site.raio_km) {
+                L.circle([site.lat, site.lon], {
+                    radius: site.raio_km * 1000, color: '#1c7ed6', weight: 1,
+                    fillColor: PIN_COR_CLIMA, fillOpacity: 0.12, interactive: false,
+                }).addTo(map);
+            }
         } else {
             var cor = site.virtual ? PIN_COR_VIRTUAL : PIN_COR_NORMAL;
             icone = buildPinIcon(cor, site.inativo ? PIN_ESCALA_INATIVO : 1);

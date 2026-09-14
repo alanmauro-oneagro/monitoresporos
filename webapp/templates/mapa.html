@@ -560,6 +560,18 @@
         var icone;
         if (site.tipo === 'clima') {
             icone = climaIcon;
+            // Area de referencia do ponto "so clima" (raio configurado na
+            // aba Mapa Interpolado > Pontos Criados) -- so' visual (esse
+            // raio nao interpola nenhuma doenca), fica sempre desenhada
+            // pra dar uma nocao de area coberta, nao so' durante a
+            // criacao do ponto. `interactive: false` pra nao atrapalhar o
+            // clique/tooltip do pino por cima.
+            if (site.raio_km) {
+                L.circle([site.lat, site.lon], {
+                    radius: site.raio_km * 1000, color: '#1c7ed6', weight: 1,
+                    fillColor: PIN_COR_CLIMA, fillOpacity: 0.12, interactive: false,
+                }).addTo(map);
+            }
         } else {
             var cor = site.virtual ? PIN_COR_VIRTUAL : PIN_COR_NORMAL;
             icone = buildPinIcon(cor, site.inativo ? PIN_ESCALA_INATIVO : 1);

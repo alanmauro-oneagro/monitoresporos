@@ -2496,7 +2496,7 @@ def mapa():
     sites_data = []
     estacoes_by_codigo = {}
 
-    def _plotar_site(site, lat, lon, cards, tipo=""):
+    def _plotar_site(site, lat, lon, cards, tipo="", raio_km=None):
         pais_da_fazenda = site_countries.get(site, countries.DEFAULT_COUNTRY)
         provider = countries.get_country(pais_da_fazenda)["station_provider"]
         escolha = overrides.get(site)
@@ -2539,6 +2539,7 @@ def mapa():
             "lon": lon,
             "virtual": site in virtual_names,
             "tipo": tipo,
+            "raio_km": raio_km,
             "cards": sorted(cards, key=lambda c: c["doenca"]),
             "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
             "inativo": inativo,
@@ -2567,7 +2568,7 @@ def mapa():
             continue
         if permitted is not None and vf["site_name"] not in permitted:
             continue
-        _plotar_site(vf["site_name"], vf["lat"], vf["lon"], [], tipo="clima")
+        _plotar_site(vf["site_name"], vf["lat"], vf["lon"], [], tipo="clima", raio_km=vf["raio_km"])
 
     sites_data.sort(key=lambda s: s["site"])
     # Fronteira desenhada mesmo sem fazenda no pais, desde que o pais ja'
