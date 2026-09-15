@@ -7,7 +7,7 @@ completa) e Relatorio Diario (clima + concentracao de esporos e risco
 de infeccao, dia a dia) -- exportacao restrita a `ALAN_MAURO_USERNAME`,
 ver `admin_exportar` em `app.py`."""
 import io
-from datetime import date
+from datetime import date, datetime
 
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -17,6 +17,30 @@ import countries
 import data_reader
 import fungicida_data
 import models
+
+
+def _ordinal_para_ordenar(data_texto):
+    """Numero ordinal (dias desde 01/01/0001) de uma data/datetime em
+    qualquer formato usado no banco (ISO com ou sem hora, dd/mm/aaaa,
+    dd/mm/aa -- ver models.parse_data_flexivel) -- 0 se vazio/nao
+    reconhecido (fica como "mais antigo" possivel, nunca quebra a
+    ordenacao por causa de uma anotacao livre tipo "comprado em
+    agosto"). Usado pra ordenar toda aba do Excel com coluna de data
+    sempre do mais novo pro mais antigo (pedido explicito do usuario)."""
+    if not data_texto:
+        return 0
+    bruto = str(data_texto).strip()
+    try:
+        return datetime.fromisoformat(bruto).toordinal()
+    except ValueError:
+        pass
+    data_iso = models.parse_data_flexivel(bruto)
+    if data_iso:
+        try:
+            return date.fromisoformat(data_iso).toordinal()
+        except ValueError:
+            pass
+    return 0
 
 UR_LIMIARES = (80, 85, 90, 95)
 
@@ -160,7 +184,11 @@ def _fazendas_produtos_rows():
                     site_name, SAFRA_LABELS.get(safra, safra), MOMENTO_LABELS.get(momento, momento),
                     TIPO_LABELS.get(tipo, tipo), linha["data_anotacao"], linha["nome"], linha["ingrediente_ativo"],
                 ])
-    rows.sort(key=lambda r: (r[0].lower(), r[1], r[2], r[3]))
+    # Dentro de cada fazenda/safra/momento/tipo, data mais nova primeiro
+    # -- "Data/Anotacao" e' de duplo uso (data OU anotacao livre, ver
+    # models.py), entao texto que nao parece data cai pro final do grupo
+    # (_ordinal_para_ordenar devolve 0), nunca quebra a ordenacao.
+    rows.sort(key=lambda r: (r[0].lower(), r[1], r[2], r[3], -_ordinal_para_ordenar(r[4])))
     return rows
 
 
@@ -173,7 +201,9 @@ def _fazendas_plantio_rows():
                     site_name, SAFRA_LABELS.get(safra, safra),
                     linha["data_plantio"], linha["talhao"], linha["variedade"], linha["ciclo_dias"],
                 ])
-    rows.sort(key=lambda r: (r[0].lower(), r[1]))
+    # Data mais nova primeiro dentro de cada fazenda/safra (mesma regra
+    # de toda aba com coluna de data, ver _ordinal_para_ordenar).
+    rows.sort(key=lambda r: (r[0].lower(), r[1], -_ordinal_para_ordenar(r[2])))
     return rows
 
 
@@ -186,7 +216,9 @@ def _fazendas_aplicacoes_rows():
                     site_name, SAFRA_LABELS.get(safra, safra), linha["data_aplicacao"], linha["talhao"],
                     linha["fungicidas_quimicos"], linha["fungicidas_biologicos"],
                 ])
-    rows.sort(key=lambda r: (r[0].lower(), r[1]))
+    # Data mais nova primeiro dentro de cada fazenda/safra (mesma regra
+    # de toda aba com coluna de data, ver _ordinal_para_ordenar).
+    rows.sort(key=lambda r: (r[0].lower(), r[1], -_ordinal_para_ordenar(r[2])))
     return rows
 
 
@@ -374,14 +406,10 @@ def _relatorio_diario_rows():
     consumidos = set()
 
     def _sort_key(fazenda, data_iso):
-        # Data mais antiga primeiro dentro de cada fazenda (pedido
-        # explicito do usuario -- lida como um historico cronologico,
-        # nao "o que aconteceu por ultimo" no topo).
-        try:
-            ordinal = date.fromisoformat(data_iso).toordinal()
-        except ValueError:
-            ordinal = 0
-        return (fazenda.lower(), ordinal)
+        # Data mais NOVA primeiro dentro de cada fazenda (pedido
+        # explicito do usuario -- mesma regra aplicada em toda aba do
+        # Excel com coluna de data, ver _ordinal_para_ordenar).
+        return (fazenda.lower(), -_ordinal_para_ordenar(data_iso))
 
     for r in report:
         site = device_to_site.get(r["estacao"])
