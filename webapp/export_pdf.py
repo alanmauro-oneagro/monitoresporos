@@ -232,7 +232,7 @@ def build_recommendation_pdf(
     story = []
 
     story.append(Paragraph(f"{nome_fazenda} - OneAgro", _ESTILO_TITULO))
-    subtitulo = f"Manejo {safra_label} - {cultura.upper()}" if cultura else f"Manejo {safra_label}"
+    subtitulo = f"Recomendações {safra_label} - {cultura.upper()}" if cultura else f"Recomendações {safra_label}"
     story.append(Paragraph(subtitulo, _ESTILO_SUBTITULO))
 
     if weather:

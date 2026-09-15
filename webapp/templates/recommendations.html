@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Manejo {{ safra_label }} - OneAgro{% endblock %}
+{% block title %}Recomendações {{ safra_label }} - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
 /* Pagina com muita tabela/formulario -- reduz a base (rem) pra tudo
@@ -9,7 +9,7 @@ html { font-size: 14px; }
 </style>
 {% endblock %}
 {% block content %}
-<h4 class="mb-2">Manejo {{ safra_label }}</h4>
+<h4 class="mb-2">Recomendações {{ safra_label }}</h4>
 
 {% if not no_access and not any_whatsapp_configured %}
 <div class="alert alert-warning small">
@@ -201,7 +201,7 @@ html { font-size: 14px; }
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <input type="hidden" name="safra" value="{{ safra }}">
                 <label class="form-label small fw-bold d-block mb-1">Folha (aplicação foliar)</label>
-                <div class="small text-muted mb-2">Mesmo dado da aba Fazendas — editar aqui atualiza lá também.</div>
+                <div class="small text-muted mb-2">Mesmo dado da aba Manejos — editar aqui atualiza lá também.</div>
                 <div class="row gx-4">
                     {% for tipo, titulo in [('quimico', 'Fungicidas quimicos'), ('biologico', 'Biológicos')] %}
                     <div class="col-12 col-lg-6 mb-2">

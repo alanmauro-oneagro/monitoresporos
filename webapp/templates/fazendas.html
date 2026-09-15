@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Fazendas - OneAgro{% endblock %}
+{% block title %}Manejos - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
 /* Fonte da pagina volta ao padrao do site -- so' o nome/cabecalho de
@@ -153,9 +153,9 @@
                 <div class="text-muted small mt-1">
                     {% if site_group.virtual %}
                     Mesmo nome editavel em <strong>Mapa Interpolado</strong> > Pontos Criados -- muda em todo o
-                    site (Painel, Mapa, Manejo, WhatsApp, PDF, Graficos).
+                    site (Painel, Mapa, Recomendações, WhatsApp, PDF, Graficos).
                     {% else %}
-                    So muda como a fazenda aparece (Painel, Mapa, Manejo, WhatsApp, PDF, Graficos) --
+                    So muda como a fazenda aparece (Painel, Mapa, Recomendações, WhatsApp, PDF, Graficos) --
                     nao afeta o casamento com os dados do BioScout.
                     {% endif %}
                 </div>
@@ -377,7 +377,7 @@ document.querySelectorAll('.safra-toggle').forEach(function (btn) {
     ciclo em dias), que comeca com 1 linha e cresce do mesmo jeito. Clique
     no nome da
     fazenda para ver e editar o estoque. A cultura atual de cada safra e'
-    definida na aba Manejo (Safra / 2ª Safra / 3ª Safra), do lado do nome
+    definida na aba Recomendações (Safra / 2ª Safra / 3ª Safra), do lado do nome
     da fazenda.
 </p>
 {% endblock %}

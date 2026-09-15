@@ -1118,7 +1118,7 @@ def _format_whatsapp_message(
     if not diseases:
         partes = [_whatsapp_titulo(site), ""]
         if safra_label:
-            partes.append(f"Manejo: *{safra_label}*")
+            partes.append(f"Recomendações: *{safra_label}*")
         if cultura:
             partes.append(f"Cultura: *{cultura.upper()}*")
         if safra_label or cultura:
@@ -1136,7 +1136,7 @@ def _format_whatsapp_message(
     lines = [_whatsapp_titulo(site), ""]
 
     if safra_label:
-        lines.append(f"Manejo: *{safra_label}*")
+        lines.append(f"Recomendações: *{safra_label}*")
     if cultura:
         lines.append(f"Cultura: *{cultura.upper()}*")
     if safra_label or cultura:
