@@ -2,15 +2,6 @@
 {% block title %}NDVI - OneAgro{% endblock %}
 {% block content %}
 <h4 class="mb-2">NDVI (Sentinel-2)</h4>
-<p class="text-muted small mb-3">
-    Anexe o(s) CAR da fazenda (arquivo KML baixado do
-    <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener">SICAR</a>) --
-    pode anexar mais de um CAR pra mesma fazenda -- e gere imagens NDVI pra essa area,
-    calculadas em cima de imagens Sentinel-2 (Copernicus) -- disponivel desde 06/2015.
-    Cada imagem gerada fica na galeria de miniaturas (ordenada da mais recente pra mais
-    antiga); clique numa miniatura pra abrir em outra aba do navegador e comparar datas,
-    ou marque "Selecionar" em varias e mande todas de uma vez por WhatsApp.
-</p>
 
 {% if not credenciais_ok %}
 <div class="alert alert-warning">
@@ -194,6 +185,16 @@
 </div>
 {% endfor %}
 {% endif %}
+
+<p class="text-muted small border-top pt-3 mt-2">
+    Anexe o(s) CAR da fazenda (arquivo KML baixado do
+    <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener">SICAR</a>) --
+    pode anexar mais de um CAR pra mesma fazenda -- e gere imagens NDVI pra essa area,
+    calculadas em cima de imagens Sentinel-2 (Copernicus) -- disponivel desde 06/2015.
+    Cada imagem gerada fica na galeria de miniaturas (ordenada da mais recente pra mais
+    antiga); clique numa miniatura pra abrir em outra aba do navegador e comparar datas,
+    ou marque "Selecionar" em varias e mande todas de uma vez por WhatsApp.
+</p>
 <script>
 // Persiste marcar/desmarcar destinatario ativo pra NDVI (default
 // desmarcado, ver `site_group.ndvi_ativos`) -- independente do form de

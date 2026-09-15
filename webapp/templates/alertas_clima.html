@@ -7,11 +7,6 @@
 {% endblock %}
 {% block content %}
 <h4 class="mb-2">Alertas Clima</h4>
-<p class="text-muted small">
-    Estacao meteorologica de referencia, frequencia de envio automatico por WhatsApp (texto/PDF) e envio manual
-    dos pontos <strong>☁️ so' clima</strong> (criados na aba <strong>Mapa Interpolado</strong> > Pontos Criados).
-    Esses pontos nao monitoram doenca -- o relatorio traz so' o clima atual e a previsao.
-</p>
 
 {% if not pontos %}
 <div class="alert alert-info small">Nenhum ponto "so clima" criado ainda -- crie um em Mapa Interpolado > Pontos Criados (Tipo de ponto = "Somente clima").</div>
@@ -127,13 +122,16 @@
             </button>
         </form>
     </div>
-
-    <p class="text-muted small mb-0 mt-2 pt-2 border-top">
-        Nome, coordenada, raio, pais e remocao desse ponto ficam na aba <strong>Mapa Interpolado</strong> > Pontos Criados.
-        Quem recebe (numero de WhatsApp) se configura na aba <strong>Usuarios</strong>.
-    </p>
 </div>
 {% endfor %}
+
+<p class="text-muted small border-top pt-3 mt-2">
+    Estacao meteorologica de referencia, frequencia de envio automatico por WhatsApp (texto/PDF) e envio manual
+    dos pontos <strong>☁️ so' clima</strong> aparecem em cada card acima. Nome, coordenada, raio, pais e remocao
+    de um ponto ficam na aba <strong>Mapa Interpolado</strong> > Pontos Criados. Quem recebe (numero de WhatsApp)
+    se configura na aba <strong>Usuarios</strong>. Pontos "so' clima" nao monitoram doenca -- o relatorio traz
+    so' o clima atual e a previsao.
+</p>
 {% endblock %}
 {% block extra_scripts %}
 <script>

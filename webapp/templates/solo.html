@@ -16,7 +16,9 @@
 {% endblock %}
 {% block content %}
 <h4 class="mb-2">Mapa de Solos</h4>
-<p class="text-muted small mb-3">
+<div id="solo-map"></div>
+
+<p class="text-muted small border-top pt-3 mt-2">
     Tipo de solo por fazenda, resolvido automaticamente pela coordenada --
     <strong>Embrapa/PronaSolos</strong> (Mapa de Solos do Brasil, classificacao SiBCS)
     dentro do Brasil, ou <strong>SoilGrids</strong> (textura estimada por %
@@ -24,7 +26,6 @@
     ordem SiBCS) fora do Brasil. As zonas coloridas no mapa sao as ordens
     de solo do Brasil; clique numa area pra ver a classe especifica.
 </p>
-<div id="solo-map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
