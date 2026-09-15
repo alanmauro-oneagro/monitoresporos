@@ -1486,7 +1486,12 @@ def _run_scheduled_whatsapp_sends():
     so' no minuto exato agendado, senao a fazenda simplesmente nunca
     recebe o relatorio naquele dia. Marca e PERSISTE logo apos cada
     envio (nao so' no final do lote), entao um crash/reinicio no meio da
-    lista retoma so' do que falta, nunca reenvia o que ja' foi."""
+    lista retoma so' do que falta, nunca reenvia o que ja' foi. Dentro
+    de cada rodada, pontos "so' clima" (aba Alertas Clima) sempre vao
+    DEPOIS de toda fazenda normal pendente -- pedido explicito do
+    usuario, pra' priorizar o relatorio de recomendacao (doenca) na
+    fila do whatsapp-bridge (ver whatsapp.py) antes de qualquer clima
+    de referencia."""
     today = datetime.now().date()
     weekday = today.weekday()
     agora = datetime.now()
@@ -1496,6 +1501,7 @@ def _run_scheduled_whatsapp_sends():
     horarios = models.get_all_whatsapp_schedule_horarios()
     hora_default = models.get_whatsapp_send_hour()
     ja_enviados = _load_scheduler_enviados(today)
+    virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
 
     pendentes = []  # (site, enviar_texto, enviar_pdf)
     for site in set(schedule_texto) | set(schedule_pdf):
@@ -1514,6 +1520,9 @@ def _run_scheduled_whatsapp_sends():
             pendentes.append((site, enviar_texto, enviar_pdf))
     if not pendentes:
         return
+    # Estavel -- so' empurra os pontos "so' clima" pro final, sem mexer
+    # na ordem relativa entre eles nem entre as demais fazendas.
+    pendentes.sort(key=lambda item: item[0] in virtual_clima_names)
     # Aquece o cache de clima de todas as fazendas pendentes em paralelo
     # antes de mandar -- sem isso, `_send_site_whatsapp` buscava o clima
     # de cada fazenda um de cada vez (rede, ~1-1.5s cada), somando varios

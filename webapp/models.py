@@ -2301,11 +2301,26 @@ def _seed_horario_sugerido(conn, site_name):
     ver `_proximo_horario_sugerido`) pra essa fazenda -- SO' se ela
     ainda nao tiver nenhuma linha em `whatsapp_schedule_horarios`
     (nunca sobrescreve um horario ja customizado, seja a mao ou por uma
-    sugestao anterior). Mesma conexao/transacao de quem chamou."""
+    sugestao anterior) E SO' se tiver pelo menos um dia marcado (texto
+    OU pdf, ver `whatsapp_schedule`/`whatsapp_schedule_pdf`) -- pedido
+    explicito do usuario: nao faz sentido sugerir horario pra uma
+    fazenda que nunca vai mandar nada de qualquer jeito (sem nenhum dia
+    marcado, o agendador nunca dispara pra ela, ver
+    `app._run_scheduled_whatsapp_sends`). Mesma conexao/transacao de
+    quem chamou."""
     ja_tem = conn.execute(
         "SELECT 1 FROM whatsapp_schedule_horarios WHERE site_name = ?", (site_name,)
     ).fetchone()
     if ja_tem:
+        return
+    tem_dia_marcado = conn.execute(
+        """
+        SELECT 1 FROM whatsapp_schedule WHERE site_name = ?
+        UNION SELECT 1 FROM whatsapp_schedule_pdf WHERE site_name = ?
+        """,
+        (site_name, site_name),
+    ).fetchone()
+    if not tem_dia_marcado:
         return
     hora, minuto = _proximo_horario_sugerido(conn)
     conn.execute(
