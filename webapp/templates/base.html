@@ -257,6 +257,18 @@
             status.className = 'autosave-status small ms-2 text-danger';
         });
     }
+    // Campo de TEXTO livre (digitado, nao escolhido com 1 clique) -- so'
+    // esses correm risco de ter o autosave disparado NO MEIO da edicao
+    // (uma pausa natural entre uma palavra e outra). Select/checkbox/
+    // radio mudam com um unico clique (nunca ficam "meio digitados"),
+    // entao continuam no debounce de tempo normal, mesmo dentro de um
+    // form "data-autosave-reload" (ver `schedule`/`focusout` abaixo).
+    function ehCampoDeTexto(field) {
+        if (field.tagName === 'TEXTAREA') return true;
+        if (field.tagName !== 'INPUT') return false;
+        var tipo = (field.type || 'text').toLowerCase();
+        return ['text', 'number', 'search', 'tel', 'email', 'url'].indexOf(tipo) !== -1;
+    }
     function schedule(form, field) {
         clearTimeout(timers.get(form));
         var status = statusFor(field, form);
@@ -265,7 +277,17 @@
             status.textContent = 'Editando...';
             status.className = 'autosave-status small ms-2 text-muted';
         }
-        timers.set(form, setTimeout(function () { doSave(form, status); }, 900));
+        // Formulario que recarrega a pagina depois de salvar (ex.: "Nome
+        // de exibicao" na aba Fazendas) NAO pode disparar em cima do
+        // debounce de tempo quando o campo e' de texto livre -- uma
+        // pausa natural na digitacao (> 1.2s entre uma palavra e outra,
+        // por exemplo) recarregava a pagina NO MEIO da edicao, derrubando
+        // o foco e voltando ao topo da pagina. Esses campos so' salvam
+        // (e so' entao recarregam) quando perdem o foco de verdade --
+        // ver o listener de "focusout" mais abaixo -- nunca no meio de
+        // quem ainda esta' digitando.
+        if (form.hasAttribute('data-autosave-reload') && ehCampoDeTexto(field)) return;
+        timers.set(form, setTimeout(function () { doSave(form, status); }, 1200));
     }
     ['input', 'change'].forEach(function (evtName) {
         document.addEventListener(evtName, function (e) {
@@ -274,6 +296,24 @@
             if (!form || !form.hasAttribute('data-autosave')) return;
             schedule(form, field);
         });
+    });
+    // Complementa o "schedule" acima pros campos de texto livre dentro
+    // de um form "data-autosave-reload" -- dispara o salvamento (e o
+    // reload que vem junto) so' quando o campo editado perde o foco de
+    // verdade (clicou fora, apertou Tab, etc.), nunca enquanto a pessoa
+    // ainda esta' digitando nele. So' dispara se realmente havia uma
+    // edicao pendente (status ainda "Editando...") -- sair de um campo
+    // sem ter mudado nada nao deve gerar um salvamento/reload a toa.
+    document.addEventListener('focusout', function (e) {
+        var field = e.target;
+        var form = field.form;
+        if (!form || !form.hasAttribute('data-autosave') || !form.hasAttribute('data-autosave-reload')) return;
+        if (!ehCampoDeTexto(field)) return;
+        var status = statusFor(field, form);
+        if (status && status.textContent === 'Editando...') {
+            clearTimeout(timers.get(form));
+            doSave(form, status);
+        }
     });
 })();
 </script>
