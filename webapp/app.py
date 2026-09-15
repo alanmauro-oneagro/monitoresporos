@@ -521,6 +521,30 @@ def _cultura_label(site, safra, culturas_by_site):
     return " / ".join(nomes)
 
 
+def _fungicida_ordem_all_cached():
+    """Cache por requisicao (flask.g, ver `_nome_exibicao` pro mesmo
+    padrao) de `models.get_all_fungicida_ordem()` -- montar a
+    recomendacao de VARIAS fazendas na mesma requisicao (aba
+    Recomendacoes) chamava `models.get_fungicida_ordem` uma vez por
+    doenca/tipo/fazenda (bug de performance real: 32 conexoes SQLite so'
+    pra isso numa unica carga da pagina, com so' 11 fazendas). Reseta
+    sozinho a cada requisicao nova (`g` e' por-requisicao)."""
+    val = getattr(g, "_fungicida_ordem_all", None)
+    if val is None:
+        val = models.get_all_fungicida_ordem()
+        g._fungicida_ordem_all = val
+    return val
+
+
+def _ordem_fungicida(doenca, tipo, n):
+    """Mesmo resultado de `models.get_fungicida_ordem(doenca, tipo, n)`,
+    so' que a partir do cache por-requisicao acima (sem abrir conexao
+    nova) -- ver `_apply_fungicida_overrides`."""
+    order = [i for i in _fungicida_ordem_all_cached().get((doenca, tipo), []) if i < n]
+    faltando = [i for i in range(n) if i not in order]
+    return order + faltando
+
+
 def _apply_fungicida_overrides(doenca, tipo, itens, overrides, cultura=None, bloqueios=None):
     """Aplica edicoes feitas pelo admin (tela Fungicidas) sobre a lista
     padrao de ingredientes ativos daquela doenca -- itens sem edicao saem
@@ -556,7 +580,7 @@ def _apply_fungicida_overrides(doenca, tipo, itens, overrides, cultura=None, blo
             content.append(None)  # linha extra ainda vazia -- nao aparece na recomendacao
         else:
             content.append(item)
-    order = models.get_fungicida_ordem(doenca, tipo, n)
+    order = _ordem_fungicida(doenca, tipo, n)
     return [content[i] for i in order if content[i] is not None]
 
 
@@ -596,17 +620,51 @@ def _formatar_condicoes_germinacao(info):
     return ", ".join(partes)
 
 
+def _fungicida_overrides_cached():
+    """Cache por requisicao (ver `_fungicida_ordem_all_cached`) de
+    `models.get_all_fungicida_overrides()`."""
+    val = getattr(g, "_fungicida_overrides", None)
+    if val is None:
+        val = models.get_all_fungicida_overrides()
+        g._fungicida_overrides = val
+    return val
+
+
+def _fungicida_bloqueios_cached():
+    """Cache por requisicao (ver `_fungicida_ordem_all_cached`) de
+    `models.get_all_fungicida_registro_bloqueado()`."""
+    val = getattr(g, "_fungicida_bloqueios", None)
+    if val is None:
+        val = models.get_all_fungicida_registro_bloqueado()
+        g._fungicida_bloqueios = val
+    return val
+
+
+def _disease_info_cached():
+    """Cache por requisicao (ver `_fungicida_ordem_all_cached`) de
+    `models.get_all_disease_info()`."""
+    val = getattr(g, "_disease_info", None)
+    if val is None:
+        val = models.get_all_disease_info()
+        g._disease_info = val
+    return val
+
+
 def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=None):
     """A partir dos cartoes (todas as doencas) de uma fazenda, monta a lista
     das que estao em Atencao/Perigo com a recomendacao de fungicida (quando
     houver) e a anotacao manual salva -- usado pela tela de Recomendacoes,
     pelo envio manual de WhatsApp e pelo envio agendado. `cultura` (cultura
     atual da fazenda/safra) filtra os quimicos sem registro pra ela -- ver
-    `_apply_fungicida_overrides`."""
+    `_apply_fungicida_overrides`. Chamado uma vez POR FAZENDA na aba
+    Recomendacoes (varias fazendas na mesma requisicao) -- os "get_all"
+    abaixo usam cache por-requisicao (`g`, mesmo padrao de
+    `_nome_exibicao`) pra nao reabrir conexao a cada fazenda (bug de
+    performance real: era a maior fatia do tempo dessa pagina)."""
     if fungicida_overrides is None:
-        fungicida_overrides = models.get_all_fungicida_overrides()
-    bloqueios = models.get_all_fungicida_registro_bloqueado()
-    disease_info = models.get_all_disease_info()
+        fungicida_overrides = _fungicida_overrides_cached()
+    bloqueios = _fungicida_bloqueios_cached()
+    disease_info = _disease_info_cached()
     diseases = []
     for card in cards:
         if card["status"] not in ("Perigo", "Atencao"):
@@ -660,7 +718,7 @@ def _build_riscos_climaticos_sem_leitura(cards):
     `_calc_previsao_risco_germinacao` usada pra `diseases`) e filtrar
     pra quem esta em risco medio/alto, senao a lista sai cheia de
     doenca com risco baixo (nao acionavel)."""
-    disease_info = models.get_all_disease_info()
+    disease_info = _disease_info_cached()
     vistos = {}
     for card in cards:
         doenca_en = card["doenca_en"]
@@ -1200,12 +1258,24 @@ def _site_whatsapp_destinations(site):
     return [(r["telefone"], r["username"]) for r in models.get_site_whatsapp_recipients(site)]
 
 
+def _all_farm_produtos_cached():
+    """Cache por requisicao (ver `_fungicida_ordem_all_cached`) de
+    `models.get_all_farm_produtos()` -- `_farm_produtos_estoque` e'
+    chamado uma vez POR FAZENDA na aba Recomendacoes, reabrindo conexao
+    pra reler o produto de TODAS as fazendas a cada chamada."""
+    val = getattr(g, "_all_farm_produtos", None)
+    if val is None:
+        val = models.get_all_farm_produtos()
+        g._all_farm_produtos = val
+    return val
+
+
 def _farm_produtos_estoque(site, safra):
     """{"quimico": [...], "biologico": [...]} com os itens que a fazenda
     ja tem comprado (aba Recomendacoes > Produtos Fazenda -- mesma
     secao Folha da aba Fazendas, momento "folha") -- sem `safra` (envio
     agendado), junta os itens das duas safras."""
-    existentes = models.get_all_farm_produtos().get(site, {})
+    existentes = _all_farm_produtos_cached().get(site, {})
     safras_a_considerar = [safra] if safra else [s for s, _ in models.SAFRAS]
     produtos = {}
     for tipo in models.TIPOS_PRODUTO:

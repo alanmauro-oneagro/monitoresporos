@@ -1236,6 +1236,26 @@ def get_fungicida_ordem(doenca, tipo, n):
     return order + faltando
 
 
+def get_all_fungicida_ordem():
+    """{(doenca, tipo): [idx_original ordenado por posicao]} -- todas as
+    reordenacoes manuais (botao mover pra cima/baixo, aba Fungicidas) de
+    uma vez so', pra quem monta recomendacao de VARIAS fazendas na mesma
+    requisicao (aba Recomendacoes) nao abrir uma conexao nova por
+    doenca/tipo/fazenda (bug de performance real, ver
+    `app._ordem_fungicida_cached`). Sem o "faltando" (indices novos que
+    ainda nao foram reordenados) -- isso depende de `n`, calculado por
+    quem usa (mesma logica de `get_fungicida_ordem`)."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT doenca, tipo, idx_original FROM fungicida_ordem ORDER BY doenca, tipo, posicao"
+    ).fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        result.setdefault((r["doenca"], r["tipo"]), []).append(r["idx_original"])
+    return result
+
+
 def set_fungicida_ordem(doenca, tipo, order):
     conn = get_db()
     conn.execute("DELETE FROM fungicida_ordem WHERE doenca = ? AND tipo = ?", (doenca, tipo))
