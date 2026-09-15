@@ -42,6 +42,25 @@ def _ordinal_para_ordenar(data_texto):
             pass
     return 0
 
+
+def _data_br_4digitos(data_texto):
+    """dd/mm/aaaa (ano com 4 digitos) -- so' usado na coluna "Data" do
+    Relatorio Diario, pedido explicito do usuario pra essa aba
+    especifica. Diferente de `models.fmt_data_br` (dd/mm/AA, 2 digitos)
+    usado em todo o resto do site/PDF/WhatsApp -- de proposito NAO mexe
+    nessa funcao compartilhada, pra nao mudar o formato em nenhum outro
+    lugar."""
+    if not data_texto:
+        return data_texto
+    data_iso = models.parse_data_flexivel(str(data_texto).strip())
+    if not data_iso:
+        return data_texto
+    try:
+        return date.fromisoformat(data_iso).strftime("%d/%m/%Y")
+    except ValueError:
+        return data_texto
+
+
 UR_LIMIARES = (80, 85, 90, 95)
 
 MOMENTO_LABELS = {"ts": "TS", "sulco": "Sulco", "folha": "Folha"}
@@ -415,9 +434,9 @@ def _relatorio_diario_rows():
         site = device_to_site.get(r["estacao"])
         fazenda = site or r["estacao"]
         data_iso = r["data"]
-        data_br = models.fmt_data_br(data_iso) or data_iso
+        data_br = _data_br_4digitos(data_iso)
         base = [
-            fazenda, data_br, r["estacao"], r["temp_min"], r["temp_max"],
+            data_br, fazenda, r["estacao"], r["temp_min"], r["temp_max"],
         ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [r["vento_predominante"] or "-"]
         doencas = doencas_por_site_dia.get((site, data_iso), []) if site else []
         atividades = atividades_por_site_dia.get((site, data_iso), []) if site else []
@@ -439,8 +458,8 @@ def _relatorio_diario_rows():
     faltantes = (set(doencas_por_site_dia) | set(atividades_por_site_dia)) - consumidos
     for site, data_iso in faltantes:
         fazenda = site
-        data_br = models.fmt_data_br(data_iso) or data_iso
-        base = [fazenda, data_br, "-", None, None, None, None, None, None, "-"]
+        data_br = _data_br_4digitos(data_iso)
+        base = [data_br, fazenda, "-", None, None, None, None, None, None, "-"]
         for nome_pt, conc, risco_pct, warn, danger, maximo in doencas_por_site_dia.get((site, data_iso), []):
             entries.append((_sort_key(fazenda, data_iso), base + [nome_pt, conc, risco_pct, warn, danger, maximo, None, None]))
         for rotulo, detalhe in atividades_por_site_dia.get((site, data_iso), []):
@@ -548,7 +567,7 @@ def build_workbook():
     # primeiro.
     _try_sheet(
         wb, "Relatorio Diario",
-        ["Fazenda", "Data", "Estacao", "Temp min (C)", "Temp max (C)"]
+        ["Data", "Fazenda", "Estacao", "Temp min (C)", "Temp max (C)"]
         + [f"Horas UR>={limiar}%" for limiar in UR_LIMIARES]
         + [
             "Vento predominante", "Doenca", "Concentracao (esporos/m3)", "Risco de Infeccao (%)",
