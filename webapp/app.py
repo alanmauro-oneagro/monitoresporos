@@ -4001,22 +4001,41 @@ def save_site_country():
 @app.route("/fazendas/nome/save", methods=["POST"])
 @login_required
 def save_site_display_name():
-    """Nome de exibicao de fazenda REAL (vinda do BioScout) -- so' muda
-    como ela aparece no site inteiro (Painel, Mapa, Manejo, WhatsApp, PDF,
-    Graficos, ver `_nome_exibicao`); o site_name em si (chave de casamento
-    com o CSV do BioScout) nunca muda. Fazenda virtual/estimada ja tem seu
-    proprio nome editavel (aba Mapa Interpolado, `update_virtual_farm`) --
-    essa rota nao se aplica a ela."""
+    """Nome de exibicao de qualquer fazenda -- so' muda como ela aparece
+    no site inteiro (Painel, Mapa, Manejo, WhatsApp, PDF, Graficos, ver
+    `_nome_exibicao`). Fazenda REAL (vinda do BioScout): so' um apelido
+    (`site_display_names`), o site_name (chave de casamento com o CSV
+    do BioScout) nunca muda. Fazenda virtual/estimada: esse EH o nome de
+    verdade (`virtual_farms.nome`) -- salvar aqui e' equivalente a editar
+    em Mapa Interpolado > Pontos Criados (mesmo `update_virtual_farm`,
+    preservando coordenada/raio/pais/tipo atuais), entao o site_name
+    dela muda junto (segue o mesmo padrao de sempre -- ver
+    `models._virtual_farm_site_name`); a pagina recarrega sozinha depois
+    (`data-autosave-reload`) e mostra a fazenda com o site_name novo."""
     site_name = request.form.get("site_name")
     if not current_user.is_admin:
         allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
         if site_name not in allowed:
             abort(403)
-    if models.get_virtual_farm(site_name):
-        return _save_response(
-            "Fazenda virtual/estimada -- edite o nome na aba Mapa Interpolado.", "fazendas", ok=False,
-        )
     nome_exibicao = request.form.get("nome_exibicao", "")
+    vf = models.get_virtual_farm(site_name)
+    if vf:
+        nome = nome_exibicao.strip()
+        if not nome:
+            return _save_response("Nome nao pode ficar vazio pra fazenda virtual/estimada.", "fazendas", ok=False)
+        country_code = models.get_all_site_countries().get(site_name, countries.DEFAULT_COUNTRY)
+        try:
+            models.update_virtual_farm(
+                site_name, nome, vf["lat"], vf["lon"], vf["raio_km"],
+                country_code=country_code, tipo=vf.get("tipo") or "doenca",
+            )
+        except sqlite3.IntegrityError:
+            return _save_response(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "fazendas", ok=False)
+        # Mesmo motivo do pop em `editar_ponto_virtual` -- sem isso,
+        # `_weather_cache` continuava servindo o clima da coordenada
+        # antiga pelo site_name ANTIGO (que muda junto do nome).
+        _weather_cache.pop(site_name, None)
+        return _save_response(f"Nome de '{nome}' salvo.", "fazendas")
     models.set_site_display_name(site_name, nome_exibicao)
     novo_nome = _nome_exibicao(site_name)
     return _save_response(f"Nome de exibicao atualizado para '{novo_nome}'.", "fazendas")
@@ -4857,7 +4876,10 @@ def admin_exportar():
     outra conta -- ver base.html)."""
     site_name = request.args.get("site") or None
     apenas_falhas = request.args.get("falhas") == "1"
-    logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas)
+    # So' os ultimos 7 dias aqui na tela (pedido explicito do usuario) --
+    # o Excel completo (admin_exportar_download) continua com o
+    # historico INTEIRO, sem esse corte.
+    logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas, dias=7)
     for l in logs:
         l["site_nome"] = _nome_exibicao(l["site_name"])
     sites = sorted(set(read_sites()) | models.virtual_farm_site_names())

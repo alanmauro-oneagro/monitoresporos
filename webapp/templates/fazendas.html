@@ -142,7 +142,6 @@
             </div>
             {% endfor %}
 
-            {% if not site_group.virtual %}
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_site_display_name') }}" class="d-flex align-items-center gap-2" data-autosave data-autosave-reload>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
@@ -152,11 +151,15 @@
                     <span class="autosave-status small"></span>
                 </form>
                 <div class="text-muted small mt-1">
+                    {% if site_group.virtual %}
+                    Mesmo nome editavel em <strong>Mapa Interpolado</strong> > Pontos Criados -- muda em todo o
+                    site (Painel, Mapa, Manejo, WhatsApp, PDF, Graficos).
+                    {% else %}
                     So muda como a fazenda aparece (Painel, Mapa, Manejo, WhatsApp, PDF, Graficos) --
                     nao afeta o casamento com os dados do BioScout.
+                    {% endif %}
                 </div>
             </div>
-            {% endif %}
 
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_site_country') }}" class="d-flex align-items-center gap-2" data-autosave>

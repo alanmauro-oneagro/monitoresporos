@@ -955,10 +955,15 @@ def log_whatsapp_envio(site_name, destinatario, telefone, ok, mensagem):
     conn.close()
 
 
-def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, limit=300):
+def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, dias=None, limit=300):
     """Historico de envios, mais recente primeiro. `site_name` filtra por
     uma fazenda; `apenas_falhas` mostra so as tentativas que nao deram
-    certo."""
+    certo; `dias` (quando informado) limita ao que foi tentado nos
+    ultimos N dias (pedido explicito do usuario pra tela "Exportar" --
+    o corte e' calculado em Python a partir do UTC real, mesmo horario
+    de Cuiaba usado por `_agora_cuiaba`/gravado em `criado_em`, NUNCA
+    via `datetime('now', ...)` do proprio SQLite, que devolveria UTC e
+    ficaria 4h fora do corte pretendido)."""
     conn = get_db()
     condicoes, params = [], []
     if site_name:
@@ -966,6 +971,10 @@ def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, limit=300):
         params.append(site_name)
     if apenas_falhas:
         condicoes.append("ok = 0")
+    if dias:
+        corte = (datetime.now(timezone.utc) - timedelta(hours=4) - timedelta(days=dias)).strftime("%Y-%m-%d %H:%M:%S")
+        condicoes.append("criado_em >= ?")
+        params.append(corte)
     where = f"WHERE {' AND '.join(condicoes)}" if condicoes else ""
     params.append(limit)
     rows = conn.execute(
