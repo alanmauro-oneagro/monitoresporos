@@ -1652,6 +1652,11 @@ def _whatsapp_scheduler_loop():
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
+# Cookie de "Manter conectado" (ver /login) -- so' o navegador precisa
+# ler/mandar de volta, nunca JS da propria pagina, entao HttpOnly (o
+# Flask-Login nao liga por padrao) fecha uma via facil de roubo via
+# XSS sem custo nenhum de funcionalidade.
+app.config["REMEMBER_COOKIE_HTTPONLY"] = True
 
 
 class User(UserMixin):
@@ -1806,9 +1811,17 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
+        # Marcado por padrao (checkbox comeca "checked" no HTML) -- so
+        # fica de fora do POST se a pessoa desmarcar antes de entrar,
+        # pedido explicito do usuario pra nao precisar digitar login e
+        # senha toda vez. Cookie separado do Flask-Login (assinado com
+        # o mesmo secret_key persistido em disco -- ver
+        # _load_or_create_secret_key -- entao sobrevive a redeploy),
+        # dura 365 dias por padrao (REMEMBER_COOKIE_DURATION).
+        lembrar = bool(request.form.get("remember"))
         row = models.get_user_by_username(username)
         if row and check_password_hash(row["password_hash"], password):
-            login_user(User(row))
+            login_user(User(row), remember=lembrar)
             return redirect(url_for("mapa"))
         if row and row["temp_password_hash"] and _senha_temporaria_valida(row) \
                 and check_password_hash(row["temp_password_hash"], password):
@@ -1817,7 +1830,7 @@ def login():
             # definitiva antes de liberar o resto do app (ver
             # _forcar_definir_senha, o before_request logo abaixo).
             models.clear_user_temp_password(row["id"])
-            login_user(User(row))
+            login_user(User(row), remember=lembrar)
             session["deve_definir_senha"] = True
             return redirect(url_for("definir_nova_senha"))
         flash("Usuario ou senha invalidos.", "error")
