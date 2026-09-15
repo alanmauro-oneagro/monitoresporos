@@ -453,12 +453,19 @@
     // aberto -- no desktop nao muda nada (o hover ja abre antes do
     // clique), no celular passa a precisar de 2 toques.
     var ultimoTooltipAberto = null;
+    // Marcador (e circulo de raio, quando existir) de cada ponto ja
+    // existente, indexado pelo site_name -- guardado aqui pra' poder
+    // esconder os dois temporariamente enquanto o ponto esta sendo
+    // arrastado no formulario de Editar (ver editMarkersPorSite abaixo),
+    // sem precisar recriar nada.
+    var layersPorSite = {};
     // Mesmo pino da fazenda real, so que amarelo claro pra um ponto
     // estimado -- sem outro icone uma vez que o ponto ja foi criado, so
     // a cor do pino diferencia (ponto "so clima" ganha tambem o circulo
     // de raio abaixo, permanente).
     sites.forEach(function (site) {
         var icone;
+        var circulo = null;
         if (site.tipo === 'clima') {
             icone = climaIcon;
             // Area de referencia do ponto -- mesmo raio configurado no
@@ -467,7 +474,7 @@
             // so' durante a criacao/edicao. `interactive: false` pra nao
             // atrapalhar o clique/tooltip do pino por cima.
             if (site.raio_km) {
-                L.circle([site.lat, site.lon], {
+                circulo = L.circle([site.lat, site.lon], {
                     radius: site.raio_km * 1000, color: '#1c7ed6', weight: 1,
                     fillColor: PIN_COR_CLIMA, fillOpacity: 0.12, interactive: false,
                 }).addTo(map);
@@ -490,6 +497,7 @@
                 }
                 window.location.href = FAZENDAS_URL + '?site=' + encodeURIComponent(site.site);
             });
+        if (site.virtual) { layersPorSite[site.site] = { marcador: marcador, circulo: circulo }; }
     });
 
     // Camada opcional de previsao de chuva acumulada (24h) cobrindo o
@@ -817,11 +825,12 @@
     // errar ou a pessoa quiser outro pais mesmo assim. So chama uma vez
     // por clique/soltar o arrasto (nao a cada pixel de 'drag'), pra nao
     // martelar o servidor.
-    function detectarPaisPreview(latlng) {
+    function detectarPaisPreview(latlng, select) {
+        select = select || countrySelect;
         fetch('{{ url_for("detectar_pais_ponto_virtual") }}?lat=' + latlng.lat + '&lon=' + latlng.lng)
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (dados) {
-                if (dados && dados.country_code && countrySelect) { countrySelect.value = dados.country_code; }
+                if (dados && dados.country_code && select) { select.value = dados.country_code; }
             })
             .catch(function () { /* deteccao automatica e so uma ajuda -- falha silenciosa */ });
     }
@@ -970,9 +979,102 @@
     });
     atualizarCirculosEstacoes(parseFloat(raioInput.value) || 0);
 
+    // Editar um ponto ja' criado agora tambem deixa mover o pino no mapa
+    // (arrastar), igual ao fluxo de "Adicionar Ponto" -- antes so' dava
+    // pra digitar lat/lon na mao. Ao abrir o painel de edicao, o pino
+    // fixo (e o circulo de raio, se houver) daquele ponto sai do mapa e
+    // um pino roxo ARRASTAVEL entra no lugar, atualizando lat/lon do
+    // proprio formulario de Editar a cada arrasto -- fechar o painel (ou
+    // trocar pra outro ponto) devolve o pino original ao mapa sem perder
+    // nada (nada e' salvo ate clicar em "Salvar" desse formulario).
+    var editEstadoPorAlvo = {};
+
+    function iniciarEdicaoPin(painel) {
+        var form = painel.querySelector('form');
+        var siteName = form.querySelector('input[name="site_name"]').value;
+        var latInputEdit = form.querySelector('input[name="lat"]');
+        var lonInputEdit = form.querySelector('input[name="lon"]');
+        var raioInputEdit = form.querySelector('input[name="raio_km"]');
+        var countrySelectEdit = form.querySelector('select[name="country_code"]');
+        if (!latInputEdit || !lonInputEdit) return;
+
+        var layers = layersPorSite[siteName];
+        if (layers) {
+            if (layers.marcador) map.removeLayer(layers.marcador);
+            if (layers.circulo) map.removeLayer(layers.circulo);
+        }
+
+        var latInicial = parseFloat(latInputEdit.value);
+        var lonInicial = parseFloat(lonInputEdit.value);
+        if (isNaN(latInicial) || isNaN(lonInicial)) return;
+
+        var estado = { siteName: siteName, circulo: null, raioInput: raioInputEdit };
+        estado.marcador = L.marker([latInicial, lonInicial], { icon: novoIcon, draggable: true }).addTo(map);
+
+        function atualizarCirculoEdicao() {
+            var raio = parseFloat(raioInputEdit.value) || 0;
+            if (estado.circulo) { map.removeLayer(estado.circulo); estado.circulo = null; }
+            if (raio > 0) {
+                estado.circulo = L.circle(estado.marcador.getLatLng(), {
+                    radius: raio * 1000, color: '#7048e8', weight: 2,
+                    fillColor: '#ffffff', fillOpacity: 0.2, interactive: false,
+                }).addTo(map);
+            }
+        }
+
+        estado.marcador.on('drag', function (ev) {
+            var novoLatLng = ev.target.getLatLng();
+            latInputEdit.value = novoLatLng.lat.toFixed(6);
+            lonInputEdit.value = novoLatLng.lng.toFixed(6);
+            atualizarCirculoEdicao();
+        });
+        estado.marcador.on('dragend', function (ev) {
+            detectarPaisPreview(ev.target.getLatLng(), countrySelectEdit);
+        });
+        estado.raioListener = atualizarCirculoEdicao;
+        raioInputEdit.addEventListener('input', estado.raioListener);
+        atualizarCirculoEdicao();
+
+        editEstadoPorAlvo[painel.id] = estado;
+    }
+
+    function encerrarEdicaoPin(alvoId) {
+        var estado = editEstadoPorAlvo[alvoId];
+        if (!estado) return;
+        // Cada remocao numa tentativa PROPRIA -- um erro tirando o pino
+        // de arrasto do mapa (ou o listener do raio) nunca pode impedir
+        // o pino/circulo ORIGINAL de voltar ao mapa logo abaixo (senao a
+        // fazenda some do mapa ate a pagina ser recarregada). Se
+        // `removeLayer` falhar no meio (ja visto acontecer num arrasto
+        // muito brusco), o elemento do DOM e' removido na mao mesmo
+        // assim, pra nunca sobrar um pino/circulo fantasma no mapa.
+        try { map.removeLayer(estado.marcador); } catch (e) {
+            if (estado.marcador._icon && estado.marcador._icon.parentNode) { estado.marcador._icon.parentNode.removeChild(estado.marcador._icon); }
+        }
+        if (estado.circulo) {
+            try { map.removeLayer(estado.circulo); } catch (e) {
+                if (estado.circulo._path && estado.circulo._path.parentNode) { estado.circulo._path.parentNode.removeChild(estado.circulo._path); }
+            }
+        }
+        try { estado.raioInput.removeEventListener('input', estado.raioListener); } catch (e) { /* idem */ }
+        delete editEstadoPorAlvo[alvoId];
+        var layers = layersPorSite[estado.siteName];
+        if (layers) {
+            if (layers.marcador && !map.hasLayer(layers.marcador)) layers.marcador.addTo(map);
+            if (layers.circulo && !map.hasLayer(layers.circulo)) layers.circulo.addTo(map);
+        }
+    }
+
     document.querySelectorAll('.editar-ponto-toggle').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            document.getElementById(btn.dataset.target).classList.toggle('d-none');
+            var painel = document.getElementById(btn.dataset.target);
+            var vaiAbrir = painel.classList.contains('d-none');
+            painel.classList.toggle('d-none');
+            if (vaiAbrir) {
+                iniciarEdicaoPin(painel);
+            } else {
+                encerrarEdicaoPin(painel.id);
+            }
         });
     });
 })();
