@@ -178,22 +178,9 @@
         </form>
     </div>
 
-    {% if ponto.tipo == 'clima' %}
-    <div class="alert alert-info small mb-2">☁️ Ponto so' de clima -- nao monitora doencas. Estacao de referencia e envio automatico por WhatsApp (texto/PDF) ficam na aba <strong>Alertas Clima</strong> (menu ⋮).</div>
-    {% elif not ponto.estacoes_usadas %}
+    {% if ponto.tipo != 'clima' and not ponto.estacoes_usadas %}
     <div class="alert alert-secondary small mb-2">Nenhuma fazenda real dentro do raio de {{ ponto.raio_km|int }} km -- sem estacao pra interpolar, esse ponto nao gera estimativa (nao aparece em nenhuma outra tela ate ter uma fazenda real por perto ou o raio aumentar).</div>
     {% endif %}
-
-    <p class="text-muted small mb-0 mt-2 pt-2 border-top">
-        {% if ponto.tipo == 'clima' %}
-        Estacao meteorologica de referencia e agenda de envio automatico por WhatsApp desse ponto
-        ficam na aba <strong>Alertas Clima</strong> (menu ⋮).
-        {% else %}
-        Doencas, produtos, plantio, aplicacoes e agenda de envio automatico por WhatsApp desse ponto ficam nas
-        abas <strong>Painel de Alertas</strong>, <strong>Fazendas</strong> e <strong>Manejo</strong>,
-        junto com as demais.
-        {% endif %}
-    </p>
 </div>
 {% endfor %}
 {% endblock %}
