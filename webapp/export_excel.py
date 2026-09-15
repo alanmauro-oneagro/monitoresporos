@@ -43,20 +43,26 @@ def _ordinal_para_ordenar(data_texto):
     return 0
 
 
-def _data_br_4digitos(data_texto):
-    """dd/mm/aaaa (ano com 4 digitos) -- so' usado na coluna "Data" do
-    Relatorio Diario, pedido explicito do usuario pra essa aba
-    especifica. Diferente de `models.fmt_data_br` (dd/mm/AA, 2 digitos)
-    usado em todo o resto do site/PDF/WhatsApp -- de proposito NAO mexe
-    nessa funcao compartilhada, pra nao mudar o formato em nenhum outro
-    lugar."""
+def _data_excel(data_texto):
+    """Objeto `date` DE VERDADE (nao texto formatado) -- Excel reconhece
+    como data de verdade (ordena/filtra certo pela propria planilha, e
+    nao mostra aquele aviso de "numero guardado como texto"). A
+    aparencia dd/mm/aaaa fica por conta do number_format aplicado na
+    celula (ver `date_columns` em `_write_sheet`/`_try_sheet`), nao do
+    valor em si -- ANTES essa funcao devolvia uma STRING ja formatada
+    (dd/mm/aaaa), que o Excel tratava como texto puro: a ordem que a
+    gente escrevia (mais novo primeiro) ficava certa, mas se a pessoa
+    tentasse ordenar/filtrar pela propria coluna no Excel, ordenava
+    alfabeticamente (errado). So' usado na coluna "Data" do Relatorio
+    Diario -- devolve o texto original se nao reconhecer a data (nunca
+    quebra a exportacao por causa disso)."""
     if not data_texto:
         return data_texto
     data_iso = models.parse_data_flexivel(str(data_texto).strip())
     if not data_iso:
         return data_texto
     try:
-        return date.fromisoformat(data_iso).strftime("%d/%m/%Y")
+        return date.fromisoformat(data_iso)
     except ValueError:
         return data_texto
 
@@ -80,19 +86,30 @@ def _safe_row(row):
     return [ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v for v in row]
 
 
-def _write_sheet(wb, title, headers, rows):
+def _write_sheet(wb, title, headers, rows, date_columns=()):
+    """`date_columns` (indices, 0-based) marca quais colunas recebem um
+    objeto `date` DE VERDADE (ver `_data_excel`) em vez de texto --
+    aplica o number_format dd/mm/aaaa na celula, pra' Excel mostrar no
+    formato brasileiro E reconhecer como data de verdade (da' pra'
+    ordenar/filtrar certo pela propria planilha, sem o aviso de "numero
+    guardado como texto" que uma STRING ja formatada causava antes)."""
     ws = wb.create_sheet(title=title)
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
     for row in rows:
         ws.append(_safe_row(row))
+    if date_columns:
+        for row_cells in ws.iter_rows(min_row=2):
+            for idx in date_columns:
+                if idx < len(row_cells) and isinstance(row_cells[idx].value, (date, datetime)):
+                    row_cells[idx].number_format = "DD/MM/YYYY"
     for col in ws.columns:
         length = max((len(str(c.value)) for c in col if c.value is not None), default=8)
         ws.column_dimensions[col[0].column_letter].width = min(max(length + 2, 10), 50)
 
 
-def _try_sheet(wb, title, headers, rows_fn):
+def _try_sheet(wb, title, headers, rows_fn, date_columns=()):
     """Roda `rows_fn()` protegido -- se QUALQUER excecao acontecer (dado
     inesperado vindo de producao, campo ausente etc.) na montagem de
     UMA aba, escreve essa aba mesmo assim com uma linha explicando o
@@ -105,7 +122,7 @@ def _try_sheet(wb, title, headers, rows_fn):
         rows = rows_fn()
     except Exception as exc:
         rows = [[f"Erro ao gerar esta aba: {exc}"] + [""] * (len(headers) - 1)]
-    _write_sheet(wb, title, headers, rows)
+    _write_sheet(wb, title, headers, rows, date_columns=date_columns)
 
 
 def _usuarios_rows():
@@ -434,7 +451,7 @@ def _relatorio_diario_rows():
         site = device_to_site.get(r["estacao"])
         fazenda = site or r["estacao"]
         data_iso = r["data"]
-        data_br = _data_br_4digitos(data_iso)
+        data_br = _data_excel(data_iso)
         base = [
             data_br, fazenda, r["estacao"], r["temp_min"], r["temp_max"],
         ] + [r["ur_counts"][limiar] for limiar in UR_LIMIARES] + [r["vento_predominante"] or "-"]
@@ -458,7 +475,7 @@ def _relatorio_diario_rows():
     faltantes = (set(doencas_por_site_dia) | set(atividades_por_site_dia)) - consumidos
     for site, data_iso in faltantes:
         fazenda = site
-        data_br = _data_br_4digitos(data_iso)
+        data_br = _data_excel(data_iso)
         base = [data_br, fazenda, "-", None, None, None, None, None, None, "-"]
         for nome_pt, conc, risco_pct, warn, danger, maximo in doencas_por_site_dia.get((site, data_iso), []):
             entries.append((_sort_key(fazenda, data_iso), base + [nome_pt, conc, risco_pct, warn, danger, maximo, None, None]))
@@ -575,6 +592,7 @@ def build_workbook():
             "Atividade", "Detalhe da Atividade",
         ],
         _relatorio_diario_rows,
+        date_columns=(0,),  # "Data" -- ver _data_excel/_write_sheet
     )
 
     _try_sheet(
