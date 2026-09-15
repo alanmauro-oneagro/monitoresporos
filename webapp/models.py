@@ -710,6 +710,14 @@ def init_db():
         # jeito, ver _catalogar_produto/_catalogar_variedade).
         pass
 
+    try:
+        _sugerir_horarios_fazendas_existentes(conn)
+    except Exception:
+        # Nunca impede o app de subir por causa disso -- na pior das
+        # hipoteses a fazenda continua sem horario sugerido ate' a
+        # proxima subida (ou ate' o usuario configurar a mao).
+        pass
+
     conn.commit()
     conn.close()
 
@@ -2261,13 +2269,85 @@ def sync_sites(site_names):
 WHATSAPP_DIAS_PADRAO_TEXTO = {0, 2, 4}
 WHATSAPP_DIAS_PADRAO_PDF = {4}
 
+# Horario sugerido de envio automatico pra fazenda que ainda nao tem
+# nenhum horario customizado -- comeca as 5h, espalhado de poucos
+# minutos por fazenda (nunca no MESMO minuto), pedido explicito do
+# usuario pra reduzir a chance de varias fazendas caindo juntas na fila
+# sequencial do whatsapp-bridge (ver `_run_scheduled_whatsapp_sends`/
+# MIN_DELAY_MS em whatsapp-bridge/index.js). So' um PONTO DE PARTIDA --
+# a pessoa pode trocar quando quiser na aba Fazendas, e trocar NUNCA e'
+# sobrescrito de volta por essa sugestao (ver `_seed_horario_sugerido`).
+HORARIO_SUGERIDO_INICIAL_HORA = 5
+HORARIO_SUGERIDO_INTERVALO_MINUTOS = 3
+
+
+def _proximo_horario_sugerido(conn):
+    """(hora, minuto) do proximo slot sugerido -- conta quantas fazendas
+    ja tem QUALQUER linha em `whatsapp_schedule_horarios` (customizada a
+    mao ou ja sugerida antes) e usa esse numero como indice do slot
+    seguinte, a partir de `HORARIO_SUGERIDO_INICIAL_HORA`:00. Usa a
+    MESMA conexao/transacao de quem chamou (sem abrir/commitar sozinha)
+    -- assim, dentro de um loop que vai inserindo uma fazenda de cada
+    vez (ver `_sugerir_horarios_fazendas_existentes`), cada nova
+    contagem ja' enxerga as linhas inseridas nas iteracoes anteriores do
+    MESMO loop, garantindo slots sempre diferentes."""
+    indice = conn.execute("SELECT COUNT(*) FROM whatsapp_schedule_horarios").fetchone()[0]
+    total_minutos = HORARIO_SUGERIDO_INICIAL_HORA * 60 + indice * HORARIO_SUGERIDO_INTERVALO_MINUTOS
+    return (total_minutos // 60) % 24, total_minutos % 60
+
+
+def _seed_horario_sugerido(conn, site_name):
+    """Aplica o proximo horario sugerido (mesmo pra texto e pra PDF,
+    ver `_proximo_horario_sugerido`) pra essa fazenda -- SO' se ela
+    ainda nao tiver nenhuma linha em `whatsapp_schedule_horarios`
+    (nunca sobrescreve um horario ja customizado, seja a mao ou por uma
+    sugestao anterior). Mesma conexao/transacao de quem chamou."""
+    ja_tem = conn.execute(
+        "SELECT 1 FROM whatsapp_schedule_horarios WHERE site_name = ?", (site_name,)
+    ).fetchone()
+    if ja_tem:
+        return
+    hora, minuto = _proximo_horario_sugerido(conn)
+    conn.execute(
+        """
+        INSERT INTO whatsapp_schedule_horarios (site_name, hora_texto, minuto_texto, hora_pdf, minuto_pdf)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (site_name, hora, minuto, hora, minuto),
+    )
+
+
+def _sugerir_horarios_fazendas_existentes(conn):
+    """Aplica o horario sugerido pra TODA fazenda que ainda nao tem
+    nenhum horario customizado -- roda em toda subida do app (ver
+    init_db), mas so' tem efeito de verdade a primeira vez: depois que
+    uma fazenda ganha sua linha em `whatsapp_schedule_horarios` (por
+    essa funcao ou por uma edicao manual), as proximas subidas nao acham
+    mais nada pra fazer nela. Pedido explicito do usuario: sugerir
+    horario, de uma vez so', pra todas as fazendas que ainda estao no
+    horario padrao antigo (7h fixo, nunca customizado). Ordem por `id`
+    (ordem de criacao/importacao) -- estavel entre subidas, entao o
+    espalhamento nao muda de fazenda em fazenda a cada deploy."""
+    sites = conn.execute("SELECT site_name FROM sites ORDER BY id").fetchall()
+    for row in sites:
+        _seed_horario_sugerido(conn, row["site_name"])
+
 
 def seed_default_whatsapp_schedule(site_name):
-    """Aplica a agenda padrao acima pra uma fazenda -- so' deve ser chamada
-    na primeira vez que ela aparece (fazenda nova), nunca pra sobrescrever
-    uma que a pessoa ja configurou diferente."""
+    """Aplica a agenda padrao (dias) e o horario SUGERIDO (ver
+    `_seed_horario_sugerido`) pra uma fazenda -- so' deve ser chamada na
+    primeira vez que ela aparece (fazenda nova), nunca pra sobrescrever
+    uma que a pessoa ja configurou diferente. O horario e' so' uma
+    sugestao inicial (usuario pode trocar a qualquer momento na aba
+    Fazendas)."""
     set_whatsapp_days(site_name, WHATSAPP_DIAS_PADRAO_TEXTO)
     set_whatsapp_days_pdf(site_name, WHATSAPP_DIAS_PADRAO_PDF)
+    conn = get_db()
+    try:
+        _seed_horario_sugerido(conn, site_name)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_all_sites():
