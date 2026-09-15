@@ -3,9 +3,21 @@
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-    #farm-map { height: 90vh; min-height: 570px; width: 100%; border-radius: 0.5rem; }
+    /* Abaixo de 992px o mapa e o formulario empilham (100% de largura
+       cada, ver media query abaixo) -- nesse layout um mapa de 90vh
+       (pensado pra' quando ele fica AO LADO do formulario, no desktop)
+       deixava quase a tela inteira presa dentro do mapa no celular: o
+       formulario "Adicionar Ponto" e a lista "Pontos Criados" ficavam
+       escondidos la' embaixo, e como o Leaflet captura o arrasto (pra'
+       mover o mapa), nao sobrava area visivel fora do mapa pra' rolar a
+       PAGINA -- so' dava pra' arrastar o mapa em si. Bem mais baixo por
+       padrao (mobile-first), volta a 90vh so' no layout de duas colunas
+       (>=992px), onde o mapa fica ao lado do formulario, nao empilhado
+       em cima dele. */
+    #farm-map { height: 50vh; min-height: 320px; width: 100%; border-radius: 0.5rem; }
     .col-mapa-interpolado-mapa, .col-mapa-interpolado-form { flex: 0 0 100%; max-width: 100%; }
     @media (min-width: 992px) {
+        #farm-map { height: 90vh; min-height: 570px; }
         .col-mapa-interpolado-mapa { flex: 0 0 80%; max-width: 80%; }
         .col-mapa-interpolado-form { flex: 0 0 20%; max-width: 20%; }
     }
