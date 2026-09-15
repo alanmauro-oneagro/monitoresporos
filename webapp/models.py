@@ -401,7 +401,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS whatsapp_schedule_horarios (
             site_name TEXT PRIMARY KEY,
             hora_texto INTEGER NOT NULL DEFAULT 7,
-            hora_pdf INTEGER NOT NULL DEFAULT 7
+            hora_pdf INTEGER NOT NULL DEFAULT 7,
+            minuto_texto INTEGER NOT NULL DEFAULT 0,
+            minuto_pdf INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS site_solo_cache (
@@ -506,6 +508,14 @@ def init_db():
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
         conn.execute("ALTER TABLE subordinados ADD COLUMN whatsapp_pausado INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        conn.execute("ALTER TABLE whatsapp_schedule_horarios ADD COLUMN minuto_texto INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        conn.execute("ALTER TABLE whatsapp_schedule_horarios ADD COLUMN minuto_pdf INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
 
@@ -789,51 +799,73 @@ def set_whatsapp_send_hour(hora):
 
 
 def get_all_whatsapp_schedule_horarios():
-    """{site_name: {"texto": hora, "pdf": hora}} -- horario individual
-    por fazenda do envio agendado de relatorio (texto e PDF podem ter
-    horarios diferentes entre si, cada um do seu jeito -- pedido
-    explicito do usuario, pra poder espalhar os envios ao longo do dia
-    em vez de todas as fazendas mandarem no mesmo horario). So' tem
-    linha pra fazenda que ja teve o horario customizado alguma vez --
+    """{site_name: {"texto": hora, "texto_min": minuto, "pdf": hora,
+    "pdf_min": minuto}} -- horario individual por fazenda do envio
+    agendado de relatorio (texto e PDF podem ter horarios diferentes
+    entre si, cada um do seu jeito -- pedido explicito do usuario, pra
+    poder espalhar os envios ao longo do dia em vez de todas as
+    fazendas mandarem no mesmo horario -- os minutos deixam espalhar
+    ainda mais fino, sem depender so' da hora cheia). So' tem linha pra
+    fazenda que ja teve o horario customizado alguma vez --
     `get_whatsapp_schedule_horarios` cobre o default pra quem nunca
     mexeu."""
     conn = get_db()
-    rows = conn.execute("SELECT site_name, hora_texto, hora_pdf FROM whatsapp_schedule_horarios").fetchall()
+    rows = conn.execute(
+        "SELECT site_name, hora_texto, minuto_texto, hora_pdf, minuto_pdf FROM whatsapp_schedule_horarios"
+    ).fetchall()
     conn.close()
-    return {r["site_name"]: {"texto": r["hora_texto"], "pdf": r["hora_pdf"]} for r in rows}
+    return {
+        r["site_name"]: {
+            "texto": r["hora_texto"], "texto_min": r["minuto_texto"],
+            "pdf": r["hora_pdf"], "pdf_min": r["minuto_pdf"],
+        }
+        for r in rows
+    }
 
 
 def get_whatsapp_schedule_horarios(site_name):
-    """Horario (0-23) do envio agendado de texto/PDF dessa fazenda --
-    `get_whatsapp_send_hour()` (default global) pra quem nunca
-    customizou, ver `get_all_whatsapp_schedule_horarios`."""
+    """Horario (hora 0-23, minuto 0-59) do envio agendado de texto/PDF
+    dessa fazenda -- `get_whatsapp_send_hour()` (default global, sempre
+    no minuto 0) pra quem nunca customizou, ver
+    `get_all_whatsapp_schedule_horarios`."""
     default = get_whatsapp_send_hour()
     conn = get_db()
     row = conn.execute(
-        "SELECT hora_texto, hora_pdf FROM whatsapp_schedule_horarios WHERE site_name = ?", (site_name,)
+        "SELECT hora_texto, minuto_texto, hora_pdf, minuto_pdf FROM whatsapp_schedule_horarios WHERE site_name = ?",
+        (site_name,),
     ).fetchone()
     conn.close()
     if not row:
-        return {"texto": default, "pdf": default}
-    return {"texto": row["hora_texto"], "pdf": row["hora_pdf"]}
+        return {"texto": default, "texto_min": 0, "pdf": default, "pdf_min": 0}
+    return {
+        "texto": row["hora_texto"], "texto_min": row["minuto_texto"],
+        "pdf": row["hora_pdf"], "pdf_min": row["minuto_pdf"],
+    }
 
 
-def set_whatsapp_schedule_hora(site_name, tipo, hora):
-    """Atualiza SO' o horario de um tipo (`tipo` = 'texto' ou 'pdf') pra
-    essa fazenda, sem mexer no outro -- os dois campos ficam em telas/
-    forms separados (aba Fazendas), entao salvar um nao pode sobrescrever
-    o outro com o default. Cria a linha com o default global
-    (`get_whatsapp_send_hour()`) no campo ainda nao customizado, se for
-    a primeira vez que essa fazenda tem qualquer horario customizado."""
-    coluna = "hora_texto" if tipo == "texto" else "hora_pdf"
+def set_whatsapp_schedule_hora(site_name, tipo, hora, minuto=0):
+    """Atualiza SO' o horario (hora + minuto) de um tipo (`tipo` =
+    'texto' ou 'pdf') pra essa fazenda, sem mexer no outro -- os dois
+    campos ficam em telas/forms separados (aba Fazendas), entao salvar
+    um nao pode sobrescrever o outro com o default. Cria a linha com o
+    default global (`get_whatsapp_send_hour()`, minuto 0) no campo
+    ainda nao customizado, se for a primeira vez que essa fazenda tem
+    qualquer horario customizado."""
+    coluna_hora = "hora_texto" if tipo == "texto" else "hora_pdf"
+    coluna_minuto = "minuto_texto" if tipo == "texto" else "minuto_pdf"
     default = get_whatsapp_send_hour()
     conn = get_db()
     conn.execute(
         f"""
-        INSERT INTO whatsapp_schedule_horarios (site_name, hora_texto, hora_pdf) VALUES (?, ?, ?)
-        ON CONFLICT(site_name) DO UPDATE SET {coluna} = excluded.{coluna}
+        INSERT INTO whatsapp_schedule_horarios (site_name, hora_texto, minuto_texto, hora_pdf, minuto_pdf)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(site_name) DO UPDATE SET {coluna_hora} = excluded.{coluna_hora}, {coluna_minuto} = excluded.{coluna_minuto}
         """,
-        (site_name, hora if tipo == "texto" else default, hora if tipo == "pdf" else default),
+        (
+            site_name,
+            hora if tipo == "texto" else default, minuto if tipo == "texto" else 0,
+            hora if tipo == "pdf" else default, minuto if tipo == "pdf" else 0,
+        ),
     )
     conn.commit()
     conn.close()

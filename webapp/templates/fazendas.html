@@ -230,9 +230,12 @@
                     {% endfor %}
                     <span class="d-inline-flex align-items-center gap-1 ms-2">
                         <label class="small text-muted mb-0" for="hora_texto_{{ farm_idx }}">as</label>
-                        <input type="number" class="form-control form-control-sm" style="width: 62px;" min="0" max="23"
+                        <input type="number" class="form-control form-control-sm" style="width: 56px;" min="0" max="23"
                                id="hora_texto_{{ farm_idx }}" name="hora" value="{{ site_group.horarios.texto }}">
-                        <label class="small text-muted mb-0" for="hora_texto_{{ farm_idx }}">h</label>
+                        <label class="small text-muted mb-0" for="minuto_texto_{{ farm_idx }}">:</label>
+                        <input type="number" class="form-control form-control-sm" style="width: 56px;" min="0" max="59"
+                               id="minuto_texto_{{ farm_idx }}" name="minuto" value="{{ '%02d' % site_group.horarios.texto_min }}"
+                               title="Minuto (0-59)">
                     </span>
                     <span class="autosave-status small ms-2"></span>
                 </form>
@@ -248,9 +251,12 @@
                     {% endfor %}
                     <span class="d-inline-flex align-items-center gap-1 ms-2">
                         <label class="small text-muted mb-0" for="hora_pdf_{{ farm_idx }}">as</label>
-                        <input type="number" class="form-control form-control-sm" style="width: 62px;" min="0" max="23"
+                        <input type="number" class="form-control form-control-sm" style="width: 56px;" min="0" max="23"
                                id="hora_pdf_{{ farm_idx }}" name="hora" value="{{ site_group.horarios.pdf }}">
-                        <label class="small text-muted mb-0" for="hora_pdf_{{ farm_idx }}">h</label>
+                        <label class="small text-muted mb-0" for="minuto_pdf_{{ farm_idx }}">:</label>
+                        <input type="number" class="form-control form-control-sm" style="width: 56px;" min="0" max="59"
+                               id="minuto_pdf_{{ farm_idx }}" name="minuto" value="{{ '%02d' % site_group.horarios.pdf_min }}"
+                               title="Minuto (0-59)">
                     </span>
                     <span class="autosave-status small ms-2"></span>
                 </form>

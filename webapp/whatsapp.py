@@ -133,7 +133,19 @@ def _send_whatsapp_bridge(phone, text):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=25) as resp:
+        # O bridge so' responde DEPOIS de mandar de verdade -- e' de
+        # proposito (fila sequencial com espacamento de 15-25s entre
+        # mensagens, anti-deteccao de robo, ver MIN_DELAY_MS em
+        # whatsapp-bridge/index.js). Com 2+ fazendas agendadas pro MESMO
+        # horario, uma mensagem pode ficar atras de varias outras na
+        # fila -- um timeout curto aqui cortava a espera achando que o
+        # bridge "nao respondeu", registrava falha (e o agendador NUNCA
+        # tentava de novo no mesmo dia) mesmo quando o WhatsApp real
+        # mandava a mensagem minutos depois. Timeout generoso da' margem
+        # pra fila absorver varios envios seguidos sem essa falha
+        # espuria -- nao elimina o problema pra uma fila MUITO longa
+        # (many fazendas no mesmo minuto exato), mas cobre o caso comum.
+        with urllib.request.urlopen(req, timeout=75) as resp:
             body = json.load(resp)
             return (True, "enviado") if body.get("ok") else (False, body.get("error", "falha desconhecida"))
     except urllib.error.HTTPError as exc:
@@ -174,7 +186,11 @@ def _send_whatsapp_image_bridge(phone, imagem_bytes, caption=None):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=45) as resp:
+        # Mesmo motivo do timeout generoso de `_send_whatsapp_bridge`
+        # (fila sequencial do bridge, ver comentario la') -- um pouco
+        # maior aqui porque imagem tambem carrega o tempo de upload do
+        # arquivo, em cima da espera na fila.
+        with urllib.request.urlopen(req, timeout=100) as resp:
             body = json.load(resp)
             return (True, "enviado") if body.get("ok") else (False, body.get("error", "falha desconhecida"))
     except urllib.error.HTTPError as exc:
@@ -214,7 +230,11 @@ def _send_whatsapp_document_bridge(phone, pdf_bytes, filename, caption=None):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=45) as resp:
+        # Mesmo motivo do timeout generoso de `_send_whatsapp_bridge`
+        # (fila sequencial do bridge, ver comentario la') -- um pouco
+        # maior aqui porque documento tambem carrega o tempo de upload
+        # do arquivo, em cima da espera na fila.
+        with urllib.request.urlopen(req, timeout=100) as resp:
             body = json.load(resp)
             return (True, "enviado") if body.get("ok") else (False, body.get("error", "falha desconhecida"))
     except urllib.error.HTTPError as exc:

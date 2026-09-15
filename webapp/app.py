@@ -1281,10 +1281,15 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     `get_all_whatsapp_days_pdf`) bate com o dia de hoje pra essa fazenda.
     Manda mesmo quando a fazenda nao tem nenhuma doenca em Atencao/Perigo
     no momento -- nesse caso a mensagem e' so o aviso de que esta tudo
-    tranquilo (ver `_format_whatsapp_message`). Retorna (ok,
-    mensagem-resumo); ok=True se pelo menos 1 numero recebeu TODOS os
-    formatos pedidos (uma falha so' no PDF, com o texto ok, ja conta como
-    falha parcial pra esse numero no resumo, mesmo sem travar o texto).
+    tranquilo (ver `_format_whatsapp_message`). Retorna (ok_texto,
+    ok_pdf, mensagem-resumo) -- ok_texto/ok_pdf sao True quando aquele
+    formato NEM foi pedido (nada a falhar) OU pelo menos 1 numero
+    recebeu ele. Separados (em vez de um "ok" so') porque
+    `_run_scheduled_whatsapp_sends` precisa marcar texto/PDF como
+    "enviado hoje" de forma independente -- juntar os dois faria uma
+    falha isolada no PDF (com o texto ok) fazer o agendador reenviar o
+    texto de novo no proximo minuto (duplicado), ou o contrario esconder
+    uma falha real de PDF atras de um texto que deu certo.
     `safra` filtra pela cultura daquela safra (quando chamado a partir de
     uma das telas de Recomendacoes) e define de qual safra vem os
     "Produtos Fazenda"; sem `safra` (envio agendado), usa a uniao das
@@ -1302,7 +1307,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     abaixo. Reduz o risco de o WhatsApp reter a entrega por padrao de
     envio automatizado (2+ mensagens em sequencia pro mesmo numero)."""
     if not enviar_texto and not enviar_pdf:
-        return False, "Nada a enviar (nem texto nem PDF agendado pra hoje)."
+        return False, False, "Nada a enviar (nem texto nem PDF agendado pra hoje)."
     translations = _load_translations()
     raw_cards = _resolve_site_cards(site, translations)
     dias_sem_leitura = _dias_sem_leitura(raw_cards)
@@ -1347,7 +1352,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     if not destinos:
         motivo = f"Nenhum usuario marcado pra receber relatorio de '{site}' (ou nenhum tem telefone cadastrado)."
         models.log_whatsapp_envio(site, None, None, False, motivo)
-        return False, motivo
+        return False, False, motivo
 
     text = None
     if enviar_texto:
@@ -1389,12 +1394,19 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
     combinar = bool(text) and bool(pdf_bytes) and len(text) <= LEGENDA_MAX_CHARS
 
     sucesso, falha = [], []
+    # Rastreados SEPARADOS de "sucesso" (que exige os dois formatos
+    # pedidos nessa chamada terem funcionado) -- um numero pode falhar so
+    # no PDF com o texto ok, e isso ainda precisa contar como "texto
+    # enviado" pro agendador nao mandar o texto de novo (ver retorno).
+    algum_texto_ok = False
+    algum_pdf_ok = False
     for phone, rotulo in destinos:
         erros = []
         ok_texto = True
         ok_pdf = True
         if combinar:
             ok_pdf, message_pdf = whatsapp.send_whatsapp_document(phone, pdf_bytes, pdf_filename, caption=text)
+            ok_texto = ok_pdf  # combinado -- o mesmo envio carrega os dois
             models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"Texto+PDF combinado num so envio: {message_pdf}")
             if not ok_pdf:
                 erros.append(f"PDF: {message_pdf}")
@@ -1412,11 +1424,17 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True):
                 models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"PDF: {message_pdf}")
                 if not ok_pdf:
                     erros.append(f"PDF: {message_pdf}")
+        if enviar_texto and ok_texto:
+            algum_texto_ok = True
+        if enviar_pdf and ok_pdf:
+            algum_pdf_ok = True
         (sucesso if ok_texto and ok_pdf else falha).append(rotulo if (ok_texto and ok_pdf) else f"{rotulo} ({'; '.join(erros)})")
     resumo = f"{len(sucesso)}/{len(destinos)} numero(s)"
     if falha:
         resumo += f" -- falha em: {', '.join(falha)}"
-    return len(sucesso) > 0, resumo
+    ok_texto_geral = (not enviar_texto) or algum_texto_ok
+    ok_pdf_geral = (not enviar_pdf) or algum_pdf_ok
+    return ok_texto_geral, ok_pdf_geral, resumo
 
 
 _SCHEDULER_STATE_KEY = "whatsapp_scheduler_state"
@@ -1452,20 +1470,27 @@ def _salvar_scheduler_enviados(today, enviados):
 def _run_scheduled_whatsapp_sends():
     """Roda a cada minuto (`_whatsapp_scheduler_loop`) -- texto e PDF tem
     cada um sua propria agenda de dias da semana E seu proprio horario
-    (aba Fazendas, `models.get_all_whatsapp_schedule_horarios` --
-    individual por fazenda, pedido explicito do usuario pra poder
+    (hora E minuto, aba Fazendas, `models.get_all_whatsapp_schedule_horarios`
+    -- individual por fazenda, pedido explicito do usuario pra poder
     espalhar os envios ao longo do dia em vez de todo mundo mandar no
     mesmo horario e parecer um robo). Uma fazenda pode, por exemplo, so
-    mandar o PDF as segundas 15h e o texto as sextas 7h. So chama
-    `_send_site_whatsapp` (que de fato manda) quando o dia da semana E a
-    hora atual batem com a agenda daquele TIPO especifico pra essa
+    mandar o PDF as segundas 15h30 e o texto as sextas 7h05. So chama
+    `_send_site_whatsapp` (que de fato manda) quando o dia da semana bate
+    E ja passou (>=) do horario agendado daquele TIPO especifico pra essa
     fazenda, E esse (site, tipo) ainda nao esta' no conjunto "ja' enviado
-    hoje" (`_load_scheduler_enviados`) -- marca e PERSISTE logo apos cada
+    hoje" (`_load_scheduler_enviados`). Usa ">=" (nao "==") de proposito:
+    `_send_site_whatsapp` so' e' marcado como feito quando REALMENTE deu
+    certo (ver abaixo) -- uma falha (ex.: bridge sobrecarregado com
+    varias fazendas na mesma janela de horario, ver timeout em
+    whatsapp.py) precisa continuar tentando nos minutos seguintes, nao
+    so' no minuto exato agendado, senao a fazenda simplesmente nunca
+    recebe o relatorio naquele dia. Marca e PERSISTE logo apos cada
     envio (nao so' no final do lote), entao um crash/reinicio no meio da
     lista retoma so' do que falta, nunca reenvia o que ja' foi."""
     today = datetime.now().date()
     weekday = today.weekday()
-    hora_atual = datetime.now().hour
+    agora = datetime.now()
+    agora_hm = (agora.hour, agora.minute)
     schedule_texto = models.get_all_whatsapp_days()
     schedule_pdf = models.get_all_whatsapp_days_pdf()
     horarios = models.get_all_whatsapp_schedule_horarios()
@@ -1474,15 +1499,15 @@ def _run_scheduled_whatsapp_sends():
 
     pendentes = []  # (site, enviar_texto, enviar_pdf)
     for site in set(schedule_texto) | set(schedule_pdf):
-        hora_site = horarios.get(site, {"texto": hora_default, "pdf": hora_default})
+        hora_site = horarios.get(site) or {"texto": hora_default, "texto_min": 0, "pdf": hora_default, "pdf_min": 0}
         enviar_texto = (
             weekday in schedule_texto.get(site, set())
-            and hora_atual == hora_site["texto"]
+            and agora_hm >= (hora_site["texto"], hora_site["texto_min"])
             and f"{site}::texto" not in ja_enviados
         )
         enviar_pdf = (
             weekday in schedule_pdf.get(site, set())
-            and hora_atual == hora_site["pdf"]
+            and agora_hm >= (hora_site["pdf"], hora_site["pdf_min"])
             and f"{site}::pdf" not in ja_enviados
         )
         if enviar_texto or enviar_pdf:
@@ -1495,10 +1520,14 @@ def _run_scheduled_whatsapp_sends():
     # segundos so' de espera sequencial toda vez que o agendador roda.
     _prefetch_weather([site for site, _, _ in pendentes], _weather_coords_all())
     for site, enviar_texto, enviar_pdf in pendentes:
-        _send_site_whatsapp(site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
-        if enviar_texto:
+        ok_texto, ok_pdf, _ = _send_site_whatsapp(site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+        # So' marca "enviado hoje" o que realmente deu certo -- o que
+        # falhar continua elegivel (agora_hm >= horario agendado) e sera'
+        # tentado de novo no proximo minuto, ate' funcionar ou o dia
+        # acabar (ver docstring).
+        if enviar_texto and ok_texto:
             ja_enviados.add(f"{site}::texto")
-        if enviar_pdf:
+        if enviar_pdf and ok_pdf:
             ja_enviados.add(f"{site}::pdf")
         _salvar_scheduler_enviados(today, ja_enviados)
 
@@ -1597,16 +1626,27 @@ def _whatsapp_scheduler_loop():
     certa?" mora DENTRO de cada uma dessas duas funcoes, nao mais aqui
     (antes havia um unico horario global pra tudo -- `models.get_whatsapp_send_hour()`
     continua existindo so' como default pra quem nunca customizou o
-    horario de uma fazenda especifica)."""
+    horario de uma fazenda especifica). Roda numa thread de background
+    PROPRIA (`threading.Thread`, sem nenhum request HTTP por tras) --
+    `with app.app_context()` e' obrigatorio aqui: `_nome_exibicao` (usado
+    em praticamente todo envio, texto e PDF) guarda cache em `flask.g`,
+    que so' existe dentro de um app context. Sem isso, TODO envio
+    agendado (a partir do momento em que `_nome_exibicao` passou a usar
+    `g`) lancava `RuntimeError: Working outside of application context`
+    logo no comeco de `_send_site_whatsapp` -- exececao sempre engolida
+    pelo try/except abaixo (pra' nunca matar o loop), entao nenhum
+    relatorio agendado saia' e NADA ficava registrado no log de falhas,
+    ate' esse fix."""
     while True:
-        try:
-            _run_scheduled_whatsapp_sends()
-        except Exception:
-            pass  # nunca deixa o loop do agendador morrer
-        try:
-            _run_scheduled_ndvi_sends()
-        except Exception:
-            pass
+        with app.app_context():
+            try:
+                _run_scheduled_whatsapp_sends()
+            except Exception:
+                pass  # nunca deixa o loop do agendador morrer
+            try:
+                _run_scheduled_ndvi_sends()
+            except Exception:
+                pass
         time.sleep(60)
 
 
@@ -2915,7 +2955,8 @@ def alertas_clima_whatsapp(site_name):
     _get_clima_virtual_farm_or_404(site_name)
     enviar_texto = bool(request.form.get("enviar_texto"))
     enviar_pdf = bool(request.form.get("enviar_pdf"))
-    ok, message = _send_site_whatsapp(site_name, safra=None, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+    ok_texto, ok_pdf, message = _send_site_whatsapp(site_name, safra=None, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+    ok = (ok_texto if enviar_texto else True) and (ok_pdf if enviar_pdf else True)
     nome_exibicao = _nome_exibicao(site_name)
     if ok:
         flash(f"WhatsApp de '{nome_exibicao}' enviado para {message}.", "success")
@@ -3099,7 +3140,8 @@ def send_site_whatsapp(site_name):
     # quando os dois vem marcados).
     enviar_texto = bool(request.form.get("enviar_texto"))
     enviar_pdf = bool(request.form.get("enviar_pdf"))
-    ok, message = _send_site_whatsapp(site_name, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+    ok_texto, ok_pdf, message = _send_site_whatsapp(site_name, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
+    ok = (ok_texto if enviar_texto else True) and (ok_pdf if enviar_pdf else True)
     nome_exibicao = _nome_exibicao(site_name)
     if ok:
         flash(f"WhatsApp de '{nome_exibicao}' enviado para {message}.", "success")
@@ -3167,8 +3209,10 @@ def save_whatsapp_days():
     days = {int(v) for v in request.form.getlist("weekday")}
     models.set_whatsapp_days(site_name, days)
     hora = request.form.get("hora")
+    minuto = request.form.get("minuto")
+    minuto_val = int(minuto) if minuto and minuto.isdigit() and 0 <= int(minuto) <= 59 else 0
     if hora and hora.isdigit() and 0 <= int(hora) <= 23:
-        models.set_whatsapp_schedule_hora(site_name, "texto", int(hora))
+        models.set_whatsapp_schedule_hora(site_name, "texto", int(hora), minuto_val)
     return _save_response(f"Agenda de WhatsApp (texto) de '{_nome_exibicao(site_name)}' salva.", "fazendas")
 
 
@@ -3186,8 +3230,10 @@ def save_whatsapp_days_pdf():
     days = {int(v) for v in request.form.getlist("weekday")}
     models.set_whatsapp_days_pdf(site_name, days)
     hora = request.form.get("hora")
+    minuto = request.form.get("minuto")
+    minuto_val = int(minuto) if minuto and minuto.isdigit() and 0 <= int(minuto) <= 59 else 0
     if hora and hora.isdigit() and 0 <= int(hora) <= 23:
-        models.set_whatsapp_schedule_hora(site_name, "pdf", int(hora))
+        models.set_whatsapp_schedule_hora(site_name, "pdf", int(hora), minuto_val)
     return _save_response(f"Agenda de WhatsApp (PDF) de '{_nome_exibicao(site_name)}' salva.", "fazendas")
 
 
@@ -3306,7 +3352,9 @@ def fazendas():
             "estacoes_proximas": estacoes_proximas,
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "country_code": country_code,
-            "horarios": horarios_by_site.get(site) or {"texto": default_hora_envio, "pdf": default_hora_envio},
+            "horarios": horarios_by_site.get(site) or {
+                "texto": default_hora_envio, "texto_min": 0, "pdf": default_hora_envio, "pdf_min": 0,
+            },
             "solo": site_solos.get(site),
         })
 
