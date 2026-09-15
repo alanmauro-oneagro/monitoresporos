@@ -1,0 +1,1 @@
+- [Sole site admin](oneagro_sole_site_admin.md) — only "Alan Mauro" adjusts OneAgro Monitor settings; some reports are username-gated, not just is_admin.
