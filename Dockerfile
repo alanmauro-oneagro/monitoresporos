@@ -14,13 +14,16 @@ COPY . .
 
 WORKDIR /app/webapp
 
-# --timeout 300: o envio manual de WhatsApp (botao "Enviar por
-# WhatsApp") roda dentro da propria requisicao HTTP, bloqueando ate
-# todos os destinatarios daquela fazenda serem processados -- com o
-# espacamento de 25-45s por mensagem entre eles (ver MIN_DELAY_MS em
-# whatsapp-bridge/index.js), uma fazenda com 2+ destinatarios (dono +
-# subordinados) pode passar de 60s. Um timeout curto aqui mata o worker
-# NO MEIO do envio (quem ainda nao foi alcancado no loop simplesmente
-# nao recebe nada, sem nenhuma falha registrada) -- 300s da' folga pra
-# varios destinatarios/formatos na mesma fazenda sem cortar o envio.
-CMD gunicorn --workers 1 --threads 4 --timeout 300 --bind 0.0.0.0:$PORT app:app
+# --timeout 360: o envio manual de WhatsApp (botao "Enviar por
+# WhatsApp") manda o PRIMEIRO destinatario dentro da propria requisicao
+# HTTP (os demais, quando a fazenda tem mais de um, sao enfileirados e
+# despachados depois em segundo plano -- ver
+# `_enviar_whatsapp_manual_escalonado` em app.py). Mesmo so' pra esse
+# primeiro, se texto e PDF nao couberem combinados num unico envio
+# (`LEGENDA_MAX_CHARS`), a requisicao faz as DUAS chamadas em sequencia
+# -- ate' 135s (texto) + 180s (PDF) = 315s no pior caso (ver os timeouts
+# em whatsapp.py, calibrados pro espacamento de 25-45s do bridge, ver
+# MIN_DELAY_MS em whatsapp-bridge/index.js). Um timeout curto aqui mata
+# o worker NO MEIO do envio (sem nenhuma falha registrada) -- 360s da'
+# folga sobre esse pior caso.
+CMD gunicorn --workers 1 --threads 4 --timeout 360 --bind 0.0.0.0:$PORT app:app

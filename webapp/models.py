@@ -1052,6 +1052,20 @@ def delete_whatsapp_manual_fila(fila_id):
     conn.close()
 
 
+def clear_whatsapp_manual_fila(site_name):
+    """Descarta qualquer lote de envio manual ainda pendente pra' essa
+    fazenda -- chamado no INICIO de um novo envio manual
+    (`app._enviar_whatsapp_manual_escalonado`), pra' um segundo clique
+    em "Enviar por WhatsApp" (ex.: por duvida se o primeiro funcionou)
+    SUBSTITUIR o lote anterior em vez de empilhar mais um por cima (sem
+    isso, cliques repetidos fariam os subordinados receberem o mesmo
+    relatorio 2+ vezes ao longo das horas seguintes)."""
+    conn = get_db()
+    conn.execute("DELETE FROM whatsapp_manual_fila WHERE site_name = ?", (site_name,))
+    conn.commit()
+    conn.close()
+
+
 _DISEASE_INFO_COLUMNS = (
     "display_name_en, nome_pt, nome_cientifico, "
     "germ_temp_min, germ_temp_max, germ_ur_min, germ_molhamento_horas, germ_agua_livre_inibe"

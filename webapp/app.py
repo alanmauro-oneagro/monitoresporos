@@ -1278,25 +1278,34 @@ def _enviar_whatsapp_manual_escalonado(site, safra, enviar_texto, enviar_pdf):
     ENFILEIRA os demais (`models.enqueue_whatsapp_manual`) pra' serem
     despachados mais tarde pelo loop de fundo (`_run_manual_whatsapp_fila`),
     um a cada `RECIPIENT_STAGGER_HORAS` horas -- ver esse comentario ali
-    em cima pro motivo. Retorna (ok_texto, ok_pdf, mensagem-resumo),
-    mesma assinatura de `_send_site_whatsapp`."""
+    em cima pro motivo. Horario calculado com `_agora_cuiaba_dt()` (NUNCA
+    `datetime.now()` puro -- ver docstring dela). Descarta qualquer
+    lote anterior ainda pendente pra' essa fazenda
+    (`models.clear_whatsapp_manual_fila`) antes de enfileirar o novo --
+    clicar "Enviar por WhatsApp" de novo (ex.: por duvida se funcionou)
+    SUBSTITUI o lote pendente em vez de empilhar mais um, senao os
+    subordinados acabariam recebendo o mesmo relatorio 2+ vezes. Retorna
+    (ok_texto, ok_pdf, mensagem-resumo), mesma assinatura de
+    `_send_site_whatsapp`."""
     destinos = _site_whatsapp_destinations(site)
-    if len(destinos) <= 1:
+    models.clear_whatsapp_manual_fila(site)
+    if not destinos:
         return _send_site_whatsapp(site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
     primeiro, *resto = destinos
     ok_texto, ok_pdf, resumo = _send_site_whatsapp(
         site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf, destinos_override=[primeiro]
     )
-    agora = datetime.now()
-    for i, (telefone, rotulo) in enumerate(resto, start=1):
-        models.enqueue_whatsapp_manual(
-            site, safra, telefone, rotulo, enviar_texto, enviar_pdf,
-            agora + timedelta(hours=RECIPIENT_STAGGER_HORAS * i),
+    if resto:
+        agora = _agora_cuiaba_dt()
+        for i, (telefone, rotulo) in enumerate(resto, start=1):
+            models.enqueue_whatsapp_manual(
+                site, safra, telefone, rotulo, enviar_texto, enviar_pdf,
+                agora + timedelta(hours=RECIPIENT_STAGGER_HORAS * i),
+            )
+        resumo += (
+            f" -- {len(resto)} destinatario(s) restante(s) serao enviados ao longo das proximas "
+            f"{RECIPIENT_STAGGER_HORAS * len(resto)}h (1 a cada {RECIPIENT_STAGGER_HORAS}h), pra evitar retencao do WhatsApp."
         )
-    resumo += (
-        f" -- {len(resto)} destinatario(s) restante(s) serao enviados ao longo das proximas "
-        f"{RECIPIENT_STAGGER_HORAS * len(resto)}h (1 a cada {RECIPIENT_STAGGER_HORAS}h), pra evitar retencao do WhatsApp."
-    )
     return ok_texto, ok_pdf, resumo
 
 
@@ -1305,14 +1314,35 @@ def _run_manual_whatsapp_fila():
     destinatarios que `_enviar_whatsapp_manual_escalonado` deixou
     enfileirados e cujo horario ja' chegou. Uma tentativa por linha (sem
     retry): e' um envio manual pontual, se falhar fica registrado no log
-    de qualquer jeito (`_send_site_whatsapp`/`log_whatsapp_envio`) e a
-    pessoa pode clicar em "Enviar por WhatsApp" de novo se precisar."""
+    de qualquer jeito (`log_whatsapp_envio`, inclusive uma excecao
+    inesperada -- ver `except` abaixo) e a pessoa pode clicar em "Enviar
+    por WhatsApp" de novo se precisar. O `except` (em vez de deixar a
+    excecao propagar) e' proposital: sem ele, uma falha numa linha
+    (ex.: rede fora do ar durante a busca de clima) derrubava o loop
+    inteiro ANTES do finally rodar pras linhas seguintes desse tick,
+    deixando os proximos destinatarios devidos sem tentar ate' o minuto
+    seguinte, e essa linha some da fila sem nenhum registro no log.
+    Reconfere `_site_whatsapp_destinations` antes de mandar (nao confia
+    so' no telefone/rotulo salvos na hora do clique) -- o destinatario
+    pode ter sido desmarcado de "Receber relatorios", pausado, ou ter o
+    telefone corrigido entre o clique e o disparo (ate'
+    `RECIPIENT_STAGGER_HORAS * N` horas depois); se ele nao aparecer
+    mais na lista atual, pula sem mandar (nem loga falha -- nao e' uma
+    falha, e' o pedido de nao mandar mais sendo respeitado)."""
     for linha in models.get_whatsapp_manual_fila_devidos():
         try:
+            destinos_atuais = {tel for tel, _ in _site_whatsapp_destinations(linha["site_name"])}
+            if linha["telefone"] not in destinos_atuais:
+                continue
             _send_site_whatsapp(
                 linha["site_name"], safra=linha["safra"],
                 enviar_texto=bool(linha["enviar_texto"]), enviar_pdf=bool(linha["enviar_pdf"]),
                 destinos_override=[(linha["telefone"], linha["rotulo"])],
+            )
+        except Exception as exc:
+            models.log_whatsapp_envio(
+                linha["site_name"], linha["rotulo"], linha["telefone"], False,
+                f"Falha inesperada no despacho da fila manual: {exc}",
             )
         finally:
             models.delete_whatsapp_manual_fila(linha["id"])
@@ -1576,21 +1606,27 @@ _SCHEDULER_STATE_KEY = "whatsapp_scheduler_state"
 
 
 def _load_scheduler_enviados(today):
-    """Conjunto de "site::indice::texto"/"site::indice::pdf" (indice = a
-    posicao do destinatario em `_site_whatsapp_destinations`, ver
-    `_horario_efetivo_destinatario`) que ja' receberam o envio agendado
-    HOJE -- persistido no banco (`models.get_setting`/`app_settings`),
-    nao numa variavel em memoria. Uma variavel em memoria zera sozinha
-    se o processo reiniciar (deploy, crash, worker reciclado) no MEIO do
-    dia, fazendo o agendador reenviar de novo pra quem ja' tinha
-    recebido -- por isso o estado precisa sobreviver a reinicio. Chave
-    por (site, indice, tipo) e nao so' site, porque cada destinatario da
-    mesma fazenda tem seu proprio horario efetivo (escalonado) e texto/
-    PDF continuam podendo ter horarios BASE diferentes tambem -- uma
-    fazenda pode ja' ter mandado o texto pro 1o destinatario e ainda
-    estar esperando a vez do 2o, ou esperando o PDF de todos, no MESMO
-    dia. Reseta sozinho quando o dia muda (registro salvo de um dia
-    anterior e' ignorado)."""
+    """Conjunto de "site::telefone::texto"/"site::telefone::pdf" que ja'
+    receberam o envio agendado HOJE -- persistido no banco
+    (`models.get_setting`/`app_settings`), nao numa variavel em memoria.
+    Uma variavel em memoria zera sozinha se o processo reiniciar
+    (deploy, crash, worker reciclado) no MEIO do dia, fazendo o
+    agendador reenviar de novo pra quem ja' tinha recebido -- por isso o
+    estado precisa sobreviver a reinicio. Chave por TELEFONE (nao pelo
+    indice/posicao do destinatario, mesmo esse indice sendo usado pra
+    calcular o horario escalonado de cada um -- ver
+    `_horario_efetivo_destinatario`): a posicao na lista alfabetica
+    (`_site_whatsapp_destinations`) pode mudar no MEIO do dia se algum
+    destinatario for adicionado/removido daquela fazenda, e uma chave
+    baseada em posicao ficaria associada a pessoa errada depois disso
+    (reenvio duplicado pra quem ja' recebeu, ou fazenda nunca marcada
+    como enviada pra quem esta' esperando). Cada destinatario da mesma
+    fazenda tem seu proprio horario efetivo (escalonado) e texto/PDF
+    continuam podendo ter horarios BASE diferentes tambem -- uma fazenda
+    pode ja' ter mandado o texto pro 1o destinatario e ainda estar
+    esperando a vez do 2o, ou esperando o PDF de todos, no MESMO dia.
+    Reseta sozinho quando o dia muda (registro salvo de um dia anterior
+    e' ignorado)."""
     bruto = models.get_setting(_SCHEDULER_STATE_KEY)
     if bruto:
         try:
@@ -1652,7 +1688,13 @@ def _run_scheduled_whatsapp_sends():
     vao DEPOIS de toda fazenda normal pendente -- pedido explicito do
     usuario, pra' priorizar o relatorio de recomendacao (doenca) na fila
     do whatsapp-bridge (ver whatsapp.py) antes de qualquer clima de
-    referencia."""
+    referencia. A chave de "ja' enviado hoje" e' por (site, TELEFONE,
+    tipo) -- nunca pelo indice/posicao do destinatario na lista (que e'
+    so' usado pra calcular o horario escalonado de cada um, via
+    `_horario_efetivo_destinatario`). Indice muda se a lista de
+    destinatarios daquela fazenda mudar no mesmo dia (alguem novo
+    cadastrado cuja posicao alfabetica entra antes de outro que ja'
+    tinha recebido) -- telefone e' a unica coisa estavel por pessoa."""
     today = datetime.now().date()
     weekday = today.weekday()
     agora_hm = (datetime.now().hour, datetime.now().minute)
@@ -1671,15 +1713,15 @@ def _run_scheduled_whatsapp_sends():
             enviar_texto = (
                 weekday in schedule_texto.get(site, set())
                 and agora_hm >= _horario_efetivo_destinatario(hora_site, "texto", idx)
-                and f"{site}::{idx}::texto" not in ja_enviados
+                and f"{site}::{telefone}::texto" not in ja_enviados
             )
             enviar_pdf = (
                 weekday in schedule_pdf.get(site, set())
                 and agora_hm >= _horario_efetivo_destinatario(hora_site, "pdf", idx)
-                and f"{site}::{idx}::pdf" not in ja_enviados
+                and f"{site}::{telefone}::pdf" not in ja_enviados
             )
             if enviar_texto or enviar_pdf:
-                pendentes.append((site, idx, telefone, rotulo, enviar_texto, enviar_pdf))
+                pendentes.append((site, telefone, rotulo, enviar_texto, enviar_pdf))
     if not pendentes:
         return
     # Estavel -- so' empurra os pontos "so' clima" pro final, sem mexer
@@ -1690,9 +1732,9 @@ def _run_scheduled_whatsapp_sends():
     # precisam de 1 busca) -- sem isso, `_send_site_whatsapp` buscava o
     # clima de cada fazenda um de cada vez (rede, ~1-1.5s cada), somando
     # varios segundos so' de espera sequencial toda vez que o agendador roda.
-    sites_pendentes = sorted({site for site, _, _, _, _, _ in pendentes})
+    sites_pendentes = sorted({site for site, _, _, _, _ in pendentes})
     _prefetch_weather(sites_pendentes, _weather_coords_all())
-    for site, idx, telefone, rotulo, enviar_texto, enviar_pdf in pendentes:
+    for site, telefone, rotulo, enviar_texto, enviar_pdf in pendentes:
         ok_texto, ok_pdf, _ = _send_site_whatsapp(
             site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf, destinos_override=[(telefone, rotulo)]
         )
@@ -1701,9 +1743,9 @@ def _run_scheduled_whatsapp_sends():
         # tentado de novo no proximo minuto, ate' funcionar ou o dia
         # acabar (ver docstring).
         if enviar_texto and ok_texto:
-            ja_enviados.add(f"{site}::{idx}::texto")
+            ja_enviados.add(f"{site}::{telefone}::texto")
         if enviar_pdf and ok_pdf:
-            ja_enviados.add(f"{site}::{idx}::pdf")
+            ja_enviados.add(f"{site}::{telefone}::pdf")
         _salvar_scheduler_enviados(today, ja_enviados)
 
 
@@ -2228,6 +2270,17 @@ def _uf_por_site():
 
 def _hoje_cuiaba():
     return (datetime.now(timezone.utc) - timedelta(hours=4)).date()
+
+
+def _agora_cuiaba_dt():
+    """Como `_hoje_cuiaba()`, so' que devolve o datetime completo (nao so'
+    a data) -- usado onde precisa somar/comparar horario, nao so' dia.
+    Mesma formula de `models._agora_cuiaba()` (que devolve string): tem
+    que ser SEMPRE essa, nunca `datetime.now()` puro, porque o container
+    roda em UTC (sem `TZ` no Dockerfile) e qualquer horario gravado com
+    `datetime.now()` fica ~4h fora ao ser comparado com algo gravado via
+    `_agora_cuiaba()`/`models.get_whatsapp_manual_fila_devidos`."""
+    return datetime.now(timezone.utc) - timedelta(hours=4)
 
 
 def _sites_permitidos_usuario():
