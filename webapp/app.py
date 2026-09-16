@@ -1258,16 +1258,23 @@ def _site_whatsapp_destinations(site):
     return [(r["telefone"], r["username"]) for r in models.get_site_whatsapp_recipients(site)]
 
 
-# Intervalo entre destinatarios DA MESMA fazenda no envio manual e no
-# agendado (ver `_enviar_whatsapp_manual_escalonado`/
-# `_run_scheduled_whatsapp_sends`) -- mandar pra varios numeros NOVOS em
-# sequencia rapida (mesmo com o espacamento de MIN_DELAY_MS do bridge
-# entre cada mensagem individual) e' um padrao de RAJADA que o WhatsApp
-# tambem penaliza retendo a entrega -- constatado em 2026-09-16: numa
-# fazenda com 5 destinatarios, so' o 1o (mandado na hora) chegou, os
-# outros 4 (mandados em sequencia, minutos depois) ficaram presos em
-# "Aguardando mensagem". Espalhar por HORAS (nao so' segundos) quebra
-# esse padrao de rajada.
+# Intervalo minimo entre 2 mensagens pro MESMO numero -- usado em 3
+# lugares: entre destinatarios da MESMA fazenda no envio manual
+# (`_enviar_whatsapp_manual_escalonado`) e no agendado
+# (`_horario_efetivo_destinatario`), E entre fazendas DIFERENTES que
+# mandam pro MESMO numero no agendado (`_horarios_efetivos_por_telefone`).
+# Mandar pra' varios numeros NOVOS em sequencia rapida, ou mandar VARIAS
+# mensagens novas pro MESMO numero em sequencia rapida (mesmo vindas de
+# fazendas diferentes) -- mesmo com o espacamento de MIN_DELAY_MS do
+# bridge entre cada mensagem individual -- e' um padrao de RAJADA que o
+# WhatsApp tambem penaliza retendo a entrega. Constatado em 2026-09-16:
+# numa fazenda com 5 destinatarios, so' o 1o (mandado na hora) chegou,
+# os outros 4 (mandados em sequencia, minutos depois) ficaram presos em
+# "Aguardando mensagem". Constatado de novo em 2026-09-17: um numero que
+# recebe de VARIAS fazendas (9 fazendas, horarios auto-sugeridos so' 3
+# min um do outro) toma a MESMA rajada, mesmo sem nenhuma fazenda ter
+# mais de 1 destinatario. Espalhar por HORAS (nao so' segundos) quebra
+# esse padrao de rajada nos dois casos.
 RECIPIENT_STAGGER_HORAS = 1
 
 
@@ -1660,6 +1667,40 @@ def _horario_efetivo_destinatario(hora_site, tipo, idx):
     return total_minutos // 60, total_minutos % 60
 
 
+def _horarios_efetivos_por_telefone(candidatos):
+    """Recebe a lista de candidatos de hoje (cada um com `telefone` e
+    `desejado_min`, minutos desde meia-noite) e devolve a MESMA lista
+    com `efetivo_min` preenchido -- agrupa por telefone, ordena pelo
+    horario desejado de cada um, e caminha em sequencia garantindo pelo
+    menos `RECIPIENT_STAGGER_HORAS` de intervalo entre 2 itens
+    consecutivos do MESMO numero, sejam eles de fazendas diferentes ou
+    da mesma fazenda. So' EMPURRA pra frente (nunca antecipa) -- itens
+    ja' bem espacados (fazendas com horarios bem diferentes configurados
+    a mao) mantem o horario configurado deles. Constatado em 2026-09-17:
+    um numero que recebe relatorio de VARIAS fazendas (ex.: 9 fazendas,
+    cada uma com seu proprio horario auto-sugerido so' 3 minutos
+    diferente da vizinha) tomava uma rajada de varias mensagens em
+    poucos minutos -- rajada o suficiente pro WhatsApp reter a entrega,
+    mesmo sem nenhuma fazenda tendo mais de 1 destinatario (esse outro
+    caso, dentro da MESMA fazenda, ja' e' tratado por
+    `_horario_efetivo_destinatario`, que so' calcula o horario
+    "desejado" de entrada aqui)."""
+    por_telefone = {}
+    for c in candidatos:
+        por_telefone.setdefault(c["telefone"], []).append(c)
+    for itens in por_telefone.values():
+        itens.sort(key=lambda c: c["desejado_min"])
+        efetivo_anterior = None
+        for item in itens:
+            efetivo = item["desejado_min"]
+            if efetivo_anterior is not None:
+                efetivo = max(efetivo, efetivo_anterior + RECIPIENT_STAGGER_HORAS * 60)
+            efetivo = min(efetivo, 23 * 60 + 59)
+            efetivo_anterior = efetivo
+            item["efetivo_min"] = efetivo
+    return candidatos
+
+
 def _run_scheduled_whatsapp_sends():
     """Roda a cada minuto (`_whatsapp_scheduler_loop`) -- texto e PDF tem
     cada um sua propria agenda de dias da semana E seu proprio horario
@@ -1667,34 +1708,48 @@ def _run_scheduled_whatsapp_sends():
     -- individual por fazenda, pedido explicito do usuario pra poder
     espalhar os envios ao longo do dia em vez de todo mundo mandar no
     mesmo horario e parecer um robo). Uma fazenda pode, por exemplo, so
-    mandar o PDF as segundas 15h30 e o texto as sextas 7h05. Dentro de
-    uma MESMA fazenda, cada destinatario (`_site_whatsapp_destinations`)
-    ganha seu proprio horario, `RECIPIENT_STAGGER_HORAS` depois do
-    anterior (ver `_horario_efetivo_destinatario`) -- constatado em
-    2026-09-16 que mandar pra' varios destinatarios da mesma fazenda em
-    sequencia (mesmo com o espacamento entre mensagens individuais do
-    bridge) e' rajada o suficiente pra' o WhatsApp reter a entrega de
-    todos menos o primeiro. So' dispara um destinatario quando o dia da
-    semana bate E ja passou (>=) do horario efetivo DELE (nao so' da
-    fazenda), E esse (site, indice, tipo) ainda nao esta' no conjunto
-    "ja' enviado hoje" (`_load_scheduler_enviados`). Usa ">=" (nao "==")
-    de proposito: so' e' marcado como feito quando REALMENTE deu certo
-    -- uma falha precisa continuar tentando nos minutos seguintes, nao
-    so' no minuto exato agendado, senao o destinatario simplesmente
-    nunca recebe o relatorio naquele dia. Marca e PERSISTE logo apos
-    cada envio (nao so' no final do lote), entao um crash/reinicio no
-    meio da lista retoma so' do que falta, nunca reenvia o que ja' foi.
-    Dentro de cada rodada, pontos "so' clima" (aba Alertas Clima) sempre
-    vao DEPOIS de toda fazenda normal pendente -- pedido explicito do
-    usuario, pra' priorizar o relatorio de recomendacao (doenca) na fila
-    do whatsapp-bridge (ver whatsapp.py) antes de qualquer clima de
-    referencia. A chave de "ja' enviado hoje" e' por (site, TELEFONE,
-    tipo) -- nunca pelo indice/posicao do destinatario na lista (que e'
-    so' usado pra calcular o horario escalonado de cada um, via
-    `_horario_efetivo_destinatario`). Indice muda se a lista de
-    destinatarios daquela fazenda mudar no mesmo dia (alguem novo
-    cadastrado cuja posicao alfabetica entra antes de outro que ja'
-    tinha recebido) -- telefone e' a unica coisa estavel por pessoa."""
+    mandar o PDF as segundas 15h30 e o texto as sextas 7h05.
+
+    O horario de disparo de cada item passa por 2 camadas: (1) DENTRO de
+    uma fazenda, cada destinatario (`_site_whatsapp_destinations`) ganha
+    um horario "desejado" `RECIPIENT_STAGGER_HORAS` depois do anterior
+    (`_horario_efetivo_destinatario`) -- resolve fazenda com VARIOS
+    destinatarios rajando juntos (2026-09-16). (2) ENTRE fazendas
+    diferentes que mandam pro MESMO numero, `_horarios_efetivos_por_telefone`
+    empurra pra frente qualquer item que caia muito perto (menos de
+    `RECIPIENT_STAGGER_HORAS`) do horario efetivo do item anterior
+    daquele numero -- resolve um numero que recebe de VARIAS fazendas
+    (ex.: 9 fazendas, horarios auto-sugeridos so' 3 min um do outro)
+    tomando rajada mesmo sem nenhuma fazenda ter mais de 1 destinatario
+    (2026-09-17). As duas causas geram o MESMO sintoma pro WhatsApp
+    (varias mensagens novas em sequencia pro mesmo numero) e por isso
+    precisam das duas camadas juntas.
+
+    Texto e PDF de uma MESMA fazenda/destinatario que calhem do MESMO
+    horario desejado (comum -- `_seed_horario_sugerido` sempre configura
+    os dois iguais) viram UM candidato so' com os 2 flags, pra'
+    `_send_site_whatsapp` poder combina-los num unico envio quando
+    couber (`LEGENDA_MAX_CHARS`) -- menos mensagens pro mesmo numero,
+    tambem ajuda contra retencao. Quando os horarios configurados
+    diferem (fazenda customizada a mao), viram 2 candidatos
+    independentes.
+
+    So' dispara um item quando o dia da semana bate E ja passou (>=) do
+    horario EFETIVO dele (depois das 2 camadas acima), E esse (site,
+    telefone, tipo) ainda nao esta' no conjunto "ja' enviado hoje"
+    (`_load_scheduler_enviados`) -- chave por TELEFONE, nunca pelo
+    indice/posicao na lista (que muda se a lista de destinatarios
+    daquela fazenda mudar no meio do dia). Usa ">=" (nao "==") de
+    proposito: so' e' marcado como feito quando REALMENTE deu certo --
+    uma falha precisa continuar tentando nos minutos seguintes, senao o
+    destinatario simplesmente nunca recebe o relatorio naquele dia.
+    Marca e PERSISTE logo apos cada envio (nao so' no final do lote),
+    entao um crash/reinicio no meio da lista retoma so' do que falta,
+    nunca reenvia o que ja' foi. Dentro de cada rodada, pontos "so'
+    clima" (aba Alertas Clima) sempre vao DEPOIS de toda fazenda normal
+    pendente -- pedido explicito do usuario, pra' priorizar o relatorio
+    de recomendacao (doenca) na fila do whatsapp-bridge (ver
+    whatsapp.py) antes de qualquer clima de referencia."""
     today = datetime.now().date()
     weekday = today.weekday()
     agora_hm = (datetime.now().hour, datetime.now().minute)
@@ -1705,36 +1760,55 @@ def _run_scheduled_whatsapp_sends():
     ja_enviados = _load_scheduler_enviados(today)
     virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
 
-    pendentes = []  # (site, telefone, rotulo, enviar_texto, enviar_pdf)
+    candidatos = []
     for site in set(schedule_texto) | set(schedule_pdf):
         hora_site = horarios.get(site) or {"texto": hora_default, "texto_min": 0, "pdf": hora_default, "pdf_min": 0}
         destinos = _site_whatsapp_destinations(site)
         for idx, (telefone, rotulo) in enumerate(destinos):
-            enviar_texto = (
-                weekday in schedule_texto.get(site, set())
-                and agora_hm >= _horario_efetivo_destinatario(hora_site, "texto", idx)
-                and f"{site}::{telefone}::texto" not in ja_enviados
+            devido_texto = (
+                weekday in schedule_texto.get(site, set()) and f"{site}::{telefone}::texto" not in ja_enviados
             )
-            enviar_pdf = (
-                weekday in schedule_pdf.get(site, set())
-                and agora_hm >= _horario_efetivo_destinatario(hora_site, "pdf", idx)
-                and f"{site}::{telefone}::pdf" not in ja_enviados
-            )
-            if enviar_texto or enviar_pdf:
-                pendentes.append((site, telefone, rotulo, enviar_texto, enviar_pdf))
+            devido_pdf = weekday in schedule_pdf.get(site, set()) and f"{site}::{telefone}::pdf" not in ja_enviados
+            if not devido_texto and not devido_pdf:
+                continue
+            desejado_texto = _horario_efetivo_destinatario(hora_site, "texto", idx) if devido_texto else None
+            desejado_pdf = _horario_efetivo_destinatario(hora_site, "pdf", idx) if devido_pdf else None
+            base = {"site": site, "telefone": telefone, "rotulo": rotulo}
+            if devido_texto and devido_pdf and desejado_texto == desejado_pdf:
+                candidatos.append({
+                    **base, "enviar_texto": True, "enviar_pdf": True,
+                    "desejado_min": desejado_texto[0] * 60 + desejado_texto[1],
+                })
+            else:
+                if devido_texto:
+                    candidatos.append({
+                        **base, "enviar_texto": True, "enviar_pdf": False,
+                        "desejado_min": desejado_texto[0] * 60 + desejado_texto[1],
+                    })
+                if devido_pdf:
+                    candidatos.append({
+                        **base, "enviar_texto": False, "enviar_pdf": True,
+                        "desejado_min": desejado_pdf[0] * 60 + desejado_pdf[1],
+                    })
+    if not candidatos:
+        return
+    _horarios_efetivos_por_telefone(candidatos)
+    pendentes = [c for c in candidatos if agora_hm >= (c["efetivo_min"] // 60, c["efetivo_min"] % 60)]
     if not pendentes:
         return
     # Estavel -- so' empurra os pontos "so' clima" pro final, sem mexer
     # na ordem relativa entre eles nem entre as demais fazendas.
-    pendentes.sort(key=lambda item: item[0] in virtual_clima_names)
+    pendentes.sort(key=lambda item: item["site"] in virtual_clima_names)
     # Aquece o cache de clima de todas as fazendas pendentes em paralelo
     # antes de mandar (dedup -- varios destinatarios da mesma fazenda so'
     # precisam de 1 busca) -- sem isso, `_send_site_whatsapp` buscava o
     # clima de cada fazenda um de cada vez (rede, ~1-1.5s cada), somando
     # varios segundos so' de espera sequencial toda vez que o agendador roda.
-    sites_pendentes = sorted({site for site, _, _, _, _ in pendentes})
+    sites_pendentes = sorted({item["site"] for item in pendentes})
     _prefetch_weather(sites_pendentes, _weather_coords_all())
-    for site, telefone, rotulo, enviar_texto, enviar_pdf in pendentes:
+    for item in pendentes:
+        site, telefone, rotulo = item["site"], item["telefone"], item["rotulo"]
+        enviar_texto, enviar_pdf = item["enviar_texto"], item["enviar_pdf"]
         ok_texto, ok_pdf, _ = _send_site_whatsapp(
             site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf, destinos_override=[(telefone, rotulo)]
         )
