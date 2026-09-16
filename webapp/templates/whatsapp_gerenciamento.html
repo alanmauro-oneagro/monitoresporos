@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}WhatsApp - OneAgro{% endblock %}
+{% block extra_head %}
+<style>
+.farm-toggle { font-size: 1rem; }
+[data-site].card { margin-bottom: 0.5rem !important; }
+[data-site] > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+</style>
+{% endblock %}
+{% block content %}
+<h4 class="mb-2">WhatsApp</h4>
+<p class="text-muted small mb-3">
+    Agenda de envio automatico (texto, PDF e NDVI) e quem recebe o relatorio de cada
+    fazenda, tudo num lugar so'.
+</p>
+
+{% if no_access %}
+<div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
+{% elif not sites_data %}
+<div class="alert alert-info">Nenhuma fazenda cadastrada ainda.</div>
+{% else %}
+{% for site_group in sites_data %}
+{% set farm_idx = loop.index0 %}
+<div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
+    <div class="card-body">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="wa-body-{{ farm_idx }}">
+            <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
+        </button>
+        <div class="d-none mt-3" id="wa-body-{{ farm_idx }}">
+
+            <form method="post" action="{{ url_for('save_whatsapp_days') }}" data-autosave>
+                <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                <label class="form-label small text-muted d-block mb-1">Texto -- nestes dias:</label>
+                {% for idx, label in weekday_labels %}
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
+                        id="wd_{{ farm_idx }}_{{ idx }}" {% if idx in site_group.dias_texto %}checked{% endif %}>
+                    <label class="form-check-label small" for="wd_{{ farm_idx }}_{{ idx }}">{{ label }}</label>
+                </div>
+                {% endfor %}
+                <span class="d-inline-flex align-items-center gap-1 ms-2">
+                    <label class="small text-muted mb-0" for="hora_texto_{{ farm_idx }}">as</label>
+                    <input type="number" class="form-control form-control-sm" style="width: 56px;" min="0" max="23"
+                           id="hora_texto_{{ farm_idx }}" name="hora" value="{{ site_group.horarios.texto }}">
+                    <label class="small text-muted mb-0" for="minuto_texto_{{ farm_idx }}">:</label>
+                    <input type="number" class="form-control form-control-sm" style="width: 56px;" min="0" max="59"
+                           id="minuto_texto_{{ farm_idx }}" name="minuto" value="{{ '%02d' % site_group.horarios.texto_min }}"
+                           title="Minuto (0-59)">
+                </span>
+                <span class="autosave-status small ms-2"></span>
+            </form>
+
+            <form method="post" action="{{ url_for('save_whatsapp_days_pdf') }}" data-autosave class="mt-2">
+                <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                <label class="form-label small text-muted d-block mb-1">PDF -- nestes dias:</label>
+                {% for idx, label in weekday_labels %}
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
+                        id="wdpdf_{{ farm_idx }}_{{ idx }}" {% if idx in site_group.dias_pdf %}checked{% endif %}>
+                    <label class="form-check-label small" for="wdpdf_{{ farm_idx }}_{{ idx }}">{{ label }}</label>
+                </div>
+                {% endfor %}
+                <span class="d-inline-flex align-items-center gap-1 ms-2">
+                    <label class="small text-muted mb-0" for="hora_pdf_{{ farm_idx }}">as</label>
+                    <input type="number" class="form-control form-control-sm" style="width: 56px;" min="0" max="23"
+                           id="hora_pdf_{{ farm_idx }}" name="hora" value="{{ site_group.horarios.pdf }}">
+                    <label class="small text-muted mb-0" for="minuto_pdf_{{ farm_idx }}">:</label>
+                    <input type="number" class="form-control form-control-sm" style="width: 56px;" min="0" max="59"
+                           id="minuto_pdf_{{ farm_idx }}" name="minuto" value="{{ '%02d' % site_group.horarios.pdf_min }}"
+                           title="Minuto (0-59)">
+                </span>
+                <span class="autosave-status small ms-2"></span>
+            </form>
+
+            <div class="mt-3 pt-3 border-top">
+                <label class="form-label small text-muted d-block mb-1">NDVI -- envio automatico:</label>
+                {% if site_group.tem_car %}
+                <form method="post" action="{{ url_for('save_ndvi_agendamento') }}" data-autosave
+                      class="d-flex align-items-center flex-wrap gap-2">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <input type="date" class="form-control form-control-sm" style="width: auto;"
+                           id="ndvi_ag_data_{{ farm_idx }}" name="data_inicio" min="{{ hoje }}"
+                           value="{{ site_group.ndvi.proxima_execucao.isoformat() if site_group.ndvi else hoje }}">
+                    <select class="form-select form-select-sm" style="width: auto;" name="frequencia">
+                        <option value="">Desativado</option>
+                        <option value="semanal" {% if site_group.ndvi and site_group.ndvi.frequencia == 'semanal' %}selected{% endif %}>Semanal</option>
+                        <option value="quinzenal" {% if site_group.ndvi and site_group.ndvi.frequencia == 'quinzenal' %}selected{% endif %}>Quinzenal</option>
+                        <option value="mensal" {% if site_group.ndvi and site_group.ndvi.frequencia == 'mensal' %}selected{% endif %}>Mensal</option>
+                    </select>
+                    <label class="small text-muted mb-0" for="ndvi_ag_hora_{{ farm_idx }}">as</label>
+                    <input type="number" class="form-control form-control-sm" style="width: 62px;" min="0" max="23"
+                           id="ndvi_ag_hora_{{ farm_idx }}" name="hora"
+                           value="{{ site_group.ndvi.hora if site_group.ndvi else site_group.horarios.texto }}">
+                    <label class="small text-muted mb-0" for="ndvi_ag_hora_{{ farm_idx }}">h</label>
+                    <span class="autosave-status small ms-2"></span>
+                </form>
+                <p class="text-muted small mt-1 mb-0">
+                    Busca sozinho a cena mais recente (nuvens ate 3%) e manda pros
+                    destinatarios ativos pra NDVI (marcados na aba
+                    <a href="{{ url_for('ndvi') }}">NDVI</a>), no dia/horario acima.
+                    {% if site_group.ndvi %}Proximo envio automatico: {{ site_group.ndvi.proxima_execucao | data_br }}, as {{ '%02d'|format(site_group.ndvi.hora) }}h.{% endif %}
+                </p>
+                {% else %}
+                <p class="text-muted small mb-0">
+                    Anexe um CAR na aba <a href="{{ url_for('ndvi') }}">NDVI</a> pra habilitar o envio automatico.
+                </p>
+                {% endif %}
+            </div>
+
+            <div class="mt-3 pt-3 border-top">
+                <label class="form-label small text-muted d-block mb-1">Destinatarios:</label>
+                {% if site_group.destinatarios %}
+                <div class="mb-2">
+                    {% for d in site_group.destinatarios %}
+                    <span class="badge {{ 'bg-secondary' if d.tipo == 'subordinado' else 'bg-primary' }} me-1 mb-1">
+                        {{ d.username }}{% if d.tipo == 'subordinado' %} (subordinado){% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted small mb-2">Ninguem cadastrado pra receber ainda.</p>
+                {% endif %}
+                {% if current_user.is_admin %}
+                <form method="post" action="{{ url_for('save_whatsapp_site_recipients') }}" data-autosave>
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for u in todos_usuarios %}
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="user_ids" value="{{ u.id }}"
+                                id="rec_{{ farm_idx }}_{{ u.id }}"
+                                {% if u.id in site_group.user_ids_recebendo %}checked{% endif %}>
+                            <label class="form-check-label small" for="rec_{{ farm_idx }}_{{ u.id }}">{{ u.username }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <span class="autosave-status small ms-2"></span>
+                </form>
+                <p class="text-muted small mt-1 mb-0">
+                    Subordinados sao gerenciados na aba <a href="{{ url_for('admin_users') }}">Usuarios</a>,
+                    dentro de cada dono.
+                </p>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endfor %}
+<script>
+document.querySelectorAll('.farm-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var body = document.getElementById(btn.dataset.target);
+        var icon = btn.querySelector('.toggle-icon');
+        var expanded = !body.classList.contains('d-none');
+        body.classList.toggle('d-none');
+        icon.textContent = expanded ? '▶' : '▼';
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

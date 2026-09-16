@@ -3539,7 +3539,7 @@ def save_whatsapp_days():
     minuto_val = int(minuto) if minuto and minuto.isdigit() and 0 <= int(minuto) <= 59 else 0
     if hora and hora.isdigit() and 0 <= int(hora) <= 23:
         models.set_whatsapp_schedule_hora(site_name, "texto", int(hora), minuto_val)
-    return _save_response(f"Agenda de WhatsApp (texto) de '{_nome_exibicao(site_name)}' salva.", "fazendas")
+    return _save_response(f"Agenda de WhatsApp (texto) de '{_nome_exibicao(site_name)}' salva.", "whatsapp_gerenciamento")
 
 
 @app.route("/recommendations/whatsapp-days-pdf/save", methods=["POST"])
@@ -3560,7 +3560,7 @@ def save_whatsapp_days_pdf():
     minuto_val = int(minuto) if minuto and minuto.isdigit() and 0 <= int(minuto) <= 59 else 0
     if hora and hora.isdigit() and 0 <= int(hora) <= 23:
         models.set_whatsapp_schedule_hora(site_name, "pdf", int(hora), minuto_val)
-    return _save_response(f"Agenda de WhatsApp (PDF) de '{_nome_exibicao(site_name)}' salva.", "fazendas")
+    return _save_response(f"Agenda de WhatsApp (PDF) de '{_nome_exibicao(site_name)}' salva.", "whatsapp_gerenciamento")
 
 
 @app.route("/fazendas")
@@ -3594,17 +3594,10 @@ def fazendas():
     plantio_by_site = models.get_all_farm_plantio()
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
     espacamento_by_site = models.get_all_farm_espacamento_plantio()
-    all_days = models.get_all_whatsapp_days()
-    all_days_pdf = models.get_all_whatsapp_days_pdf()
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
     site_countries = models.get_all_site_countries()
     site_solos = models.get_all_site_solos()
-    # Em lote (uma unica query) em vez de get_whatsapp_schedule_horarios(site)
-    # dentro do loop -- essa versao "get_all" ja existia mas nao era usada
-    # aqui, cada fazenda reabria uma conexao/query so' pra ler o horario dela.
-    default_hora_envio = models.get_whatsapp_send_hour()
-    horarios_by_site = models.get_all_whatsapp_schedule_horarios()
     grades = [
         ("ts", "TS (Tratamento de Sementes)"),
         ("sulco", "Sulco (aplicacao no sulco de plantio)"),
@@ -3672,21 +3665,15 @@ def fazendas():
         escolha = overrides.get(site)
         sites_data.append({
             "site": site, "nome_exibicao": _nome_exibicao(site), "safras": safras_data,
-            "selected_days": all_days.get(site, set()),
-            "selected_days_pdf": all_days_pdf.get(site, set()),
             "virtual": site in virtual_names,
             "estacoes_proximas": estacoes_proximas,
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "country_code": country_code,
-            "horarios": horarios_by_site.get(site) or {
-                "texto": default_hora_envio, "texto_min": 0, "pdf": default_hora_envio, "pdf_min": 0,
-            },
             "solo": site_solos.get(site),
         })
 
     return render_template(
         "fazendas.html", sites_data=sites_data, no_access=False,
-        weekday_labels=list(enumerate(WEEKDAY_LABELS)),
         countries=countries.COUNTRIES,
         catalogo_produtos=catalogo_produtos, catalogo_variedades=catalogo_variedades,
     )
@@ -3719,13 +3706,11 @@ def ndvi():
 
     cars_by_site = models.get_all_farm_ndvi_cars()
     coords = _coords_all()
-    agendamentos = models.get_all_ndvi_agendamentos()
     sites_data = [
         {
             "site": site,
             "nome_exibicao": _nome_exibicao(site),
             "cars": cars_by_site.get(site, []),
-            "ndvi_agendamento": agendamentos.get(site),
             "ndvi_ativos": models.get_ndvi_ativos(site),
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
@@ -3741,7 +3726,6 @@ def ndvi():
         "ndvi.html", sites_data=sites_data, no_access=False,
         credenciais_ok=ndvi_service.credenciais_configuradas(),
         hoje=datetime.now(timezone.utc).date().isoformat(),
-        hora_padrao=models.get_whatsapp_send_hour(),
     )
 
 
@@ -3767,7 +3751,7 @@ def save_ndvi_agendamento():
         try:
             data_inicio = datetime.strptime(data_texto, "%Y-%m-%d").date()
         except ValueError:
-            return _save_response("Data de inicio invalida.", "ndvi", ok=False)
+            return _save_response("Data de inicio invalida.", "whatsapp_gerenciamento", ok=False)
         hora_texto = request.form.get("hora", "")
         hora = int(hora_texto) if hora_texto.isdigit() and 0 <= int(hora_texto) <= 23 else None
         models.set_ndvi_agendamento(site_name, data_inicio, frequencia, hora=hora)
@@ -3775,7 +3759,72 @@ def save_ndvi_agendamento():
     else:
         models.set_ndvi_agendamento(site_name, None, "")
         mensagem = f"Envio automatico de NDVI de '{_nome_exibicao(site_name)}' desativado."
-    return _save_response(mensagem, "ndvi")
+    return _save_response(mensagem, "whatsapp_gerenciamento")
+
+
+@app.route("/whatsapp")
+@login_required
+def whatsapp_gerenciamento():
+    """Pagina central de envios por WhatsApp -- agenda de texto, PDF e
+    NDVI, mais quem recebe cada fazenda, tudo num lugar so' (antes
+    espalhado entre Manejos, NDVI e Usuarios -- pedido explicito do
+    usuario depois de um bug real ficar dificil de enxergar por causa
+    dessa dispersao: 9 fazendas mandando quase juntas pro mesmo numero,
+    cada uma configurada numa tela diferente, sem visao de conjunto).
+    Mesma regra de acesso de `fazendas()`: admin ve todas as fazendas,
+    usuario comum so' as permitidas."""
+    virtual_names = models.virtual_farm_site_names()
+    if current_user.is_admin:
+        sites = sorted(set(read_sites()) | virtual_names)
+    else:
+        sites = sorted(set(models.get_user_permitted_site_names(int(current_user.id))))
+        if not sites:
+            return render_template("whatsapp_gerenciamento.html", sites_data=[], no_access=True)
+
+    gerenciamento = models.get_all_whatsapp_gerenciamento()
+    cars_by_site = models.get_all_farm_ndvi_cars()
+    hora_default = models.get_whatsapp_send_hour()
+    todos_usuarios = models.get_all_users() if current_user.is_admin else []
+
+    sites_data = []
+    for site in sites:
+        dados = gerenciamento.get(site) or {
+            "dias_texto": set(), "dias_pdf": set(),
+            "horarios": {"texto": hora_default, "texto_min": 0, "pdf": hora_default, "pdf_min": 0},
+            "ndvi": None, "destinatarios": [], "user_ids_recebendo": set(),
+        }
+        sites_data.append({
+            "site": site,
+            "nome_exibicao": _nome_exibicao(site),
+            "dias_texto": dados["dias_texto"],
+            "dias_pdf": dados["dias_pdf"],
+            "horarios": dados["horarios"],
+            "ndvi": dados["ndvi"],
+            "tem_car": bool(cars_by_site.get(site)),
+            "destinatarios": dados["destinatarios"],
+            "user_ids_recebendo": dados["user_ids_recebendo"],
+        })
+
+    return render_template(
+        "whatsapp_gerenciamento.html", sites_data=sites_data, no_access=False,
+        weekday_labels=list(enumerate(WEEKDAY_LABELS)),
+        hoje=datetime.now(timezone.utc).date().isoformat(),
+        todos_usuarios=todos_usuarios,
+    )
+
+
+@app.route("/whatsapp/destinatarios/save", methods=["POST"])
+@admin_required
+def save_whatsapp_site_recipients():
+    """So' admin edita quem recebe (mesmo nivel de acesso de
+    `admin_report_permissions`/`admin_user_subordinados` hoje) -- so'
+    mexe em USUARIOS (`models.set_site_whatsapp_user_recipients`);
+    subordinado continua sendo editado na tela do dono dele (ver
+    docstring de `set_site_whatsapp_user_recipients`)."""
+    site_name = request.form.get("site_name")
+    user_ids = [int(v) for v in request.form.getlist("user_ids") if v.isdigit()]
+    models.set_site_whatsapp_user_recipients(site_name, user_ids)
+    return _save_response(f"Destinatarios de '{_nome_exibicao(site_name)}' salvos.", "whatsapp_gerenciamento")
 
 
 @app.route("/ndvi/destinatario/toggle", methods=["POST"])

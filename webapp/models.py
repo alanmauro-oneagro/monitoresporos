@@ -2710,12 +2710,15 @@ def get_site_whatsapp_recipients(site_name):
     sem apagar as marcacoes individuais de "Receber relatorios", ver
     `set_user_whatsapp_pausado`/`set_subordinado_whatsapp_pausado`). Nao
     depende de ser admin nem de ter acesso pra VER a fazenda -- sao
-    coisas separadas de proposito."""
+    coisas separadas de proposito. `tipo` ('user' ou 'subordinado')
+    deixa quem le' saber qual dos dois cadastros gerou aquela linha --
+    ex.: pra' distinguir na tela quem pode ser editado direto ali (user)
+    de quem so' pode ser editado na tela do dono (subordinado)."""
     conn = get_db()
     rows = conn.execute(
         """
-        SELECT username, telefone FROM (
-            SELECT DISTINCT u.username AS username, u.telefone AS telefone
+        SELECT username, telefone, tipo FROM (
+            SELECT DISTINCT u.username AS username, u.telefone AS telefone, 'user' AS tipo
             FROM users u
             JOIN user_report_permissions r ON r.user_id = u.id
             JOIN sites s ON s.id = r.site_id
@@ -2723,7 +2726,7 @@ def get_site_whatsapp_recipients(site_name):
               AND u.telefone IS NOT NULL AND u.telefone != ''
               AND u.whatsapp_pausado = 0
             UNION
-            SELECT DISTINCT sub.nome AS username, sub.telefone AS telefone
+            SELECT DISTINCT sub.nome AS username, sub.telefone AS telefone, 'subordinado' AS tipo
             FROM subordinados sub
             JOIN subordinado_report_permissions sr ON sr.subordinado_id = sub.id
             JOIN sites s ON s.id = sr.site_id
@@ -2743,18 +2746,19 @@ def get_all_sites_whatsapp_recipients():
     """Versao em lote de `get_site_whatsapp_recipients`, pra telas que
     precisam do destinatario de TODAS as fazendas (Recomendacoes, relatorio
     admin de WhatsApp) -- uma unica consulta em vez de uma por fazenda.
-    Retorna {site_name: [sqlite3.Row(username, telefone), ...]}."""
+    Retorna {site_name: [sqlite3.Row(username, telefone, tipo), ...]}
+    (`tipo` -- ver docstring de `get_site_whatsapp_recipients`)."""
     conn = get_db()
     rows = conn.execute(
         """
-        SELECT site_name, username, telefone FROM (
-            SELECT DISTINCT s.site_name AS site_name, u.username AS username, u.telefone AS telefone
+        SELECT site_name, username, telefone, tipo FROM (
+            SELECT DISTINCT s.site_name AS site_name, u.username AS username, u.telefone AS telefone, 'user' AS tipo
             FROM users u
             JOIN user_report_permissions r ON r.user_id = u.id
             JOIN sites s ON s.id = r.site_id
             WHERE u.telefone IS NOT NULL AND u.telefone != '' AND u.whatsapp_pausado = 0
             UNION
-            SELECT DISTINCT s.site_name AS site_name, sub.nome AS username, sub.telefone AS telefone
+            SELECT DISTINCT s.site_name AS site_name, sub.nome AS username, sub.telefone AS telefone, 'subordinado' AS tipo
             FROM subordinados sub
             JOIN subordinado_report_permissions sr ON sr.subordinado_id = sub.id
             JOIN sites s ON s.id = sr.site_id
@@ -2767,6 +2771,71 @@ def get_all_sites_whatsapp_recipients():
     por_site = {}
     for r in rows:
         por_site.setdefault(r["site_name"], []).append(r)
+    return por_site
+
+
+def get_all_whatsapp_gerenciamento():
+    """Junta, numa unica chamada, tudo que a pagina "WhatsApp" (central
+    de agenda/destinatarios, ver `app.whatsapp_gerenciamento`) precisa
+    mostrar por fazenda: dias de texto, dias de PDF, horario de
+    texto/PDF, agendamento de NDVI e destinatarios -- so' zipa os 5
+    `get_all_*` que ja existiam (nenhum e' recalculado, cada um
+    continua sendo a fonte de verdade usada tambem pelo agendador
+    (`app._run_scheduled_whatsapp_sends`/`_run_scheduled_ndvi_sends`) e
+    pelas paginas Fazendas/NDVI, que NAO usam esta funcao -- ela e' so'
+    pra' tela nova, pra nao arriscar mudar o comportamento das duas
+    paginas que ja existiam). Retorna {site_name: {"dias_texto": set,
+    "dias_pdf": set, "horarios": {...}, "ndvi": {...} ou None,
+    "destinatarios": [...], "user_ids_recebendo": set}} -- SO' pras
+    fazendas que ja tem alguma customizacao/destinatario; quem chama
+    ainda precisa aplicar o default (mesmo fallback que `fazendas()`/
+    `ndvi()` ja fazem hoje) pra' fazenda sem nada configurado ainda,
+    ja que essa funcao nao conhece a lista completa de fazendas (isso
+    e' responsabilidade de quem itera, igual `fazendas()` ja faz)."""
+    dias_texto = get_all_whatsapp_days()
+    dias_pdf = get_all_whatsapp_days_pdf()
+    horarios = get_all_whatsapp_schedule_horarios()
+    ndvi_agendamentos = get_all_ndvi_agendamentos()
+    destinatarios = get_all_sites_whatsapp_recipients()
+    user_ids_por_site = get_all_sites_report_user_ids()
+    hora_default = get_whatsapp_send_hour()
+
+    sites = (
+        set(dias_texto) | set(dias_pdf) | set(horarios) | set(ndvi_agendamentos)
+        | set(destinatarios) | set(user_ids_por_site)
+    )
+    resultado = {}
+    for site in sites:
+        resultado[site] = {
+            "dias_texto": dias_texto.get(site, set()),
+            "dias_pdf": dias_pdf.get(site, set()),
+            "horarios": horarios.get(site) or {
+                "texto": hora_default, "texto_min": 0, "pdf": hora_default, "pdf_min": 0,
+            },
+            "ndvi": ndvi_agendamentos.get(site),
+            "destinatarios": destinatarios.get(site, []),
+            "user_ids_recebendo": user_ids_por_site.get(site, set()),
+        }
+    return resultado
+
+
+def get_all_sites_report_user_ids():
+    """{site_name: {user_id, ...}} -- so' os USUARIOS (nao subordinados)
+    marcados em "Receber relatorios" pra' cada fazenda, independente de
+    telefone/pausa (ao contrario de `get_all_sites_whatsapp_recipients`,
+    que so' traz quem REALMENTE recebe agora). Usado pra' pre-marcar o
+    seletor de destinatarios na tela "WhatsApp"
+    (`app.whatsapp_gerenciamento`) -- precisa do `user_id` (nao so' o
+    nome) pra' casar com o checkbox de cada usuario."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT s.site_name AS site_name, r.user_id AS user_id "
+        "FROM user_report_permissions r JOIN sites s ON s.id = r.site_id"
+    ).fetchall()
+    conn.close()
+    por_site = {}
+    for r in rows:
+        por_site.setdefault(r["site_name"], set()).add(r["user_id"])
     return por_site
 
 
@@ -2905,6 +2974,33 @@ def set_user_report_permissions(user_id, site_ids):
     conn = get_db()
     conn.execute("DELETE FROM user_report_permissions WHERE user_id = ?", (user_id,))
     for site_id in site_ids:
+        conn.execute(
+            "INSERT INTO user_report_permissions (user_id, site_id) VALUES (?, ?)",
+            (user_id, site_id),
+        )
+    conn.commit()
+    conn.close()
+
+
+def set_site_whatsapp_user_recipients(site_name, user_ids):
+    """Substitui os USUARIOS marcados pra receber relatorio DESSA fazenda
+    -- mesmo padrao de `set_user_report_permissions` (substitui, nao
+    empilha), so' que fixando o site e variando os usuarios (direcao
+    inversa: usada pela tela "WhatsApp" que edita por fazenda, nao por
+    pessoa). So' mexe em `user_report_permissions` -- NUNCA em
+    `subordinado_report_permissions` (subordinado continua sendo
+    editado so' na tela do dono dele, `admin_user_subordinados`, onde a
+    elegibilidade dele -- so' fazenda que o dono ja recebe -- e' de
+    fato aplicada; duplicar essa regra aqui arriscaria as duas telas
+    divergirem)."""
+    conn = get_db()
+    site_row = conn.execute("SELECT id FROM sites WHERE site_name = ?", (site_name,)).fetchone()
+    if not site_row:
+        conn.close()
+        return
+    site_id = site_row["id"]
+    conn.execute("DELETE FROM user_report_permissions WHERE site_id = ?", (site_id,))
+    for user_id in user_ids:
         conn.execute(
             "INSERT INTO user_report_permissions (user_id, site_id) VALUES (?, ?)",
             (user_id, site_id),
