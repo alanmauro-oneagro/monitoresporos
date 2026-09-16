@@ -413,6 +413,29 @@ def init_db():
             fonte TEXT,
             resolvido_em TEXT NOT NULL
         );
+
+        -- Fila de envio manual escalonado: quando o botao "Enviar por
+        -- WhatsApp" manda pra uma fazenda com VARIOS destinatarios, so' o
+        -- primeiro sai na hora -- os demais viram uma linha aqui, cada um
+        -- com seu proprio horario futuro (ver RECIPIENT_STAGGER_HORAS em
+        -- app.py), e sao disparados pelo mesmo loop de fundo do
+        -- agendamento diario (`_run_manual_whatsapp_fila`). Evita mandar
+        -- pra varios numeros NOVOS em sequencia rapida, que o WhatsApp
+        -- trata como rajada de robo e passa a reter a entrega (ver
+        -- MIN_DELAY_MS em whatsapp-bridge/index.js -- esse problema e' o
+        -- MESMO, so' que entre destinatarios da mesma fazenda em vez de
+        -- entre fazendas diferentes).
+        CREATE TABLE IF NOT EXISTS whatsapp_manual_fila (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_name TEXT NOT NULL,
+            safra TEXT,
+            telefone TEXT NOT NULL,
+            rotulo TEXT,
+            enviar_texto INTEGER NOT NULL,
+            enviar_pdf INTEGER NOT NULL,
+            disparar_em TEXT NOT NULL,
+            criado_em TEXT NOT NULL
+        );
         """
     )
     try:
@@ -984,6 +1007,49 @@ def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, dias=None, limit
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def enqueue_whatsapp_manual(site_name, safra, telefone, rotulo, enviar_texto, enviar_pdf, disparar_em):
+    """Agenda um envio manual pra' UM destinatario especifico, pra' ser
+    disparado mais tarde pelo loop de fundo (`app._run_manual_whatsapp_fila`)
+    -- ver comentario da tabela `whatsapp_manual_fila`. `disparar_em` e'
+    um datetime (nao string) no horario local de Cuiaba, mesmo padrao de
+    `_agora_cuiaba`."""
+    conn = get_db()
+    conn.execute(
+        """
+        INSERT INTO whatsapp_manual_fila
+            (site_name, safra, telefone, rotulo, enviar_texto, enviar_pdf, disparar_em, criado_em)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (site_name, safra, telefone, rotulo, 1 if enviar_texto else 0, 1 if enviar_pdf else 0,
+         disparar_em.strftime("%Y-%m-%d %H:%M:%S"), _agora_cuiaba()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_whatsapp_manual_fila_devidos():
+    """Linhas da fila de envio manual escalonado cujo horario ja' chegou
+    (`disparar_em <= agora`, mesmo horario local de Cuiaba gravado --
+    ver `enqueue_whatsapp_manual`/`_agora_cuiaba`). Mais antigas primeiro,
+    pra' respeitar a ordem em que os destinatarios foram enfileirados."""
+    conn = get_db()
+    agora = _agora_cuiaba()
+    rows = conn.execute(
+        "SELECT id, site_name, safra, telefone, rotulo, enviar_texto, enviar_pdf FROM whatsapp_manual_fila "
+        "WHERE disparar_em <= ? ORDER BY disparar_em, id",
+        (agora,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_whatsapp_manual_fila(fila_id):
+    conn = get_db()
+    conn.execute("DELETE FROM whatsapp_manual_fila WHERE id = ?", (fila_id,))
+    conn.commit()
+    conn.close()
 
 
 _DISEASE_INFO_COLUMNS = (
