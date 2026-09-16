@@ -120,6 +120,17 @@ def _coords_all():
     return coords
 
 
+def _sites_ativos_para_admin():
+    """Fazendas (reais do CSV + virtuais) que o admin deve enxergar,
+    excluindo as desativadas (`models.get_deactivated_site_names`) --
+    substitui o sentinel `permitted=None` nos lugares que hoje mostram
+    "tudo" pro admin (Painel, Mapa, Graficos, Recomendacoes, NDVI,
+    Envios, Exportar). `fazendas()` (Manejos) e' a UNICA excecao de
+    proposito -- continua mostrando fazenda desativada tambem, pra' dar
+    pra' reativar."""
+    return (set(read_sites()) | models.virtual_farm_site_names()) - models.get_deactivated_site_names()
+
+
 def _cards_by_site_all(permitted, translations):
     """cards_by_site real (`get_dashboard_data`) + uma entrada por
     fazenda virtual/estimada, calculada na hora por interpolacao (IDW)
@@ -2249,7 +2260,7 @@ def dashboard_atualizar():
 def dashboard():
     _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
     if current_user.is_admin:
-        permitted = None  # admin ve todas as fazendas
+        permitted = _sites_ativos_para_admin()  # admin ve todas as fazendas ativas
     else:
         permitted = set(models.get_user_permitted_site_names(int(current_user.id)))
         if not permitted:
@@ -2352,12 +2363,13 @@ def _agora_cuiaba_dt():
 
 
 def _sites_permitidos_usuario():
-    """None (sem filtro, ve tudo) se admin; senao o conjunto de fazendas
-    liberadas pra esse usuario (mesmo `get_user_permitted_site_names` ja
-    usado no Painel/Mapa/Manejo) -- usado pra aba Graficos nunca mostrar
-    dado de fazenda que o usuario nao tem permissao de ver."""
+    """Todas as fazendas ATIVAS se admin (`_sites_ativos_para_admin`);
+    senao o conjunto de fazendas liberadas pra esse usuario (mesmo
+    `get_user_permitted_site_names` ja usado no Painel/Mapa/Manejo) --
+    usado pra aba Graficos nunca mostrar dado de fazenda que o usuario
+    nao tem permissao de ver, nem fazenda desativada."""
     if current_user.is_admin:
-        return None
+        return _sites_ativos_para_admin()
     return set(models.get_user_permitted_site_names(int(current_user.id)))
 
 
@@ -2815,7 +2827,7 @@ def _country_map_context():
 def mapa():
     _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
     if current_user.is_admin:
-        permitted = None  # admin ve todas as fazendas
+        permitted = _sites_ativos_para_admin()  # admin ve todas as fazendas ativas
     else:
         permitted = set(models.get_user_permitted_site_names(int(current_user.id)))
         if not permitted:
@@ -2948,10 +2960,15 @@ def mapa_interpolado():
     "Configuracoes")."""
     cards_reais = get_dashboard_data(None, _load_translations())
     coords_reais = data_reader.read_site_coordinates()
+    # Desativada so' some do que e' EXIBIDO (sites_data) -- cards_reais/
+    # coords_reais continuam cheios, ja que sao a base de interpolacao
+    # (IDW) dos pontos virtuais logo abaixo (nao pode encolher so' porque
+    # uma fazenda vizinha foi desativada).
+    desativadas = models.get_deactivated_site_names()
 
     sites_data = []
     for site, cards in cards_reais.items():
-        if site not in coords_reais:
+        if site not in coords_reais or site in desativadas:
             continue
         lat, lon = coords_reais[site]
         sites_data.append({
@@ -3316,7 +3333,7 @@ def recommendations(safra):
         abort(404)
     _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
     if current_user.is_admin:
-        permitted = None
+        permitted = _sites_ativos_para_admin()  # admin ve todas as fazendas ativas
     else:
         permitted = set(models.get_user_permitted_site_names(int(current_user.id)))
         if not permitted:
@@ -3554,6 +3571,10 @@ def save_whatsapp_days_pdf():
 @login_required
 def fazendas():
     virtual_names = models.virtual_farm_site_names()
+    # So' esta pagina continua mostrando fazenda desativada (mesmo pro
+    # branch admin abaixo, que nao filtra por isso de proposito) -- e'
+    # aqui que o admin reativa (ver save_site_ativo).
+    desativadas = models.get_deactivated_site_names()
     # Ponto "so clima" (aba Alertas Clima) nao aparece aqui -- nao tem
     # doenca/produtos/plantio/aplicacoes pra anotar (o titulo da pagina e'
     # literalmente "Anotacoes de Safra"), e ja tem tela propria dedicada
@@ -3657,6 +3678,7 @@ def fazendas():
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "country_code": country_code,
             "solo": site_solos.get(site),
+            "ativo": site not in desativadas,
         })
 
     return render_template(
@@ -3685,7 +3707,7 @@ def _get_ndvi_preview(site_name):
 def ndvi():
     virtual_names = models.virtual_farm_site_names()
     if current_user.is_admin:
-        sites = sorted(set(read_sites()) | virtual_names)
+        sites = sorted((set(read_sites()) | virtual_names) - models.get_deactivated_site_names())
     else:
         sites = sorted(models.get_user_permitted_site_names(int(current_user.id)))
         if not sites:
@@ -3767,7 +3789,7 @@ def whatsapp_gerenciamento():
     virtual_names = models.virtual_farm_site_names()
     virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
     if current_user.is_admin:
-        sites_set = set(read_sites()) | virtual_names
+        sites_set = (set(read_sites()) | virtual_names) - models.get_deactivated_site_names()
     else:
         sites_set = set(models.get_user_permitted_site_names(int(current_user.id)))
         if not sites_set:
@@ -4276,6 +4298,27 @@ def save_site_country():
     models.set_site_country(site_name, country_code)
     nome_pais = countries.get_country(country_code)["nome"]
     return _save_response(f"'{_nome_exibicao(site_name)}' marcada como {nome_pais}.", "fazendas")
+
+
+@app.route("/fazendas/ativo/save", methods=["POST"])
+@admin_required
+def save_site_ativo():
+    """Ativa/desativa uma fazenda (real ou virtual) -- desativada some de
+    TODAS as outras telas (Painel, Mapa, Graficos, Recomendacoes, NDVI,
+    Envios, Exportar, telas de permissao), mas continua aparecendo aqui
+    em Manejos (unica excecao de proposito, ver `fazendas()`) pra' poder
+    reativar. Existe porque fazenda REAL vem do CSV sincronizado
+    (`_ensure_sites_synced`/`models.sync_sites`, que so' ADICIONA linha
+    nova e nunca remove) -- um DELETE de verdade nao resolveria, ela
+    voltaria sozinha na proxima sincronizacao."""
+    site_name = request.form.get("site_name")
+    ativo = request.form.get("ativo") == "1"
+    models.set_site_ativo(site_name, ativo)
+    if ativo:
+        msg = f"'{_nome_exibicao(site_name)}' reativada -- volta a aparecer em todas as telas."
+    else:
+        msg = f"'{_nome_exibicao(site_name)}' desativada -- deixa de aparecer no Painel/Mapa/Graficos/Recomendacoes/NDVI/Envios (continua aqui em Manejos pra poder reativar)."
+    return _save_response(msg, "fazendas")
 
 
 @app.route("/fazendas/nome/save", methods=["POST"])
@@ -5162,7 +5205,7 @@ def admin_exportar():
     logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas, dias=7)
     for l in logs:
         l["site_nome"] = _nome_exibicao(l["site_name"])
-    sites = sorted(set(read_sites()) | models.virtual_farm_site_names())
+    sites = sorted((set(read_sites()) | models.virtual_farm_site_names()) - models.get_deactivated_site_names())
     nomes_exibicao = {s: _nome_exibicao(s) for s in sites}
     todos_destinos = models.get_all_sites_whatsapp_recipients()
     cadastro = []

@@ -189,7 +189,7 @@ def _fazendas_cadastro_rows():
     coords = dict(data_reader.read_site_coordinates())
     for vf in virtual_by_name.values():
         coords[vf["site_name"]] = (vf["lat"], vf["lon"])
-    todos = sorted(set(data_reader.read_sites()) | set(virtual_by_name))
+    todos = sorted((set(data_reader.read_sites()) | set(virtual_by_name)) - models.get_deactivated_site_names())
 
     rows = []
     for site in todos:

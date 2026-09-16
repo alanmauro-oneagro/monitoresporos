@@ -134,7 +134,8 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS sites (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            site_name TEXT UNIQUE NOT NULL
+            site_name TEXT UNIQUE NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 1
         );
 
         CREATE TABLE IF NOT EXISTS virtual_farms (
@@ -531,6 +532,16 @@ def init_db():
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
         conn.execute("ALTER TABLE subordinados ADD COLUMN whatsapp_pausado INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    try:
+        # Fazenda desativada (real ou virtual) para de aparecer em
+        # qualquer tela (Painel, Mapa, Graficos, Recomendacoes, NDVI,
+        # Envios) sem apagar nada -- so' continua visivel em Manejos
+        # (aba Fazendas), onde o admin pode reativar. Existe pra fazenda
+        # real sincronizada do CSV (`sync_sites` so' adiciona, nunca
+        # remove), entao um DELETE nao resolveria sozinho.
+        conn.execute("ALTER TABLE sites ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
@@ -2496,10 +2507,38 @@ def seed_default_whatsapp_schedule(site_name):
 
 
 def get_all_sites():
+    """So' fazenda ATIVA (ver `set_site_ativo`) -- usada pelas telas de
+    permissao (admin_user_permissions/reports/subordinados, admin_users)
+    e pelo Excel exportado, entao uma fazenda desativada tambem some
+    dali, igual em qualquer outra tela."""
     conn = get_db()
-    rows = conn.execute("SELECT id, site_name FROM sites ORDER BY site_name").fetchall()
+    rows = conn.execute("SELECT id, site_name FROM sites WHERE ativo = 1 ORDER BY site_name").fetchall()
     conn.close()
     return rows
+
+
+def get_deactivated_site_names():
+    """Nomes das fazendas (reais ou virtuais) marcadas como desativadas
+    -- usado pra subtrair de qualquer lista de fazendas montada direto
+    do CSV (`data_reader.read_sites()`), ja que `sync_sites` so' ADICIONA
+    fazenda nova na tabela `sites` e nunca remove, entao uma fazenda
+    real continuaria voltando sozinha se a exclusao fosse so' um
+    DELETE."""
+    conn = get_db()
+    rows = conn.execute("SELECT site_name FROM sites WHERE ativo = 0").fetchall()
+    conn.close()
+    return {r["site_name"] for r in rows}
+
+
+def set_site_ativo(site_name, ativo):
+    """Ativa/desativa uma fazenda (real ou virtual) -- toda fazenda ja
+    tem linha em `sites` no momento em que aparece em qualquer tela (ver
+    `sync_sites`/`create_virtual_farm`), entao o UPDATE sempre encontra
+    a linha."""
+    conn = get_db()
+    conn.execute("UPDATE sites SET ativo = ? WHERE site_name = ?", (1 if ativo else 0, site_name))
+    conn.commit()
+    conn.close()
 
 
 def get_all_virtual_farms():
@@ -2925,7 +2964,7 @@ def get_user_permitted_site_names(user_id):
         """
         SELECT s.site_name FROM sites s
         JOIN user_site_permissions p ON p.site_id = s.id
-        WHERE p.user_id = ?
+        WHERE p.user_id = ? AND s.ativo = 1
         ORDER BY s.site_name
         """,
         (user_id,),
