@@ -7,7 +7,7 @@ completa) e Relatorio Diario (clima + concentracao de esporos e risco
 de infeccao, dia a dia) -- exportacao restrita a `ALAN_MAURO_USERNAME`,
 ver `admin_exportar` em `app.py`."""
 import io
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -41,6 +41,26 @@ def _ordinal_para_ordenar(data_texto):
         except ValueError:
             pass
     return 0
+
+
+def _data_hora_excel(criado_em):
+    """(date, time) DE VERDADE (nao texto) a partir de um `criado_em`
+    ("YYYY-MM-DD HH:MM:SS", formato fixo gravado por
+    `models._agora_cuiaba()` -- ver `log_whatsapp_envio`) -- mesmo
+    raciocinio de `_data_excel` (Excel reconhece como data/hora de
+    verdade, ordena/filtra certo pela propria planilha em vez de texto).
+    Usado na aba WhatsApp (Historico de Envios), que tinha um unico
+    campo "Data/Hora" combinado -- separado em 2 colunas pra' poder
+    ordenar/filtrar so' por data ou so' por hora. Devolve
+    (valor_original, None) se nao reconhecer o formato, nunca quebra a
+    exportacao por causa disso."""
+    if not criado_em:
+        return None, None
+    try:
+        dt = datetime.strptime(str(criado_em).strip(), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return criado_em, None
+    return dt.date(), dt.time()
 
 
 def _data_excel(data_texto):
@@ -496,15 +516,25 @@ def _add_whatsapp_sheet(wb):
 
     ws.append(["Historico de Envios"])
     ws.cell(row=ws.max_row, column=1).font = Font(bold=True, size=12)
-    ws.append(["Data/Hora", "Fazenda", "Destinatario", "Telefone", "Status", "Detalhe"])
+    ws.append(["Data", "Hora", "Fazenda", "Destinatario", "Telefone", "Status", "Detalhe"])
     for cell in ws[ws.max_row]:
         cell.font = Font(bold=True)
+    primeira_linha_historico = ws.max_row + 1
     for log in models.get_whatsapp_envio_log(limit=1_000_000):
+        data_obj, hora_obj = _data_hora_excel(log["criado_em"])
         ws.append(_safe_row([
-            models.fmt_data_br(log["criado_em"]) or "",
+            data_obj, hora_obj,
             log["site_name"], log["destinatario"] or "", models.fmt_telefone_br(log["telefone"]) or "",
             "Enviado" if log["ok"] else "Falha", log["mensagem"] or "",
         ]))
+    # Data/Hora como objetos de verdade (ver `_data_hora_excel`) --
+    # o number_format e' quem faz aparecer no formato brasileiro/24h,
+    # sem virar texto puro (Excel continua ordenando/filtrando certo).
+    for row_cells in ws.iter_rows(min_row=primeira_linha_historico, max_row=ws.max_row, min_col=1, max_col=2):
+        if isinstance(row_cells[0].value, date):
+            row_cells[0].number_format = "DD/MM/YYYY"
+        if isinstance(row_cells[1].value, time):
+            row_cells[1].number_format = "HH:MM"
 
     # Fazenda real (tabela `sites`) + virtual/estimada -- as duas podem
     # ter destinatario/agenda proprios (`_send_site_whatsapp` funciona

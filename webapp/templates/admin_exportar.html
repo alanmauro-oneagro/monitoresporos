@@ -46,7 +46,8 @@
             <table class="table table-sm align-middle mb-0">
                 <thead style="position: sticky; top: 0; background: #fff; z-index: 1;">
                     <tr>
-                        <th>Data/Hora</th>
+                        <th>Data</th>
+                        <th>Hora</th>
                         <th>Fazenda</th>
                         <th>Destinatario</th>
                         <th>Telefone</th>
@@ -57,7 +58,8 @@
                 <tbody>
                     {% for l in logs %}
                     <tr class="{{ 'table-danger' if not l.ok else '' }}">
-                        <td class="text-nowrap">{{ l.criado_em | data_br }}</td>
+                        <td class="text-nowrap">{{ l.criado_em[:10] | data_br }}</td>
+                        <td class="text-nowrap">{{ l.criado_em[11:16] }}</td>
                         <td>{{ l.site_nome }}</td>
                         <td>{{ l.destinatario or '-' }}</td>
                         <td>{{ l.telefone | telefone_br if l.telefone else '-' }}</td>
