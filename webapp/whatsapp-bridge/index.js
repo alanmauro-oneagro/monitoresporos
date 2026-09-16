@@ -52,9 +52,13 @@ const AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || "./auth_info";
 // num envio de imagem NDVI reenviada 3x seguidas pro mesmo numero em 3
 // minutos -- aumentado pra 15-25s pra dar mais folga, mas isso reduz o
 // risco, nao elimina (a decisao de segurar e' inteiramente do
-// WhatsApp, sem sinal nenhum que o bridge possa consultar antes).
-const MIN_DELAY_MS = 15000;
-const JITTER_MS = 10000;
+// WhatsApp, sem sinal nenhum que o bridge possa consultar antes). Em
+// 2026-09-16 aconteceu de novo especificamente com numeros de
+// subordinados (contatos com pouco/nenhum historico de conversa com
+// esse numero, mais suscetiveis a retencao que os donos das fazendas)
+// no envio agendado -- aumentado pra 25-45s.
+const MIN_DELAY_MS = 25000;
+const JITTER_MS = 20000;
 
 let sock = null;
 let lastQrDataUrl = null;
