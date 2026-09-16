@@ -1522,8 +1522,15 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
 
     destinos = destinos_override if destinos_override is not None else _site_whatsapp_destinations(site)
     if not destinos:
+        # NAO loga no historico (`models.log_whatsapp_envio`) -- fazenda
+        # sem ninguem cadastrado pra receber nao e' uma FALHA de envio
+        # (nada foi tentado), e' uma lacuna de cadastro. Logar isso
+        # misturava com falhas de verdade no relatorio "Envios por
+        # WhatsApp" (aba Exportar), inflando a contagem de falhas com
+        # fazendas que nunca deveriam ter sido contadas ali. O motivo
+        # ainda aparece pra quem clicou manualmente (flash da rota),
+        # so' nao fica persistido no log.
         motivo = f"Nenhum usuario marcado pra receber relatorio de '{site}' (ou nenhum tem telefone cadastrado)."
-        models.log_whatsapp_envio(site, None, None, False, motivo)
         return False, False, motivo
 
     text = None
