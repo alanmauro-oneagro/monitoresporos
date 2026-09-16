@@ -741,8 +741,29 @@ def init_db():
         # proxima subida (ou ate' o usuario configurar a mao).
         pass
 
+    try:
+        _limpar_falsas_falhas_sem_destinatario(conn)
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
+
+
+def _limpar_falsas_falhas_sem_destinatario(conn):
+    """Apaga do historico (`whatsapp_envio_log`) as linhas antigas de
+    "falha" que na verdade eram so' "fazenda sem ninguem cadastrado pra
+    receber" -- registradas por engano como falha ANTES desse
+    comportamento ser corrigido (`app._send_site_whatsapp` parou de
+    chamar `log_whatsapp_envio` nesse caso). Idempotente: depois da
+    primeira limpeza nao sobra nenhuma linha desse padrao pra apagar de
+    novo (nenhuma nova e' criada). So' apaga pelo padrao exato da
+    mensagem antiga (destinatario/telefone NULOS, ok=0), nunca uma falha
+    de envio de verdade."""
+    conn.execute(
+        "DELETE FROM whatsapp_envio_log WHERE destinatario IS NULL AND telefone IS NULL "
+        "AND ok = 0 AND mensagem LIKE 'Nenhum usuario marcado pra receber relatorio%'"
+    )
 
 
 def _migrar_estoque_rapido_para_folha(conn):
