@@ -8,11 +8,7 @@
 </style>
 {% endblock %}
 {% block content %}
-<h4 class="mb-2">WhatsApp</h4>
-<p class="text-muted small mb-3">
-    Agenda de envio automatico (texto, PDF e NDVI) e quem recebe o relatorio de cada
-    fazenda, tudo num lugar so'.
-</p>
+<h4 class="mb-3">WhatsApp</h4>
 
 {% if no_access %}
 <div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
@@ -25,6 +21,9 @@
     <div class="card-body">
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="wa-body-{{ farm_idx }}">
             <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
+            <span class="badge rounded-pill {{ 'bg-info text-dark' if site_group.so_clima else 'bg-success' }} ms-1">
+                {{ 'Só Clima' if site_group.so_clima else 'Monitorar Doenças' }}
+            </span>
         </button>
         <div class="d-none mt-3" id="wa-body-{{ farm_idx }}">
 
@@ -146,6 +145,10 @@
     </div>
 </div>
 {% endfor %}
+<p class="text-muted small mt-3 mb-0 d-none d-md-block">
+    Agenda de envio automatico (texto, PDF e NDVI) e quem recebe o relatorio de cada
+    fazenda, tudo num lugar so'.
+</p>
 <script>
 document.querySelectorAll('.farm-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {

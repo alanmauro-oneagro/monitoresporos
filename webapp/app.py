@@ -1019,24 +1019,23 @@ def _format_whatsapp_message(
     o valor e' estimado, pro relatorio ficar igual ao de uma fazenda
     real. `cultura` (nome da cultura atual definida na aba Manejo, ou
     None/"" se ainda estiver "(vazio)") aparece em destaque (negrito,
-    maiuscula), logo abaixo do titulo, antes do clima. A data/hora de
-    atualizacao (e a cidade da estacao de referencia, se houver) fica no
-    rodape do relatorio, nao mais logo abaixo do titulo. Ordem do
+    maiuscula), logo abaixo do titulo, antes do clima. Ordem do
     relatorio: titulo -> Manejo/Cultura -> Clima agora -> separador ->
     "Doencas em Atencao/Perigo" -> um bloco por doenca (nome, contagem,
     risco, germinacao, recomendacao, sugestao) -> Produtos ja
     disponiveis -> Datas de Plantio -> Datas de Pulverizacao -> rodape
-    (fonte do clima, atualizado em, instituicoes consultadas, aviso de
-    nao substituir agronomo, "Powered by BioScout" sempre por ultimo).
+    (so' o aviso de nao substituir agronomo -- pedido explicito do
+    usuario pra' tirar fonte do clima/atualizado em/instituicoes
+    consultadas/"Powered by BioScout" do relatorio de TEXTO, mantendo so'
+    o aviso de responsabilidade; o PDF continua com essa info completa,
+    ver `_build_site_pdf`/`export_pdf.build_recommendation_pdf`).
     `riscos_climaticos` (ver `app._riscos_climaticos_relevantes`) e' um
     aviso a parte, so' de risco climatico (sem status/concentracao
     confirmados) -- aparece mesmo com `mostrar_secao_doencas=False`
     (diferente do aviso "esta tudo tranquilo", que fica escondido nesse
     caso), pois nao afirma deteccao nenhuma, so' que o clima favorece a
     germinacao de uma doenca ja monitorada nessa fazenda."""
-    rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
-    if weather and weather.get("cidade"):
-        rodape_data += f" · {weather['cidade']}/{weather['uf']}"
+    _AVISO_AGRONOMO = "Isso não substitui a avaliação de um agrônomo responsável."
 
     def _linhas_clima():
         """"Clima agora"/"Previsao" -- extraido pra funcao porque o
@@ -1129,8 +1128,7 @@ def _format_whatsapp_message(
             partes.append("")
             partes.append("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.")
         partes.append("")
-        partes.append(rodape_data)
-        partes.append("Powered by BioScout")
+        partes.append(_AVISO_AGRONOMO)
         return "\n".join(partes)
 
     lines = [_whatsapp_titulo(site), ""]
@@ -1147,7 +1145,6 @@ def _format_whatsapp_message(
     lines.append(_WHATSAPP_SEPARADOR)
     lines.append("*Doenças em Atenção / Perigo*")
 
-    fontes_pesquisadas = []
     for d in diseases:
         lines.append("")
         emoji_status = _STATUS_EMOJI.get(d["status"], "")
@@ -1180,9 +1177,6 @@ def _format_whatsapp_message(
             if quimicos_itens:
                 ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens)
                 lines.append(f"⚗️ *Quimicos:* {ativos}")
-            for grupo in (d.get("biologicos"), d.get("quimicos")):
-                if grupo and grupo.get("fonte"):
-                    fontes_pesquisadas.append(grupo["fonte"].split(" -- ")[0])
         lines.append(_WHATSAPP_SEPARADOR)
         lines.append(f"📝 Sugestão: {d.get('nota') or '*'}")
 
@@ -1234,14 +1228,7 @@ def _format_whatsapp_message(
     lines.append("")
 
     lines.append(_WHATSAPP_SEPARADOR)
-    if weather:
-        lines.append(f"Fonte do clima: {weather['fonte']}")
-    lines.append(rodape_data)
-    if fontes_pesquisadas:
-        fontes_unicas = sorted(set(fontes_pesquisadas))
-        lines.append(f"Instituições de pesquisa consultadas para as recomendações acima: {' · '.join(fontes_unicas)}.")
-    lines.append("Isso não substitui a avaliação de um agrônomo responsável.")
-    lines.append("Powered by BioScout")
+    lines.append(_AVISO_AGRONOMO)
 
     return "\n".join(lines).strip()
 
@@ -3772,14 +3759,23 @@ def whatsapp_gerenciamento():
     dessa dispersao: 9 fazendas mandando quase juntas pro mesmo numero,
     cada uma configurada numa tela diferente, sem visao de conjunto).
     Mesma regra de acesso de `fazendas()`: admin ve todas as fazendas,
-    usuario comum so' as permitidas."""
+    usuario comum so' as permitidas. Ordem da lista: primeiro toda
+    fazenda de "Monitorar Doencas" (real ou virtual, ordem alfabetica
+    pelo nome de exibicao), DEPOIS toda fazenda "So Clima" (virtual,
+    tipo='clima', tambem alfabetica) -- pedido explicito do usuario,
+    cada grupo com seu proprio selo visivel no cabecalho do card."""
     virtual_names = models.virtual_farm_site_names()
+    virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
     if current_user.is_admin:
-        sites = sorted(set(read_sites()) | virtual_names)
+        sites_set = set(read_sites()) | virtual_names
     else:
-        sites = sorted(set(models.get_user_permitted_site_names(int(current_user.id))))
-        if not sites:
+        sites_set = set(models.get_user_permitted_site_names(int(current_user.id)))
+        if not sites_set:
             return render_template("whatsapp_gerenciamento.html", sites_data=[], no_access=True)
+
+    sites_doenca = sorted(sites_set - virtual_clima_names, key=_nome_exibicao)
+    sites_clima = sorted(sites_set & virtual_clima_names, key=_nome_exibicao)
+    sites = sites_doenca + sites_clima
 
     gerenciamento = models.get_all_whatsapp_gerenciamento()
     cars_by_site = models.get_all_farm_ndvi_cars()
@@ -3796,6 +3792,7 @@ def whatsapp_gerenciamento():
         sites_data.append({
             "site": site,
             "nome_exibicao": _nome_exibicao(site),
+            "so_clima": site in virtual_clima_names,
             "dias_texto": dados["dias_texto"],
             "dias_pdf": dados["dias_pdf"],
             "horarios": dados["horarios"],
