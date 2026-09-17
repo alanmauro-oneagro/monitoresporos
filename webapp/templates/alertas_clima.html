@@ -70,31 +70,9 @@
         </form>
     </div>
 
-    <div class="mb-2">
-        <form method="post" action="{{ url_for('save_whatsapp_days') }}" data-autosave>
-            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
-            <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- Texto -- nestes dias (as {{ '%02d'|format(7) }}h):</label>
-            {% for idx, label in weekday_labels %}
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
-                    id="ac_wd_{{ ponto_idx }}_{{ idx }}" {% if idx in ponto.selected_days %}checked{% endif %}>
-                <label class="form-check-label small" for="ac_wd_{{ ponto_idx }}_{{ idx }}">{{ label }}</label>
-            </div>
-            {% endfor %}
-            <span class="autosave-status small ms-2"></span>
-        </form>
-        <form method="post" action="{{ url_for('save_whatsapp_days_pdf') }}" data-autosave class="mt-2">
-            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
-            <label class="form-label small text-muted d-block mb-1">Enviar automaticamente por WhatsApp -- PDF -- nestes dias (as {{ '%02d'|format(7) }}h):</label>
-            {% for idx, label in weekday_labels %}
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" name="weekday" value="{{ idx }}"
-                    id="ac_wdpdf_{{ ponto_idx }}_{{ idx }}" {% if idx in ponto.selected_days_pdf %}checked{% endif %}>
-                <label class="form-check-label small" for="ac_wdpdf_{{ ponto_idx }}_{{ idx }}">{{ label }}</label>
-            </div>
-            {% endfor %}
-            <span class="autosave-status small ms-2"></span>
-        </form>
+    <div class="mb-2 text-muted small">
+        Agenda de envio automatico (texto/PDF, dias da semana) deste ponto fica na aba
+        <a href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a> (grupo "Só Clima"), junto com as outras fazendas.
     </div>
 
     <div class="d-flex align-items-center flex-wrap gap-2 pt-2 border-top">
@@ -126,11 +104,11 @@
 {% endfor %}
 
 <p class="text-muted small border-top pt-3 mt-2">
-    Estacao meteorologica de referencia, frequencia de envio automatico por WhatsApp (texto/PDF) e envio manual
-    dos pontos <strong>☁️ so' clima</strong> aparecem em cada card acima. Nome, coordenada, raio, pais e remocao
-    de um ponto ficam na aba <strong>Mapa Interpolado</strong> > Pontos Criados. Quem recebe (numero de WhatsApp)
-    se configura na aba <strong>Usuarios</strong>. Pontos "so' clima" nao monitoram doenca -- o relatorio traz
-    so' o clima atual e a previsao.
+    Estacao meteorologica de referencia, anotacao e envio manual dos pontos <strong>☁️ so' clima</strong> aparecem
+    em cada card acima. Agenda de envio automatico fica na aba <strong>Envios</strong>. Nome, coordenada, raio,
+    pais, ativar/desativar e remocao de um ponto ficam na aba <strong>Mapa Interpolado</strong> > Pontos Criados.
+    Quem recebe (numero de WhatsApp) se configura na aba <strong>Usuarios</strong>. Pontos "so' clima" nao
+    monitoram doenca -- o relatorio traz so' o clima atual e a previsao.
 </p>
 {% endblock %}
 {% block extra_scripts %}

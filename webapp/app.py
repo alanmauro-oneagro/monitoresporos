@@ -3006,8 +3006,9 @@ def mapa_interpolado():
             "estacoes_usadas": estacoes_usadas,
             "country_code": _pais_code_vf,
             "pais_nome": countries.get_country(_pais_code_vf)["nome"],
+            "ativo": vf["site_name"] not in desativadas,
         })
-        if cards or tipo == "clima":
+        if (cards or tipo == "clima") and vf["site_name"] not in desativadas:
             sites_data.append({
                 "site": vf["site_name"], "nome_exibicao": vf["nome"], "lat": vf["lat"], "lon": vf["lon"], "virtual": True,
                 "tipo": tipo,
@@ -3235,24 +3236,28 @@ def _get_clima_virtual_farm_or_404(site_name):
 def alertas_clima():
     """Tela dedicada aos pontos "so clima" (ver `mapa_interpolado`/
     `create_virtual_farm`, tipo='clima') -- escolher a estacao oficial de
-    referencia, a frequencia de envio automatico por WhatsApp (texto/PDF,
-    mesma agenda por dia da semana da aba Fazendas/Manejo) e mandar/baixar
-    na hora, tudo num lugar so'. So' o usuario Alan Mauro ve essa aba (nao
-    e' so' `is_admin`, ver `alan_mauro_required`) -- pedido explicito,
-    igual as outras telas de Configuracoes restritas a ele."""
+    referencia, anotacao e mandar/baixar o relatorio na hora, tudo num
+    lugar so'. A agenda de envio automatico (texto/PDF, dias da semana)
+    desses pontos e' configurada na aba Envios junto com todas as outras
+    fazendas (removida daqui pra nao duplicar -- ver
+    `whatsapp_gerenciamento`, que ja lista ponto 'so clima' tambem). So'
+    o usuario Alan Mauro ve essa aba (nao e' so' `is_admin`, ver
+    `alan_mauro_required`) -- pedido explicito, igual as outras telas de
+    Configuracoes restritas a ele."""
     site_countries = models.get_all_site_countries()
     weather_overrides = models.get_all_weather_station_overrides()
-    all_days = models.get_all_whatsapp_days()
-    all_days_pdf = models.get_all_whatsapp_days_pdf()
     whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
     notes_by_site = models.get_all_site_climate_notes()
     coords = _weather_coords_all()
+    desativadas = models.get_deactivated_site_names()
 
     pontos = []
     for vf in models.get_all_virtual_farms():
         if vf.get("tipo") != "clima":
             continue
         site = vf["site_name"]
+        if site in desativadas:
+            continue
         weather = _get_weather_for_site(site, coords)
         escolha = weather_overrides.get(site)
         anotacao = notes_by_site.get(site, "")
@@ -3263,8 +3268,6 @@ def alertas_clima():
             "pais_nome": countries.get_country(_pais_code_clima)["nome"],
             "estacoes_proximas": countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], _pais_code_clima, n=2),
             "estacao_selecionada": escolha["codigo"] if escolha else "",
-            "selected_days": all_days.get(site, set()),
-            "selected_days_pdf": all_days_pdf.get(site, set()),
             "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
             "weather": weather,
             "nota": anotacao,
@@ -3273,10 +3276,7 @@ def alertas_clima():
             ),
         })
     pontos.sort(key=lambda p: p["nome"])
-    return render_template(
-        "alertas_clima.html", pontos=pontos, countries=countries.COUNTRIES,
-        weekday_labels=list(enumerate(WEEKDAY_LABELS)),
-    )
+    return render_template("alertas_clima.html", pontos=pontos, countries=countries.COUNTRIES)
 
 
 @app.route("/alertas-clima/whatsapp/<path:site_name>", methods=["POST"])
@@ -4303,11 +4303,14 @@ def save_site_country():
 @app.route("/fazendas/ativo/save", methods=["POST"])
 @admin_required
 def save_site_ativo():
-    """Ativa/desativa uma fazenda (real ou virtual) -- desativada some de
-    TODAS as outras telas (Painel, Mapa, Graficos, Recomendacoes, NDVI,
-    Envios, Exportar, telas de permissao), mas continua aparecendo aqui
-    em Manejos (unica excecao de proposito, ver `fazendas()`) pra' poder
-    reativar. Existe porque fazenda REAL vem do CSV sincronizado
+    """Ativa/desativa uma fazenda real ou ponto virtual (qualquer tipo,
+    inclusive 'so clima') -- desativada some de TODAS as outras telas
+    (Painel, Mapa, Graficos, Recomendacoes, NDVI, Envios, Alertas Clima,
+    Exportar, telas de permissao). O toggle fica em Manejos (fazenda
+    real e ponto virtual tipo 'doenca') e em Mapa Interpolado > Pontos
+    Criados (todo ponto virtual, ja que 'so clima' nao aparece em
+    Manejos) -- de onde vier o POST, e' pra la' que volta (`request.referrer`).
+    Existe porque fazenda REAL vem do CSV sincronizado
     (`_ensure_sites_synced`/`models.sync_sites`, que so' ADICIONA linha
     nova e nunca remove) -- um DELETE de verdade nao resolveria, ela
     voltaria sozinha na proxima sincronizacao."""
@@ -4317,8 +4320,8 @@ def save_site_ativo():
     if ativo:
         msg = f"'{_nome_exibicao(site_name)}' reativada -- volta a aparecer em todas as telas."
     else:
-        msg = f"'{_nome_exibicao(site_name)}' desativada -- deixa de aparecer no Painel/Mapa/Graficos/Recomendacoes/NDVI/Envios (continua aqui em Manejos pra poder reativar)."
-    return _save_response(msg, "fazendas")
+        msg = f"'{_nome_exibicao(site_name)}' desativada -- deixa de aparecer no Painel/Mapa/Graficos/Recomendacoes/NDVI/Envios/Alertas Clima (da pra reativar aqui a qualquer momento)."
+    return _save_response(msg)
 
 
 @app.route("/fazendas/nome/save", methods=["POST"])

@@ -126,9 +126,19 @@
         {% if ponto.tipo == 'clima' %}
         <span class="badge bg-info text-dark">☁️ So clima</span>
         {% endif %}
+        {% if not ponto.ativo %}
+        <span class="badge bg-secondary">Desativado</span>
+        {% endif %}
         <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
         <div class="ms-auto d-flex gap-2">
             <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}">✏️ Editar</button>
+            <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0">
+                <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+                <input type="hidden" name="ativo" value="{{ '0' if ponto.ativo else '1' }}">
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="{% if ponto.ativo %}Esconder este ponto do Painel/Mapa/Alertas Clima/Envios, sem apagar nada -- da pra reativar depois{% else %}Reativar este ponto{% endif %}">
+                    {% if ponto.ativo %}🙈 Ocultar{% else %}👁️ Reativar{% endif %}
+                </button>
+            </form>
             <form method="post" action="{{ url_for('remover_ponto_virtual') }}" class="mb-0"
                   onsubmit="return confirm('Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga tambem permissoes, agenda de WhatsApp e anotacoes ligadas a ele.');">
                 <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
