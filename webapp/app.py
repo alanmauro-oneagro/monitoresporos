@@ -1278,38 +1278,69 @@ RECIPIENT_STAGGER_HORAS = 1
 
 def _enviar_whatsapp_manual_escalonado(site, safra, enviar_texto, enviar_pdf):
     """Envio manual (botao "Enviar por WhatsApp") pra' uma fazenda com
-    VARIOS destinatarios -- manda pro PRIMEIRO na hora (mesmo
-    comportamento de sempre, resposta imediata pra quem clicou) e
-    ENFILEIRA os demais (`models.enqueue_whatsapp_manual`) pra' serem
-    despachados mais tarde pelo loop de fundo (`_run_manual_whatsapp_fila`),
-    um a cada `RECIPIENT_STAGGER_HORAS` horas -- ver esse comentario ali
-    em cima pro motivo. Horario calculado com `_agora_cuiaba_dt()` (NUNCA
-    `datetime.now()` puro -- ver docstring dela). Descarta qualquer
-    lote anterior ainda pendente pra' essa fazenda
-    (`models.clear_whatsapp_manual_fila`) antes de enfileirar o novo --
-    clicar "Enviar por WhatsApp" de novo (ex.: por duvida se funcionou)
-    SUBSTITUI o lote pendente em vez de empilhar mais um, senao os
-    subordinados acabariam recebendo o mesmo relatorio 2+ vezes. Retorna
-    (ok_texto, ok_pdf, mensagem-resumo), mesma assinatura de
-    `_send_site_whatsapp`."""
+    VARIOS destinatarios -- manda pro PRIMEIRO na hora (resposta imediata
+    pra quem clicou) e ENFILEIRA os demais (`models.enqueue_whatsapp_manual`)
+    pra' serem despachados mais tarde pelo loop de fundo
+    (`_run_manual_whatsapp_fila`), um a cada `RECIPIENT_STAGGER_HORAS`
+    horas -- ver esse comentario ali em cima pro motivo. Horario calculado
+    com `_agora_cuiaba_dt()` (NUNCA `datetime.now()` puro -- ver docstring
+    dela). Descarta qualquer lote anterior ainda pendente pra' essa
+    fazenda (`models.clear_whatsapp_manual_fila`) antes de enfileirar o
+    novo -- clicar "Enviar por WhatsApp" de novo (ex.: por duvida se
+    funcionou) SUBSTITUI o lote pendente em vez de empilhar mais um, senao
+    os subordinados acabariam recebendo o mesmo relatorio 2+ vezes.
+
+    Antes de decidir o horario de CADA destinatario (inclusive o
+    "primeiro", que normalmente sai na hora), confere
+    `models.get_horarios_ocupados_por_telefone_hoje()` -- o ultimo envio
+    JA' feito ou enfileirado HOJE pro mesmo numero, vindo de QUALQUER
+    fazenda e QUALQUER mecanismo (agendado ou outro clique manual). Sem
+    isso, o "primeiro" deste lote sempre saia na hora mesmo que o numero
+    tivesse acabado de receber outra fazenda minutos atras -- bug real,
+    confirmado em producao 2026-09-22 (2 mensagens 34min uma da outra pro
+    mesmo numero, ambas retidas pelo WhatsApp). Se ATE' o primeiro
+    precisar esperar, ninguem sai sincrono neste clique -- todos entram
+    na fila, sem excecao (evita a confusao de "por que so' o 3o
+    destinatario saiu na hora"). Retorna (ok_texto, ok_pdf,
+    mensagem-resumo), mesma assinatura de `_send_site_whatsapp`."""
     destinos = _site_whatsapp_destinations(site)
     models.clear_whatsapp_manual_fila(site)
     if not destinos:
         return _send_site_whatsapp(site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
-    primeiro, *resto = destinos
-    ok_texto, ok_pdf, resumo = _send_site_whatsapp(
-        site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf, destinos_override=[primeiro]
-    )
+
+    agora = _agora_cuiaba_dt()
+    ocupados = models.get_horarios_ocupados_por_telefone_hoje()
+    planejados = []
+    for i, (telefone, rotulo) in enumerate(destinos):
+        desejado = agora + timedelta(hours=RECIPIENT_STAGGER_HORAS * i)
+        ocupado_ate = ocupados.get(telefone)
+        if ocupado_ate:
+            liberado_em = datetime.strptime(ocupado_ate, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc) + timedelta(hours=RECIPIENT_STAGGER_HORAS)
+            desejado = max(desejado, liberado_em)
+        planejados.append((telefone, rotulo, desejado))
+
+    primeiro_telefone, primeiro_rotulo, primeiro_quando = planejados[0]
+    if primeiro_quando <= agora:
+        ok_texto, ok_pdf, resumo = _send_site_whatsapp(
+            site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf,
+            destinos_override=[(primeiro_telefone, primeiro_rotulo)],
+        )
+        resto = planejados[1:]
+    else:
+        ok_texto, ok_pdf = True, True
+        resto = planejados
+        resumo = (
+            f"ninguem ainda (numero(s) ja receberam mensagem de outra fazenda ha pouco) -- "
+            f"primeiro destinatario sai as {primeiro_quando.strftime('%H:%M')}"
+        )
+
     if resto:
-        agora = _agora_cuiaba_dt()
-        for i, (telefone, rotulo) in enumerate(resto, start=1):
-            models.enqueue_whatsapp_manual(
-                site, safra, telefone, rotulo, enviar_texto, enviar_pdf,
-                agora + timedelta(hours=RECIPIENT_STAGGER_HORAS * i),
-            )
+        for telefone, rotulo, quando in resto:
+            models.enqueue_whatsapp_manual(site, safra, telefone, rotulo, enviar_texto, enviar_pdf, quando)
         resumo += (
-            f" -- {len(resto)} destinatario(s) restante(s) serao enviados ao longo das proximas "
-            f"{RECIPIENT_STAGGER_HORAS * len(resto)}h (1 a cada {RECIPIENT_STAGGER_HORAS}h), pra evitar retencao do WhatsApp."
+            f" -- {len(resto)} destinatario(s) restante(s) serao enviados ao longo do dia "
+            f"(1 a cada {RECIPIENT_STAGGER_HORAS}h, ou mais tarde se o numero ja tiver recebido "
+            f"algo de outra fazenda hoje), pra evitar retencao do WhatsApp."
         )
     return ok_texto, ok_pdf, resumo
 
@@ -1672,7 +1703,14 @@ def _horario_efetivo_destinatario(hora_site, tipo, idx):
     return total_minutos // 60, total_minutos % 60
 
 
-def _horarios_efetivos_por_telefone(candidatos):
+def _minutos_do_dia(timestamp_cuiaba):
+    """'YYYY-MM-DD HH:MM:SS' (formato de `_agora_cuiaba`) -> minutos desde
+    meia-noite daquele mesmo dia -- so' pega o pedaco HH:MM, sem precisar
+    fazer parse de datetime completo (formato e' sempre fixo)."""
+    return int(timestamp_cuiaba[11:13]) * 60 + int(timestamp_cuiaba[14:16])
+
+
+def _horarios_efetivos_por_telefone(candidatos, ocupados_por_telefone=None):
     """Recebe a lista de candidatos de hoje (cada um com `telefone` e
     `desejado_min`, minutos desde meia-noite) e devolve a MESMA lista
     com `efetivo_min` preenchido -- agrupa por telefone, ordena pelo
@@ -1689,13 +1727,25 @@ def _horarios_efetivos_por_telefone(candidatos):
     mesmo sem nenhuma fazenda tendo mais de 1 destinatario (esse outro
     caso, dentro da MESMA fazenda, ja' e' tratado por
     `_horario_efetivo_destinatario`, que so' calcula o horario
-    "desejado" de entrada aqui)."""
+    "desejado" de entrada aqui).
+
+    `ocupados_por_telefone` (opcional, ver
+    `models.get_horarios_ocupados_por_telefone_hoje`) semeia o
+    `efetivo_anterior` de cada numero com o ultimo envio JA' feito ou
+    enfileirado hoje por QUALQUER mecanismo (inclusive o envio manual
+    escalonado, `_enviar_whatsapp_manual_escalonado`) -- sem isso, esta
+    funcao so' enxerga rajada DENTRO do proprio lote agendado do tick
+    atual, e um numero que recebeu algo manualmente minutos atras podia
+    levar outra mensagem agendada logo em seguida (bug real, confirmado
+    em producao 2026-09-22)."""
+    ocupados_por_telefone = ocupados_por_telefone or {}
     por_telefone = {}
     for c in candidatos:
         por_telefone.setdefault(c["telefone"], []).append(c)
-    for itens in por_telefone.values():
+    for telefone, itens in por_telefone.items():
         itens.sort(key=lambda c: c["desejado_min"])
-        efetivo_anterior = None
+        ocupado_ate = ocupados_por_telefone.get(telefone)
+        efetivo_anterior = _minutos_do_dia(ocupado_ate) if ocupado_ate else None
         for item in itens:
             efetivo = item["desejado_min"]
             if efetivo_anterior is not None:
@@ -1715,20 +1765,29 @@ def _run_scheduled_whatsapp_sends():
     mesmo horario e parecer um robo). Uma fazenda pode, por exemplo, so
     mandar o PDF as segundas 15h30 e o texto as sextas 7h05.
 
-    O horario de disparo de cada item passa por 2 camadas: (1) DENTRO de
+    O horario de disparo de cada item passa por 3 camadas: (1) DENTRO de
     uma fazenda, cada destinatario (`_site_whatsapp_destinations`) ganha
     um horario "desejado" `RECIPIENT_STAGGER_HORAS` depois do anterior
     (`_horario_efetivo_destinatario`) -- resolve fazenda com VARIOS
     destinatarios rajando juntos (2026-09-16). (2) ENTRE fazendas
-    diferentes que mandam pro MESMO numero, `_horarios_efetivos_por_telefone`
-    empurra pra frente qualquer item que caia muito perto (menos de
-    `RECIPIENT_STAGGER_HORAS`) do horario efetivo do item anterior
-    daquele numero -- resolve um numero que recebe de VARIAS fazendas
-    (ex.: 9 fazendas, horarios auto-sugeridos so' 3 min um do outro)
-    tomando rajada mesmo sem nenhuma fazenda ter mais de 1 destinatario
-    (2026-09-17). As duas causas geram o MESMO sintoma pro WhatsApp
-    (varias mensagens novas em sequencia pro mesmo numero) e por isso
-    precisam das duas camadas juntas.
+    diferentes que mandam pro MESMO numero DENTRO DESTE MESMO tick,
+    `_horarios_efetivos_por_telefone` empurra pra frente qualquer item
+    que caia muito perto (menos de `RECIPIENT_STAGGER_HORAS`) do horario
+    efetivo do item anterior daquele numero -- resolve um numero que
+    recebe de VARIAS fazendas (ex.: 9 fazendas, horarios auto-sugeridos
+    so' 3 min um do outro) tomando rajada mesmo sem nenhuma fazenda ter
+    mais de 1 destinatario (2026-09-17). (3) ENTRE este mecanismo e o
+    envio MANUAL escalonado (`_enviar_whatsapp_manual_escalonado`, tela
+    Recomendacoes/Alertas Clima), que roda de forma totalmente
+    independente -- `models.get_horarios_ocupados_por_telefone_hoje()`
+    semeia `_horarios_efetivos_por_telefone` com o ultimo envio JA' feito
+    ou enfileirado hoje por QUALQUER um dos dois mecanismos, senao um
+    numero que acabou de receber um envio MANUAL de uma fazenda podia
+    levar outro envio AGENDADO de outra fazenda minutos depois (bug real,
+    confirmado em producao 2026-09-22: 2 mensagens 34min uma da outra
+    pro mesmo numero, ambas retidas pelo WhatsApp). As 3 causas geram o
+    MESMO sintoma pro WhatsApp (varias mensagens novas em sequencia pro
+    mesmo numero) e por isso precisam das 3 camadas juntas.
 
     Texto e PDF de uma MESMA fazenda/destinatario que calhem do MESMO
     horario desejado (comum -- `_seed_horario_sugerido` sempre configura
@@ -1755,9 +1814,16 @@ def _run_scheduled_whatsapp_sends():
     pendente -- pedido explicito do usuario, pra' priorizar o relatorio
     de recomendacao (doenca) na fila do whatsapp-bridge (ver
     whatsapp.py) antes de qualquer clima de referencia."""
-    today = datetime.now().date()
+    # `_agora_cuiaba_dt()`, NUNCA `datetime.now()` puro -- o container
+    # roda em UTC (sem `TZ` no Dockerfile), entao `datetime.now()` fica
+    # ~4h fora do horario configurado (Cuiaba) usado pra decidir se ja'
+    # e' hora de mandar, e tambem desalinharia a comparacao com
+    # `models.get_horarios_ocupados_por_telefone_hoje()` (gravado sempre
+    # em horario de Cuiaba via `log_whatsapp_envio`/`enqueue_whatsapp_manual`).
+    agora_dt = _agora_cuiaba_dt()
+    today = agora_dt.date()
     weekday = today.weekday()
-    agora_hm = (datetime.now().hour, datetime.now().minute)
+    agora_hm = (agora_dt.hour, agora_dt.minute)
     schedule_texto = models.get_all_whatsapp_days()
     schedule_pdf = models.get_all_whatsapp_days_pdf()
     horarios = models.get_all_whatsapp_schedule_horarios()
@@ -1797,7 +1863,7 @@ def _run_scheduled_whatsapp_sends():
                     })
     if not candidatos:
         return
-    _horarios_efetivos_por_telefone(candidatos)
+    _horarios_efetivos_por_telefone(candidatos, models.get_horarios_ocupados_por_telefone_hoje())
     pendentes = [c for c in candidatos if agora_hm >= (c["efetivo_min"] // 60, c["efetivo_min"] % 60)]
     if not pendentes:
         return

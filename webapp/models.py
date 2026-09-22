@@ -1098,6 +1098,42 @@ def clear_whatsapp_manual_fila(site_name):
     conn.close()
 
 
+def get_horarios_ocupados_por_telefone_hoje():
+    """{telefone: 'YYYY-MM-DD HH:MM:SS' mais recente} combinando o que ja'
+    foi REALMENTE enviado hoje (`whatsapp_envio_log`) com o que ja' esta'
+    ENFILEIRADO pra hoje (`whatsapp_manual_fila`, ainda nao despachado) --
+    usado pelos 2 mecanismos de disparo (`app._run_scheduled_whatsapp_sends`
+    e `app._enviar_whatsapp_manual_escalonado`) pra nenhum dos dois marcar
+    um envio novo a menos de `RECIPIENT_STAGGER_HORAS` de QUALQUER outro
+    envio (ja feito ou so' planejado) pro MESMO numero hoje, nao importa
+    qual dos dois mecanismos foi o responsavel por aquele outro envio --
+    sem isso, cada mecanismo so' enxerga a propria rajada e um numero que
+    recebe de fazendas com agendas diferentes (uma automatica, outra
+    disparada na mao) pode levar 2 mensagens em minutos mesmo com os dois
+    mecanismos "corretos" isoladamente (bug real, confirmado em producao
+    2026-09-22: duas mensagens 34min uma da outra pro mesmo numero)."""
+    conn = get_db()
+    hoje = _agora_cuiaba()[:10]
+    rows_log = conn.execute(
+        "SELECT telefone, MAX(criado_em) AS quando FROM whatsapp_envio_log "
+        "WHERE telefone IS NOT NULL AND criado_em >= ? GROUP BY telefone",
+        (hoje,),
+    ).fetchall()
+    rows_fila = conn.execute(
+        "SELECT telefone, MAX(disparar_em) AS quando FROM whatsapp_manual_fila "
+        "WHERE disparar_em >= ? GROUP BY telefone",
+        (hoje,),
+    ).fetchall()
+    conn.close()
+    resultado = {}
+    for r in list(rows_log) + list(rows_fila):
+        atual = resultado.get(r["telefone"])
+        if atual is None or r["quando"] > atual:
+            resultado[r["telefone"]] = r["quando"]
+    return resultado
+    conn.close()
+
+
 _DISEASE_INFO_COLUMNS = (
     "display_name_en, nome_pt, nome_cientifico, "
     "germ_temp_min, germ_temp_max, germ_ur_min, germ_molhamento_horas, germ_agua_livre_inibe"
