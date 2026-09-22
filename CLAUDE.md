@@ -64,7 +64,7 @@ menos que seja pedido explicitamente paridade para outros admins.
   normal (1200ms).
 - **Renomear fazenda virtual**: `models.update_virtual_farm(...)` muda o
   `nome`, que muda o proprio `site_name` (cascata em varias tabelas).
-  Acessivel tanto por Mapa Interpolado quanto pela aba Fazendas (campo "Nome
+  Acessivel tanto por Mapa Interpolado quanto pela aba Manejos (campo "Nome
   de exibicao").
 - **Datas no Excel**: sempre escrever objetos `date`/`datetime` reais nas
   celulas (nunca string pre-formatada), usando
@@ -75,6 +75,32 @@ menos que seja pedido explicitamente paridade para outros admins.
   `datetime('now', ...)` do proprio SQLite** para comparar com essas colunas
   (retorna UTC, 4h de diferenca) — qualquer logica de corte por data deve
   calcular em Python com a mesma formula.
+- **Fazenda REAL vem sincronizada de `data/sites.csv`** via `_ensure_sites_synced()`
+  (`models.sync_sites`, roda a cada requisicao) — so' ADICIONA linha nova na
+  tabela `sites`, NUNCA remove. Uma fazenda no CSV sempre reaparece sozinha,
+  mesmo apagada na mao do banco.
+- **Fazenda ativa/desativada** (`sites.ativo`, `models.set_site_ativo`/
+  `get_deactivated_site_names`): esconde fazenda (real ou virtual) de TODAS
+  as telas sem apagar — existe por causa do ponto acima (delete nao
+  resolveria). Toggle em Manejos e em Mapa Interpolado > Pontos Criados
+  (rota `save_site_ativo`, redireciona pro `request.referrer`). Preferir
+  desativar a apagar quando o pedido for "sumir com uma fazenda".
+- **3 mecanismos diferentes de "listar fazendas"** (sem choke point unico):
+  CSV cru (`read_sites()`/`get_dashboard_data(None,...)`) pro admin em
+  varias telas, `models.get_user_permitted_site_names()` (DB) pro
+  nao-admin, `models.get_all_sites()` (DB) nas 4 telas de permissao. Um
+  filtro que precisa valer "sempre, admin ou nao" tem que tocar nos 3.
+- **Aba "Envios"** (Configuracoes -> Envios, admin-only, rota
+  `whatsapp_gerenciamento`/`/whatsapp`): consolida agenda de texto/PDF/NDVI
+  + destinatarios por fazenda (inclusive pontos "so' clima"). Substituiu a
+  agenda que antes ficava espalhada em Manejos/NDVI/Alertas Clima — ao
+  mexer em agenda de envio, e' aqui que fica agora.
+- **Escalonamento de WhatsApp** (retencao "Aguardando mensagem", validado em
+  producao — ver `.claude\memory\oneagro_whatsapp_stagger_validado.md`):
+  `RECIPIENT_STAGGER_HORAS = 1` (horas, nao segundos) entre destinatarios da
+  mesma fazenda E entre fazendas diferentes pro mesmo numero
+  (`_horarios_efetivos_por_telefone`). Dedup "ja enviado hoje" sempre por
+  TELEFONE, nunca por indice/posicao na lista.
 
 ## Como trabalhar neste projeto (licoes ja aprendidas — nao repetir)
 
@@ -98,25 +124,11 @@ menos que seja pedido explicitamente paridade para outros admins.
 
 ## Plano salvo, ainda nao implementado
 
-Ha um plano detalhado (modo Plan) com varias ideias futuras ainda NAO
-implementadas — perguntar ao Alan antes de retomar, e revalidar contra o
-codigo atual (pode estar desatualizado):
-
-1. Catalogo de produtos/variedades com autocompletar (aprende sozinho o que
-   ja foi digitado, preenche produto<->ingrediente ativo automaticamente)
-   nas abas Produtos/Aplicacoes/Plantio.
-2. Correlacionar Plantio/Aplicacoes/Produtos na aba "Relatorio Diario" do
-   Excel (historico de atividades de safra ao lado do dado de estacao).
-3. Trocar a tecnica de desenho do mapa de chuva: sair do `Leaflet.heat` (que
-   SOMA opacidade de pontos vizinhos, causando leitura errada dependendo do
-   zoom) para um raster proprio interpolado (bilinear) via canvas +
-   `L.imageOverlay`.
-4. Mapa de chuva (heatmap `Leaflet.heat`) no Mapa Interpolado no lugar da
-   camada de nuvens.
-5. Fluxo "Esqueci a senha" via WhatsApp: senha temporaria de uso unico
-   (colunas separadas `temp_password_hash`/`temp_password_expires_at`, nunca
-   sobrescreve a senha real ate' ser de fato usada), forca trocar senha no
-   proximo login.
+Nenhum no momento (atualizado 2026-09-21) — o plano anterior (catalogo de
+autocompletar, correlacionar atividades no Relatorio Diario, raster de
+chuva interpolado, mapa de chuva no Mapa Interpolado, "esqueci a senha")
+foi TODO implementado e ja esta em producao. Resumo completo do trabalho
+recente em `.claude\RESUMO_PARA_NOVA_CONTA.md`.
 
 ## Notas / historico arquivado
 
