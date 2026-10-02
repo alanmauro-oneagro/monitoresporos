@@ -1,23 +1,29 @@
 // Servico que usa o WhatsApp de verdade do administrador (via Baileys,
 // protocolo multi-device do WhatsApp) pra mandar os relatorios do
-// OneAgro Monitor -- substitui o CallMeBot. O endpoint /send NAO tem
-// nenhuma autenticacao -- a seguranca depende inteiramente de isolamento
-// de rede (so o app Flask consegue chamar aqui). Local, isso significa
-// so escutar em 127.0.0.1; hospedado (Railway/Render), significa manter
-// esse servico SEM dominio publico -- so acessivel pela rede privada
-// entre servicos do mesmo projeto (por isso o bind muda pra 0.0.0.0
-// quando HOST vem definido, ver .env.example).
+// OneAgro Monitor. O endpoint /send NAO tem autenticacao -- a seguranca
+// depende de isolamento de rede (so o app Flask consegue chamar aqui).
 //
-// Primeira vez: rode "npm install" aqui dentro, depois "npm start" e
-// pareie de um dos dois jeitos, pela tela Configuracoes > WhatsApp do
-// app: (1) escaneando o QR code (Aparelhos conectados > Conectar um
-// aparelho), ou (2) gerando um codigo de pareamento (Aparelhos
-// conectados > Conectar com numero de telefone > digitar codigo) --
-// mais confiavel quando a camera/QR da problema. A sessao fica salva em
-// ./auth_info/, entao nao precisa parear de novo depois de reiniciar --
-// so se voce desconectar o aparelho pelo proprio celular (hospedado,
-// esse diretorio precisa estar num disco persistente, senao perde o
-// pareamento a cada deploy).
+// Primeira vez: "npm install", "npm start" e pareie pela tela
+// Configuracoes > WhatsApp do app (QR code ou codigo de pareamento).
+// A sessao fica salva em ./auth_info/ (no Railway, precisa de volume
+// persistente montado nesse diretorio).
+//
+// AJUSTES DESTA VERSAO:
+// 1. Ritmo de envio configuravel por variaveis de ambiente no Railway
+//    (WHATSAPP_MIN_DELAY_MS / WHATSAPP_JITTER_MS).
+// 2. /send espera a reconexao (ate WHATSAPP_WAIT_CONNECT_MS) em vez de
+//    devolver erro na hora -- antes, mensagem enviada durante uma queda
+//    de conexao ficava presa em "aguardando envio" pra sempre.
+// 3. Envio com ate 3 tentativas (backoff 10s/20s).
+// 4. Reconexao com pausa entre tentativas.
+//
+// IMPORTANTE sobre "Aguardando mensagem..." no celular do destinatario:
+// isso e' retencao de entrega feita pelo PROPRIO WhatsApp quando desconfia
+// de comportamento de bot num "aparelho conectado". O espacamento 25-45s
+// reduz o risco, nao elimina. Mitiga ainda mais: destinatario com
+// historico de conversa com o numero remetente e numero salvo nos
+// contatos. Solucao definitiva: API oficial (WhatsApp Cloud API).
+
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
@@ -31,34 +37,20 @@ const {
 } = require("@whiskeysockets/baileys");
 
 const PORT = process.env.PORT || 3001;
-// So usa 0.0.0.0 quando explicitamente pedido (ambiente hospedado) --
-// local continua isolado em 127.0.0.1 por padrao, sem precisar mudar nada.
+// So usa 0.0.0.0 quando explicitamente pedido (ambiente hospedado).
 const HOST = process.env.HOST || "127.0.0.1";
 const AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || "./auth_info";
-// Espaco minimo entre envios (+ variacao aleatoria por cima) -- 2s fixo
-// era rapido e regular demais pra ser um envio manual de verdade; o
-// WhatsApp trata rajadas de mensagens vindas de um "aparelho conectado"
-// (que e' o que o Baileys e', tecnicamente) nesse ritmo como
-// comportamento de bot e passa a segurar a ENTREGA pro destinatario --
-// a mensagem fica "enviada" pro remetente, mas o destinatario so' ve'
-// "Aguardando mensagem. Essa acao pode levar alguns instantes." sem
-// nunca abrir (o texto some quando o WhatsApp decide liberar, minutos
-// ou horas depois -- ou nunca). Mandar pelo proprio celular nao sofre
-// disso porque nao passa por esse mecanismo de "linked device". Isso e'
-// o que estava acontecendo no envio automatico dos relatorios (varias
-// fazendas seguidas, mensagens parecidas, ritmo constante de 2s) mas
-// nao no envio manual pelo app do WhatsApp do administrador. 8-13s
-// (primeira tentativa desse espacamento) ainda deixou passar retencao
-// num envio de imagem NDVI reenviada 3x seguidas pro mesmo numero em 3
-// minutos -- aumentado pra 15-25s pra dar mais folga, mas isso reduz o
-// risco, nao elimina (a decisao de segurar e' inteiramente do
-// WhatsApp, sem sinal nenhum que o bridge possa consultar antes). Em
-// 2026-09-16 aconteceu de novo especificamente com numeros de
-// subordinados (contatos com pouco/nenhum historico de conversa com
-// esse numero, mais suscetiveis a retencao que os donos das fazendas)
-// no envio agendado -- aumentado pra 25-45s.
-const MIN_DELAY_MS = 25000;
-const JITTER_MS = 20000;
+
+// Espacamento minimo entre envios (+ variacao aleatoria). Configuravel
+// no Railway (WHATSAPP_MIN_DELAY_MS e WHATSAPP_JITTER_MS).
+const MIN_DELAY_MS = parseInt(process.env.WHATSAPP_MIN_DELAY_MS || "25000", 10);
+const JITTER_MS = parseInt(process.env.WHATSAPP_JITTER_MS || "20000", 10);
+// Pausa antes de cada tentativa de reconexao.
+const RECONNECT_DELAY_MS = parseInt(process.env.WHATSAPP_RECONNECT_DELAY_MS || "5000", 10);
+// Quanto tempo o /send espera pela reconexao antes de devolver erro.
+const WAIT_CONNECT_MS = parseInt(process.env.WHATSAPP_WAIT_CONNECT_MS || "60000", 10);
+// Tentativas de envio por mensagem.
+const SEND_RETRIES = parseInt(process.env.WHATSAPP_SEND_RETRIES || "3", 10);
 
 let sock = null;
 let lastQrDataUrl = null;
@@ -76,14 +68,12 @@ async function startSock() {
         browser: ["OneAgro Monitor", "Chrome", "120.0.0"],
         logger: pino({ level: "silent" }),
     });
-
     sock.ev.on("creds.update", saveCreds);
-
     sock.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
             lastQrDataUrl = await QRCode.toDataURL(qr);
-            console.log("Novo QR code gerado -- abra http://localhost:" + PORT + "/qr pra escanear.");
+            console.log("Novo QR code gerado -- abra /qr pra escanear (ou use /pair-code).");
         }
         if (connection === "open") {
             connected = true;
@@ -100,8 +90,10 @@ async function startSock() {
             if (loggedOut) {
                 console.log("Desconectado pelo celular -- apague a pasta auth_info e escaneie de novo.");
             } else {
-                console.log("Tentando reconectar...");
-                startSock();
+                console.log("Tentando reconectar em " + RECONNECT_DELAY_MS + "ms...");
+                setTimeout(() => {
+                    startSock().catch((e) => console.error("Falha ao reconectar:", e.message));
+                }, RECONNECT_DELAY_MS);
             }
         }
     });
@@ -111,14 +103,44 @@ startSock().catch((err) => {
     console.error("Falha ao iniciar o Baileys:", err);
 });
 
+// Espera a reconexao acontecer. Resolve true se conectou no prazo.
+function esperarConexao(tempoMaxMs) {
+    const inicio = Date.now();
+    return new Promise((resolve) => {
+        const t = setInterval(() => {
+            if (connected || Date.now() - inicio > tempoMaxMs) {
+                clearInterval(t);
+                resolve(connected);
+            }
+        }, 500);
+    });
+}
+
+// Envio com tentativas: erro momentaneo nao perde mais a mensagem.
+async function enviarComRetry(jid, conteudo) {
+    let ultimoErro = null;
+    for (let tentativa = 1; tentativa <= SEND_RETRIES; tentativa++) {
+        try {
+            return await sock.sendMessage(jid, conteudo);
+        } catch (err) {
+            ultimoErro = err;
+            console.log("Envio falhou (tentativa " + tentativa + "/" + SEND_RETRIES + "): " + (err && err.message));
+            if (tentativa < SEND_RETRIES) {
+                await new Promise((r) => setTimeout(r, 10000 * tentativa));
+            }
+        }
+    }
+    throw ultimoErro;
+}
+
 function normalizePhone(phone) {
     const digits = String(phone).replace(/\D/g, "");
     return digits + "@s.whatsapp.net";
 }
 
 const app = express();
-// Default do express.json() e' 100kb -- pequeno demais pro PDF/imagem NDVI
-// em base64 (que ja aumenta ~33% so' de virar texto).
+// Default do express.json() e' 100kb -- pequeno demais pro PDF/imagem
+// NDVI em base64.
 app.use(express.json({ limit: "20mb" }));
 
 app.get("/status", (req, res) => {
@@ -163,10 +185,6 @@ app.get("/qr", (req, res) => {
 });
 
 app.post("/check-number", async (req, res) => {
-    // Debug/validacao: confirma se um numero tem WhatsApp de verdade antes
-    // de mandar (Baileys aceita mandar pra qualquer JID sem erro, mesmo
-    // que o numero nao exista ou o formato esteja errado -- a mensagem so'
-    // "some", sem aviso nenhum).
     const { phone } = req.body || {};
     const digits = String(phone || "").replace(/\D/g, "");
     if (!digits) {
@@ -188,67 +206,65 @@ app.post("/send", (req, res) => {
     if (!phone || (!message && !documentBase64 && !imageBase64)) {
         return res.status(400).json({ ok: false, error: "phone e (message, documentBase64 ou imageBase64) sao obrigatorios" });
     }
-    if (!connected || !sock) {
-        return res.status(503).json({ ok: false, error: "WhatsApp nao conectado -- escaneie o QR code em /qr" });
-    }
-    // fila sequencial simples com um espacamento minimo (+ variacao) entre
-    // mensagens -- ver comentario de MIN_DELAY_MS acima.
-    sendQueue = sendQueue
-        .then(() => new Promise((resolve) => setTimeout(resolve, MIN_DELAY_MS + Math.random() * JITTER_MS)))
-        .then(async () => {
-            // O numero "oficial" (com o 9o digito, padrao brasileiro atual)
-            // nem sempre bate com o JID de verdade que o WhatsApp usa por
-            // baixo dos panos -- alguns DDDs ainda respondem so' ao formato
-            // de 8 digitos. sendMessage NAO da erro pra um JID que nao
-            // existe, a mensagem so' "some" sem aviso -- por isso confirma
-            // com onWhatsApp() primeiro e usa o JID que ele devolver.
-            const digits = String(phone).replace(/\D/g, "");
-            const [info] = await sock.onWhatsApp(digits).catch(() => []);
-            const jid = (info && info.exists) ? info.jid : normalizePhone(digits);
-            // "Digitando..." antes de mandar de verdade -- outro sinal de
-            // envio humano (ver comentario de MIN_DELAY_MS). So' cosmetico:
-            // se falhar (numero sem presenca disponivel, etc.) nao impede
-            // o envio, so' pula direto pra mensagem.
-            try {
-                await sock.presenceSubscribe(jid);
-                await sock.sendPresenceUpdate("composing", jid);
-                await new Promise((resolve) => setTimeout(resolve, 1200 + Math.random() * 1200));
-                await sock.sendPresenceUpdate("paused", jid);
-            } catch (err) { /* presenca e' so' cosmetica -- nunca bloqueia o envio */ }
-            if (documentBase64) {
-                // Relatorio em PDF (mesmo conteudo do texto, mais o grafico
-                // de concentracao) mandado como documento anexado -- ver
-                // `_send_site_whatsapp` em app.py, que manda o texto e
-                // depois o PDF pro mesmo numero.
-                return sock.sendMessage(jid, {
-                    document: Buffer.from(documentBase64, "base64"),
-                    mimetype: "application/pdf",
-                    fileName: fileName || "relatorio.pdf",
-                    caption: caption || undefined,
-                });
+    (async () => {
+        // Em vez de devolver erro na hora (o que deixava a mensagem presa
+        // em "aguardando envio" durante quedas de conexao), espera a
+        // reconexao por ate WAIT_CONNECT_MS.
+        if (!connected) {
+            console.log("/send sem conexao -- aguardando reconexao (ate " + WAIT_CONNECT_MS + "ms)...");
+            const ok = await esperarConexao(WAIT_CONNECT_MS);
+            if (!ok) {
+                return res.status(503).json({ ok: false, error: "WhatsApp nao conectado apos espera -- escaneie o QR em /qr" });
             }
-            if (imageBase64) {
-                // Imagem NDVI salva na galeria (ver
-                // `enviar_ndvi_historico_whatsapp` em app.py) -- `image`
-                // (nao `document`) faz o Baileys mandar como foto de
-                // verdade (com preview na conversa), nao como arquivo
-                // anexado.
-                return sock.sendMessage(jid, {
-                    image: Buffer.from(imageBase64, "base64"),
-                    caption: caption || undefined,
-                });
-            }
-            return sock.sendMessage(jid, { text: message });
-        })
-        .then(() => res.json({ ok: true }))
-        .catch((err) => res.status(500).json({ ok: false, error: String(err) }));
+        }
+        // Fila sequencial com espacamento minimo (+ variacao) entre
+        // mensagens -- ritmo humano reduz a retencao de entrega.
+        sendQueue = sendQueue
+            .then(() => new Promise((resolve) => setTimeout(resolve, MIN_DELAY_MS + Math.random() * JITTER_MS)))
+            .then(async () => {
+                // A conexao pode ter caido enquanto a mensagem esperava na
+                // fila -- espera de novo antes de desistir.
+                if (!connected) {
+                    const ok = await esperarConexao(WAIT_CONNECT_MS);
+                    if (!ok) throw new Error("WhatsApp desconectado no momento do envio");
+                }
+                // O numero "oficial" nem sempre bate com o JID de verdade
+                // que o WhatsApp usa -- confirma com onWhatsApp() primeiro.
+                const digits = String(phone).replace(/\D/g, "");
+                const [info] = await sock.onWhatsApp(digits).catch(() => []);
+                const jid = (info && info.exists) ? info.jid : normalizePhone(digits);
+                // "Digitando..." antes de mandar -- sinal de envio humano
+                // (so' cosmetico: falha aqui nao impede o envio).
+                try {
+                    await sock.presenceSubscribe(jid);
+                    await sock.sendPresenceUpdate("composing", jid);
+                    await new Promise((resolve) => setTimeout(resolve, 1200 + Math.random() * 1200));
+                    await sock.sendPresenceUpdate("paused", jid);
+                } catch (err) { /* presenca e' so' cosmetica -- nunca bloqueia */ }
+                if (documentBase64) {
+                    return enviarComRetry(jid, {
+                        document: Buffer.from(documentBase64, "base64"),
+                        mimetype: "application/pdf",
+                        fileName: fileName || "relatorio.pdf",
+                        caption: caption || undefined,
+                    });
+                }
+                if (imageBase64) {
+                    return enviarComRetry(jid, {
+                        image: Buffer.from(imageBase64, "base64"),
+                        caption: caption || undefined,
+                    });
+                }
+                return enviarComRetry(jid, { text: message });
+            })
+            .then(() => res.json({ ok: true }))
+            .catch((err) => res.status(500).json({ ok: false, error: String(err) }));
+    })().catch((err) => res.status(500).json({ ok: false, error: String(err) }));
 });
 
 app.post("/reset", async (req, res) => {
-    // Desconecta o numero atual e limpa a sessao salva, pra poder conectar
-    // um numero diferente (ex.: trocar o WhatsApp corporativo) sem precisar
-    // mexer no servidor na mao -- usado pelo botao "Trocar numero" na tela
-    // Configuracoes > WhatsApp do app.
+    // Desconecta o numero atual e limpa a sessao salva (botao "Trocar
+    // numero" na tela Configuracoes > WhatsApp do app).
     try {
         if (sock) {
             try { await sock.logout(); } catch (err) { console.log("Logout falhou (ignorando):", err && err.message); }
