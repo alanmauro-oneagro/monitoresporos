@@ -102,16 +102,26 @@ def _parse_dt(value):
 def read_site_coordinates():
     """siteName -> (latitude, longitude) -- uma coordenada por fazenda,
     tirada direto do spore_counts.csv (o BioScout ja manda isso por
-    dispositivo, e cada fazenda usa sempre a mesma)."""
+    dispositivo, e cada fazenda usa sempre a mesma). Cacheado pelo mtime
+    do CSV -- roda varias vezes por request (inclusive no before_request)
+    e varria as ~14 mil linhas a cada chamada."""
+    linhas = read_spore_counts()
+    if _site_coordinates_cache.get("linhas") is linhas:
+        return dict(_site_coordinates_cache["coords"])
     coords = {}
-    for row in read_spore_counts():
+    for row in linhas:
         site = row.get("siteName")
         if site and site not in coords:
             lat = _to_float(row.get("latitude"))
             lon = _to_float(row.get("longitude"))
             if lat is not None and lon is not None:
                 coords[site] = (lat, lon)
-    return coords
+    _site_coordinates_cache["linhas"] = linhas
+    _site_coordinates_cache["coords"] = coords
+    return dict(coords)
+
+
+_site_coordinates_cache = {}  # {"linhas": lista do _csv_cache que gerou, "coords": ...}
 
 
 def read_site_device_ids():
