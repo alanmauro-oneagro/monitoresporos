@@ -8,10 +8,12 @@ legivel por maquina (ver conversa de 14/10/2026).
 Paises integrados: Brasil (INMET), Chile (DMC) e Argentina (SMN).
 
 Brasil (INMET):
-- Rota `/token/estacao/{inicio}/{fim}/{codigo}/{token}` da apitempo --
-  exige token (pedido por e-mail a cadastro.act@inmet.gov.br), lido de
-  `INMET_TOKEN`. Sem token a rota devolve 404 (por isso o comentario
-  antigo em inmet_stations.py dizia que a API "parou de funcionar").
+- Com `INMET_TOKEN` (pedido por e-mail a cadastro.act@inmet.gov.br): rota
+  `/token/estacao/{inicio}/{fim}/{codigo}/{token}` da apitempo.
+- Sem token: tenta a rota antiga `/estacao/{inicio}/{fim}/{codigo}` --
+  as fontes divergem se ela ainda responde (relatos de 404 em 2026); se
+  recusar, a falha aparece no aviso do Painel e a fazenda segue na
+  Open-Meteo.
 - Resposta: lista de registros horarios com DT_MEDICAO ("YYYY-MM-DD"),
   HR_MEDICAO ("HHMM", UTC), TEM_INS (C), UMD_INS (%), CHUVA (mm),
   VEN_DIR (graus) -- nomes de campo conferidos no cliente inmetpy.
@@ -43,12 +45,16 @@ import os
 import re
 import time
 import unicodedata
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
 from datetime import datetime, timedelta
 
 INMET_URL = "https://apitempo.inmet.gov.br/token/estacao/{inicio}/{fim}/{codigo}/{token}"
+# Rota antiga, sem token -- relatos de 2026 dizem que devolve 404, outros
+# que continua aberta; sem INMET_TOKEN o site tenta esta (ver `_inmet_horas`).
+INMET_URL_PUBLICA = "https://apitempo.inmet.gov.br/estacao/{inicio}/{fim}/{codigo}"
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 # Fuso por UF (sem horario de verao desde 2019) -- a API do INMET devolve
@@ -76,7 +82,7 @@ def _float(valor):
 
 def configurado(country_code):
     if country_code == "BR":
-        return bool(os.environ.get("INMET_TOKEN"))
+        return True
     if country_code == "CL":
         return bool(os.environ.get("METEOCHILE_USUARIO") and os.environ.get("METEOCHILE_TOKEN"))
     return country_code == "AR"
@@ -89,8 +95,17 @@ def _abrir(url, timeout=30):
 
 
 def _inmet_horas(codigo, uf, inicio, fim):
-    url = INMET_URL.format(inicio=inicio, fim=fim, codigo=codigo, token=os.environ["INMET_TOKEN"])
-    registros = json.loads(_abrir(url) or b"[]")
+    token = os.environ.get("INMET_TOKEN")
+    if token:
+        url = INMET_URL.format(inicio=inicio, fim=fim, codigo=codigo, token=token)
+    else:
+        url = INMET_URL_PUBLICA.format(inicio=inicio, fim=fim, codigo=codigo)
+    try:
+        registros = json.loads(_abrir(url) or b"[]")
+    except urllib.error.HTTPError as exc:
+        if not token and exc.code in (401, 403, 404):
+            raise RuntimeError(f"INMET recusou a rota publica (HTTP {exc.code}) -- precisa de INMET_TOKEN") from exc
+        raise
     offset = timedelta(hours=_offset_uf(uf))
     horas = {}
     for r in registros:
@@ -330,13 +345,16 @@ def diagnostico(estacoes_em_uso):
     ontem = (hoje - timedelta(days=1)).isoformat()
     amostras = []
 
-    if os.environ.get("INMET_TOKEN") and estacoes_em_uso.get("BR"):
+    codigo_br = estacoes_em_uso.get("BR", "A901")
+    amostras.append(_amostra(
+        "INMET -- dados horarios, rota publica (sem token)",
+        INMET_URL_PUBLICA.format(inicio=ontem, fim=hoje.isoformat(), codigo=codigo_br),
+    ))
+    if os.environ.get("INMET_TOKEN"):
         amostras.append(_amostra(
             "INMET -- dados horarios (com token)",
-            INMET_URL.format(inicio=ontem, fim=hoje.isoformat(), codigo=estacoes_em_uso["BR"], token=os.environ["INMET_TOKEN"]),
+            INMET_URL.format(inicio=ontem, fim=hoje.isoformat(), codigo=codigo_br, token=os.environ["INMET_TOKEN"]),
         ))
-    else:
-        amostras.append({"titulo": "INMET -- dados horarios", "url": "-", "status": "sem INMET_TOKEN ou sem estacao BR em uso", "conteudo": ""})
 
     usuario, token = os.environ.get("METEOCHILE_USUARIO"), os.environ.get("METEOCHILE_TOKEN")
     if usuario and token:
