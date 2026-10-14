@@ -2091,7 +2091,37 @@ def _whatsapp_scheduler_loop():
                 _run_scheduled_ndvi_sends()
             except Exception:
                 pass
+            try:
+                _atualizar_open_meteo_diario()
+            except Exception:
+                pass
         time.sleep(60)
+
+
+def _atualizar_open_meteo_diario():
+    """Leitura unica do dia na Open-Meteo (01:00 de Cuiaba, ver
+    `weather_forecast.dia_de_leitura`) pra coordenada de clima de toda
+    fazenda -- a estacao de referencia (`_weather_coords_all`), as 3
+    estacoes da opcao "interpolacao" e a coordenada propria. Se o
+    servidor subir depois das 01:00 sem a leitura do dia ainda feita,
+    roda na hora."""
+    if not weather_forecast.rodada_pendente():
+        return
+    coords_proprias = _coords_all()
+    coordenadas = list(coords_proprias.values())
+    for latlon in _weather_coords_all().values():
+        if latlon[0] != INTERPOLACAO_SENTINEL:
+            coordenadas.append(latlon)
+            continue
+        for par in latlon[1:]:
+            country_code, codigo = par.split(":", 1)
+            provider = countries.get_country(country_code)["station_provider"]
+            estacao = next((e for e in provider.get_estacoes() if e["codigo"] == codigo), None)
+            if estacao:
+                coordenadas.append((estacao["lat"], estacao["lon"]))
+    weather_forecast.atualizar_todos(coordenadas)
+    _weather_cache.clear()
+    _historico_horario_cache.clear()
 
 
 login_manager = LoginManager(app)
