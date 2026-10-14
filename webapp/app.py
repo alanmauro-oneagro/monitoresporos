@@ -5569,9 +5569,15 @@ def admin_estacoes_diagnostico():
             linha["ultima"] = f"{ultimas[-1]['hora']} -- {ultimas[-1]['temp']} C, {ultimas[-1]['umidade']}%" if ultimas else "-"
             linha["previsao"] = len(weather_forecast.previsao_estacao(estacao[0], estacao[1])) if estacao[0] == "AR" else "Open-Meteo"
         verificacao.append(linha)
+    site_countries = models.get_all_site_countries()
+    fazendas_br = [
+        (_nome_exibicao(site), lat, lon) for site, (lat, lon) in sorted(_coords_all().items())
+        if site_countries.get(site, countries.DEFAULT_COUNTRY) == "BR"
+    ]
     return render_template(
         "admin_estacoes_diagnostico.html", amostras=estacoes_dados.diagnostico(estacoes_em_uso),
         verificacao=verificacao, erro_clima=weather_forecast.ultimo_erro,
+        noaa=estacoes_dados.diagnostico_noaa(fazendas_br),
     )
 
 
