@@ -254,6 +254,72 @@ def _get_weather_for_site(site, coords):
     return data
 
 
+_historico_horario_cache = {}  # (lat, lon, inicio, fim) -> (timestamp, {dia: [horas]})
+
+
+def _historico_horario_open_meteo(latlon, inicio, fim):
+    """`weather_forecast.get_historico_horario` com cache em memoria
+    (mesmo TTL/backoff de `_get_weather_for_site`)."""
+    chave = (latlon[0], latlon[1], inicio, fim)
+    cached = _historico_horario_cache.get(chave)
+    now = time.time()
+    if cached:
+        ttl = WEATHER_CACHE_TTL_SECONDS if cached[1] else WEATHER_FALHA_BACKOFF_SECONDS
+        if now - cached[0] < ttl:
+            return cached[1]
+    por_dia = weather_forecast.get_historico_horario(latlon[0], latlon[1], inicio, fim)
+    if len(_historico_horario_cache) > 500:
+        _historico_horario_cache.clear()
+    _historico_horario_cache[chave] = (now, por_dia)
+    return por_dia
+
+
+def _completar_clima_horario(hourly_lookup, device_by_site, sites, dias):
+    """Copia de `hourly_lookup` (clima horario dos devices BioScout) com
+    os dias SEM leitura do device preenchidos pelo historico horario da
+    Open-Meteo na coordenada de clima da fazenda (`_weather_coords_all`,
+    mesma estacao de referencia do resto do site) -- o BioScout parou de
+    mandar clima dos devices (404 no endpoint de clima, ver
+    bioscout_fetch), e sem isso o Risco de Infeccao/vento da aba
+    Graficos ficava vazio em todo dia passado. Leitura do proprio device
+    continua tendo prioridade quando existe."""
+    if not dias:
+        return hourly_lookup
+    coords_clima = _weather_coords_all()
+    coords_proprias = None
+    pendentes = {}
+    dias_faltando = set()
+    for site in sites:
+        device = device_by_site.get(site)
+        faltando = [d for d in dias if not hourly_lookup.get((device, d))] if device else []
+        if not faltando:
+            continue
+        latlon = coords_clima.get(site)
+        if latlon and latlon[0] == INTERPOLACAO_SENTINEL:
+            if coords_proprias is None:
+                coords_proprias = _coords_all()
+            latlon = coords_proprias.get(site)
+        if latlon:
+            pendentes[device] = latlon
+            dias_faltando.update(faltando)
+    hoje = _hoje_cuiaba().isoformat()
+    dias_faltando = {d for d in dias_faltando if d <= hoje}
+    if not pendentes or not dias_faltando:
+        return hourly_lookup
+    inicio, fim = min(dias_faltando), max(dias_faltando)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        resultados = dict(zip(
+            pendentes,
+            executor.map(lambda ll: _historico_horario_open_meteo(ll, inicio, fim), pendentes.values()),
+        ))
+    completo = dict(hourly_lookup)
+    for device, por_dia in resultados.items():
+        for dia, horas in por_dia.items():
+            if not completo.get((device, dia)):
+                completo[(device, dia)] = horas
+    return completo
+
+
 def _prefetch_weather(sites, coords):
     """Busca o clima (Open-Meteo) de varias fazendas em PARALELO, so' pra'
     aquecer `_weather_cache` -- `_get_weather_for_site` sozinho busca uma
@@ -2666,6 +2732,10 @@ def graficos_dados():
         for vf in models.get_all_virtual_farms()
         if vf["site_name"] in sites
     }
+    sites_reais_clima = set(sites) | {real for vizinhas in vizinhas_por_ponto_virtual.values() for real, _ in vizinhas}
+    hourly_lookup = _completar_clima_horario(
+        hourly_lookup, device_by_site, sites_reais_clima, [d for d in dias if d not in dias_previsao_set]
+    )
 
     # Mesma ordem (nome cientifico) ja usada na aba Doencas -- os graficos
     # aparecem na mesma hierarquia, em vez da ordem crua de
@@ -5337,7 +5407,7 @@ def admin_exportar_download():
     (historico/destinatarios/agenda), fungicidas (biblioteca completa) e
     relatorio diario de clima (ver `export_excel.build_workbook`) --
     botao "Baixar Excel completo" na pagina `admin_exportar`."""
-    buffer = export_excel.build_workbook()
+    buffer = export_excel.build_workbook(completar_clima=_completar_clima_horario)
     filename = f"OneAgro_Export_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     conteudo = buffer.getvalue()
     destino = _save_export_copy_local(conteudo, filename)
