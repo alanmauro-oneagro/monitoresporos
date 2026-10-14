@@ -6,7 +6,7 @@ para o Claude retomar com o contexto essencial. (Atualizado em 2026-09-21.)
 
 ## Quem sou / projeto
 
-Sou Alan Mauro (alan.mauro@biotrop.com.br), mantenho sozinho o app Flask
+Sou Alan Mauro (alan.mauro@outlook.com), mantenho sozinho o app Flask
 "OneAgro Monitor" (monitoramento de esporos/clima/doencas em fazendas).
 
 - Repo: github.com/alanmauro-oneagro/monitoresporos
