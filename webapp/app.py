@@ -44,6 +44,7 @@ import inmet_stations
 import virtual_farms
 import ndvi_service
 import countries
+import estacoes_dados
 import soil_service
 import soilgrids_service
 from data_reader import read_sites, get_dashboard_data
@@ -250,7 +251,52 @@ def _get_weather_for_site(site, coords):
     if data:
         data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
         data["fonte"] = "Open-Meteo"
+    data = _aplicar_leitura_estacao_oficial(site, data, latlon)
     _weather_cache[site] = (now, latlon, data)
+    return data
+
+
+def _estacao_oficial_do_site(site):
+    """(country_code, codigo, uf) da estacao de referencia escolhida pra'
+    fazenda (`weather_station_overrides`), so' quando o pais dela tem
+    integracao de DADOS medidos (`estacoes_dados.configurado`) -- None
+    caso contrario (inclusive na opcao "interpolacao das 3 estacoes")."""
+    escolha = models.get_all_weather_station_overrides().get(site)
+    if not escolha or not escolha["codigo"] or escolha["codigo"] == INTERPOLACAO_SENTINEL:
+        return None
+    if not estacoes_dados.configurado(escolha["country_code"]):
+        return None
+    provider = countries.get_country(escolha["country_code"])["station_provider"]
+    estacao = next((e for e in provider.get_estacoes() if e["codigo"] == escolha["codigo"]), None)
+    return (escolha["country_code"], escolha["codigo"], (estacao or {}).get("uf"))
+
+
+def _aplicar_leitura_estacao_oficial(site, data, latlon):
+    """Troca o clima "agora"/ultimas 24h (Open-Meteo) pelo MEDIDO na
+    estacao oficial da fazenda, quando o pais tem integracao e a estacao
+    mandou leitura nas ultimas 6h. A previsao continua da Open-Meteo.
+    Se a Open-Meteo falhou (data None), ainda devolve a leitura medida,
+    so' sem previsao."""
+    estacao = _estacao_oficial_do_site(site)
+    if not estacao:
+        return data
+    ultimas = weather_forecast.ultimas_24h_estacao(*estacao)
+    if not ultimas:
+        return data
+    ultima = ultimas[-1]
+    if datetime.fromisoformat(ultima["hora"]) < _agora_cuiaba_dt().replace(tzinfo=None) - timedelta(hours=6):
+        return data
+    if not data:
+        data = {"previsao_5_dias": [], "previsao_horaria_por_dia": {}}
+        data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
+    data.update({
+        "temperatura_atual": ultima["temp"],
+        "umidade_atual": ultima["umidade"],
+        "chuva_atual_mm": ultima["chuva"],
+        "chuva_24h_mm": round(sum(h["chuva"] or 0 for h in ultimas), 1),
+        "ultimas_24h": ultimas,
+        "fonte": "INMET (estacao) + previsao Open-Meteo" if estacao[0] == "BR" else "Estacao oficial + previsao Open-Meteo",
+    })
     return data
 
 
@@ -281,19 +327,31 @@ def _completar_clima_horario(hourly_lookup, device_by_site, sites, dias):
     mesma estacao de referencia do resto do site) -- o BioScout parou de
     mandar clima dos devices (404 no endpoint de clima, ver
     bioscout_fetch), e sem isso o Risco de Infeccao/vento da aba
-    Graficos ficava vazio em todo dia passado. Leitura do proprio device
-    continua tendo prioridade quando existe."""
+    Graficos ficava vazio em todo dia passado. Ordem de preferencia:
+    device BioScout > estacao oficial da fazenda (`_estacao_oficial_do_site`,
+    pais com integracao de dados medidos) > Open-Meteo."""
     if not dias:
         return hourly_lookup
     coords_clima = _weather_coords_all()
     coords_proprias = None
     pendentes = {}
     dias_faltando = set()
+    hoje = _hoje_cuiaba().isoformat()
+    completo = dict(hourly_lookup)
     for site in sites:
         device = device_by_site.get(site)
-        faltando = [d for d in dias if not hourly_lookup.get((device, d))] if device else []
+        faltando = [d for d in dias if not completo.get((device, d))] if device else []
         if not faltando:
             continue
+        estacao = _estacao_oficial_do_site(site)
+        if estacao:
+            por_dia = weather_forecast.horas_estacao_por_dia(*estacao, min(faltando), max(faltando))
+            for dia in faltando:
+                if por_dia.get(dia):
+                    completo[(device, dia)] = por_dia[dia]
+            faltando = [d for d in faltando if not completo.get((device, d))]
+            if not faltando:
+                continue
         latlon = coords_clima.get(site)
         if latlon and latlon[0] == INTERPOLACAO_SENTINEL:
             if coords_proprias is None:
@@ -302,17 +360,15 @@ def _completar_clima_horario(hourly_lookup, device_by_site, sites, dias):
         if latlon:
             pendentes[device] = latlon
             dias_faltando.update(faltando)
-    hoje = _hoje_cuiaba().isoformat()
     dias_faltando = {d for d in dias_faltando if d <= hoje}
     if not pendentes or not dias_faltando:
-        return hourly_lookup
+        return completo
     inicio, fim = min(dias_faltando), max(dias_faltando)
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         resultados = dict(zip(
             pendentes,
             executor.map(lambda ll: _historico_horario_open_meteo(ll, inicio, fim), pendentes.values()),
         ))
-    completo = dict(hourly_lookup)
     for device, por_dia in resultados.items():
         for dia, horas in por_dia.items():
             if not completo.get((device, dia)):
@@ -2119,7 +2175,8 @@ def _atualizar_open_meteo_diario():
             estacao = next((e for e in provider.get_estacoes() if e["codigo"] == codigo), None)
             if estacao:
                 coordenadas.append((estacao["lat"], estacao["lon"]))
-    weather_forecast.atualizar_todos(coordenadas)
+    estacoes = {e for e in (_estacao_oficial_do_site(site) for site in coords_proprias) if e}
+    weather_forecast.atualizar_todos(coordenadas, estacoes)
     _weather_cache.clear()
     _historico_horario_cache.clear()
 
@@ -5426,6 +5483,20 @@ def admin_exportar():
         site_selecionado=site_name or "", apenas_falhas=apenas_falhas,
         linhas_fungicidas=linhas_fungicidas, culturas_ativas=culturas_ativas,
     )
+
+
+@app.route("/admin/estacoes-diagnostico")
+@alan_mauro_required
+def admin_estacoes_diagnostico():
+    """Amostras reais das APIs de DADOS das estacoes oficiais (INMET, DMC,
+    SMN) -- so' leitura, credenciais ocultas. Existe pra' fechar o formato
+    de resposta do Chile/Argentina antes de integrar (o ambiente de
+    desenvolvimento nao alcanca esses servidores)."""
+    estacoes_em_uso = {}
+    for escolha in models.get_all_weather_station_overrides().values():
+        if escolha["codigo"] and escolha["codigo"] != INTERPOLACAO_SENTINEL:
+            estacoes_em_uso.setdefault(escolha["country_code"], escolha["codigo"])
+    return render_template("admin_estacoes_diagnostico.html", amostras=estacoes_dados.diagnostico(estacoes_em_uso))
 
 
 @app.route("/admin/exportar/download")

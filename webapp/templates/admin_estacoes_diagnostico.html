@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Diagnostico de estacoes{% endblock %}
+{% block content %}
+<h2 class="mb-3">Diagnostico das APIs de estacoes</h2>
+<p class="text-muted small">Amostras reais das respostas do INMET, DMC (Chile) e SMN (Argentina), so' leitura. Tokens e usuarios aparecem ocultos.</p>
+{% for a in amostras %}
+<div class="card mb-3">
+    <div class="card-body">
+        <h6 class="mb-1">{{ a.titulo }}</h6>
+        <div class="small text-muted mb-2" style="word-break: break-all;">{{ a.url }} &mdash; <strong>{{ a.status }}</strong></div>
+        {% if a.conteudo %}<pre class="small bg-light p-2 mb-0" style="white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow: auto;">{{ a.conteudo }}</pre>{% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
