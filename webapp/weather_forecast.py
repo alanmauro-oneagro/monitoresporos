@@ -7,6 +7,7 @@ import os
 import threading
 import urllib.request
 import urllib.parse
+import estacoes_dados
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -75,6 +76,7 @@ def _carregar():
             _store = {}
         _store.setdefault("pontos", {})
         _store.setdefault("grades", {})
+        _store.setdefault("estacoes", {})
         _store.setdefault("ultima_rodada", None)
     return _store
 
@@ -143,6 +145,70 @@ def _ponto(lat, lon, salvar=True):
     return registro
 
 
+def _estacao(country_code, codigo, uf, salvar=True):
+    """Leitura do dia das horas MEDIDAS pela estacao oficial (ver
+    `estacoes_dados`) -- mesmo esquema de `_ponto`: no maximo 1 busca por
+    dia de leitura, acumulando o historico em disco, backoff em falha.
+    Primeira busca traz 90 dias; as seguintes, so' os ultimos 3 (o resto
+    ja esta guardado). None se o pais nao tem integracao/credencial."""
+    if not estacoes_dados.configurado(country_code):
+        return None
+    chave = f"{country_code}:{codigo}"
+    dia = dia_de_leitura()
+    with _lock:
+        registro = _carregar()["estacoes"].get(chave)
+        if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
+            return registro if registro.get("horas") else None
+    hoje = _agora_cuiaba().date()
+    inicio = hoje - timedelta(days=3 if (registro or {}).get("horas") else 90)
+    try:
+        novas = estacoes_dados.buscar_horas(country_code, codigo, uf, inicio.isoformat(), hoje.isoformat())
+    except Exception as exc:
+        ultimo_erro["erro"] = f"estacao {chave}: {str(exc)[:180]}"
+        ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
+        with _lock:
+            registro = dict(registro or {})
+            registro["falha_em"] = _agora_cuiaba().isoformat(timespec="seconds")
+            _store["estacoes"][chave] = registro
+        return registro if registro.get("horas") else None
+    corte = (datetime.now() - timedelta(days=DIAS_HISTORICO_GUARDADOS)).strftime("%Y-%m-%d")
+    with _lock:
+        horas = dict((registro or {}).get("horas") or {})
+        horas.update(novas)
+        horas = {t: v for t, v in horas.items() if t >= corte}
+        registro = {"dia": dia, "horas": horas, "uf": uf}
+        _store["estacoes"][chave] = registro
+        if salvar:
+            _salvar()
+    return registro
+
+
+def horas_estacao_por_dia(country_code, codigo, uf, data_inicio, data_fim):
+    """Horas MEDIDAS pela estacao oficial entre as datas (inclusive),
+    agrupadas por dia local -- mesmo formato de `get_historico_horario`.
+    {} se nao houver integracao/dado."""
+    registro = _estacao(country_code, codigo, uf)
+    if not registro:
+        return {}
+    por_dia = {}
+    for t in sorted(registro["horas"]):
+        v = registro["horas"][t]
+        if v[0] is None or not (data_inicio <= t[:10] <= data_fim):
+            continue
+        por_dia.setdefault(t[:10], []).append({"temp": v[0], "umidade": v[1], "chuva": v[2] or 0, "vento": v[3]})
+    return por_dia
+
+
+def ultimas_24h_estacao(country_code, codigo, uf):
+    """Ultimas 24 horas medidas pela estacao (lista de {"hora", "temp",
+    "umidade", "chuva"}, mais antiga primeiro) -- [] se nao houver."""
+    registro = _estacao(country_code, codigo, uf)
+    if not registro:
+        return []
+    ultimas = sorted(t for t, v in registro["horas"].items() if v[0] is not None)[-24:]
+    return [_hora_dict(t, registro["horas"][t]) for t in ultimas]
+
+
 def _hora_atual_local(registro):
     agora = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=registro.get("utc_offset", 0))
     return agora.strftime("%Y-%m-%dT%H:00")
@@ -157,7 +223,7 @@ def rodada_pendente():
         return _carregar()["ultima_rodada"] != dia_de_leitura()
 
 
-def atualizar_todos(coordenadas):
+def atualizar_todos(coordenadas, estacoes=()):
     """Rodada diaria (01:00): garante a leitura do dia de cada (lat, lon),
     gravando o arquivo uma vez so' no fim. So' marca a rodada como feita
     se TODAS as coordenadas ficaram com a leitura do dia -- senao o
@@ -173,6 +239,13 @@ def atualizar_todos(coordenadas):
             continue
         vistas.add(chave)
         registro = _ponto(lat, lon, salvar=False)
+        if not registro or registro.get("dia") != dia:
+            completa = False
+    for country_code, codigo, uf in estacoes:
+        if not estacoes_dados.configurado(country_code) or f"{country_code}:{codigo}" in vistas:
+            continue
+        vistas.add(f"{country_code}:{codigo}")
+        registro = _estacao(country_code, codigo, uf, salvar=False)
         if not registro or registro.get("dia") != dia:
             completa = False
     with _lock:
