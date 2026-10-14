@@ -10,10 +10,9 @@ Paises integrados: Brasil (INMET), Chile (DMC) e Argentina (SMN).
 Brasil (INMET):
 - Com `INMET_TOKEN` (pedido por e-mail a cadastro.act@inmet.gov.br): rota
   `/token/estacao/{inicio}/{fim}/{codigo}/{token}` da apitempo.
-- Sem token: tenta a rota antiga `/estacao/{inicio}/{fim}/{codigo}` --
-  as fontes divergem se ela ainda responde (relatos de 404 em 2026); se
-  recusar, a falha aparece no aviso do Painel e a fazenda segue na
-  Open-Meteo.
+- Sem token o Brasil fica na Open-Meteo: a rota antiga sem token
+  (`/estacao/{inicio}/{fim}/{codigo}`) respondeu VAZIA em producao
+  (14/10/2026).
 - Resposta: lista de registros horarios com DT_MEDICAO ("YYYY-MM-DD"),
   HR_MEDICAO ("HHMM", UTC), TEM_INS (C), UMD_INS (%), CHUVA (mm),
   VEN_DIR (graus) -- nomes de campo conferidos no cliente inmetpy.
@@ -45,15 +44,14 @@ import os
 import re
 import time
 import unicodedata
-import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
 from datetime import datetime, timedelta
 
 INMET_URL = "https://apitempo.inmet.gov.br/token/estacao/{inicio}/{fim}/{codigo}/{token}"
-# Rota antiga, sem token -- relatos de 2026 dizem que devolve 404, outros
-# que continua aberta; sem INMET_TOKEN o site tenta esta (ver `_inmet_horas`).
+# Rota antiga, sem token -- testada em producao em 14/10/2026: responde 200
+# VAZIO (0 bytes). So' fica no diagnostico, pra' perceber se um dia voltar.
 INMET_URL_PUBLICA = "https://apitempo.inmet.gov.br/estacao/{inicio}/{fim}/{codigo}"
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
@@ -82,7 +80,7 @@ def _float(valor):
 
 def configurado(country_code):
     if country_code == "BR":
-        return True
+        return bool(os.environ.get("INMET_TOKEN"))
     if country_code == "CL":
         return bool(os.environ.get("METEOCHILE_USUARIO") and os.environ.get("METEOCHILE_TOKEN"))
     return country_code == "AR"
@@ -95,17 +93,8 @@ def _abrir(url, timeout=30):
 
 
 def _inmet_horas(codigo, uf, inicio, fim):
-    token = os.environ.get("INMET_TOKEN")
-    if token:
-        url = INMET_URL.format(inicio=inicio, fim=fim, codigo=codigo, token=token)
-    else:
-        url = INMET_URL_PUBLICA.format(inicio=inicio, fim=fim, codigo=codigo)
-    try:
-        registros = json.loads(_abrir(url) or b"[]")
-    except urllib.error.HTTPError as exc:
-        if not token and exc.code in (401, 403, 404):
-            raise RuntimeError(f"INMET recusou a rota publica (HTTP {exc.code}) -- precisa de INMET_TOKEN") from exc
-        raise
+    url = INMET_URL.format(inicio=inicio, fim=fim, codigo=codigo, token=os.environ["INMET_TOKEN"])
+    registros = json.loads(_abrir(url) or b"[]")
     offset = timedelta(hours=_offset_uf(uf))
     horas = {}
     for r in registros:
@@ -153,8 +142,16 @@ def _dmc_horas(codigo, inicio, fim):
         meses.append((ano, mes))
         ano, mes = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
     por_hora = {}
+    sem_dado = None
     for ano, mes in meses:
-        bruto = json.loads(_abrir(DMC_URL.format(codigo=codigo, ano=ano, mes=mes, cred=cred), timeout=60) or b"{}")
+        corpo = _abrir(DMC_URL.format(codigo=codigo, ano=ano, mes=mes, cred=cred), timeout=60) or b"{}"
+        try:
+            bruto = json.loads(corpo)
+        except ValueError:
+            # A DMC responde texto puro ("Sin Información") quando a estacao
+            # nao tem dado nesse servico -- visto em producao em 14/10/2026.
+            sem_dado = f"DMC estacao {codigo} {mes:02d}/{ano}: {corpo.decode('utf-8', errors='replace').strip()[:80]}"
+            continue
         if bruto.get("mensaje") and not (bruto.get("datosEstaciones") or {}).get("datos"):
             raise RuntimeError(f"DMC: {bruto['mensaje']}")
         utc = re.search(r"utc|gmt", str(bruto.get("timezone", "UTC")), re.I)
@@ -184,6 +181,8 @@ def _dmc_horas(codigo, inicio, fim):
             vento = _numero(_campo(leitura, "direcc", "viento"))
             if vento is not None:
                 item["vento"] = vento
+    if not por_hora and sem_dado:
+        raise RuntimeError(sem_dado)
     return {
         hora: [
             round(sum(v["temp"]) / len(v["temp"]), 1),
@@ -359,18 +358,16 @@ def diagnostico(estacoes_em_uso):
     usuario, token = os.environ.get("METEOCHILE_USUARIO"), os.environ.get("METEOCHILE_TOKEN")
     if usuario and token:
         cred = urllib.parse.urlencode({"usuario": usuario, "token": token})
-        base = "https://climatologia.meteochile.gob.cl/application"
-        codigo_cl = estacoes_em_uso.get("CL", "330020")
-        amostras.append(_amostra("DMC -- dados do mes de uma estacao", DMC_URL.format(codigo=codigo_cl, ano=hoje.year, mes=hoje.month, cred=cred)))
-        # Indice da documentacao: lista os servicos disponiveis (endereco +
-        # descricao) -- precisamos de um que traga o dia ANTERIOR inteiro.
-        for n in range(1, 13):
-            item = _amostra(f"DMC -- documentacao {n} (enderecos de servico)", f"{base}/documentacao/getDocumento/{n}", limite=200000)
-            if item["status"].startswith("ok"):
-                servicos = sorted(set(re.findall(r"application/servicios/[A-Za-z]+[^\"'<\s]*", item["conteudo"])))
-                titulo = re.search(r"<title>(.*?)</title>", item["conteudo"], re.S)
-                item["conteudo"] = (titulo.group(1).strip() if titulo else "") + "\n" + "\n".join(servicos)
-            amostras.append(item)
+        dmc_recentes = "https://climatologia.meteochile.gob.cl/application/servicios/getDatosRecientesEma/{codigo}?{cred}"
+        codigo_cl = estacoes_em_uso.get("CL")
+        if codigo_cl:
+            amostras.append(_amostra(f"DMC -- estacao em uso {codigo_cl}, mes atual", DMC_URL.format(codigo=codigo_cl, ano=hoje.year, mes=hoje.month, cred=cred)))
+            amostras.append(_amostra(f"DMC -- estacao em uso {codigo_cl}, ultimas 12h", dmc_recentes.format(codigo=codigo_cl, cred=cred)))
+        # Quinta Normal (Santiago) -- estacao automatica de referencia da
+        # propria documentacao da DMC: se ESTA responder e a de cima nao,
+        # o problema e' a estacao escolhida (nao automatica), nao o servico.
+        amostras.append(_amostra("DMC -- Quinta Normal 330020, mes atual", DMC_URL.format(codigo="330020", ano=hoje.year, mes=hoje.month, cred=cred)))
+        amostras.append(_amostra("DMC -- Quinta Normal 330020, ultimas 12h", dmc_recentes.format(codigo="330020", cred=cred)))
     else:
         amostras.append({"titulo": "DMC (Chile)", "url": "-", "status": "sem METEOCHILE_USUARIO/METEOCHILE_TOKEN", "conteudo": ""})
 
