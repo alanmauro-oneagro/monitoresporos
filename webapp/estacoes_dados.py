@@ -366,6 +366,7 @@ def diagnostico(estacoes_em_uso):
         # Quinta Normal (Santiago) -- estacao automatica de referencia da
         # propria documentacao da DMC: se ESTA responder e a de cima nao,
         # o problema e' a estacao escolhida (nao automatica), nao o servico.
+        amostras.append(_amostra("DMC -- rede de estacoes automaticas (EMA)", f"https://climatologia.meteochile.gob.cl/application/geoservicios/getEmaResumenDiarioGeo?{cred}"))
         amostras.append(_amostra("DMC -- Quinta Normal 330020, mes atual", DMC_URL.format(codigo="330020", ano=hoje.year, mes=hoje.month, cred=cred)))
         amostras.append(_amostra("DMC -- Quinta Normal 330020, ultimas 12h", dmc_recentes.format(codigo="330020", cred=cred)))
     else:

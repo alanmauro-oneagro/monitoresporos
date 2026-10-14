@@ -145,3 +145,68 @@ def estacoes_mais_proximas(lat, lon, n=2):
 def estacao_mais_proxima(lat, lon):
     proximas = estacoes_mais_proximas(lat, lon, n=1)
     return proximas[0] if proximas else None
+
+
+# Rede de estacoes AUTOMATICAS (EMA) -- o catalogo acima
+# (getCatastroEstacionesGeo) mistura estacoes manuais antigas/desativadas
+# (ex.: 340037, so' chuva de 1974-1979), e o servico de dados medidos
+# (getDatosRecientesEma, ver estacoes_dados.py) so' tem dado de EMA:
+# responde "Sin Información" pras outras -- visto em producao em
+# 14/10/2026 com a estacao 350024. getEmaResumenDiarioGeo lista so' as
+# EMA, cada uma com "fueraDeServicio"/"conDatos" (documentacao da DMC).
+EMA_URL = "https://climatologia.meteochile.gob.cl/application/geoservicios/getEmaResumenDiarioGeo"
+_cache_ema = {"timestamp": 0, "estacoes": [], "ultima_tentativa": 0}
+
+
+def _valor(props, nome):
+    """Campo por nome sem diferenciar maiusculas (a DMC capitaliza
+    diferente de servico pra servico, ver docstring do modulo)."""
+    for chave, valor in props.items():
+        if chave.lower() == nome.lower():
+            return valor
+    return None
+
+
+def _fetch_ema():
+    params = urllib.parse.urlencode({
+        "usuario": os.environ["METEOCHILE_USUARIO"],
+        "token": os.environ["METEOCHILE_TOKEN"],
+    })
+    req = urllib.request.Request(f"{EMA_URL}?{params}", headers={"Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        raw = json.load(resp)
+    estacoes = []
+    for feature in raw.get("features", []):
+        props = feature.get("properties") or (feature.get("features") or {}).get("properties") or {}
+        geometria = feature.get("geometry") or (feature.get("features") or {}).get("geometry") or {}
+        codigo = _valor(props, "codigoNacional")
+        if codigo is None or _valor(props, "fueraDeServicio") in (True, "true", 1):
+            continue
+        try:
+            lon, lat = (float(v) for v in geometria["coordinates"][:2])
+        except (KeyError, TypeError, ValueError):
+            try:
+                lat, lon = float(_valor(props, "latitud")), float(_valor(props, "longitud"))
+            except (TypeError, ValueError):
+                continue
+        estacoes.append({"codigo": str(codigo), "cidade": _valor(props, "nombreEstacion"), "lat": lat, "lon": lon})
+    return estacoes
+
+
+def estacoes_automaticas():
+    """Estacoes automaticas (EMA) em servico -- [] sem credencial ou se o
+    servico falhar (cache 24h + backoff, como o catalogo)."""
+    if not credenciais_configuradas():
+        return []
+    return estacoes_cache_util.cached_fetch(_cache_ema, _fetch_ema)
+
+
+def automatica_mais_proxima(lat, lon, max_km=60):
+    """EMA em servico mais perto da coordenada (ate' `max_km`) -- None se
+    nao houver."""
+    candidatas = [
+        dict(e, distancia_km=round(inmet_stations._haversine_km(lat, lon, e["lat"], e["lon"]), 1))
+        for e in estacoes_automaticas()
+    ]
+    candidatas = [e for e in candidatas if e["distancia_km"] <= max_km]
+    return min(candidatas, key=lambda e: e["distancia_km"]) if candidatas else None
