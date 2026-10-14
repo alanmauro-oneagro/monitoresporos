@@ -44,6 +44,7 @@ import inmet_stations
 import virtual_farms
 import ndvi_service
 import countries
+import dmc_stations
 import estacoes_dados
 import soil_service
 import soilgrids_service
@@ -268,6 +269,14 @@ def _estacao_oficial_do_site(site):
         return None
     provider = countries.get_country(escolha["country_code"])["station_provider"]
     estacao = next((e for e in provider.get_estacoes() if e["codigo"] == escolha["codigo"]), None)
+    if escolha["country_code"] == "CL":
+        # Dado medido da DMC so' existe pra estacao AUTOMATICA (EMA) -- se a
+        # de referencia e' manual/desativada, usa a EMA em servico mais perto.
+        automaticas = {e["codigo"] for e in dmc_stations.estacoes_automaticas()}
+        if automaticas and escolha["codigo"] not in automaticas:
+            latlon = (estacao["lat"], estacao["lon"]) if estacao else _coords_all().get(site)
+            ema = dmc_stations.automatica_mais_proxima(*latlon) if latlon else None
+            return ("CL", ema["codigo"], None) if ema else None
     return (escolha["country_code"], escolha["codigo"], (estacao or {}).get("uf"))
 
 
