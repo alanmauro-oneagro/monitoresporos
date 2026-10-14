@@ -5553,7 +5553,26 @@ def admin_estacoes_diagnostico():
     for escolha in models.get_all_weather_station_overrides().values():
         if escolha["codigo"] and escolha["codigo"] != INTERPOLACAO_SENTINEL:
             estacoes_em_uso.setdefault(escolha["country_code"], escolha["codigo"])
-    return render_template("admin_estacoes_diagnostico.html", amostras=estacoes_dados.diagnostico(estacoes_em_uso))
+    hoje = _hoje_cuiaba()
+    verificacao = []
+    for site in sorted(_coords_all()):
+        escolha = models.get_all_weather_station_overrides().get(site)
+        if not escolha or escolha["country_code"] not in ("BR", "CL", "AR"):
+            continue
+        estacao = _estacao_oficial_do_site(site)
+        linha = {"fazenda": _nome_exibicao(site), "pais": escolha["country_code"], "escolhida": escolha["codigo"],
+                 "usada": estacao[1] if estacao else "-", "horas": "-", "ultima": "-", "previsao": "-"}
+        if estacao:
+            por_dia = weather_forecast.horas_estacao_por_dia(*estacao, (hoje - timedelta(days=3)).isoformat(), hoje.isoformat())
+            ultimas = weather_forecast.ultimas_24h_estacao(*estacao)
+            linha["horas"] = sum(len(h) for h in por_dia.values())
+            linha["ultima"] = f"{ultimas[-1]['hora']} -- {ultimas[-1]['temp']} C, {ultimas[-1]['umidade']}%" if ultimas else "-"
+            linha["previsao"] = len(weather_forecast.previsao_estacao(estacao[0], estacao[1])) if estacao[0] == "AR" else "Open-Meteo"
+        verificacao.append(linha)
+    return render_template(
+        "admin_estacoes_diagnostico.html", amostras=estacoes_dados.diagnostico(estacoes_em_uso),
+        verificacao=verificacao, erro_clima=weather_forecast.ultimo_erro,
+    )
 
 
 @app.route("/admin/exportar/download")
