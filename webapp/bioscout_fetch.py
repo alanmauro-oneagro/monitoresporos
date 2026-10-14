@@ -254,6 +254,12 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
             )
             if w:
                 weather_rows.extend(w)
+        except urllib.error.HTTPError as exc:
+            log(f"  erro clima site {site_id}: {exc}")
+            # 404 = BioScout sem leitura de clima pra esse site (o clima do
+            # site vem do INMET/Open-Meteo) -- nao e' falha da sincronizacao.
+            if exc.code != 404:
+                erros.append(f"clima site {site_id}: {exc}")
         except Exception as exc:
             log(f"  erro clima site {site_id}: {exc}")
             erros.append(f"clima site {site_id}: {exc}")
