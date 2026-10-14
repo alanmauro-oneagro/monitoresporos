@@ -23,6 +23,7 @@ import unicodedata
 from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g
+from flask_compress import Compress
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
     current_user,
@@ -75,6 +76,7 @@ WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda 
 NDVI_AGENDAMENTO_COBERTURA_MAXIMA = 3  # % -- mais estrito que o preview manual (5%), pedido explicito do usuario pro envio automatico
 INTERPOLACAO_SENTINEL = "__interp3__"  # valor especial de weather_station_overrides.estacao_codigo -- "media das 3 estacoes mais proximas" em vez de uma estacao so (ver _weather_coords_all/_get_weather_for_site)
 WEATHER_CACHE_TTL_SECONDS = 30 * 60  # nao busca de novo na Open-Meteo antes disso, por fazenda
+WEATHER_FALHA_BACKOFF_SECONDS = 5 * 60  # busca que falhou (timeout, 429...) so' tenta de novo depois disso -- senao cada pagina esperava o timeout de novo
 NDVI_PREVIEW_TTL_SECONDS = 30 * 60  # pre-visualizacao de NDVI expira sozinha se ninguem confirmar/descartar
 DADOS_AVISO_DIAS = 7  # ate isso = verde (ok); acima = aviso (amarelo)
 DADOS_BLOQUEIO_DIAS = 15  # acima disso (16+ dias) = vermelho, WhatsApp/PDF/copia da recomendacao viram so' clima (sem doenca)
@@ -222,8 +224,10 @@ def _get_weather_for_site(site, coords):
         return None
     cached = _weather_cache.get(site)
     now = time.time()
-    if cached and cached[1] == latlon and now - cached[0] < WEATHER_CACHE_TTL_SECONDS:
-        return cached[2]
+    if cached and cached[1] == latlon:
+        ttl = WEATHER_CACHE_TTL_SECONDS if cached[2] else WEATHER_FALHA_BACKOFF_SECONDS
+        if now - cached[0] < ttl:
+            return cached[2]
     if latlon[0] == INTERPOLACAO_SENTINEL:
         # "Interpolacao das 3 estacoes mais proximas" (ver _weather_coords_all)
         # -- `latlon` aqui NAO e' uma coordenada, e' (SENTINEL, "pais:codigo" x3).
@@ -240,13 +244,13 @@ def _get_weather_for_site(site, coords):
             data["cidade"] = f"Media de {len(estacoes_info)} estacoes: {nomes}"
             data["uf"] = None
             data["fonte"] = "Open-Meteo (media de estacoes proximas)"
-            _weather_cache[site] = (now, latlon, data)
+        _weather_cache[site] = (now, latlon, data)
         return data
     data = weather_forecast.get_weather_forecast(*latlon)
     if data:
         data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
         data["fonte"] = "Open-Meteo"
-        _weather_cache[site] = (now, latlon, data)
+    _weather_cache[site] = (now, latlon, data)
     return data
 
 
@@ -354,6 +358,14 @@ app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 # ida-e-volta ao servidor toda vez pra confirmar que nao mudou. Com
 # max-age, o navegador usa a copia local direto por 12h sem nem perguntar.
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 43200
+
+# Paginas (Manejos/Fungicidas ~400-500KB de HTML) e GeoJSON/rodovias
+# (1.5-4MB cada) iam sem compressao nenhuma -- gzip/brotli reduz ~10x.
+app.config["COMPRESS_MIMETYPES"] = [
+    "text/html", "text/css", "text/javascript", "application/javascript",
+    "application/json", "application/geo+json", "image/svg+xml",
+]
+Compress(app)
 
 
 @app.after_request
@@ -2061,6 +2073,8 @@ def alan_mauro_required(view):
 
 @app.before_request
 def _ensure_sites_synced():
+    if request.endpoint in ("static", "service_worker"):
+        return
     # Mantem a tabela "sites" alinhada com o CSV mais recente (novas fazendas
     # aparecem automaticamente na tela de permissoes) -- fazenda nova (site
     # que ainda nao existia na tabela) ja entra com a agenda padrao de
