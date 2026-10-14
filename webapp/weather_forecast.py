@@ -9,6 +9,24 @@ from datetime import datetime, timedelta
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
+# Ultima falha de chamada a Open-Meteo (ou None depois de um sucesso) --
+# mostrada no aviso do Painel so' pro admin (ver `app.dashboard`). Sem
+# isso toda falha virava "sem clima" em silencio.
+ultimo_erro = {"erro": None, "quando": None}
+
+
+def _abrir_json(url, timeout):
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            data = json.load(resp)
+    except Exception as exc:
+        ultimo_erro["erro"] = str(exc)[:200]
+        ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
+        raise
+    ultimo_erro["erro"] = None
+    ultimo_erro["quando"] = None
+    return data
+
 
 def get_weather_forecast(lat, lon):
     """Retorna dict com clima atual, previsao dos proximos 5 dias e o
@@ -30,8 +48,7 @@ def get_weather_forecast(lat, lon):
     }
     url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
     try:
-        with urllib.request.urlopen(url, timeout=15) as resp:
-            data = json.load(resp)
+        data = _abrir_json(url, timeout=15)
     except Exception:
         return None
 
@@ -189,8 +206,7 @@ def get_cloud_forecast_grid(lats, lons):
     }
     url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
     try:
-        with urllib.request.urlopen(url, timeout=45) as resp:
-            resultados = json.load(resp)
+        resultados = _abrir_json(url, timeout=45)
     except Exception:
         return []
     if not isinstance(resultados, list):
@@ -221,8 +237,7 @@ def get_rain_forecast_grid(lats, lons):
     }
     url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
     try:
-        with urllib.request.urlopen(url, timeout=45) as resp:
-            resultados = json.load(resp)
+        resultados = _abrir_json(url, timeout=45)
     except Exception:
         return []
     if not isinstance(resultados, list):
@@ -260,8 +275,7 @@ def get_historico_por_dia(lat, lon, data_inicio, data_fim):
     }
     url = f"{ARCHIVE_URL}?{urllib.parse.urlencode(params)}"
     try:
-        with urllib.request.urlopen(url, timeout=20) as resp:
-            data = json.load(resp)
+        data = _abrir_json(url, timeout=20)
     except Exception:
         return {}
     hourly = data.get("hourly", {})
@@ -299,8 +313,7 @@ def get_historico_horario(lat, lon, data_inicio, data_fim):
     }
     url = f"{base}?{urllib.parse.urlencode(params)}"
     try:
-        with urllib.request.urlopen(url, timeout=20) as resp:
-            data = json.load(resp)
+        data = _abrir_json(url, timeout=20)
     except Exception:
         return {}
     hourly = data.get("hourly", {})

@@ -2455,6 +2455,7 @@ def dashboard():
         "dashboard.html", cards_by_site=cards_by_site, no_access=False,
         weather_by_site=weather_by_site, dados_status_by_site=dados_status_by_site,
         fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
+        open_meteo_erro=weather_forecast.ultimo_erro if current_user.is_admin and weather_forecast.ultimo_erro["erro"] else None,
     )
 
 
