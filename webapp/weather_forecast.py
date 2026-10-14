@@ -159,17 +159,25 @@ def rodada_pendente():
 
 def atualizar_todos(coordenadas):
     """Rodada diaria (01:00): garante a leitura do dia de cada (lat, lon),
-    gravando o arquivo uma vez so' no fim. Coordenada que falhar fica pra'
-    proxima tentativa sob demanda (backoff de `FALHA_BACKOFF`)."""
+    gravando o arquivo uma vez so' no fim. So' marca a rodada como feita
+    se TODAS as coordenadas ficaram com a leitura do dia -- senao o
+    agendador chama de novo a cada minuto e `_ponto` retenta cada falha
+    depois de `FALHA_BACKOFF` (antes uma falha na rodada so' era retentada
+    na madrugada seguinte)."""
+    dia = dia_de_leitura()
     vistas = set()
+    completa = True
     for lat, lon in coordenadas:
         chave = _chave(lat, lon)
         if chave in vistas:
             continue
         vistas.add(chave)
-        _ponto(lat, lon, salvar=False)
+        registro = _ponto(lat, lon, salvar=False)
+        if not registro or registro.get("dia") != dia:
+            completa = False
     with _lock:
-        _store["ultima_rodada"] = dia_de_leitura()
+        if completa:
+            _store["ultima_rodada"] = dia
         _salvar()
 
 
