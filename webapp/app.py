@@ -280,24 +280,72 @@ def _aplicar_leitura_estacao_oficial(site, data, latlon):
     estacao = _estacao_oficial_do_site(site)
     if not estacao:
         return data
+    orgao = {"BR": "INMET", "CL": "DMC", "AR": "SMN"}.get(estacao[0], "estacao oficial")
+    fonte_previsao = "Open-Meteo"
+    previsao_orgao = weather_forecast.previsao_estacao(estacao[0], estacao[1])
+    if previsao_orgao:
+        if not data:
+            data = {"previsao_5_dias": [], "previsao_horaria_por_dia": {}}
+            data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
+        _aplicar_previsao_orgao(data, previsao_orgao)
+        fonte_previsao = orgao
     ultimas = weather_forecast.ultimas_24h_estacao(*estacao)
-    if not ultimas:
-        return data
-    ultima = ultimas[-1]
-    if datetime.fromisoformat(ultima["hora"]) < _agora_cuiaba_dt().replace(tzinfo=None) - timedelta(hours=6):
-        return data
-    if not data:
-        data = {"previsao_5_dias": [], "previsao_horaria_por_dia": {}}
-        data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
-    data.update({
-        "temperatura_atual": ultima["temp"],
-        "umidade_atual": ultima["umidade"],
-        "chuva_atual_mm": ultima["chuva"],
-        "chuva_24h_mm": round(sum(h["chuva"] or 0 for h in ultimas), 1),
-        "ultimas_24h": ultimas,
-        "fonte": "INMET (estacao) + previsao Open-Meteo" if estacao[0] == "BR" else "Estacao oficial + previsao Open-Meteo",
-    })
+    leitura_recente = ultimas and datetime.fromisoformat(ultimas[-1]["hora"]) >= _agora_cuiaba_dt().replace(tzinfo=None) - timedelta(hours=6)
+    if leitura_recente:
+        if not data:
+            data = {"previsao_5_dias": [], "previsao_horaria_por_dia": {}}
+            data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
+        ultima = ultimas[-1]
+        data.update({
+            "temperatura_atual": ultima["temp"],
+            "umidade_atual": ultima["umidade"],
+            "chuva_atual_mm": ultima["chuva"],
+            "chuva_24h_mm": round(sum(h["chuva"] or 0 for h in ultimas), 1) if any(h["chuva"] is not None for h in ultimas) else data.get("chuva_24h_mm"),
+            "ultimas_24h": ultimas,
+        })
+    if data and (leitura_recente or previsao_orgao):
+        leitura_fonte = f"{orgao} (estacao)" if leitura_recente else "Open-Meteo"
+        data["fonte"] = f"Leitura: {leitura_fonte} / Previsao: {fonte_previsao}"
     return data
+
+
+def _aplicar_previsao_orgao(data, previsao):
+    """Troca a previsao (Open-Meteo) pela do orgao nacional -- hoje so' o
+    SMN, de 3 em 3 horas, com temperatura e chuva mas SEM umidade. Cada
+    ponto de 3h vira 3 horas (chuva dividida entre elas); a umidade de
+    cada hora vem da previsao horaria da Open-Meteo quando ela existir,
+    senao fica None (o risco de infeccao entao so' considera a chuva)."""
+    umidade_open_meteo = {
+        p["hora"]: p.get("umidade")
+        for pontos in (data.get("previsao_horaria_por_dia") or {}).values() for p in pontos
+    }
+    agora = _agora_cuiaba_dt().replace(tzinfo=None).strftime("%Y-%m-%dT%H:00")
+    hoje = agora[:10]
+    por_dia = {}
+    for hora_iso in sorted(previsao):
+        temp, chuva = previsao[hora_iso]
+        base = datetime.fromisoformat(hora_iso)
+        for i in range(3):
+            h = (base + timedelta(hours=i)).strftime("%Y-%m-%dT%H:00")
+            if h <= agora:
+                continue
+            por_dia.setdefault(h[:10], []).append({
+                "hora": h, "temp": temp, "umidade": umidade_open_meteo.get(h),
+                "chuva": round((chuva or 0) / 3, 2),
+            })
+    nuvens_open_meteo = {d["data"]: d.get("nuvens_pct") for d in data.get("previsao_5_dias") or []}
+    previsao_5_dias = []
+    for dia in sorted(d for d in por_dia if d > hoje)[:5]:
+        pontos = [previsao[h] for h in previsao if h[:10] == dia]
+        previsao_5_dias.append({
+            "data": dia,
+            "chuva_mm": round(sum(p[1] or 0 for p in pontos), 1),
+            "temp_max": max(p[0] for p in pontos),
+            "temp_min": min(p[0] for p in pontos),
+            "nuvens_pct": nuvens_open_meteo.get(dia),
+        })
+    data["previsao_horaria_por_dia"] = por_dia
+    data["previsao_5_dias"] = previsao_5_dias
 
 
 _historico_horario_cache = {}  # (lat, lon, inicio, fim) -> (timestamp, {dia: [horas]})

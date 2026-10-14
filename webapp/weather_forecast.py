@@ -77,6 +77,7 @@ def _carregar():
         _store.setdefault("pontos", {})
         _store.setdefault("grades", {})
         _store.setdefault("estacoes", {})
+        _store.setdefault("previsoes", {})
         _store.setdefault("ultima_rodada", None)
     return _store
 
@@ -199,6 +200,35 @@ def horas_estacao_por_dia(country_code, codigo, uf, data_inicio, data_fim):
     return por_dia
 
 
+def previsao_estacao(country_code, codigo):
+    """Previsao do orgao nacional pra' estacao (hoje so' o SMN da
+    Argentina, ver `estacoes_dados.previsao_smn`): {"YYYY-MM-DDTHH:00":
+    [temp, chuva_mm]} de 3 em 3 horas -- buscada 1x por dia de leitura,
+    guardada em disco. {} se o pais nao publica previsao legivel."""
+    if country_code != "AR":
+        return {}
+    chave = f"{country_code}:{codigo}"
+    dia = dia_de_leitura()
+    with _lock:
+        registro = _carregar()["previsoes"].get(chave)
+        if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
+            return registro.get("horas") or {}
+    try:
+        horas = estacoes_dados.previsao_smn(codigo)
+    except Exception as exc:
+        ultimo_erro["erro"] = f"previsao {chave}: {str(exc)[:180]}"
+        ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
+        with _lock:
+            registro = dict(registro or {})
+            registro["falha_em"] = _agora_cuiaba().isoformat(timespec="seconds")
+            _store["previsoes"][chave] = registro
+        return registro.get("horas") or {}
+    with _lock:
+        _store["previsoes"][chave] = {"dia": dia, "horas": horas}
+        _salvar()
+    return horas
+
+
 def ultimas_24h_estacao(country_code, codigo, uf):
     """Ultimas 24 horas medidas pela estacao (lista de {"hora", "temp",
     "umidade", "chuva"}, mais antiga primeiro) -- [] se nao houver."""
@@ -248,6 +278,7 @@ def atualizar_todos(coordenadas, estacoes=()):
         registro = _estacao(country_code, codigo, uf, salvar=False)
         if not registro or registro.get("dia") != dia:
             completa = False
+        previsao_estacao(country_code, codigo)
     with _lock:
         if completa:
             _store["ultima_rodada"] = dia
