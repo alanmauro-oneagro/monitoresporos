@@ -398,7 +398,7 @@ def _atividades_por_site_dia():
     return atividades
 
 
-def _relatorio_diario_rows():
+def _relatorio_diario_rows(completar_clima=None):
     """Uma linha por (estacao/fazenda, dia, doenca OU atividade de
     safra) -- clima do dia (temp, UR, vento, igual sempre) MAIS a
     concentracao de esporos/risco de infeccao (pra cada doenca com
@@ -424,6 +424,13 @@ def _relatorio_diario_rows():
     hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
     device_by_site = data_reader.read_site_device_ids()
     device_to_site = {device: site for site, device in device_by_site.items()}
+    if completar_clima:
+        # Dias com leitura de esporo mas sem clima do device (o BioScout
+        # parou de mandar clima) -- `app._completar_clima_horario` preenche
+        # com o historico da Open-Meteo, so' pro Risco de Infeccao.
+        dias_com_esporo = sorted({p["data"] for pontos in spore_lookup.values() for p in pontos})
+        sites_com_esporo = {site for site, _ in spore_lookup}
+        hourly_lookup = completar_clima(hourly_lookup, device_by_site, sites_com_esporo, dias_com_esporo)
 
     # (site, dia) -> lista de (nome_pt, concentracao, risco_pct, warn,
     # danger, maximo), ordenada por nome de doenca -- montada uma vez so',
@@ -605,7 +612,7 @@ def _add_fungicidas_sheet(wb, culturas_ativas):
     _write_sheet(wb, "Fungicidas", ["Doenca", "Tipo", "Ingrediente ativo", "Classe"] + culturas_ativas, rows)
 
 
-def build_workbook():
+def build_workbook(completar_clima=None):
     wb = Workbook()
     wb.remove(wb.active)
 
@@ -621,7 +628,7 @@ def build_workbook():
             "Limite Atencao (esporos/m3)", "Limite Perigo (esporos/m3)", "Limite Maximo (esporos/m3)",
             "Atividade", "Detalhe da Atividade",
         ],
-        _relatorio_diario_rows,
+        lambda: _relatorio_diario_rows(completar_clima),
         date_columns=(0,),  # "Data" -- ver _data_excel/_write_sheet
     )
 

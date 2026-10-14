@@ -4,7 +4,7 @@ cada estacao (ja vem no spore_counts.csv, uma por fazenda)."""
 import json
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
@@ -273,6 +273,52 @@ def get_historico_por_dia(lat, lon, data_inicio, data_fim):
         dia = hora_iso[:10]  # "YYYY-MM-DDTHH:MM" -> "YYYY-MM-DD"
         por_dia.setdefault(dia, []).append({
             "chuva": chuva[i] if i < len(chuva) else None,
+            "vento": vento[i] if i < len(vento) else None,
+        })
+    return por_dia
+
+
+def get_historico_horario(lat, lon, data_inicio, data_fim):
+    """Temperatura, umidade, chuva e direcao de vento hora a hora,
+    observados (nao previsao), entre `data_inicio` e `data_fim`
+    ("YYYY-MM-DD", inclusive), agrupado por dia local -- mesmo formato
+    de `data_reader.build_hourly_weather_lookup` ({"temp", "umidade",
+    "chuva", "vento"} por hora). Usado pelo Risco de Infeccao da aba
+    Graficos quando o device BioScout da fazenda nao tem clima pro dia
+    (o BioScout parou de mandar clima, ver bioscout_fetch). Ultimos 90
+    dias vem do endpoint de previsao (que aceita datas passadas e nao
+    tem o atraso de ~5 dias do arquivo historico); mais antigo que isso,
+    do arquivo historico. {} se a busca falhar."""
+    limite_previsao = (datetime.now().date() - timedelta(days=90)).isoformat()
+    base = OPEN_METEO_URL if data_inicio >= limite_previsao else ARCHIVE_URL
+    params = {
+        "latitude": lat, "longitude": lon,
+        "start_date": data_inicio, "end_date": data_fim,
+        "hourly": "temperature_2m,relative_humidity_2m,precipitation,wind_direction_10m",
+        "timezone": "auto",
+    }
+    url = f"{base}?{urllib.parse.urlencode(params)}"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            data = json.load(resp)
+    except Exception:
+        return {}
+    hourly = data.get("hourly", {})
+    horas = hourly.get("time", [])
+    temp = hourly.get("temperature_2m", [])
+    umidade = hourly.get("relative_humidity_2m", [])
+    chuva = hourly.get("precipitation", [])
+    vento = hourly.get("wind_direction_10m", [])
+    agora = datetime.now()
+    por_dia = {}
+    for i, hora_iso in enumerate(horas):
+        t = temp[i] if i < len(temp) else None
+        if t is None or datetime.fromisoformat(hora_iso) > agora:
+            continue
+        por_dia.setdefault(hora_iso[:10], []).append({
+            "temp": t,
+            "umidade": umidade[i] if i < len(umidade) else None,
+            "chuva": (chuva[i] if i < len(chuva) else None) or 0,
             "vento": vento[i] if i < len(vento) else None,
         })
     return por_dia
