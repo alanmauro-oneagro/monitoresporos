@@ -21,8 +21,10 @@ Chile (DMC): `getDatosRecientesEma/{codigo}/{ano}/{mes}` (usuario+token
 em METEOCHILE_USUARIO/METEOCHILE_TOKEN, os mesmos do catalogo) -- leituras
 de 15 em 15 min do mes em `datosEstaciones.datos`, cada uma com `momento`
 ("YYYY-MM-DD HH:MM:SS", no fuso de `timezone`, UTC), `temperatura`
-("8.0 °C" -- texto com unidade), `humedadRelativa`, `aguaCaidaDelMinuto`
-e direcao do vento. Agregado por hora (media; chuva somada). Formato
+("8.0 °C" -- texto com unidade), `humedadRelativa`, `aguaCaida6Horas`
+e direcao do vento -- leituras de 30 em 30 min (confirmado em producao,
+14/10/2026, Quinta Normal). Agregado por hora (media; chuva pela
+diferenca do acumulado de 6h). Formato
 conferido no cliente publico sebastianmibanez/clima-chile (dmc.mjs) e na
 documentacao da DMC.
 
@@ -170,28 +172,39 @@ def _dmc_horas(codigo, inicio, fim):
             temp = _numero(leitura.get("temperatura"))
             if temp is None:
                 continue
-            item = por_hora.setdefault(hora, {"temp": [], "umidade": [], "chuva": [], "vento": None})
+            item = por_hora.setdefault(hora, {"temp": [], "umidade": [], "r6": None, "vento": None})
             item["temp"].append(temp)
             umidade = _numero(leitura.get("humedadRelativa") if "humedadRelativa" in leitura else _campo(leitura, "humedad"))
             if umidade is not None:
                 item["umidade"].append(umidade)
-            chuva = _numero(_campo(leitura, "agua", "minuto"))
-            if chuva is not None:
-                item["chuva"].append(chuva)
+            # Leituras de 30 em 30 min: "aguaCaidaDelMinuto" so' cobre 1
+            # minuto e subestimaria a chuva -- usa o acumulado movel de 6h
+            # (ultima leitura da hora) e tira a chuva da hora pela diferenca
+            # com a hora anterior, la' embaixo.
+            acumulado_6h = _numero(leitura.get("aguaCaida6Horas"))
+            if acumulado_6h is not None:
+                item["r6"] = acumulado_6h
             vento = _numero(_campo(leitura, "direcc", "viento"))
             if vento is not None:
                 item["vento"] = vento
     if not por_hora and sem_dado:
         raise RuntimeError(sem_dado)
-    return {
-        hora: [
+    horas = {}
+    for hora in sorted(por_hora):
+        v = por_hora[hora]
+        anterior = por_hora.get((datetime.fromisoformat(hora) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:00"))
+        chuva = None
+        if v["r6"] is not None and anterior and anterior["r6"] is not None:
+            # Diferenca do acumulado de 6h: chuva que entrou na ultima hora
+            # menos a que saiu da janela -- nunca negativa (aproximacao).
+            chuva = round(max(0.0, v["r6"] - anterior["r6"]), 1)
+        horas[hora] = [
             round(sum(v["temp"]) / len(v["temp"]), 1),
             round(sum(v["umidade"]) / len(v["umidade"])) if v["umidade"] else None,
-            round(sum(v["chuva"]), 1) if v["chuva"] else None,
+            chuva,
             v["vento"],
         ]
-        for hora, v in por_hora.items()
-    }
+    return horas
 
 
 SMN_DATOHORARIO_URL = "https://ssl.smn.gob.ar/dpd/descarga_opendata.php?file=observaciones/datohorario{data}.txt"
@@ -277,7 +290,7 @@ def previsao_smn(codigo):
         if not m:
             # Nome da localidade = linha de texto solta antes do bloco;
             # cabecalhos de coluna tem "FECHA", "=", "(", "|" etc.
-            if not re.search(r"FECHA|HORA|[=\[(|:]|-{3}", linha):
+            if not re.search(r"FECHA|HORA|[=\[(|:*]|-{3}", linha):
                 atual = _normalizar_nome(linha)
             continue
         if atual != nome or len(partes) < 4 or m.group(2) not in _MESES_SMN:
