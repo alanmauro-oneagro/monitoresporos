@@ -168,9 +168,12 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
     "ja conhecida" so' por ter recebido uma janela recente antes do
     backfill completo existir, e nunca mais ganhou o historico anterior
     ate essa checagem virar "data mais antiga", nao so' "existe alguma
-    linha"."""
+    linha". Devolve a lista de erros parciais (contagem de esporos/clima
+    de algum site) -- antes so' iam pro `log` e o site hospedado (que
+    passa um `log` que descarta tudo) nunca ficava sabendo da falha."""
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
+    erros = []
     spore_counts_path = data_dir / "spore_counts.csv"
 
     # Data mais antiga ja salva por site, ANTES dessa busca -- capturado
@@ -237,6 +240,7 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
             log(f"  contagem de esporos ({from_iso[:10]} -> {to_iso[:10]}): {len(counts)} registros")
         except Exception as exc:
             log(f"  erro contagem de esporos: {exc}")
+            erros.append(f"contagem de esporos: {exc}")
 
     weather_rows = []
     for site_id in site_ids:
@@ -252,7 +256,9 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
                 weather_rows.extend(w)
         except Exception as exc:
             log(f"  erro clima site {site_id}: {exc}")
+            erros.append(f"clima site {site_id}: {exc}")
     _merge_csv(weather_rows, data_dir / "weather.csv", ["deviceId", "dateMeasured"])
     log(f"  clima: {len(weather_rows)} registros")
 
     log(f"Concluido. Dados em {data_dir}")
+    return erros

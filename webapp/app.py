@@ -415,10 +415,10 @@ def _fetch_configured():
 def _run_fetch_in_background():
     try:
         if BIOSCOUT_USERNAME and BIOSCOUT_PASSWORD:
-            bioscout_fetch.fetch_recent(
+            erros = bioscout_fetch.fetch_recent(
                 data_reader.DATA_DIR, BIOSCOUT_USERNAME, BIOSCOUT_PASSWORD, log=lambda msg: None
             )
-            error = None
+            error = "; ".join(erros)[:300] if erros else None
         else:
             result = subprocess.run(
                 [POWERSHELL_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(FETCH_SCRIPT), "-SkipExtras"],
