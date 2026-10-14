@@ -4,7 +4,7 @@ Contexto persistente deste projeto. Carregado automaticamente sempre que uma
 sessão do Claude Code trabalha nesta pasta, independente de qual conta/usuario
 Claude esta sendo usada.
 
-Mantido por: Alan Mauro (alan.mauro@biotrop.com.br), unico responsavel pelo app.
+Mantido por: Alan Mauro (OneAgro, alan.mauro@outlook.com), unico responsavel pelo app.
 
 - App: Flask "OneAgro Monitor" — monitoramento de esporos/clima/doencas em
   fazendas.

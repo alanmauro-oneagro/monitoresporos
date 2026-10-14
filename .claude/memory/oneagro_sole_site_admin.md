@@ -8,7 +8,7 @@ metadata:
   modified: 2026-09-01T19:15:01.145Z
 ---
 
-Only the account with username "Alan Mauro" (alan.mauro@biotrop.com.br) should be able to adjust site-wide settings in the OneAgro Monitor webapp. Several admin-only reports and routes are intentionally gated to `current_user.username == 'Alan Mauro'` specifically, not just `current_user.is_admin` — e.g. the WhatsApp admin panel, WhatsApp report, and fungicide report links in the settings dropdown (base.html), plus their matching routes in app.py.
+Only the account with username "Alan Mauro" (alan.mauro@outlook.com) should be able to adjust site-wide settings in the OneAgro Monitor webapp. Several admin-only reports and routes are intentionally gated to `current_user.username == 'Alan Mauro'` specifically, not just `current_user.is_admin` — e.g. the WhatsApp admin panel, WhatsApp report, and fungicide report links in the settings dropdown (base.html), plus their matching routes in app.py.
 
 **Why:** The user explicitly confirmed this is deliberate — other users flagged `is_admin` in the system should NOT see or use these particular reports/settings; access is restricted to this one specific account, not the general admin role.
 
