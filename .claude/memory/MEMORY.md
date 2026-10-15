@@ -1,2 +1,3 @@
 - [Sole site admin](oneagro_sole_site_admin.md) — only "Alan Mauro" adjusts OneAgro Monitor settings; some reports are username-gated, not just is_admin.
 - [WhatsApp stagger validado](oneagro_whatsapp_stagger_validado.md) — envios por WhatsApp (mesma fazenda ou mesmo numero em varias fazendas) precisam de escalonamento por HORAS; validado em producao.
+- [WhatsApp Meta pausado](oneagro_whatsapp_meta_pausado.md) — onde parou a configuracao da API oficial da Meta (numero sem o nono digito, modelo, token).
