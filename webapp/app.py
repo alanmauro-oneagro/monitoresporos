@@ -251,7 +251,7 @@ def _get_weather_for_site(site, coords):
     data = weather_forecast.get_weather_forecast(*latlon)
     if data:
         data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
-        data["fonte"] = "Open-Meteo"
+        data["fonte"] = data.get("fonte_previsao", "Open-Meteo")
     data = _aplicar_leitura_estacao_oficial(site, data, latlon)
     _weather_cache[site] = (now, latlon, data)
     return data
@@ -267,9 +267,8 @@ def _estacao_oficial_do_site(site):
         return None
     if escolha["codigo"] == INTERPOLACAO_SENTINEL:
         # "Interpolacao das 3 estacoes": pro dado MEDIDO usa a mais perto
-        # das 3 (pedido do usuario, 15/10/2026 -- "onde tem interpolacao,
-        # se for usar NOAA, pegue os dados da mais proxima"). A previsao
-        # continua sendo a media das 3 (`_get_weather_for_site`).
+        # das 3 (pedido do usuario, 15/10/2026). A previsao continua sendo
+        # a media das 3 (`_get_weather_for_site`).
         latlon = _coords_all().get(site)
         if not latlon:
             return None
@@ -307,7 +306,7 @@ def _aplicar_leitura_estacao_oficial(site, data, latlon):
     if not estacao:
         return data
     orgao = weather_forecast.fonte_estacao(estacao[0], estacao[1]) or {"BR": "INMET", "CL": "DMC", "AR": "SMN"}.get(estacao[0], "estacao oficial")
-    fonte_previsao = "Open-Meteo"
+    fonte_previsao = (data or {}).get("fonte_previsao", "Open-Meteo")
     previsao_orgao = weather_forecast.previsao_estacao(estacao[0], estacao[1])
     if previsao_orgao:
         if not data:
@@ -5590,15 +5589,9 @@ def admin_estacoes_diagnostico():
             linha["ultima"] = f"{ultimas[-1]['hora']} -- {ultimas[-1]['temp']} C, {ultimas[-1]['umidade']}%" if ultimas else "-"
             linha["previsao"] = len(weather_forecast.previsao_estacao(estacao[0], estacao[1])) if estacao[0] == "AR" else "Open-Meteo"
         verificacao.append(linha)
-    site_countries = models.get_all_site_countries()
-    fazendas_br = [
-        (_nome_exibicao(site), lat, lon) for site, (lat, lon) in sorted(_coords_all().items())
-        if site_countries.get(site, countries.DEFAULT_COUNTRY) == "BR"
-    ]
     return render_template(
         "admin_estacoes_diagnostico.html", amostras=estacoes_dados.diagnostico(estacoes_em_uso),
         verificacao=verificacao, erro_clima=weather_forecast.ultimo_erro,
-        noaa=estacoes_dados.diagnostico_noaa(fazendas_br),
     )
 
 

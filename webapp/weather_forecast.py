@@ -135,28 +135,35 @@ def _ponto(lat, lon, salvar=True):
     url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
     try:
         data = _abrir_json(url, timeout=30)
+        hourly = data.get("hourly", {})
+        colunas = [hourly.get(c) or [] for c in ("temperature_2m", "relative_humidity_2m", "precipitation", "wind_direction_10m")]
+        novas = {
+            t: [col[i] if i < len(col) else None for col in colunas]
+            for i, t in enumerate(hourly.get("time", []))
+        }
+        daily, utc_offset, fonte = data.get("daily", {}), data.get("utc_offset_seconds", 0), "Open-Meteo"
     except Exception:
-        with _lock:
-            registro = dict(registro or {})
-            registro["falha_em"] = _agora_cuiaba().isoformat(timespec="seconds")
-            _store["pontos"][chave] = registro
-        return registro if registro.get("horas") else None
+        try:
+            utc_offset = (registro or {}).get("utc_offset")
+            if utc_offset is None:
+                utc_offset = _offset_estimado(lat, lon)
+            novas, daily = _met_norway(lat, lon, utc_offset)
+            fonte = "MET Norway"
+        except Exception as exc:
+            ultimo_erro["erro"] = f"{ultimo_erro.get('erro') or 'Open-Meteo falhou'}; backup MET Norway: {str(exc)[:120]}"
+            ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
+            with _lock:
+                registro = dict(registro or {})
+                registro["falha_em"] = _agora_cuiaba().isoformat(timespec="seconds")
+                _store["pontos"][chave] = registro
+            return registro if registro.get("horas") else None
 
-    hourly = data.get("hourly", {})
-    colunas = [hourly.get(c) or [] for c in ("temperature_2m", "relative_humidity_2m", "precipitation", "wind_direction_10m")]
-    novas = {
-        t: [col[i] if i < len(col) else None for col in colunas]
-        for i, t in enumerate(hourly.get("time", []))
-    }
     corte = (datetime.now() - timedelta(days=DIAS_HISTORICO_GUARDADOS)).strftime("%Y-%m-%d")
     with _lock:
         horas = dict((registro or {}).get("horas") or {})
         horas.update(novas)
         horas = {t: v for t, v in horas.items() if t >= corte}
-        registro = {
-            "dia": dia, "horas": horas, "daily": data.get("daily", {}),
-            "utc_offset": data.get("utc_offset_seconds", 0),
-        }
+        registro = {"dia": dia, "horas": horas, "daily": daily, "utc_offset": utc_offset, "fonte": fonte}
         _store["pontos"][chave] = registro
         if salvar:
             _salvar()
@@ -203,7 +210,7 @@ def _estacao(country_code, codigo, uf, salvar=True):
 
 def fonte_estacao(country_code, codigo):
     """De onde veio a ultima leitura guardada da estacao ("INMET",
-    "NOAA BR000083361"...) -- None se ainda nao ha leitura."""
+    "DMC", "SMN") -- None se ainda nao ha leitura."""
     with _lock:
         return (_carregar()["estacoes"].get(f"{country_code}:{codigo}") or {}).get("fonte")
 
@@ -261,6 +268,71 @@ def ultimas_24h_estacao(country_code, codigo, uf):
         return []
     ultimas = sorted(t for t, v in registro["horas"].items() if v[0] is not None)[-24:]
     return [_hora_dict(t, registro["horas"][t]) for t in ultimas]
+
+
+MET_NORWAY_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
+# A MET Norway exige identificar o aplicativo no User-Agent (termos de uso);
+# dados sob CC BY 4.0 -- a fonte aparece como "MET Norway" no rotulo.
+MET_NORWAY_USER_AGENT = "OneAgroMonitor/1.0 (+https://monitoresporos-production.up.railway.app)"
+
+
+def _offset_estimado(lat, lon):
+    """Fuso (segundos) quando ainda nao ha leitura da Open-Meteo pra'
+    coordenada: Chile pela mesma regra de verao/inverno usada no resto do
+    site; resto da America do Sul pela longitude (UTC-3 a UTC-5)."""
+    if lon < -66.5 and lat < -17:
+        horas = -3 if datetime.now().month in (9, 10, 11, 12, 1, 2, 3, 4) else -4
+    else:
+        horas = max(-5, min(-3, round(lon / 15)))
+    return horas * 3600
+
+
+def _met_norway(lat, lon, utc_offset):
+    """Backup da previsao quando a Open-Meteo falha (pedido do usuario,
+    15/10/2026): Locationforecast 2.0 da MET Norway (gratuita, sem
+    chave), mesmo formato de `_ponto` -- ({"YYYY-MM-DDTHH:00" local:
+    [temp, umidade, chuva, vento]}, daily no formato da Open-Meteo).
+    Hora a hora nos primeiros ~2-3 dias, depois de 6 em 6 h (cada ponto
+    de 6 h vira 6 horas iguais, chuva dividida entre elas). So' previsao
+    -- nao traz historico."""
+    params = urllib.parse.urlencode({"lat": round(float(lat), 4), "lon": round(float(lon), 4)})
+    req = urllib.request.Request(f"{MET_NORWAY_URL}?{params}", headers={"User-Agent": MET_NORWAY_USER_AGENT})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.load(resp)
+    serie = (data.get("properties") or {}).get("timeseries") or []
+    if not serie:
+        raise RuntimeError("resposta sem previsao")
+    offset = timedelta(seconds=utc_offset)
+    horas, nuvens_por_dia = {}, {}
+    for i, ponto in enumerate(serie):
+        dt_utc = datetime.fromisoformat(ponto["time"].replace("Z", "+00:00")).replace(tzinfo=None)
+        dados = ponto.get("data") or {}
+        instante = (dados.get("instant") or {}).get("details") or {}
+        if "next_1_hours" in dados:
+            passo, chuva = 1, ((dados["next_1_hours"].get("details") or {}).get("precipitation_amount"))
+        else:
+            passo = 6 if "next_6_hours" in dados else 1
+            chuva = ((dados.get("next_6_hours") or {}).get("details") or {}).get("precipitation_amount")
+        for h in range(passo):
+            local = dt_utc + offset + timedelta(hours=h)
+            horas[local.strftime("%Y-%m-%dT%H:00")] = [
+                instante.get("air_temperature"), instante.get("relative_humidity"),
+                round(chuva / passo, 2) if chuva is not None else None, instante.get("wind_from_direction"),
+            ]
+        if instante.get("cloud_area_fraction") is not None:
+            nuvens_por_dia.setdefault((dt_utc + offset).date().isoformat(), []).append(instante["cloud_area_fraction"])
+    por_dia = {}
+    for t, v in horas.items():
+        por_dia.setdefault(t[:10], []).append(v)
+    dias = sorted(por_dia)
+    daily = {
+        "time": dias,
+        "precipitation_sum": [round(sum(v[2] or 0 for v in por_dia[d]), 1) for d in dias],
+        "temperature_2m_max": [max(v[0] for v in por_dia[d] if v[0] is not None) for d in dias],
+        "temperature_2m_min": [min(v[0] for v in por_dia[d] if v[0] is not None) for d in dias],
+        "cloud_cover_mean": [round(sum(nuvens_por_dia[d]) / len(nuvens_por_dia[d])) if nuvens_por_dia.get(d) else None for d in dias],
+    }
+    return horas, daily
 
 
 def _hora_atual_local(registro):
@@ -364,6 +436,7 @@ def get_weather_forecast(lat, lon):
         "previsao_5_dias": previsao[:5],
         "ultimas_24h": ultimas_24h,
         "previsao_horaria_por_dia": futuras_por_dia,
+        "fonte_previsao": registro.get("fonte", "Open-Meteo"),
     }
 
 

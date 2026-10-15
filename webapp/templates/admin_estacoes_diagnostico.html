@@ -21,22 +21,6 @@
         </div>
     </div>
 </div>
-<div class="card mb-3">
-    <div class="card-body">
-        <h6 class="mb-2">Teste NOAA GHCNh (backup de dado medido, Brasil)</h6>
-        <div class="table-responsive">
-        <table class="table table-sm small mb-0">
-            <thead><tr><th>Fazenda</th><th>Estacao NOAA mais perto</th><th>Distancia</th><th>Situacao</th><th>Ultima leitura</th><th>Atraso</th><th>Valores</th><th>Linhas no ano</th></tr></thead>
-            <tbody>
-            {% for n in noaa %}
-            <tr><td>{{ n.fazenda }}</td><td>{{ n.estacao }}</td><td>{{ n.distancia or '' }}</td><td>{{ n.situacao or '' }}</td><td>{{ n.ultima or '' }}</td><td>{{ n.atraso or '' }}</td><td>{{ n.valores or '' }}</td><td>{{ n.linhas or '' }}</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
-        </div>
-        {% for n in noaa if n.url %}{% if loop.first %}<div class="small text-muted mt-1">Arquivo: {{ n.url }}</div>{% endif %}{% endfor %}
-    </div>
-</div>
 {% for a in amostras %}
 <div class="card mb-3">
     <div class="card-body">

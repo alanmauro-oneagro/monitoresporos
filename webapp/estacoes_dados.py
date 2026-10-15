@@ -49,7 +49,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 INMET_URL = "https://apitempo.inmet.gov.br/token/estacao/{inicio}/{fim}/{codigo}/{token}"
 # Rota antiga, sem token -- testada em producao em 14/10/2026: responde 200
@@ -82,7 +82,7 @@ def _float(valor):
 
 def configurado(country_code):
     if country_code == "BR":
-        return True  # INMET (com token) e, se falhar ou sem token, NOAA -- ver `_brasil_horas`
+        return bool(os.environ.get("INMET_TOKEN"))
     if country_code == "CL":
         return bool(os.environ.get("METEOCHILE_USUARIO") and os.environ.get("METEOCHILE_TOKEN"))
     return country_code == "AR"
@@ -316,128 +316,13 @@ def buscar_horas(country_code, codigo, uf, inicio, fim):
     raise ValueError(f"pais sem integracao de dados de estacao: {country_code}")
 
 
-NOAA_MAX_KM = 100
-
-
 def _brasil_horas(codigo, uf, inicio, fim):
-    """INMET primeiro (precisa de INMET_TOKEN); se falhar, vier vazio ou nao
-    houver token, cai pra' estacao da NOAA GHCNh mais perto da estacao do
-    INMET (ate' `NOAA_MAX_KM`) -- pedido do usuario (15/10/2026): "se der
-    erro ja carregue os dados do NOAA". Se as duas falharem, lanca
-    excecao com os dois motivos (a fazenda segue na Open-Meteo)."""
-    motivo_inmet = "sem INMET_TOKEN"
-    if os.environ.get("INMET_TOKEN"):
-        try:
-            horas = _inmet_horas(codigo, uf, inicio, fim)
-            if horas:
-                return horas, "INMET"
-            motivo_inmet = "INMET respondeu vazio"
-        except Exception as exc:
-            motivo_inmet = f"INMET: {str(exc)[:100]}"
-    import inmet_stations
-    estacao = next((e for e in inmet_stations.get_estacoes() if e["codigo"] == codigo), None)
-    if not estacao:
-        raise RuntimeError(f"{motivo_inmet}; NOAA: estacao {codigo} fora do catalogo do INMET")
-    try:
-        horas, id_noaa = _noaa_horas(estacao["lat"], estacao["lon"], uf or estacao.get("uf"), inicio, fim)
-    except Exception as exc:
-        raise RuntimeError(f"{motivo_inmet}; NOAA: {str(exc)[:100]}") from exc
-    return horas, f"NOAA {id_noaa}"
-
-
-def _ghcnh_proximas(lat, lon, limite=6):
-    """[(distancia_km, id, nome)] das estacoes GHCNh do Brasil ate'
-    `NOAA_MAX_KM`, da mais perto pra mais longe (no maximo `limite`)."""
-    import inmet_stations
-    candidatas = sorted(
-        (inmet_stations._haversine_km(lat, lon, e[1], e[2]), e[0], e[3]) for e in _ghcnh_estacoes()
-    )
-    return [c for c in candidatas if c[0] <= NOAA_MAX_KM][:limite]
-
-
-def _ghcnh_leituras(texto):
-    """(datetime UTC, temperatura, umidade, chuva, direcao do vento) de
-    cada linha do .psv que tenha temperatura -- colunas pelo cabecalho
-    (Year/Month/Day/Hour UTC, temperature, relative_humidity,
-    precipitation, wind_direction; conferido em producao, 15/10/2026).
-    Linhas sem temperatura (outros tipos de relatorio) sao puladas."""
-    linhas = [l for l in texto.splitlines() if l.strip()]
-    if not linhas:
-        return
-    idx = {nome.strip().lower(): i for i, nome in enumerate(linhas[0].split("|"))}
-    for linha in linhas[1:]:
-        c = [x.strip() for x in linha.split("|")]
-
-        def campo(nome):
-            i = idx.get(nome)
-            return c[i] if i is not None and i < len(c) else None
-
-        temp = _float(campo("temperature"))
-        if temp is None:
-            continue
-        try:
-            dt = datetime(int(campo("year")), int(campo("month")), int(campo("day")), int(campo("hour")))
-        except (TypeError, ValueError):
-            continue
-        yield dt, temp, _float(campo("relative_humidity")), _float(campo("precipitation")), _float(campo("wind_direction"))
-
-
-def _noaa_horas(lat, lon, uf, inicio, fim):
-    """Horas medidas pela estacao GHCNh (NOAA) mais perto de (lat, lon)
-    QUE TENHA DADO no periodo -- a lista da NOAA inclui estacoes antigas
-    sem arquivo do ano (404, visto em producao), entao tenta a proxima
-    mais perto (ate' `NOAA_MAX_KM`). Hora UTC convertida pro fuso da UF;
-    varias observacoes na mesma hora viram a media. A NOAA publica com
-    ~2 dias de atraso (visto em producao): os dias mais recentes ficam
-    sem dado aqui e caem na Open-Meteo."""
-    candidatas = _ghcnh_proximas(lat, lon)
-    if not candidatas:
-        raise RuntimeError(f"nenhuma estacao a menos de {NOAA_MAX_KM} km")
-    offset = timedelta(hours=_offset_uf(uf))
-    tentativas = []
-    for _, id_estacao, _ in candidatas:
-        por_hora = {}
-        for ano in sorted({int(inicio[:4]), int(fim[:4])}):
-            try:
-                texto = _ghcnh_arquivo(id_estacao, ano)
-            except Exception:
-                continue
-            for dt_utc, temp, umidade, chuva, vento in _ghcnh_leituras(texto):
-                hora = (dt_utc + offset).strftime("%Y-%m-%dT%H:00")
-                if not (inicio <= hora[:10] <= fim):
-                    continue
-                item = por_hora.setdefault(hora, {"temp": [], "umidade": [], "chuva": None, "vento": None})
-                item["temp"].append(temp)
-                if umidade is not None:
-                    item["umidade"].append(umidade)
-                if chuva is not None:
-                    item["chuva"] = max(item["chuva"] or 0, chuva)
-                if vento is not None:
-                    item["vento"] = vento
-        if por_hora:
-            horas = {
-                h: [
-                    round(sum(v["temp"]) / len(v["temp"]), 1),
-                    round(sum(v["umidade"]) / len(v["umidade"])) if v["umidade"] else None,
-                    v["chuva"], v["vento"],
-                ]
-                for h, v in por_hora.items()
-            }
-            return horas, id_estacao
-        tentativas.append(id_estacao)
-    raise RuntimeError(f"estacoes sem dado no periodo: {', '.join(tentativas)}")
-
-
-def _ghcnh_arquivo(id_estacao, ano):
-    """Texto do arquivo .psv do ano da estacao GHCNh -- testa os dois
-    caminhos da documentacao (com e sem /psv/)."""
-    erro = None
-    for modelo in GHCNH_ANO:
-        try:
-            return _abrir(modelo.format(ano=ano, id=id_estacao), timeout=120).decode("utf-8", errors="replace")
-        except Exception as exc:
-            erro = exc
-    raise erro
+    """INMET (precisa de INMET_TOKEN). Vazio conta como falha -- a fazenda
+    segue na Open-Meteo e o aviso do Painel mostra o motivo."""
+    horas = _inmet_horas(codigo, uf, inicio, fim)
+    if not horas:
+        raise RuntimeError("INMET respondeu vazio")
+    return horas, "INMET"
 
 
 def _ocultar_credenciais(texto):
@@ -512,101 +397,3 @@ def diagnostico(estacoes_em_uso):
     amostras.append(_amostra("SMN -- datohorario de ontem", SMN_DATOHORARIO_URL.format(data=(hoje - timedelta(days=1)).strftime("%Y%m%d"))))
     amostras.append(_amostra("SMN -- previsao pron5d", SMN_PRON5D_URL))
     return amostras
-
-
-# --- Teste da NOAA GHCNh como 2a fonte de dado MEDIDO (pedido de 14/10/2026)
-# Base horaria mundial da NOAA que inclui estacoes sinoticas do INMET --
-# gratuita, sem token. So' diagnostico por enquanto: mostra, por fazenda,
-# a estacao GHCNh mais perto e o quao atualizado esta o arquivo dela.
-# Caminhos conforme a documentacao do GHCNh (ghcnh_DOCUMENTATION.pdf);
-# o "by-year" aparece com e sem "/psv/", entao testa os dois.
-GHCNH_BASE = "https://www.ncei.noaa.gov/oa/global-historical-climatology-network/hourly"
-GHCNH_LISTA = GHCNH_BASE + "/doc/ghcnh-station-list.csv"
-GHCNH_ANO = (
-    GHCNH_BASE + "/access/by-year/{ano}/psv/GHCNh_{id}_{ano}.psv",
-    GHCNH_BASE + "/access/by-year/{ano}/GHCNh_{id}_{ano}.psv",
-)
-_ghcnh_lista = {"timestamp": 0, "estacoes": []}
-
-
-def _ghcnh_estacoes(pais="BR"):
-    """[(id, lat, lon, nome)] das estacoes GHCNh cujo id comeca com o codigo
-    FIPS do pais (BR) -- id de 11 caracteres, ver documentacao. Cache 24h."""
-    if _ghcnh_lista["estacoes"] and time.time() - _ghcnh_lista["timestamp"] < 24 * 3600:
-        return _ghcnh_lista["estacoes"]
-    texto = _abrir(GHCNH_LISTA, timeout=60).decode("utf-8", errors="replace")
-    estacoes = []
-    for linha in texto.splitlines():
-        partes = [p.strip().strip("\"") for p in linha.split(",")]
-        if len(partes) < 3 or not partes[0].startswith(pais) or len(partes[0]) != 11:
-            continue
-        try:
-            lat, lon = float(partes[1]), float(partes[2])
-        except ValueError:
-            continue
-        nome = next((p for p in partes[4:] if re.search(r"[A-Za-z]{3}", p)), "")
-        estacoes.append((partes[0], lat, lon, nome))
-    _ghcnh_lista.update({"timestamp": time.time(), "estacoes": estacoes})
-    return estacoes
-
-
-def _ghcnh_ultima_leitura(id_estacao, ano):
-    """(url, ultima data/hora UTC COM temperatura, temperatura, umidade,
-    linhas com temperatura no ano) -- lanca excecao se o arquivo nao
-    existir."""
-    for modelo in GHCNH_ANO:
-        url = modelo.format(ano=ano, id=id_estacao)
-        try:
-            texto = _abrir(url, timeout=90).decode("utf-8", errors="replace")
-        except Exception as exc:
-            erro = exc
-            continue
-        leituras = list(_ghcnh_leituras(texto))
-        if not leituras:
-            raise RuntimeError("arquivo sem temperatura")
-        quando, temp, umidade, _, _ = leituras[-1]
-        return url, quando, temp, umidade, len(leituras)
-    raise erro
-
-
-def diagnostico_noaa(fazendas):
-    """`fazendas`: [(nome, lat, lon)] (Brasil). Uma linha por fazenda com
-    a estacao GHCNh mais perto e a situacao do arquivo do ano dela."""
-    try:
-        estacoes = _ghcnh_estacoes()
-    except Exception as exc:
-        return [{"fazenda": "-", "estacao": f"lista de estacoes da NOAA falhou: {str(exc)[:150]}"}]
-    agora = datetime.now(timezone.utc).replace(tzinfo=None)
-    linhas, por_estacao = [], {}
-    for nome, lat, lon in fazendas:
-        if not estacoes:
-            linhas.append({"fazenda": nome, "estacao": "lista sem estacoes BR"})
-            continue
-        candidatas = _ghcnh_proximas(lat, lon)
-        if not candidatas:
-            linhas.append({"fazenda": nome, "estacao": f"nenhuma a menos de {NOAA_MAX_KM} km"})
-            continue
-        puladas = []
-        for dist, id_est, enome in candidatas:
-            if id_est not in por_estacao:
-                try:
-                    por_estacao[id_est] = _ghcnh_ultima_leitura(id_est, agora.year)
-                except Exception as exc:
-                    por_estacao[id_est] = exc
-            if not isinstance(por_estacao[id_est], Exception):
-                break
-            puladas.append(id_est)
-        r = por_estacao[id_est]
-        linha = {"fazenda": nome, "estacao": f"{id_est} {enome}" + (f" (puladas sem dado: {len(puladas)})" if puladas else ""), "distancia": f"{dist:.0f} km"}
-        if isinstance(r, Exception):
-            linha["situacao"] = f"erro: {str(r)[:120]}"
-        else:
-            url, quando, temp, umid, n = r
-            atraso = (agora - quando).total_seconds() / 3600
-            linha.update({
-                "situacao": "ok", "ultima": f"{quando:%d/%m %H:%M} UTC", "atraso": f"{atraso:.0f} h",
-                "valores": f"{temp} C, {umid}%", "linhas": n, "url": url.replace(GHCNH_BASE, "..."),
-            })
-        linhas.append(linha)
-    linhas.insert(0, {"fazenda": "(lista NOAA)", "estacao": f"{len(estacoes)} estacoes do Brasil na GHCNh"})
-    return linhas
