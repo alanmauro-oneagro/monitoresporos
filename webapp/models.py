@@ -2447,14 +2447,15 @@ WHATSAPP_DIAS_PADRAO_TEXTO = {0, 2, 4}
 WHATSAPP_DIAS_PADRAO_PDF = {4}
 
 # Horario sugerido de envio automatico pra fazenda que ainda nao tem
-# nenhum horario customizado -- comeca as 5h, espalhado de poucos
+# nenhum horario customizado -- comeca as 5h30 (depois da leitura de clima
+# das 05:00, ver weather_forecast.HORARIOS_LEITURA), espalhado de poucos
 # minutos por fazenda (nunca no MESMO minuto), pedido explicito do
 # usuario pra reduzir a chance de varias fazendas caindo juntas na fila
 # sequencial do whatsapp-bridge (ver `_run_scheduled_whatsapp_sends`/
 # MIN_DELAY_MS em whatsapp-bridge/index.js). So' um PONTO DE PARTIDA --
 # a pessoa pode trocar quando quiser na aba Fazendas, e trocar NUNCA e'
 # sobrescrito de volta por essa sugestao (ver `_seed_horario_sugerido`).
-HORARIO_SUGERIDO_INICIAL_HORA = 5
+HORARIO_SUGERIDO_INICIAL_MINUTOS = 5 * 60 + 30
 HORARIO_SUGERIDO_INTERVALO_MINUTOS = 3
 
 
@@ -2462,14 +2463,14 @@ def _proximo_horario_sugerido(conn):
     """(hora, minuto) do proximo slot sugerido -- conta quantas fazendas
     ja tem QUALQUER linha em `whatsapp_schedule_horarios` (customizada a
     mao ou ja sugerida antes) e usa esse numero como indice do slot
-    seguinte, a partir de `HORARIO_SUGERIDO_INICIAL_HORA`:00. Usa a
+    seguinte, a partir de `HORARIO_SUGERIDO_INICIAL_MINUTOS` (5h30). Usa a
     MESMA conexao/transacao de quem chamou (sem abrir/commitar sozinha)
     -- assim, dentro de um loop que vai inserindo uma fazenda de cada
     vez (ver `_sugerir_horarios_fazendas_existentes`), cada nova
     contagem ja' enxerga as linhas inseridas nas iteracoes anteriores do
     MESMO loop, garantindo slots sempre diferentes."""
     indice = conn.execute("SELECT COUNT(*) FROM whatsapp_schedule_horarios").fetchone()[0]
-    total_minutos = HORARIO_SUGERIDO_INICIAL_HORA * 60 + indice * HORARIO_SUGERIDO_INTERVALO_MINUTOS
+    total_minutos = HORARIO_SUGERIDO_INICIAL_MINUTOS + indice * HORARIO_SUGERIDO_INTERVALO_MINUTOS
     return (total_minutos // 60) % 24, total_minutos % 60
 
 
