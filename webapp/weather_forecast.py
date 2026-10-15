@@ -7,6 +7,7 @@ import os
 import threading
 import urllib.request
 import urllib.parse
+import cemaden
 import estacoes_dados
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -84,6 +85,7 @@ def _carregar():
         _store.setdefault("grades", {})
         _store.setdefault("estacoes", {})
         _store.setdefault("previsoes", {})
+        _store.setdefault("pluviometros", {})
         _store.setdefault("ultima_rodada", None)
     return _store
 
@@ -198,6 +200,100 @@ def _estacao(country_code, codigo, uf, salvar=True):
         if salvar:
             _salvar()
     return registro
+
+
+_cemaden_cache = {"janela": None, "lista": [], "falha_janela": None}
+
+
+def _estacoes_cemaden():
+    """Lista de pluviometros do CEMADEN, baixada no maximo 1x por janela
+    de leitura (so' em memoria -- depois de um deploy baixa de novo)."""
+    janela = janela_de_leitura()
+    with _lock:
+        if janela in (_cemaden_cache["janela"], _cemaden_cache["falha_janela"]):
+            return _cemaden_cache["lista"]
+    try:
+        lista = cemaden.buscar_estacoes()
+    except Exception as exc:
+        ultimo_erro["erro"] = f"CEMADEN (lista de pluviometros): {str(exc)[:160]}"
+        ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
+        with _lock:
+            _cemaden_cache["falha_janela"] = janela
+        return _cemaden_cache["lista"]
+    with _lock:
+        _cemaden_cache.update(janela=janela, lista=lista)
+    return lista
+
+
+def pluviometro(lat, lon, salvar=True):
+    """Chuva MEDIDA no pluviometro do CEMADEN mais perto da coordenada (ate'
+    `cemaden.RAIO_KM`): {"horas": {"YYYY-MM-DDTHH:00" UTC: mm}, "rotulo"}.
+    Mesmo esquema de `_estacao` -- 1 busca por janela de leitura (a serie
+    publica cobre 48h, mais que o intervalo entre leituras), historico
+    acumulado em disco. None fora do Brasil/sem pluviometro perto."""
+    estacao = cemaden.mais_proxima(_estacoes_cemaden(), float(lat), float(lon))
+    if not estacao:
+        return None
+    rotulo = f"CEMADEN {estacao['cidade']}/{estacao['uf']} ({estacao['distancia_km']} km)"
+    chave = str(estacao["id"])
+    dia = janela_de_leitura()
+    with _lock:
+        registro = _carregar()["pluviometros"].get(chave)
+        if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
+            return {"id": estacao["id"], "horas": registro["horas"], "rotulo": rotulo} if registro.get("horas") else None
+    try:
+        novas = cemaden.chuva_horaria(estacao["id"])
+    except Exception as exc:
+        ultimo_erro["erro"] = f"CEMADEN {estacao['codigo']}: {str(exc)[:160]}"
+        ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
+        with _lock:
+            registro = dict(registro or {})
+            registro["falha_janela"] = dia
+            _store["pluviometros"][chave] = registro
+        return {"id": estacao["id"], "horas": registro["horas"], "rotulo": rotulo} if registro.get("horas") else None
+    corte = (datetime.now() - timedelta(days=DIAS_HISTORICO_GUARDADOS)).strftime("%Y-%m-%d")
+    with _lock:
+        horas = dict((registro or {}).get("horas") or {})
+        horas.update(novas)
+        horas = {t: v for t, v in horas.items() if t >= corte}
+        _store["pluviometros"][chave] = {"dia": dia, "horas": horas}
+        if salvar:
+            _salvar()
+    return {"id": estacao["id"], "horas": horas, "rotulo": rotulo} if horas else None
+
+
+def _chuva_medida_local(chuva_em, utc_offset):
+    """({"YYYY-MM-DDTHH:00" local: mm}, rotulo) do pluviometro mais perto
+    de `chuva_em` (lat, lon da propria fazenda) -- ({}, None) se nao ha."""
+    if not chuva_em:
+        return {}, None
+    plu = pluviometro(*chuva_em)
+    if not plu:
+        return {}, None
+    desloc = timedelta(seconds=utc_offset or 0)
+    return {
+        (datetime.fromisoformat(t) + desloc).strftime("%Y-%m-%dT%H:00"): mm for t, mm in plu["horas"].items()
+    }, plu["rotulo"]
+
+
+def aplicar_chuva_medida(data, lat, lon):
+    """Troca a chuva estimada das ultimas 24h/"agora" de `data` (formato
+    de `get_weather_forecast`) pela MEDIDA no pluviometro do CEMADEN mais
+    perto da fazenda. Hora sem medicao continua com a estimada. Marca
+    `data["fonte_chuva"]`."""
+    if not data or not data.get("ultimas_24h"):
+        return data
+    medida, rotulo = _chuva_medida_local((lat, lon), data.get("utc_offset", _offset_estimado(lat, lon)))
+    trocou = False
+    for p in data["ultimas_24h"]:
+        if p["hora"] in medida:
+            p["chuva"] = medida[p["hora"]]
+            trocou = True
+    if trocou:
+        data["chuva_atual_mm"] = data["ultimas_24h"][-1]["chuva"]
+        data["chuva_24h_mm"] = round(sum(p["chuva"] for p in data["ultimas_24h"] if p.get("chuva") is not None), 1)
+        data["fonte_chuva"] = rotulo
+    return data
 
 
 def fonte_estacao(country_code, codigo):
@@ -341,7 +437,7 @@ def rodada_pendente():
         return _carregar()["ultima_rodada"] != janela_de_leitura()
 
 
-def atualizar_todos(coordenadas, estacoes=()):
+def atualizar_todos(coordenadas, estacoes=(), pontos_chuva=()):
     """Rodada das 05:00/11:00/16:00: busca a leitura da janela de cada
     (lat, lon) e estacao, gravando o arquivo uma vez so' no fim. O que
     falhar fica pra' proxima janela (`_falhou_ha_pouco`) -- a rodada conta
@@ -360,6 +456,8 @@ def atualizar_todos(coordenadas, estacoes=()):
         vistas.add(f"{country_code}:{codigo}")
         _estacao(country_code, codigo, uf, salvar=False)
         previsao_estacao(country_code, codigo)
+    for lat, lon in pontos_chuva:
+        pluviometro(lat, lon, salvar=False)
     with _lock:
         _store["ultima_rodada"] = janela_de_leitura()
         _salvar()
@@ -421,6 +519,7 @@ def get_weather_forecast(lat, lon):
         "ultimas_24h": ultimas_24h,
         "previsao_horaria_por_dia": futuras_por_dia,
         "fonte_previsao": registro.get("fonte", "Open-Meteo"),
+        "utc_offset": registro.get("utc_offset", 0),
     }
 
 
@@ -497,6 +596,7 @@ def get_weather_forecast_interpolado(coords_list):
         "previsao_5_dias": previsao_5_dias,
         "ultimas_24h": ultimas_24h,
         "previsao_horaria_por_dia": previsao_horaria_por_dia,
+        "utc_offset": resultados[0]["utc_offset"],
     }
 
 
@@ -558,16 +658,19 @@ def get_rain_forecast_grid(lats, lons):
     return _grade_diaria("chuva", lats, lons, "precipitation_sum", "chuva_mm_por_dia")
 
 
-def _horas_observadas_por_dia(lat, lon, data_inicio, data_fim):
+def _horas_observadas_por_dia(lat, lon, data_inicio, data_fim, chuva_em=None):
     registro = _ponto(lat, lon)
     if not registro:
         return {}
     hora_atual = _hora_atual_local(registro)
+    medida, _ = _chuva_medida_local(chuva_em, registro.get("utc_offset"))
     por_dia = {}
     for t in sorted(registro["horas"]):
         v = registro["horas"][t]
         if t > hora_atual or v[0] is None or not (data_inicio <= t[:10] <= data_fim):
             continue
+        if t in medida:
+            v = [v[0], v[1], medida[t], v[3]]
         por_dia.setdefault(t[:10], []).append(v)
     return por_dia
 
@@ -585,15 +688,17 @@ def get_historico_por_dia(lat, lon, data_inicio, data_fim):
     }
 
 
-def get_historico_horario(lat, lon, data_inicio, data_fim):
+def get_historico_horario(lat, lon, data_inicio, data_fim, chuva_em=None):
     """Temperatura, umidade, chuva e direcao de vento hora a hora,
     observados, entre `data_inicio` e `data_fim` ("YYYY-MM-DD", inclusive),
     agrupado por dia local -- mesmo formato de
     `data_reader.build_hourly_weather_lookup`. Usado pelo Risco de
     Infeccao quando o device BioScout nao tem clima pro dia. Sai da
     leitura diaria guardada (`_ponto`, historico acumulado de ate'
-    `DIAS_HISTORICO_GUARDADOS` dias). {} se nao houver dado."""
+    `DIAS_HISTORICO_GUARDADOS` dias). `chuva_em` = (lat, lon) da propria
+    fazenda: troca a chuva estimada pela medida no pluviometro do CEMADEN
+    mais perto dela (`aplicar_chuva_medida`). {} se nao houver dado."""
     return {
         dia: [{"temp": v[0], "umidade": v[1], "chuva": v[2] or 0, "vento": v[3]} for v in horas]
-        for dia, horas in _horas_observadas_por_dia(lat, lon, data_inicio, data_fim).items()
+        for dia, horas in _horas_observadas_por_dia(lat, lon, data_inicio, data_fim, chuva_em).items()
     }
