@@ -51,6 +51,8 @@ import urllib.request
 import zipfile
 from datetime import datetime, timedelta
 
+import cemaden
+
 INMET_URL = "https://apitempo.inmet.gov.br/token/estacao/{inicio}/{fim}/{codigo}/{token}"
 # Rota antiga, sem token -- testada em producao em 14/10/2026: responde 200
 # VAZIO (0 bytes). So' fica no diagnostico, pra' perceber se um dia voltar.
@@ -376,6 +378,10 @@ def diagnostico(estacoes_em_uso):
             "INMET -- dados horarios (com token)",
             INMET_URL.format(inicio=ontem, fim=hoje.isoformat(), codigo=codigo_br, token=os.environ["INMET_TOKEN"]),
         ))
+
+    amostras.append(_amostra("CEMADEN -- pluviometros (acumulado 24h)", cemaden.ESTACOES_URL))
+    if estacoes_em_uso.get("CEMADEN"):
+        amostras.append(_amostra("CEMADEN -- serie horaria 48h do pluviometro em uso", cemaden.HORARIO_URL.format(id=estacoes_em_uso["CEMADEN"])))
 
     usuario, token = os.environ.get("METEOCHILE_USUARIO"), os.environ.get("METEOCHILE_TOKEN")
     if usuario and token:
