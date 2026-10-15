@@ -115,6 +115,10 @@ menos que seja pedido explicitamente paridade para outros admins.
   fazenda real. Selecionar sempre explicitamente pelo elemento certo.
 - Ao corrigir um bug de UX, preferir um fix ESCOPADO (so' onde o problema
   existe) em vez de mudar o comportamento geral para todo mundo.
+- **Ao final de cada pedido: sempre fazer merge e push** (pedido explicito
+  do Alan, 15/10/2026). Fluxo: branch nova a partir da `main` -> commit ->
+  push -> PR -> merge na `main` (o Railway publica sozinho) -> conferir o
+  deploy. Nao precisa perguntar "quer que eu faca o merge?".
 - Antes de qualquer operacao destrutiva do git (reset, checkout, clean),
   rodar `git status` primeiro. Sempre criar commits novos (nunca `--amend`),
   nunca pular hooks.
