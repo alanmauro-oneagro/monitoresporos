@@ -21,6 +21,31 @@
         </div>
     </div>
 </div>
+<div class="card mb-3">
+    <div class="card-body">
+        <h6 class="mb-2">Pluviometros do CEMADEN (chuva medida, Brasil)</h6>
+        {% if cemaden_total %}
+        <p class="small mb-2"><strong>{{ cemaden_total }}</strong> pluviometros no Brasil &mdash;
+            {{ cemaden_fazendas|selectattr("usado")|list|length }} de {{ cemaden_fazendas|length }} fazendas do Brasil com pluviometro a ate' {{ cemaden_raio }} km (chuva medida no lugar da estimada; mais longe que isso segue a estimada da Open-Meteo).</p>
+        <div class="table-responsive">
+        <table class="table table-sm small mb-2">
+            <thead><tr><th>Fazenda</th><th>Pluviometro mais perto</th><th>Distancia</th><th>Chuva usada</th></tr></thead>
+            <tbody>
+            {% for f in cemaden_fazendas %}
+            <tr><td>{{ f.fazenda }}</td>
+                <td>{% if f.pluviometro %}{{ f.pluviometro.cidade }}/{{ f.pluviometro.uf }} &mdash; {{ f.pluviometro.nome }}{% else %}-{% endif %}</td>
+                <td>{% if f.pluviometro %}{{ f.pluviometro.distancia_km }} km{% else %}-{% endif %}</td>
+                <td>{% if f.usado %}<span class="badge bg-success">Medida</span>{% else %}<span class="badge bg-secondary">Estimada</span>{% endif %}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <div class="small text-muted">Por estado: {% for uf, n in cemaden_por_uf %}{{ uf }} {{ n }}{% if not loop.last %} &middot; {% endif %}{% endfor %}</div>
+        {% else %}
+        <p class="small text-muted mb-0">Lista de pluviometros ainda nao baixada (ou o CEMADEN nao respondeu nesta janela de leitura) &mdash; veja o erro acima e a amostra abaixo.</p>
+        {% endif %}
+    </div>
+</div>
 {% for a in amostras %}
 <div class="card mb-3">
     <div class="card-body">
