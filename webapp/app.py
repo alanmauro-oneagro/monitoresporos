@@ -2228,12 +2228,14 @@ def _whatsapp_scheduler_loop():
 
 
 def _atualizar_open_meteo_diario():
-    """Leitura unica do dia na Open-Meteo (01:00 de Cuiaba, ver
-    `weather_forecast.dia_de_leitura`) pra coordenada de clima de toda
+    """Leitura cadenciada (05:00, 11:00 e 16:00 de Cuiaba, ver
+    `weather_forecast.janela_de_leitura`) da previsao (Open-Meteo, MET
+    Norway de backup) e das estacoes oficiais (INMET, DMC, SMN) pra toda
     fazenda -- a estacao de referencia (`_weather_coords_all`), as 3
-    estacoes da opcao "interpolacao" e a coordenada propria. Se o
-    servidor subir depois das 01:00 sem a leitura do dia ainda feita,
-    roda na hora."""
+    estacoes da opcao "interpolacao" e a coordenada propria. Se o servidor
+    subir no meio de uma janela ainda nao lida, roda na hora. Depois,
+    limpa os caches em memoria pra' Painel/Graficos refletirem a leitura
+    nova."""
     if not weather_forecast.rodada_pendente():
         return
     coords_proprias = _coords_all()
