@@ -49,7 +49,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 INMET_URL = "https://apitempo.inmet.gov.br/token/estacao/{inicio}/{fim}/{codigo}/{token}"
 # Rota antiga, sem token -- testada em producao em 14/10/2026: responde 200
@@ -304,16 +304,25 @@ def previsao_smn(codigo):
 
 
 def buscar_horas(country_code, codigo, uf, inicio, fim):
-    """{"YYYY-MM-DDTHH:00" (hora local da estacao): [temp, umidade, chuva,
-    vento]} entre `inicio` e `fim` ("YYYY-MM-DD"). Lanca excecao em
+    """({"YYYY-MM-DDTHH:00" (hora local da estacao): [temp, umidade, chuva,
+    vento]}, fonte) entre `inicio` e `fim` ("YYYY-MM-DD"). Lanca excecao em
     falha de rede/formato (quem chama trata e faz backoff)."""
     if country_code == "BR":
-        return _inmet_horas(codigo, uf, inicio, fim)
+        return _brasil_horas(codigo, uf, inicio, fim)
     if country_code == "CL":
-        return _dmc_horas(codigo, inicio, fim)
+        return _dmc_horas(codigo, inicio, fim), "DMC"
     if country_code == "AR":
-        return _smn_horas(codigo, inicio, fim)
+        return _smn_horas(codigo, inicio, fim), "SMN"
     raise ValueError(f"pais sem integracao de dados de estacao: {country_code}")
+
+
+def _brasil_horas(codigo, uf, inicio, fim):
+    """INMET (precisa de INMET_TOKEN). Vazio conta como falha -- a fazenda
+    segue na Open-Meteo e o aviso do Painel mostra o motivo."""
+    horas = _inmet_horas(codigo, uf, inicio, fim)
+    if not horas:
+        raise RuntimeError("INMET respondeu vazio")
+    return horas, "INMET"
 
 
 def _ocultar_credenciais(texto):
@@ -388,103 +397,3 @@ def diagnostico(estacoes_em_uso):
     amostras.append(_amostra("SMN -- datohorario de ontem", SMN_DATOHORARIO_URL.format(data=(hoje - timedelta(days=1)).strftime("%Y%m%d"))))
     amostras.append(_amostra("SMN -- previsao pron5d", SMN_PRON5D_URL))
     return amostras
-
-
-# --- Teste da NOAA GHCNh como 2a fonte de dado MEDIDO (pedido de 14/10/2026)
-# Base horaria mundial da NOAA que inclui estacoes sinoticas do INMET --
-# gratuita, sem token. So' diagnostico por enquanto: mostra, por fazenda,
-# a estacao GHCNh mais perto e o quao atualizado esta o arquivo dela.
-# Caminhos conforme a documentacao do GHCNh (ghcnh_DOCUMENTATION.pdf);
-# o "by-year" aparece com e sem "/psv/", entao testa os dois.
-GHCNH_BASE = "https://www.ncei.noaa.gov/oa/global-historical-climatology-network/hourly"
-GHCNH_LISTA = GHCNH_BASE + "/doc/ghcnh-station-list.csv"
-GHCNH_ANO = (
-    GHCNH_BASE + "/access/by-year/{ano}/psv/GHCNh_{id}_{ano}.psv",
-    GHCNH_BASE + "/access/by-year/{ano}/GHCNh_{id}_{ano}.psv",
-)
-_ghcnh_lista = {"timestamp": 0, "estacoes": []}
-
-
-def _ghcnh_estacoes(pais="BR"):
-    """[(id, lat, lon, nome)] das estacoes GHCNh cujo id comeca com o codigo
-    FIPS do pais (BR) -- id de 11 caracteres, ver documentacao. Cache 24h."""
-    if _ghcnh_lista["estacoes"] and time.time() - _ghcnh_lista["timestamp"] < 24 * 3600:
-        return _ghcnh_lista["estacoes"]
-    texto = _abrir(GHCNH_LISTA, timeout=60).decode("utf-8", errors="replace")
-    estacoes = []
-    for linha in texto.splitlines():
-        partes = [p.strip().strip("\"") for p in linha.split(",")]
-        if len(partes) < 3 or not partes[0].startswith(pais) or len(partes[0]) != 11:
-            continue
-        try:
-            lat, lon = float(partes[1]), float(partes[2])
-        except ValueError:
-            continue
-        nome = next((p for p in partes[4:] if re.search(r"[A-Za-z]{3}", p)), "")
-        estacoes.append((partes[0], lat, lon, nome))
-    _ghcnh_lista.update({"timestamp": time.time(), "estacoes": estacoes})
-    return estacoes
-
-
-def _ghcnh_ultima_leitura(id_estacao, ano):
-    """Baixa o arquivo do ano da estacao e devolve (url_que_funcionou,
-    ultima data/hora UTC, temperatura e umidade da ultima linha, n de
-    linhas) -- ou lanca a ultima excecao se nenhum caminho responder."""
-    erro = None
-    for modelo in GHCNH_ANO:
-        url = modelo.format(ano=ano, id=id_estacao)
-        try:
-            texto = _abrir(url, timeout=90).decode("utf-8", errors="replace")
-        except Exception as exc:
-            erro = exc
-            continue
-        linhas = [l for l in texto.splitlines() if l.strip()]
-        cab = [c.strip() for c in linhas[0].split("|")]
-        idx = {nome.lower(): i for i, nome in enumerate(cab)}
-        ultima = [c.strip() for c in linhas[-1].split("|")]
-
-        def campo(nome):
-            i = idx.get(nome.lower())
-            return ultima[i] if i is not None and i < len(ultima) else None
-
-        quando = datetime(int(campo("Year")), int(campo("Month")), int(campo("Day")), int(campo("Hour")), int(campo("Minute") or 0))
-        return url, quando, campo("temperature"), campo("relative_humidity"), len(linhas) - 1
-    raise erro
-
-
-def diagnostico_noaa(fazendas):
-    """`fazendas`: [(nome, lat, lon)] (Brasil). Uma linha por fazenda com
-    a estacao GHCNh mais perto e a situacao do arquivo do ano dela."""
-    import inmet_stations
-    try:
-        estacoes = _ghcnh_estacoes()
-    except Exception as exc:
-        return [{"fazenda": "-", "estacao": f"lista de estacoes da NOAA falhou: {str(exc)[:150]}"}]
-    agora = datetime.now(timezone.utc).replace(tzinfo=None)
-    linhas, por_estacao = [], {}
-    for nome, lat, lon in fazendas:
-        if not estacoes:
-            linhas.append({"fazenda": nome, "estacao": "lista sem estacoes BR"})
-            continue
-        dist, (id_est, elat, elon, enome) = min(
-            ((inmet_stations._haversine_km(lat, lon, e[1], e[2]), e) for e in estacoes), key=lambda x: x[0]
-        )
-        linha = {"fazenda": nome, "estacao": f"{id_est} {enome}", "distancia": f"{dist:.0f} km"}
-        if id_est not in por_estacao:
-            try:
-                por_estacao[id_est] = _ghcnh_ultima_leitura(id_est, agora.year)
-            except Exception as exc:
-                por_estacao[id_est] = exc
-        r = por_estacao[id_est]
-        if isinstance(r, Exception):
-            linha["situacao"] = f"erro: {str(r)[:120]}"
-        else:
-            url, quando, temp, umid, n = r
-            atraso = (agora - quando).total_seconds() / 3600
-            linha.update({
-                "situacao": "ok", "ultima": f"{quando:%d/%m %H:%M} UTC", "atraso": f"{atraso:.0f} h",
-                "valores": f"{temp} C, {umid}%", "linhas": n, "url": url.replace(GHCNH_BASE, "..."),
-            })
-        linhas.append(linha)
-    linhas.insert(0, {"fazenda": "(lista NOAA)", "estacao": f"{len(estacoes)} estacoes do Brasil na GHCNh"})
-    return linhas

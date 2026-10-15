@@ -33,22 +33,22 @@ def _abrir_json(url, timeout):
 
 
 # ---------------------------------------------------------------------------
-# Leitura UNICA por dia (pedido do usuario, 14/10/2026 -- reduzir o uso da
-# Open-Meteo): cada coordenada e' buscada no maximo 1x por "dia de leitura"
-# (que vira as 01:00 de Cuiaba, `HORA_LEITURA`) numa chamada so' que ja traz
+# Leituras CADENCIADAS (pedido do usuario, 15/10/2026 -- deixar o site mais
+# leve): clima e previsao sao buscados so' as 05:00, 11:00 e 16:00 de Cuiaba
+# (`HORARIOS_LEITURA`). Cada coordenada/estacao e' buscada no maximo 1x por
+# "janela de leitura" (`janela_de_leitura`), numa chamada so' que ja traz
 # historico horario dos ultimos 92 dias + previsao de 7 dias. Tudo fica
 # gravado em disco (`STORE_PATH`, no mesmo volume persistente dos CSVs, entao
 # sobrevive a deploy) e todas as telas leem dali -- clima "atual" sai da hora
-# corrente da serie horaria ja guardada, sem chamada nova. A rodada das 01:00
-# roda no agendador (`app._whatsapp_scheduler_loop` -> `atualizar_todos`);
-# coordenada que ainda nao foi buscada no dia (fazenda nova, estacao trocada)
-# e' buscada sob demanda, uma vez, e entra no mesmo esquema.
+# corrente da serie horaria ja guardada, sem chamada nova. A rodada roda no
+# agendador (`app._whatsapp_scheduler_loop` -> `atualizar_todos`); coordenada
+# que ainda nao foi buscada na janela (fazenda nova, estacao trocada) e'
+# buscada sob demanda, uma vez, e entra no mesmo esquema.
 # ---------------------------------------------------------------------------
 DATA_DIR = Path(os.environ.get("BIOSCOUT_DATA_DIR", str(Path(__file__).parent.parent / "data")))
 STORE_PATH = DATA_DIR / "open_meteo_diario.json"
-HORA_LEITURA = 1  # 01:00, horario de Cuiaba
+HORARIOS_LEITURA = (5, 11, 16)  # horario de Cuiaba
 DIAS_HISTORICO_GUARDADOS = 400
-FALHA_BACKOFF = timedelta(minutes=30)
 _HOURLY_CAMPOS = "temperature_2m,relative_humidity_2m,precipitation,wind_direction_10m"
 _DAILY_CAMPOS = "precipitation_sum,temperature_2m_max,temperature_2m_min,cloud_cover_mean"
 
@@ -60,10 +60,16 @@ def _agora_cuiaba():
     return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=4)
 
 
-def dia_de_leitura(agora=None):
-    """Data (ISO) da leitura vigente -- vira as 01:00 de Cuiaba, nao a
-    meia-noite (de 00:00 a 00:59 ainda vale a leitura do dia anterior)."""
-    return ((agora or _agora_cuiaba()) - timedelta(hours=HORA_LEITURA)).date().isoformat()
+def janela_de_leitura(agora=None):
+    """Identificador da leitura vigente ("YYYY-MM-DD HHh") -- o ultimo
+    horario de `HORARIOS_LEITURA` que ja passou (antes das 05:00 ainda vale
+    a das 16:00 do dia anterior). Muda 3x por dia; a cada mudanca o
+    agendador busca tudo de novo."""
+    agora = agora or _agora_cuiaba()
+    passados = [h for h in HORARIOS_LEITURA if h <= agora.hour]
+    if passados:
+        return f"{agora.date().isoformat()} {passados[-1]:02d}h"
+    return f"{(agora - timedelta(days=1)).date().isoformat()} {HORARIOS_LEITURA[-1]:02d}h"
 
 
 def _carregar():
@@ -95,17 +101,20 @@ def _chave(lat, lon):
 
 
 def _falhou_ha_pouco(registro):
-    falha = (registro or {}).get("falha_em")
-    return bool(falha) and _agora_cuiaba() - datetime.fromisoformat(falha) < FALHA_BACKOFF
+    """Ja falhou NESTA janela de leitura -- so' tenta de novo no proximo
+    horario (05:00/11:00/16:00), pra' nao ficar repetindo a chamada
+    (pedido do usuario: site mais leve). Enquanto isso valem o backup e a
+    ultima leitura guardada."""
+    return (registro or {}).get("falha_janela") == janela_de_leitura()
 
 
 def _ponto(lat, lon, salvar=True):
     """Dados guardados da coordenada, buscando na Open-Meteo so' se ainda
-    nao tem a leitura do dia (e nao falhou ha pouco). Em falha devolve o
+    nao tem a leitura da janela (e nao falhou ha pouco). Em falha devolve o
     que ja tinha (leitura antiga ainda serve -- a previsao cobre 7 dias),
     ou None se nunca teve nada."""
     chave = _chave(lat, lon)
-    dia = dia_de_leitura()
+    dia = janela_de_leitura()
     with _lock:
         registro = _carregar()["pontos"].get(chave)
         if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
@@ -118,28 +127,35 @@ def _ponto(lat, lon, salvar=True):
     url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
     try:
         data = _abrir_json(url, timeout=30)
+        hourly = data.get("hourly", {})
+        colunas = [hourly.get(c) or [] for c in ("temperature_2m", "relative_humidity_2m", "precipitation", "wind_direction_10m")]
+        novas = {
+            t: [col[i] if i < len(col) else None for col in colunas]
+            for i, t in enumerate(hourly.get("time", []))
+        }
+        daily, utc_offset, fonte = data.get("daily", {}), data.get("utc_offset_seconds", 0), "Open-Meteo"
     except Exception:
-        with _lock:
-            registro = dict(registro or {})
-            registro["falha_em"] = _agora_cuiaba().isoformat(timespec="seconds")
-            _store["pontos"][chave] = registro
-        return registro if registro.get("horas") else None
+        try:
+            utc_offset = (registro or {}).get("utc_offset")
+            if utc_offset is None:
+                utc_offset = _offset_estimado(lat, lon)
+            novas, daily = _met_norway(lat, lon, utc_offset)
+            fonte = "MET Norway"
+        except Exception as exc:
+            ultimo_erro["erro"] = f"{ultimo_erro.get('erro') or 'Open-Meteo falhou'}; backup MET Norway: {str(exc)[:120]}"
+            ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
+            with _lock:
+                registro = dict(registro or {})
+                registro["falha_janela"] = janela_de_leitura()
+                _store["pontos"][chave] = registro
+            return registro if registro.get("horas") else None
 
-    hourly = data.get("hourly", {})
-    colunas = [hourly.get(c) or [] for c in ("temperature_2m", "relative_humidity_2m", "precipitation", "wind_direction_10m")]
-    novas = {
-        t: [col[i] if i < len(col) else None for col in colunas]
-        for i, t in enumerate(hourly.get("time", []))
-    }
     corte = (datetime.now() - timedelta(days=DIAS_HISTORICO_GUARDADOS)).strftime("%Y-%m-%d")
     with _lock:
         horas = dict((registro or {}).get("horas") or {})
         horas.update(novas)
         horas = {t: v for t, v in horas.items() if t >= corte}
-        registro = {
-            "dia": dia, "horas": horas, "daily": data.get("daily", {}),
-            "utc_offset": data.get("utc_offset_seconds", 0),
-        }
+        registro = {"dia": dia, "horas": horas, "daily": daily, "utc_offset": utc_offset, "fonte": fonte}
         _store["pontos"][chave] = registro
         if salvar:
             _salvar()
@@ -147,15 +163,15 @@ def _ponto(lat, lon, salvar=True):
 
 
 def _estacao(country_code, codigo, uf, salvar=True):
-    """Leitura do dia das horas MEDIDAS pela estacao oficial (ver
+    """Leitura da janela das horas MEDIDAS pela estacao oficial (ver
     `estacoes_dados`) -- mesmo esquema de `_ponto`: no maximo 1 busca por
-    dia de leitura, acumulando o historico em disco, backoff em falha.
+    janela de leitura, acumulando o historico em disco, backoff em falha.
     Primeira busca traz 90 dias; as seguintes, so' os ultimos 3 (o resto
     ja esta guardado). None se o pais nao tem integracao/credencial."""
     if not estacoes_dados.configurado(country_code):
         return None
     chave = f"{country_code}:{codigo}"
-    dia = dia_de_leitura()
+    dia = janela_de_leitura()
     with _lock:
         registro = _carregar()["estacoes"].get(chave)
         if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
@@ -163,13 +179,13 @@ def _estacao(country_code, codigo, uf, salvar=True):
     hoje = _agora_cuiaba().date()
     inicio = hoje - timedelta(days=3 if (registro or {}).get("horas") else 90)
     try:
-        novas = estacoes_dados.buscar_horas(country_code, codigo, uf, inicio.isoformat(), hoje.isoformat())
+        novas, fonte = estacoes_dados.buscar_horas(country_code, codigo, uf, inicio.isoformat(), hoje.isoformat())
     except Exception as exc:
         ultimo_erro["erro"] = f"estacao {chave}: {str(exc)[:180]}"
         ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
         with _lock:
             registro = dict(registro or {})
-            registro["falha_em"] = _agora_cuiaba().isoformat(timespec="seconds")
+            registro["falha_janela"] = janela_de_leitura()
             _store["estacoes"][chave] = registro
         return registro if registro.get("horas") else None
     corte = (datetime.now() - timedelta(days=DIAS_HISTORICO_GUARDADOS)).strftime("%Y-%m-%d")
@@ -177,11 +193,18 @@ def _estacao(country_code, codigo, uf, salvar=True):
         horas = dict((registro or {}).get("horas") or {})
         horas.update(novas)
         horas = {t: v for t, v in horas.items() if t >= corte}
-        registro = {"dia": dia, "horas": horas, "uf": uf}
+        registro = {"dia": dia, "horas": horas, "uf": uf, "fonte": fonte}
         _store["estacoes"][chave] = registro
         if salvar:
             _salvar()
     return registro
+
+
+def fonte_estacao(country_code, codigo):
+    """De onde veio a ultima leitura guardada da estacao ("INMET",
+    "DMC", "SMN") -- None se ainda nao ha leitura."""
+    with _lock:
+        return (_carregar()["estacoes"].get(f"{country_code}:{codigo}") or {}).get("fonte")
 
 
 def horas_estacao_por_dia(country_code, codigo, uf, data_inicio, data_fim):
@@ -203,12 +226,12 @@ def horas_estacao_por_dia(country_code, codigo, uf, data_inicio, data_fim):
 def previsao_estacao(country_code, codigo):
     """Previsao do orgao nacional pra' estacao (hoje so' o SMN da
     Argentina, ver `estacoes_dados.previsao_smn`): {"YYYY-MM-DDTHH:00":
-    [temp, chuva_mm]} de 3 em 3 horas -- buscada 1x por dia de leitura,
+    [temp, chuva_mm]} de 3 em 3 horas -- buscada 1x por janela de leitura,
     guardada em disco. {} se o pais nao publica previsao legivel."""
     if country_code != "AR":
         return {}
     chave = f"{country_code}:{codigo}"
-    dia = dia_de_leitura()
+    dia = janela_de_leitura()
     with _lock:
         registro = _carregar()["previsoes"].get(chave)
         if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
@@ -220,7 +243,7 @@ def previsao_estacao(country_code, codigo):
         ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
         with _lock:
             registro = dict(registro or {})
-            registro["falha_em"] = _agora_cuiaba().isoformat(timespec="seconds")
+            registro["falha_janela"] = janela_de_leitura()
             _store["previsoes"][chave] = registro
         return registro.get("horas") or {}
     with _lock:
@@ -239,6 +262,71 @@ def ultimas_24h_estacao(country_code, codigo, uf):
     return [_hora_dict(t, registro["horas"][t]) for t in ultimas]
 
 
+MET_NORWAY_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
+# A MET Norway exige identificar o aplicativo no User-Agent (termos de uso);
+# dados sob CC BY 4.0 -- a fonte aparece como "MET Norway" no rotulo.
+MET_NORWAY_USER_AGENT = "OneAgroMonitor/1.0 (+https://monitoresporos-production.up.railway.app)"
+
+
+def _offset_estimado(lat, lon):
+    """Fuso (segundos) quando ainda nao ha leitura da Open-Meteo pra'
+    coordenada: Chile pela mesma regra de verao/inverno usada no resto do
+    site; resto da America do Sul pela longitude (UTC-3 a UTC-5)."""
+    if lon < -66.5 and lat < -17:
+        horas = -3 if datetime.now().month in (9, 10, 11, 12, 1, 2, 3, 4) else -4
+    else:
+        horas = max(-5, min(-3, round(lon / 15)))
+    return horas * 3600
+
+
+def _met_norway(lat, lon, utc_offset):
+    """Backup da previsao quando a Open-Meteo falha (pedido do usuario,
+    15/10/2026): Locationforecast 2.0 da MET Norway (gratuita, sem
+    chave), mesmo formato de `_ponto` -- ({"YYYY-MM-DDTHH:00" local:
+    [temp, umidade, chuva, vento]}, daily no formato da Open-Meteo).
+    Hora a hora nos primeiros ~2-3 dias, depois de 6 em 6 h (cada ponto
+    de 6 h vira 6 horas iguais, chuva dividida entre elas). So' previsao
+    -- nao traz historico."""
+    params = urllib.parse.urlencode({"lat": round(float(lat), 4), "lon": round(float(lon), 4)})
+    req = urllib.request.Request(f"{MET_NORWAY_URL}?{params}", headers={"User-Agent": MET_NORWAY_USER_AGENT})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.load(resp)
+    serie = (data.get("properties") or {}).get("timeseries") or []
+    if not serie:
+        raise RuntimeError("resposta sem previsao")
+    offset = timedelta(seconds=utc_offset)
+    horas, nuvens_por_dia = {}, {}
+    for i, ponto in enumerate(serie):
+        dt_utc = datetime.fromisoformat(ponto["time"].replace("Z", "+00:00")).replace(tzinfo=None)
+        dados = ponto.get("data") or {}
+        instante = (dados.get("instant") or {}).get("details") or {}
+        if "next_1_hours" in dados:
+            passo, chuva = 1, ((dados["next_1_hours"].get("details") or {}).get("precipitation_amount"))
+        else:
+            passo = 6 if "next_6_hours" in dados else 1
+            chuva = ((dados.get("next_6_hours") or {}).get("details") or {}).get("precipitation_amount")
+        for h in range(passo):
+            local = dt_utc + offset + timedelta(hours=h)
+            horas[local.strftime("%Y-%m-%dT%H:00")] = [
+                instante.get("air_temperature"), instante.get("relative_humidity"),
+                round(chuva / passo, 2) if chuva is not None else None, instante.get("wind_from_direction"),
+            ]
+        if instante.get("cloud_area_fraction") is not None:
+            nuvens_por_dia.setdefault((dt_utc + offset).date().isoformat(), []).append(instante["cloud_area_fraction"])
+    por_dia = {}
+    for t, v in horas.items():
+        por_dia.setdefault(t[:10], []).append(v)
+    dias = sorted(por_dia)
+    daily = {
+        "time": dias,
+        "precipitation_sum": [round(sum(v[2] or 0 for v in por_dia[d]), 1) for d in dias],
+        "temperature_2m_max": [max(v[0] for v in por_dia[d] if v[0] is not None) for d in dias],
+        "temperature_2m_min": [min(v[0] for v in por_dia[d] if v[0] is not None) for d in dias],
+        "cloud_cover_mean": [round(sum(nuvens_por_dia[d]) / len(nuvens_por_dia[d])) if nuvens_por_dia.get(d) else None for d in dias],
+    }
+    return horas, daily
+
+
 def _hora_atual_local(registro):
     agora = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=registro.get("utc_offset", 0))
     return agora.strftime("%Y-%m-%dT%H:00")
@@ -250,38 +338,30 @@ def _hora_dict(t, v):
 
 def rodada_pendente():
     with _lock:
-        return _carregar()["ultima_rodada"] != dia_de_leitura()
+        return _carregar()["ultima_rodada"] != janela_de_leitura()
 
 
 def atualizar_todos(coordenadas, estacoes=()):
-    """Rodada diaria (01:00): garante a leitura do dia de cada (lat, lon),
-    gravando o arquivo uma vez so' no fim. So' marca a rodada como feita
-    se TODAS as coordenadas ficaram com a leitura do dia -- senao o
-    agendador chama de novo a cada minuto e `_ponto` retenta cada falha
-    depois de `FALHA_BACKOFF` (antes uma falha na rodada so' era retentada
-    na madrugada seguinte)."""
-    dia = dia_de_leitura()
+    """Rodada das 05:00/11:00/16:00: busca a leitura da janela de cada
+    (lat, lon) e estacao, gravando o arquivo uma vez so' no fim. O que
+    falhar fica pra' proxima janela (`_falhou_ha_pouco`) -- a rodada conta
+    como feita e o agendador nao repete as chamadas ate' o proximo
+    horario."""
     vistas = set()
-    completa = True
     for lat, lon in coordenadas:
         chave = _chave(lat, lon)
         if chave in vistas:
             continue
         vistas.add(chave)
-        registro = _ponto(lat, lon, salvar=False)
-        if not registro or registro.get("dia") != dia:
-            completa = False
+        _ponto(lat, lon, salvar=False)
     for country_code, codigo, uf in estacoes:
         if not estacoes_dados.configurado(country_code) or f"{country_code}:{codigo}" in vistas:
             continue
         vistas.add(f"{country_code}:{codigo}")
-        registro = _estacao(country_code, codigo, uf, salvar=False)
-        if not registro or registro.get("dia") != dia:
-            completa = False
+        _estacao(country_code, codigo, uf, salvar=False)
         previsao_estacao(country_code, codigo)
     with _lock:
-        if completa:
-            _store["ultima_rodada"] = dia
+        _store["ultima_rodada"] = janela_de_leitura()
         _salvar()
 
 
@@ -340,6 +420,7 @@ def get_weather_forecast(lat, lon):
         "previsao_5_dias": previsao[:5],
         "ultimas_24h": ultimas_24h,
         "previsao_horaria_por_dia": futuras_por_dia,
+        "fonte_previsao": registro.get("fonte", "Open-Meteo"),
     }
 
 
@@ -421,12 +502,12 @@ def get_weather_forecast_interpolado(coords_list):
 
 def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida):
     """Grade em lote (camadas de nuvens/chuva dos mapas) -- uma chamada
-    Open-Meteo pra todos os pontos, guardada por dia de leitura: a mesma
-    grade so' e' buscada 1x por dia (cada ponto da grade conta como uma
+    Open-Meteo pra todos os pontos, guardada por janela de leitura: a mesma
+    grade so' e' buscada 1x por janela (cada ponto da grade conta como uma
     chamada pro limite da Open-Meteo, entao isso pesava muito)."""
     assinatura = json.dumps([[round(float(v), 3) for v in lats], [round(float(v), 3) for v in lons]])
     chave = f"{tipo}:{hashlib.sha1(assinatura.encode()).hexdigest()}"
-    dia = dia_de_leitura()
+    dia = janela_de_leitura()
     with _lock:
         registro = _carregar()["grades"].get(chave)
         if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
@@ -444,7 +525,7 @@ def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida):
     except Exception:
         with _lock:
             registro = dict(registro or {})
-            registro["falha_em"] = _agora_cuiaba().isoformat(timespec="seconds")
+            registro["falha_janela"] = janela_de_leitura()
             _store["grades"][chave] = registro
         return registro.get("resultado") or []
     if not isinstance(resultados, list):

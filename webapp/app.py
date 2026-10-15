@@ -251,7 +251,7 @@ def _get_weather_for_site(site, coords):
     data = weather_forecast.get_weather_forecast(*latlon)
     if data:
         data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
-        data["fonte"] = "Open-Meteo"
+        data["fonte"] = data.get("fonte_previsao", "Open-Meteo")
     data = _aplicar_leitura_estacao_oficial(site, data, latlon)
     _weather_cache[site] = (now, latlon, data)
     return data
@@ -261,10 +261,26 @@ def _estacao_oficial_do_site(site):
     """(country_code, codigo, uf) da estacao de referencia escolhida pra'
     fazenda (`weather_station_overrides`), so' quando o pais dela tem
     integracao de DADOS medidos (`estacoes_dados.configurado`) -- None
-    caso contrario (inclusive na opcao "interpolacao das 3 estacoes")."""
+    caso contrario. Na opcao "interpolacao das 3 estacoes", a mais perto."""
     escolha = models.get_all_weather_station_overrides().get(site)
-    if not escolha or not escolha["codigo"] or escolha["codigo"] == INTERPOLACAO_SENTINEL:
+    if not escolha or not escolha["codigo"]:
         return None
+    if escolha["codigo"] == INTERPOLACAO_SENTINEL:
+        # "Interpolacao das 3 estacoes": pro dado MEDIDO usa a mais perto
+        # das 3 (pedido do usuario, 15/10/2026). A previsao continua sendo
+        # a media das 3 (`_get_weather_for_site`).
+        latlon = _coords_all().get(site)
+        if not latlon:
+            return None
+        pais = models.get_all_site_countries().get(site, countries.DEFAULT_COUNTRY)
+        proximas = countries.estacoes_mais_proximas_global(*latlon, pais, n=1)
+        if not proximas or not estacoes_dados.configurado(proximas[0]["country_code"]):
+            return None
+        mais_perto = proximas[0]
+        if mais_perto["country_code"] == "CL":
+            escolha = {"codigo": mais_perto["codigo"], "country_code": "CL"}
+        else:
+            return (mais_perto["country_code"], mais_perto["codigo"], mais_perto.get("uf"))
     if not estacoes_dados.configurado(escolha["country_code"]):
         return None
     provider = countries.get_country(escolha["country_code"])["station_provider"]
@@ -289,8 +305,8 @@ def _aplicar_leitura_estacao_oficial(site, data, latlon):
     estacao = _estacao_oficial_do_site(site)
     if not estacao:
         return data
-    orgao = {"BR": "INMET", "CL": "DMC", "AR": "SMN"}.get(estacao[0], "estacao oficial")
-    fonte_previsao = "Open-Meteo"
+    orgao = weather_forecast.fonte_estacao(estacao[0], estacao[1]) or {"BR": "INMET", "CL": "DMC", "AR": "SMN"}.get(estacao[0], "estacao oficial")
+    fonte_previsao = (data or {}).get("fonte_previsao", "Open-Meteo")
     previsao_orgao = weather_forecast.previsao_estacao(estacao[0], estacao[1])
     if previsao_orgao:
         if not data:
@@ -2212,12 +2228,14 @@ def _whatsapp_scheduler_loop():
 
 
 def _atualizar_open_meteo_diario():
-    """Leitura unica do dia na Open-Meteo (01:00 de Cuiaba, ver
-    `weather_forecast.dia_de_leitura`) pra coordenada de clima de toda
+    """Leitura cadenciada (05:00, 11:00 e 16:00 de Cuiaba, ver
+    `weather_forecast.janela_de_leitura`) da previsao (Open-Meteo, MET
+    Norway de backup) e das estacoes oficiais (INMET, DMC, SMN) pra toda
     fazenda -- a estacao de referencia (`_weather_coords_all`), as 3
-    estacoes da opcao "interpolacao" e a coordenada propria. Se o
-    servidor subir depois das 01:00 sem a leitura do dia ainda feita,
-    roda na hora."""
+    estacoes da opcao "interpolacao" e a coordenada propria. Se o servidor
+    subir no meio de uma janela ainda nao lida, roda na hora. Depois,
+    limpa os caches em memoria pra' Painel/Graficos refletirem a leitura
+    nova."""
     if not weather_forecast.rodada_pendente():
         return
     coords_proprias = _coords_all()
@@ -5563,21 +5581,19 @@ def admin_estacoes_diagnostico():
         linha = {"fazenda": _nome_exibicao(site), "pais": escolha["country_code"], "escolhida": escolha["codigo"],
                  "usada": estacao[1] if estacao else "-", "horas": "-", "ultima": "-", "previsao": "-"}
         if estacao:
+            fonte = weather_forecast.fonte_estacao(estacao[0], estacao[1])
+            if fonte:
+                linha["usada"] = f"{estacao[1]} ({fonte})"
+        if estacao:
             por_dia = weather_forecast.horas_estacao_por_dia(*estacao, (hoje - timedelta(days=3)).isoformat(), hoje.isoformat())
             ultimas = weather_forecast.ultimas_24h_estacao(*estacao)
             linha["horas"] = sum(len(h) for h in por_dia.values())
             linha["ultima"] = f"{ultimas[-1]['hora']} -- {ultimas[-1]['temp']} C, {ultimas[-1]['umidade']}%" if ultimas else "-"
             linha["previsao"] = len(weather_forecast.previsao_estacao(estacao[0], estacao[1])) if estacao[0] == "AR" else "Open-Meteo"
         verificacao.append(linha)
-    site_countries = models.get_all_site_countries()
-    fazendas_br = [
-        (_nome_exibicao(site), lat, lon) for site, (lat, lon) in sorted(_coords_all().items())
-        if site_countries.get(site, countries.DEFAULT_COUNTRY) == "BR"
-    ]
     return render_template(
         "admin_estacoes_diagnostico.html", amostras=estacoes_dados.diagnostico(estacoes_em_uso),
         verificacao=verificacao, erro_clima=weather_forecast.ultimo_erro,
-        noaa=estacoes_dados.diagnostico_noaa(fazendas_br),
     )
 
 
