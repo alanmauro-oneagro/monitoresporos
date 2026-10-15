@@ -2771,8 +2771,16 @@ def graficos():
         {site_countries.get(s, countries.DEFAULT_COUNTRY) for s in uf_por_site},
         key=lambda c: countries.get_country(c)["nome"],
     )
+    # Filtro de Cultura -- so' as culturas escolhidas em alguma safra nas
+    # abas Recomendacoes (seletor "Cultura atual" de cada fazenda), das
+    # fazendas que o usuario enxerga.
+    culturas_em_uso = sorted({
+        v["cultura"] for (site, _), v in models.get_all_farm_culturas().items()
+        if v["cultura"] and v["cultura"] != CULTURA_TODOS and site in uf_por_site
+    }, key=str.lower)
     return render_template(
         "graficos.html", inicio=inicio.isoformat(), fim=fim.isoformat(),
+        culturas_disponiveis=culturas_em_uso,
         estacoes_disponiveis=[
             {
                 "nome": s, "nome_exibicao": _nome_exibicao(s), "uf": uf_por_site.get(s),
@@ -2823,6 +2831,22 @@ def graficos_dados():
     # selecionada(s) realmente tem cadastrado quando o filtro bateu com
     # alguma fazenda de verdade -- ver `filtro_estacao_aplicado` mais
     # abaixo (usa `spore_lookup`/vizinhas, calculado depois de `sites`).
+    cultura_sel = (request.args.get("cultura") or "").strip()
+    if cultura_sel:
+        # Mesma regra das abas Recomendacoes: fazenda com essa cultura em
+        # alguma safra (Safra/2a/3a); doencas pela matriz Doencas x
+        # Culturas (`_filter_cards_by_cultura`) -- doenca sem marcacao
+        # nenhuma na matriz nunca e' escondida.
+        culturas_by_site = models.get_all_farm_culturas()
+        sites = [
+            s for s in sites
+            if any(culturas_by_site.get((s, safra), {}).get("cultura") == cultura_sel for safra, _ in models.SAFRAS)
+        ]
+        if not sites:
+            return jsonify({
+                "inicio": inicio.isoformat(), "fim": fim.isoformat(), "dias": [],
+                "doencas": [], "rosa_ventos": {}, "num_dias_previsao": 0, "anotacoes": {},
+            })
     filtro_estacao_aplicado = bool(estacoes_sel) and bool(sites)
     if not sites:
         # Filtro nao bateu com nenhuma fazenda (ex.: catalogo de estacoes
@@ -2908,6 +2932,9 @@ def graficos_dados():
         data_reader.read_unique_display_names(),
         key=lambda en: _chave_alfabetica(translations.get(en, {}).get("nome_cientifico") or ""),
     )
+    if cultura_sel:
+        doenca_culturas = models.get_doenca_culturas()
+        doencas_en = [en for en in doencas_en if not doenca_culturas.get(en) or cultura_sel in doenca_culturas[en]]
     if filtro_estacao_aplicado:
         # So' traz doenca realmente cadastrada na(s) estacao(oes)
         # selecionada(s) -- antes mostrava TODA doenca ja vista em

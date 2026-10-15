@@ -71,6 +71,15 @@
                     </div>
                 </div>
             </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1" for="filtroCultura">Cultura</label>
+                <select id="filtroCultura" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    {% for c in culturas_disponiveis %}
+                    <option value="{{ c }}">{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="col-md-2">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="filtroOcultarRisco">
@@ -500,6 +509,7 @@
                 inicio: document.getElementById('filtroInicio').value,
                 pais: Array.from(document.querySelectorAll('.filtro-pais:checked')).map(function (el) { return el.value; }),
                 estacao: Array.from(document.querySelectorAll('.filtro-estacao:checked')).map(function (el) { return el.value; }),
+                cultura: document.getElementById('filtroCultura').value,
                 ocultarRisco: document.getElementById('filtroOcultarRisco').checked,
             }));
         } catch (e) { /* localStorage indisponivel (modo privado etc.) -- ignora */ }
@@ -520,6 +530,10 @@
         }
         if (Array.isArray(f.estacao)) {
             document.querySelectorAll('.filtro-estacao').forEach(function (el) { el.checked = f.estacao.indexOf(el.value) !== -1; });
+        }
+        if (typeof f.cultura === 'string') {
+            var selCultura = document.getElementById('filtroCultura');
+            if (Array.from(selCultura.options).some(function (o) { return o.value === f.cultura; })) selCultura.value = f.cultura;
         }
         if (typeof f.ocultarRisco === 'boolean') document.getElementById('filtroOcultarRisco').checked = f.ocultarRisco;
     }
@@ -542,6 +556,8 @@
     document.querySelectorAll('.filtro-pais, .filtro-estacao').forEach(function (el) {
         el.addEventListener('change', agendarRecarga);
     });
+    document.getElementById('filtroCultura').addEventListener('change', agendarRecarga);
+    document.getElementById('filtroCultura').addEventListener('change', salvarFiltros);
     document.getElementById('filtroInicio').addEventListener('change', salvarFiltros);
     document.getElementById('filtroFim').addEventListener('change', salvarFiltros);
     document.querySelectorAll('.filtro-pais, .filtro-estacao').forEach(function (el) {
@@ -578,6 +594,7 @@
         params.set('fim', document.getElementById('filtroFim').value);
         document.querySelectorAll('.filtro-estacao:checked').forEach(function (el) { params.append('estacao', el.value); });
         document.querySelectorAll('.filtro-pais:checked').forEach(function (el) { params.append('pais', el.value); });
+        if (document.getElementById('filtroCultura').value) params.set('cultura', document.getElementById('filtroCultura').value);
         return params.toString();
     }
 
