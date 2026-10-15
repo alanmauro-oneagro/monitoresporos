@@ -289,7 +289,7 @@ def _aplicar_leitura_estacao_oficial(site, data, latlon):
     estacao = _estacao_oficial_do_site(site)
     if not estacao:
         return data
-    orgao = {"BR": "INMET", "CL": "DMC", "AR": "SMN"}.get(estacao[0], "estacao oficial")
+    orgao = weather_forecast.fonte_estacao(estacao[0], estacao[1]) or {"BR": "INMET", "CL": "DMC", "AR": "SMN"}.get(estacao[0], "estacao oficial")
     fonte_previsao = "Open-Meteo"
     previsao_orgao = weather_forecast.previsao_estacao(estacao[0], estacao[1])
     if previsao_orgao:
@@ -5562,6 +5562,10 @@ def admin_estacoes_diagnostico():
         estacao = _estacao_oficial_do_site(site)
         linha = {"fazenda": _nome_exibicao(site), "pais": escolha["country_code"], "escolhida": escolha["codigo"],
                  "usada": estacao[1] if estacao else "-", "horas": "-", "ultima": "-", "previsao": "-"}
+        if estacao:
+            fonte = weather_forecast.fonte_estacao(estacao[0], estacao[1])
+            if fonte:
+                linha["usada"] = f"{estacao[1]} ({fonte})"
         if estacao:
             por_dia = weather_forecast.horas_estacao_por_dia(*estacao, (hoje - timedelta(days=3)).isoformat(), hoje.isoformat())
             ultimas = weather_forecast.ultimas_24h_estacao(*estacao)

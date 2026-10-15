@@ -60,10 +60,27 @@ def _agora_cuiaba():
     return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=4)
 
 
-def dia_de_leitura(agora=None):
-    """Data (ISO) da leitura vigente -- vira as 01:00 de Cuiaba, nao a
-    meia-noite (de 00:00 a 00:59 ainda vale a leitura do dia anterior)."""
-    return ((agora or _agora_cuiaba()) - timedelta(hours=HORA_LEITURA)).date().isoformat()
+# Hora da leitura diaria das estacoes oficiais, por pais (Cuiaba) -- o
+# INMET as 04:00 (pedido do usuario, 15/10/2026); os demais junto com a
+# Open-Meteo, as 01:00.
+HORA_LEITURA_ESTACAO = {"BR": 4}
+
+
+def dia_de_leitura(agora=None, hora=HORA_LEITURA):
+    """Data (ISO) da leitura vigente -- vira as `hora` de Cuiaba (01:00 por
+    padrao), nao a meia-noite (de 00:00 a 00:59 ainda vale a leitura do
+    dia anterior)."""
+    return ((agora or _agora_cuiaba()) - timedelta(hours=hora)).date().isoformat()
+
+
+def _dia_estacao(country_code):
+    return dia_de_leitura(hora=HORA_LEITURA_ESTACAO.get(country_code, HORA_LEITURA))
+
+
+def _marca_rodada():
+    """Muda as 01:00 (Open-Meteo e estacoes de CL/AR) e de novo as 04:00
+    (INMET) -- a rodada roda de novo a cada virada."""
+    return "|".join([dia_de_leitura()] + [dia_de_leitura(hora=h) for h in sorted(set(HORA_LEITURA_ESTACAO.values()))])
 
 
 def _carregar():
@@ -155,7 +172,7 @@ def _estacao(country_code, codigo, uf, salvar=True):
     if not estacoes_dados.configurado(country_code):
         return None
     chave = f"{country_code}:{codigo}"
-    dia = dia_de_leitura()
+    dia = _dia_estacao(country_code)
     with _lock:
         registro = _carregar()["estacoes"].get(chave)
         if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
@@ -163,7 +180,7 @@ def _estacao(country_code, codigo, uf, salvar=True):
     hoje = _agora_cuiaba().date()
     inicio = hoje - timedelta(days=3 if (registro or {}).get("horas") else 90)
     try:
-        novas = estacoes_dados.buscar_horas(country_code, codigo, uf, inicio.isoformat(), hoje.isoformat())
+        novas, fonte = estacoes_dados.buscar_horas(country_code, codigo, uf, inicio.isoformat(), hoje.isoformat())
     except Exception as exc:
         ultimo_erro["erro"] = f"estacao {chave}: {str(exc)[:180]}"
         ultimo_erro["quando"] = datetime.now().strftime("%d/%m %H:%M")
@@ -177,11 +194,18 @@ def _estacao(country_code, codigo, uf, salvar=True):
         horas = dict((registro or {}).get("horas") or {})
         horas.update(novas)
         horas = {t: v for t, v in horas.items() if t >= corte}
-        registro = {"dia": dia, "horas": horas, "uf": uf}
+        registro = {"dia": dia, "horas": horas, "uf": uf, "fonte": fonte}
         _store["estacoes"][chave] = registro
         if salvar:
             _salvar()
     return registro
+
+
+def fonte_estacao(country_code, codigo):
+    """De onde veio a ultima leitura guardada da estacao ("INMET",
+    "NOAA BR000083361"...) -- None se ainda nao ha leitura."""
+    with _lock:
+        return (_carregar()["estacoes"].get(f"{country_code}:{codigo}") or {}).get("fonte")
 
 
 def horas_estacao_por_dia(country_code, codigo, uf, data_inicio, data_fim):
@@ -250,11 +274,11 @@ def _hora_dict(t, v):
 
 def rodada_pendente():
     with _lock:
-        return _carregar()["ultima_rodada"] != dia_de_leitura()
+        return _carregar()["ultima_rodada"] != _marca_rodada()
 
 
 def atualizar_todos(coordenadas, estacoes=()):
-    """Rodada diaria (01:00): garante a leitura do dia de cada (lat, lon),
+    """Rodada diaria (01:00; e 04:00 pro INMET): garante a leitura do dia de cada (lat, lon) e estacao,
     gravando o arquivo uma vez so' no fim. So' marca a rodada como feita
     se TODAS as coordenadas ficaram com a leitura do dia -- senao o
     agendador chama de novo a cada minuto e `_ponto` retenta cada falha
@@ -276,12 +300,12 @@ def atualizar_todos(coordenadas, estacoes=()):
             continue
         vistas.add(f"{country_code}:{codigo}")
         registro = _estacao(country_code, codigo, uf, salvar=False)
-        if not registro or registro.get("dia") != dia:
+        if not registro or registro.get("dia") != _dia_estacao(country_code):
             completa = False
         previsao_estacao(country_code, codigo)
     with _lock:
         if completa:
-            _store["ultima_rodada"] = dia
+            _store["ultima_rodada"] = _marca_rodada()
         _salvar()
 
 
