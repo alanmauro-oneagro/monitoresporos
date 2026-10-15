@@ -20,7 +20,6 @@ import subprocess
 import threading
 import time
 import unicodedata
-from collections import Counter
 from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g
@@ -44,7 +43,6 @@ import weather_forecast
 import inmet_stations
 import virtual_farms
 import ndvi_service
-import cemaden
 import countries
 import dmc_stations
 import estacoes_dados
@@ -5706,20 +5704,9 @@ def admin_estacoes_diagnostico():
             linha["ultima"] = f"{ultimas[-1]['hora']} -- {ultimas[-1]['temp']} C, {ultimas[-1]['umidade']}%" if ultimas else "-"
             linha["previsao"] = len(weather_forecast.previsao_estacao(estacao[0], estacao[1])) if estacao[0] == "AR" else "Open-Meteo"
         verificacao.append(linha)
-    pluviometros = weather_forecast._estacoes_cemaden()
-    paises = models.get_all_site_countries()
-    cemaden_fazendas = []
-    for site, (lat, lon) in sorted(_coords_all().items(), key=lambda i: _nome_exibicao(i[0])):
-        if paises.get(site, countries.DEFAULT_COUNTRY) != "BR":
-            continue
-        perto = cemaden.mais_proxima(pluviometros, lat, lon, max_km=float("inf"))
-        cemaden_fazendas.append({"fazenda": _nome_exibicao(site), "pluviometro": perto,
-                                 "usado": bool(perto and perto["distancia_km"] <= cemaden.RAIO_KM)})
     return render_template(
         "admin_estacoes_diagnostico.html", amostras=estacoes_dados.diagnostico(estacoes_em_uso),
         verificacao=verificacao, erro_clima=weather_forecast.ultimo_erro,
-        cemaden_total=len(pluviometros), cemaden_por_uf=sorted(Counter(e["uf"] for e in pluviometros).items()),
-        cemaden_fazendas=cemaden_fazendas, cemaden_raio=cemaden.RAIO_KM,
     )
 
 
