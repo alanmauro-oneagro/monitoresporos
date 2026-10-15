@@ -345,66 +345,87 @@ def _brasil_horas(codigo, uf, inicio, fim):
     return horas, f"NOAA {id_noaa}"
 
 
-def _noaa_horas(lat, lon, uf, inicio, fim):
-    """Horas medidas pela estacao GHCNh (NOAA) mais perto de (lat, lon),
-    entre `inicio` e `fim` -- arquivo do ano (e do ano anterior, se o
-    periodo comecar nele), hora UTC convertida pro fuso da UF. Varias
-    observacoes na mesma hora viram a media."""
+def _ghcnh_proximas(lat, lon, limite=6):
+    """[(distancia_km, id, nome)] das estacoes GHCNh do Brasil ate'
+    `NOAA_MAX_KM`, da mais perto pra mais longe (no maximo `limite`)."""
     import inmet_stations
-    candidatas = [
-        (inmet_stations._haversine_km(lat, lon, e[1], e[2]), e[0]) for e in _ghcnh_estacoes()
-    ]
-    candidatas = [c for c in candidatas if c[0] <= NOAA_MAX_KM]
+    candidatas = sorted(
+        (inmet_stations._haversine_km(lat, lon, e[1], e[2]), e[0], e[3]) for e in _ghcnh_estacoes()
+    )
+    return [c for c in candidatas if c[0] <= NOAA_MAX_KM][:limite]
+
+
+def _ghcnh_leituras(texto):
+    """(datetime UTC, temperatura, umidade, chuva, direcao do vento) de
+    cada linha do .psv que tenha temperatura -- colunas pelo cabecalho
+    (Year/Month/Day/Hour UTC, temperature, relative_humidity,
+    precipitation, wind_direction; conferido em producao, 15/10/2026).
+    Linhas sem temperatura (outros tipos de relatorio) sao puladas."""
+    linhas = [l for l in texto.splitlines() if l.strip()]
+    if not linhas:
+        return
+    idx = {nome.strip().lower(): i for i, nome in enumerate(linhas[0].split("|"))}
+    for linha in linhas[1:]:
+        c = [x.strip() for x in linha.split("|")]
+
+        def campo(nome):
+            i = idx.get(nome)
+            return c[i] if i is not None and i < len(c) else None
+
+        temp = _float(campo("temperature"))
+        if temp is None:
+            continue
+        try:
+            dt = datetime(int(campo("year")), int(campo("month")), int(campo("day")), int(campo("hour")))
+        except (TypeError, ValueError):
+            continue
+        yield dt, temp, _float(campo("relative_humidity")), _float(campo("precipitation")), _float(campo("wind_direction"))
+
+
+def _noaa_horas(lat, lon, uf, inicio, fim):
+    """Horas medidas pela estacao GHCNh (NOAA) mais perto de (lat, lon)
+    QUE TENHA DADO no periodo -- a lista da NOAA inclui estacoes antigas
+    sem arquivo do ano (404, visto em producao), entao tenta a proxima
+    mais perto (ate' `NOAA_MAX_KM`). Hora UTC convertida pro fuso da UF;
+    varias observacoes na mesma hora viram a media. A NOAA publica com
+    ~2 dias de atraso (visto em producao): os dias mais recentes ficam
+    sem dado aqui e caem na Open-Meteo."""
+    candidatas = _ghcnh_proximas(lat, lon)
     if not candidatas:
         raise RuntimeError(f"nenhuma estacao a menos de {NOAA_MAX_KM} km")
-    _, id_estacao = min(candidatas)
     offset = timedelta(hours=_offset_uf(uf))
-    por_hora = {}
-    for ano in sorted({int(inicio[:4]), int(fim[:4])}):
-        texto = _ghcnh_arquivo(id_estacao, ano)
-        linhas = [l for l in texto.splitlines() if l.strip()]
-        if not linhas:
-            continue
-        idx = {nome.strip().lower(): i for i, nome in enumerate(linhas[0].split("|"))}
-        for linha in linhas[1:]:
-            c = [x.strip() for x in linha.split("|")]
-
-            def campo(nome):
-                i = idx.get(nome)
-                return c[i] if i is not None and i < len(c) else None
-
+    tentativas = []
+    for _, id_estacao, _ in candidatas:
+        por_hora = {}
+        for ano in sorted({int(inicio[:4]), int(fim[:4])}):
             try:
-                dt = datetime(int(campo("year")), int(campo("month")), int(campo("day")), int(campo("hour"))) + offset
-            except (TypeError, ValueError):
+                texto = _ghcnh_arquivo(id_estacao, ano)
+            except Exception:
                 continue
-            hora = dt.strftime("%Y-%m-%dT%H:00")
-            if not (inicio <= hora[:10] <= fim):
-                continue
-            temp = _float(campo("temperature"))
-            if temp is None:
-                continue
-            item = por_hora.setdefault(hora, {"temp": [], "umidade": [], "chuva": None, "vento": None})
-            item["temp"].append(temp)
-            umidade = _float(campo("relative_humidity"))
-            if umidade is not None:
-                item["umidade"].append(umidade)
-            chuva = _float(campo("precipitation"))
-            if chuva is not None:
-                item["chuva"] = max(item["chuva"] or 0, chuva)
-            vento = _float(campo("wind_direction"))
-            if vento is not None:
-                item["vento"] = vento
-    if not por_hora:
-        raise RuntimeError(f"estacao {id_estacao} sem leitura no periodo")
-    horas = {
-        h: [
-            round(sum(v["temp"]) / len(v["temp"]), 1),
-            round(sum(v["umidade"]) / len(v["umidade"])) if v["umidade"] else None,
-            v["chuva"], v["vento"],
-        ]
-        for h, v in por_hora.items()
-    }
-    return horas, id_estacao
+            for dt_utc, temp, umidade, chuva, vento in _ghcnh_leituras(texto):
+                hora = (dt_utc + offset).strftime("%Y-%m-%dT%H:00")
+                if not (inicio <= hora[:10] <= fim):
+                    continue
+                item = por_hora.setdefault(hora, {"temp": [], "umidade": [], "chuva": None, "vento": None})
+                item["temp"].append(temp)
+                if umidade is not None:
+                    item["umidade"].append(umidade)
+                if chuva is not None:
+                    item["chuva"] = max(item["chuva"] or 0, chuva)
+                if vento is not None:
+                    item["vento"] = vento
+        if por_hora:
+            horas = {
+                h: [
+                    round(sum(v["temp"]) / len(v["temp"]), 1),
+                    round(sum(v["umidade"]) / len(v["umidade"])) if v["umidade"] else None,
+                    v["chuva"], v["vento"],
+                ]
+                for h, v in por_hora.items()
+            }
+            return horas, id_estacao
+        tentativas.append(id_estacao)
+    raise RuntimeError(f"estacoes sem dado no periodo: {', '.join(tentativas)}")
 
 
 def _ghcnh_arquivo(id_estacao, ano):
@@ -530,10 +551,9 @@ def _ghcnh_estacoes(pais="BR"):
 
 
 def _ghcnh_ultima_leitura(id_estacao, ano):
-    """Baixa o arquivo do ano da estacao e devolve (url_que_funcionou,
-    ultima data/hora UTC, temperatura e umidade da ultima linha, n de
-    linhas) -- ou lanca a ultima excecao se nenhum caminho responder."""
-    erro = None
+    """(url, ultima data/hora UTC COM temperatura, temperatura, umidade,
+    linhas com temperatura no ano) -- lanca excecao se o arquivo nao
+    existir."""
     for modelo in GHCNH_ANO:
         url = modelo.format(ano=ano, id=id_estacao)
         try:
@@ -541,24 +561,17 @@ def _ghcnh_ultima_leitura(id_estacao, ano):
         except Exception as exc:
             erro = exc
             continue
-        linhas = [l for l in texto.splitlines() if l.strip()]
-        cab = [c.strip() for c in linhas[0].split("|")]
-        idx = {nome.lower(): i for i, nome in enumerate(cab)}
-        ultima = [c.strip() for c in linhas[-1].split("|")]
-
-        def campo(nome):
-            i = idx.get(nome.lower())
-            return ultima[i] if i is not None and i < len(ultima) else None
-
-        quando = datetime(int(campo("Year")), int(campo("Month")), int(campo("Day")), int(campo("Hour")), int(campo("Minute") or 0))
-        return url, quando, campo("temperature"), campo("relative_humidity"), len(linhas) - 1
+        leituras = list(_ghcnh_leituras(texto))
+        if not leituras:
+            raise RuntimeError("arquivo sem temperatura")
+        quando, temp, umidade, _, _ = leituras[-1]
+        return url, quando, temp, umidade, len(leituras)
     raise erro
 
 
 def diagnostico_noaa(fazendas):
     """`fazendas`: [(nome, lat, lon)] (Brasil). Uma linha por fazenda com
     a estacao GHCNh mais perto e a situacao do arquivo do ano dela."""
-    import inmet_stations
     try:
         estacoes = _ghcnh_estacoes()
     except Exception as exc:
@@ -569,16 +582,22 @@ def diagnostico_noaa(fazendas):
         if not estacoes:
             linhas.append({"fazenda": nome, "estacao": "lista sem estacoes BR"})
             continue
-        dist, (id_est, elat, elon, enome) = min(
-            ((inmet_stations._haversine_km(lat, lon, e[1], e[2]), e) for e in estacoes), key=lambda x: x[0]
-        )
-        linha = {"fazenda": nome, "estacao": f"{id_est} {enome}", "distancia": f"{dist:.0f} km"}
-        if id_est not in por_estacao:
-            try:
-                por_estacao[id_est] = _ghcnh_ultima_leitura(id_est, agora.year)
-            except Exception as exc:
-                por_estacao[id_est] = exc
+        candidatas = _ghcnh_proximas(lat, lon)
+        if not candidatas:
+            linhas.append({"fazenda": nome, "estacao": f"nenhuma a menos de {NOAA_MAX_KM} km"})
+            continue
+        puladas = []
+        for dist, id_est, enome in candidatas:
+            if id_est not in por_estacao:
+                try:
+                    por_estacao[id_est] = _ghcnh_ultima_leitura(id_est, agora.year)
+                except Exception as exc:
+                    por_estacao[id_est] = exc
+            if not isinstance(por_estacao[id_est], Exception):
+                break
+            puladas.append(id_est)
         r = por_estacao[id_est]
+        linha = {"fazenda": nome, "estacao": f"{id_est} {enome}" + (f" (puladas sem dado: {len(puladas)})" if puladas else ""), "distancia": f"{dist:.0f} km"}
         if isinstance(r, Exception):
             linha["situacao"] = f"erro: {str(r)[:120]}"
         else:

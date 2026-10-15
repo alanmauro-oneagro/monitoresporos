@@ -261,10 +261,27 @@ def _estacao_oficial_do_site(site):
     """(country_code, codigo, uf) da estacao de referencia escolhida pra'
     fazenda (`weather_station_overrides`), so' quando o pais dela tem
     integracao de DADOS medidos (`estacoes_dados.configurado`) -- None
-    caso contrario (inclusive na opcao "interpolacao das 3 estacoes")."""
+    caso contrario. Na opcao "interpolacao das 3 estacoes", a mais perto."""
     escolha = models.get_all_weather_station_overrides().get(site)
-    if not escolha or not escolha["codigo"] or escolha["codigo"] == INTERPOLACAO_SENTINEL:
+    if not escolha or not escolha["codigo"]:
         return None
+    if escolha["codigo"] == INTERPOLACAO_SENTINEL:
+        # "Interpolacao das 3 estacoes": pro dado MEDIDO usa a mais perto
+        # das 3 (pedido do usuario, 15/10/2026 -- "onde tem interpolacao,
+        # se for usar NOAA, pegue os dados da mais proxima"). A previsao
+        # continua sendo a media das 3 (`_get_weather_for_site`).
+        latlon = _coords_all().get(site)
+        if not latlon:
+            return None
+        pais = models.get_all_site_countries().get(site, countries.DEFAULT_COUNTRY)
+        proximas = countries.estacoes_mais_proximas_global(*latlon, pais, n=1)
+        if not proximas or not estacoes_dados.configurado(proximas[0]["country_code"]):
+            return None
+        mais_perto = proximas[0]
+        if mais_perto["country_code"] == "CL":
+            escolha = {"codigo": mais_perto["codigo"], "country_code": "CL"}
+        else:
+            return (mais_perto["country_code"], mais_perto["codigo"], mais_perto.get("uf"))
     if not estacoes_dados.configurado(escolha["country_code"]):
         return None
     provider = countries.get_country(escolha["country_code"])["station_provider"]
