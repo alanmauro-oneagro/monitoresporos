@@ -250,16 +250,18 @@ def send_whatsapp_image(phone, imagem_bytes, caption=None):
 
 
 # Modelo do relatorio (aprovado no WhatsApp Manager -- categoria Utilidade,
-# cabecalho DOCUMENTO com o PDF, corpo com 6 variaveis, botao de URL fixa
-# pro site). Nome/idioma configuraveis, pra' trocar sem mexer no codigo.
+# cabecalho DOCUMENTO com o PDF, corpo com 4 variaveis: nome, fazenda, data
+# e doencas em alerta com o risco de infeccao de cada uma; botao de URL
+# fixa pro site). Nome/idioma configuraveis, pra' trocar sem mexer no codigo.
 TEMPLATE_RELATORIO = os.environ.get("WHATSAPP_CLOUD_TEMPLATE_RELATORIO", "relatorio_fazenda")
 TEMPLATE_IDIOMA = os.environ.get("WHATSAPP_CLOUD_TEMPLATE_IDIOMA", "pt_BR")
 
 
-def _variavel(texto, limite=200):
+def _variavel(texto, limite=700):
     """Valor de variavel de modelo dentro das regras da Meta: sem quebra
     de linha nem tab, sem mais de 4 espacos seguidos, nunca vazio (a API
-    recusa parametro vazio) e curto."""
+    recusa parametro vazio) e cabendo no corpo do modelo (1024 caracteres
+    no total, com o texto fixo)."""
     texto = " - ".join(p.strip() for p in str(texto or "").replace("\t", " ").splitlines() if p.strip())
     texto = " ".join(texto.split())
     if len(texto) > limite:
@@ -270,7 +272,7 @@ def _variavel(texto, limite=200):
 def send_relatorio_modelo(phone, pdf_bytes, filename, variaveis):
     """Relatorio agendado/manual pelo MODELO aprovado (`TEMPLATE_RELATORIO`):
     PDF completo como cabecalho DOCUMENTO + resumo nas variaveis do corpo
-    ({{1}}..{{6}}, na ordem de `variaveis`). E' o unico jeito da empresa
+    ({{1}}..{{4}}, na ordem de `variaveis`). E' o unico jeito da empresa
     INICIAR a conversa fora da janela de 24h. Mesmo retorno (ok, mensagem)
     das outras funcoes de envio."""
     if not phone:

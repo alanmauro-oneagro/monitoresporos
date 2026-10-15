@@ -1816,7 +1816,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     LEGENDA_MAX_CHARS = 1024
     combinar = bool(text) and bool(pdf_bytes) and len(text) <= LEGENDA_MAX_CHARS
     if modelo_oficial:
-        variaveis_base = _variaveis_modelo_relatorio(site, diseases, weather, mostrar_secao_doencas)
+        variaveis_base = _variaveis_modelo_relatorio(site, diseases, mostrar_secao_doencas)
 
     sucesso, falha = [], []
     # Rastreados SEPARADOS de "sucesso" (que exige os dois formatos
@@ -1873,29 +1873,26 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     return ok_texto_geral, ok_pdf_geral, resumo
 
 
-def _variaveis_modelo_relatorio(site, diseases, weather, mostrar_secao_doencas):
-    """Variaveis {{2}}..{{6}} do modelo do relatorio na API oficial
+def _variaveis_modelo_relatorio(site, diseases, mostrar_secao_doencas):
+    """Variaveis {{2}}..{{4}} do modelo do relatorio na API oficial
     (`whatsapp_cloud_api.TEMPLATE_RELATORIO`; {{1}} e' o nome de quem
-    recebe): fazenda, data, maior risco de infeccao entre as doencas em
-    alerta, doencas em alerta e chuva das ultimas 24h. O relatorio
-    completo vai no PDF do cabecalho."""
+    recebe): fazenda, data e TODAS as doencas em alerta, cada uma com o
+    seu nivel (Atencao/Perigo) e o seu risco de infeccao -- pedido do
+    usuario (15/10/2026: mais de uma doenca em risco tem que aparecer;
+    sem a chuva das ultimas 24h). O relatorio completo vai no PDF do
+    cabecalho."""
     if not mostrar_secao_doencas:
-        risco, alerta = "-", "Sem monitoramento de doenças (só clima)"
-    elif diseases:
-        ordem = {"vermelho": 3, "amarelo": 2, "verde": 1}
-        maior = max((d.get("risco") for d in diseases if d.get("risco")), key=lambda r: ordem.get(r, 0), default=None)
-        risco = _risco_label(maior) or "-"
-        alerta = ", ".join(f"{d['doenca']} ({'Perigo' if d['status'] == 'Perigo' else 'Atenção'})" for d in diseases)
+        doencas = "Sem monitoramento de doenças (só clima)"
+    elif not diseases:
+        doencas = "Nenhuma doença em alerta"
     else:
-        risco, alerta = "Baixo", "Nenhuma"
-    chuva = (weather or {}).get("chuva_24h_mm")
-    return [
-        _nome_exibicao(site),
-        _hoje_cuiaba().strftime("%d/%m/%Y"),
-        risco,
-        alerta,
-        f"{chuva:.1f}".replace(".", ",") if chuva is not None else "-",
-    ]
+        partes = []
+        for d in diseases:
+            nivel = "Perigo" if d["status"] == "Perigo" else "Atenção"
+            risco = _risco_label(d.get("risco"))
+            partes.append(f"{d['doenca']} ({nivel}" + (f", risco de infecção {risco})" if risco else ")"))
+        doencas = "; ".join(partes)
+    return [_nome_exibicao(site), _hoje_cuiaba().strftime("%d/%m/%Y"), doencas]
 
 
 _SCHEDULER_STATE_KEY = "whatsapp_scheduler_state"
