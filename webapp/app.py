@@ -1340,8 +1340,6 @@ def _format_whatsapp_message(
                     for p in previsao_risco
                 )
                 linhas.append(f"Risco de infecção: {dias_txt}")
-            if d.get("cientifico"):
-                linhas.append(f"({d['cientifico']})")
         return linhas
 
     if not diseases:
@@ -1394,8 +1392,6 @@ def _format_whatsapp_message(
                 for p in previsao_risco
             )
             lines.append(f"Risco de infecção: {dias_txt}")
-        if d.get("cientifico"):
-            lines.append(f"({d['cientifico']})")
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
         quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None
         if biologicos_itens or quimicos_itens:
