@@ -246,29 +246,14 @@ def _get_weather_for_site(site, coords):
             data["cidade"] = f"Media de {len(estacoes_info)} estacoes: {nomes}"
             data["uf"] = None
             data["fonte"] = "Open-Meteo (media de estacoes proximas)"
-        data = _aplicar_chuva_cemaden(site, data)
         _weather_cache[site] = (now, latlon, data)
         return data
     data = weather_forecast.get_weather_forecast(*latlon)
     if data:
         data["cidade"], data["uf"] = _rotulo_estacao_clima(site, latlon)
         data["fonte"] = data.get("fonte_previsao", "Open-Meteo")
-    data = _aplicar_chuva_cemaden(site, data)
     data = _aplicar_leitura_estacao_oficial(site, data, latlon)
     _weather_cache[site] = (now, latlon, data)
-    return data
-
-
-def _aplicar_chuva_cemaden(site, data):
-    """Chuva das ultimas 24h/"agora" MEDIDA no pluviometro do CEMADEN mais
-    perto da propria fazenda (Brasil), no lugar da estimada pela
-    Open-Meteo -- ver `weather_forecast.aplicar_chuva_medida`."""
-    farm = _coords_all().get(site)
-    if not data or not farm:
-        return data
-    data = weather_forecast.aplicar_chuva_medida(data, *farm)
-    if data.get("fonte_chuva"):
-        data["fonte"] = f"{data['fonte']} / Chuva medida: {data['fonte_chuva']}"
     return data
 
 
@@ -391,17 +376,17 @@ def _aplicar_previsao_orgao(data, previsao):
 _historico_horario_cache = {}  # (lat, lon, inicio, fim) -> (timestamp, {dia: [horas]})
 
 
-def _historico_horario_open_meteo(latlon, inicio, fim, chuva_em=None):
+def _historico_horario_open_meteo(latlon, inicio, fim):
     """`weather_forecast.get_historico_horario` com cache em memoria
     (mesmo TTL/backoff de `_get_weather_for_site`)."""
-    chave = (latlon[0], latlon[1], inicio, fim, chuva_em)
+    chave = (latlon[0], latlon[1], inicio, fim)
     cached = _historico_horario_cache.get(chave)
     now = time.time()
     if cached:
         ttl = WEATHER_CACHE_TTL_SECONDS if cached[1] else WEATHER_FALHA_BACKOFF_SECONDS
         if now - cached[0] < ttl:
             return cached[1]
-    por_dia = weather_forecast.get_historico_horario(latlon[0], latlon[1], inicio, fim, chuva_em=chuva_em)
+    por_dia = weather_forecast.get_historico_horario(latlon[0], latlon[1], inicio, fim)
     if len(_historico_horario_cache) > 500:
         _historico_horario_cache.clear()
     _historico_horario_cache[chave] = (now, por_dia)
@@ -421,7 +406,7 @@ def _completar_clima_horario(hourly_lookup, device_by_site, sites, dias):
     if not dias:
         return hourly_lookup
     coords_clima = _weather_coords_all()
-    coords_proprias = _coords_all()
+    coords_proprias = None
     pendentes = {}
     dias_faltando = set()
     hoje = _hoje_cuiaba().isoformat()
@@ -442,9 +427,11 @@ def _completar_clima_horario(hourly_lookup, device_by_site, sites, dias):
                 continue
         latlon = coords_clima.get(site)
         if latlon and latlon[0] == INTERPOLACAO_SENTINEL:
+            if coords_proprias is None:
+                coords_proprias = _coords_all()
             latlon = coords_proprias.get(site)
         if latlon:
-            pendentes[device] = (latlon, coords_proprias.get(site))
+            pendentes[device] = latlon
             dias_faltando.update(faltando)
     dias_faltando = {d for d in dias_faltando if d <= hoje}
     if not pendentes or not dias_faltando:
@@ -453,7 +440,7 @@ def _completar_clima_horario(hourly_lookup, device_by_site, sites, dias):
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         resultados = dict(zip(
             pendentes,
-            executor.map(lambda p: _historico_horario_open_meteo(p[0], inicio, fim, chuva_em=p[1]), pendentes.values()),
+            executor.map(lambda ll: _historico_horario_open_meteo(ll, inicio, fim), pendentes.values()),
         ))
     for device, por_dia in resultados.items():
         for dia, horas in por_dia.items():
@@ -2327,7 +2314,7 @@ def _atualizar_open_meteo_diario():
             if estacao:
                 coordenadas.append((estacao["lat"], estacao["lon"]))
     estacoes = {e for e in (_estacao_oficial_do_site(site) for site in coords_proprias) if e}
-    weather_forecast.atualizar_todos(coordenadas, estacoes, pontos_chuva=coords_proprias.values())
+    weather_forecast.atualizar_todos(coordenadas, estacoes)
     _weather_cache.clear()
     _historico_horario_cache.clear()
 
@@ -5686,13 +5673,7 @@ def admin_estacoes_diagnostico():
             continue
         estacao = _estacao_oficial_do_site(site)
         linha = {"fazenda": _nome_exibicao(site), "pais": escolha["country_code"], "escolhida": escolha["codigo"],
-                 "usada": estacao[1] if estacao else "-", "horas": "-", "ultima": "-", "previsao": "-", "chuva": "-"}
-        farm = _coords_all().get(site)
-        plu = weather_forecast.pluviometro(*farm) if farm and escolha["country_code"] == "BR" else None
-        if plu:
-            estacoes_em_uso.setdefault("CEMADEN", plu["id"])
-            ultima_hora = max(plu["horas"])
-            linha["chuva"] = f"{plu['rotulo']} -- {len(plu['horas'])} h, ultima {ultima_hora} UTC: {plu['horas'][ultima_hora]} mm"
+                 "usada": estacao[1] if estacao else "-", "horas": "-", "ultima": "-", "previsao": "-"}
         if estacao:
             fonte = weather_forecast.fonte_estacao(estacao[0], estacao[1])
             if fonte:

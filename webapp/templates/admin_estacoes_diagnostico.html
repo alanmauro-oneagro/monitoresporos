@@ -2,19 +2,19 @@
 {% block title %}Diagnostico de estacoes{% endblock %}
 {% block content %}
 <h2 class="mb-3">Diagnostico das APIs de estacoes</h2>
-<p class="text-muted small">Amostras reais das respostas do INMET, CEMADEN, DMC (Chile) e SMN (Argentina), so' leitura. Tokens e usuarios aparecem ocultos.</p>
+<p class="text-muted small">Amostras reais das respostas do INMET, DMC (Chile) e SMN (Argentina), so' leitura. Tokens e usuarios aparecem ocultos.</p>
 <div class="card mb-3">
     <div class="card-body">
         <h6 class="mb-2">Verificacao por fazenda (dados ja lidos pelo site)</h6>
         {% if erro_clima.erro %}<div class="alert alert-warning small py-1">Ultimo erro ({{ erro_clima.quando }}): <code>{{ erro_clima.erro }}</code></div>{% endif %}
         <div class="table-responsive">
         <table class="table table-sm small mb-0">
-            <thead><tr><th>Fazenda</th><th>Pais</th><th>Estacao escolhida</th><th>Estacao usada</th><th>Horas lidas (3 dias)</th><th>Ultima leitura</th><th>Pontos de previsao</th><th>Chuva medida (CEMADEN)</th></tr></thead>
+            <thead><tr><th>Fazenda</th><th>Pais</th><th>Estacao escolhida</th><th>Estacao usada</th><th>Horas lidas (3 dias)</th><th>Ultima leitura</th><th>Pontos de previsao</th></tr></thead>
             <tbody>
             {% for v in verificacao %}
-            <tr><td>{{ v.fazenda }}</td><td>{{ v.pais }}</td><td>{{ v.escolhida }}</td><td>{{ v.usada }}</td><td>{{ v.horas }}</td><td>{{ v.ultima }}</td><td>{{ v.previsao }}</td><td>{{ v.chuva }}</td></tr>
+            <tr><td>{{ v.fazenda }}</td><td>{{ v.pais }}</td><td>{{ v.escolhida }}</td><td>{{ v.usada }}</td><td>{{ v.horas }}</td><td>{{ v.ultima }}</td><td>{{ v.previsao }}</td></tr>
             {% else %}
-            <tr><td colspan="8" class="text-muted">Nenhuma fazenda com estacao de referencia do BR/CL/AR.</td></tr>
+            <tr><td colspan="7" class="text-muted">Nenhuma fazenda com estacao de referencia do BR/CL/AR.</td></tr>
             {% endfor %}
             </tbody>
         </table>
