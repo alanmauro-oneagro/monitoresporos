@@ -331,7 +331,8 @@ def build_recommendation_pdf(
         # comparado com a germinacao, sem status/concentracao
         # confirmados (ver docstring). Aparece mesmo com
         # mostrar_secao_doencas=False, de proposito.
-        story.append(Paragraph("Risco Climático (sem leitura recente do sensor)", _ESTILO_SECAO))
+        titulo_riscos = "Risco de infecção pelo clima (sem alerta de esporos)" if mostrar_secao_doencas else "Risco Climático (sem leitura recente do sensor)"
+        story.append(Paragraph(titulo_riscos, _ESTILO_SECAO))
         for d in riscos_climaticos:
             cabecalho = []
             previsao_risco = d.get("previsao_risco")
