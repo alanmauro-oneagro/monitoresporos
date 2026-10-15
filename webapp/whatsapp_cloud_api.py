@@ -249,20 +249,57 @@ def send_whatsapp_image(phone, imagem_bytes, caption=None):
     return (True, "enviado") if ok else (False, resultado)
 
 
+# Modelo do relatorio (aprovado no WhatsApp Manager -- categoria Utilidade,
+# cabecalho DOCUMENTO com o PDF, corpo com 6 variaveis, botao de URL fixa
+# pro site). Nome/idioma configuraveis, pra' trocar sem mexer no codigo.
+TEMPLATE_RELATORIO = os.environ.get("WHATSAPP_CLOUD_TEMPLATE_RELATORIO", "relatorio_fazenda")
+TEMPLATE_IDIOMA = os.environ.get("WHATSAPP_CLOUD_TEMPLATE_IDIOMA", "pt_BR")
+
+
+def _variavel(texto, limite=200):
+    """Valor de variavel de modelo dentro das regras da Meta: sem quebra
+    de linha nem tab, sem mais de 4 espacos seguidos, nunca vazio (a API
+    recusa parametro vazio) e curto."""
+    texto = " - ".join(p.strip() for p in str(texto or "").replace("\t", " ").splitlines() if p.strip())
+    texto = " ".join(texto.split())
+    if len(texto) > limite:
+        texto = texto[: limite - 3].rstrip() + "..."
+    return texto or "-"
+
+
+def send_relatorio_modelo(phone, pdf_bytes, filename, variaveis):
+    """Relatorio agendado/manual pelo MODELO aprovado (`TEMPLATE_RELATORIO`):
+    PDF completo como cabecalho DOCUMENTO + resumo nas variaveis do corpo
+    ({{1}}..{{6}}, na ordem de `variaveis`). E' o unico jeito da empresa
+    INICIAR a conversa fora da janela de 24h. Mesmo retorno (ok, mensagem)
+    das outras funcoes de envio."""
+    if not phone:
+        return False, "Numero de WhatsApp nao informado."
+    if not _configurado():
+        return False, _erro_configuracao()
+    if not pdf_bytes:
+        return False, "Modelo do relatorio precisa do PDF (cabecalho documento) -- PDF nao foi gerado."
+    ok, media_id_ou_erro = _upload_media(pdf_bytes, "application/pdf", filename)
+    if not ok:
+        return False, f"Falha no upload do PDF: {media_id_ou_erro}"
+    components = [
+        {"type": "header", "parameters": [
+            {"type": "document", "document": {"id": media_id_ou_erro, "filename": filename}},
+        ]},
+        {"type": "body", "parameters": [{"type": "text", "text": _variavel(v)} for v in variaveis]},
+    ]
+    return send_whatsapp_template(phone, TEMPLATE_RELATORIO, TEMPLATE_IDIOMA, components)
+
+
 def send_whatsapp_template(phone, template_name, language_code="pt_BR", components=None):
     """Mensagem via MODELO pre-aprovado -- o UNICO tipo que a Meta deixa
     a empresa iniciar fora da janela de 24h (ver docstring do modulo,
     "O QUE AINDA FALTA"). `template_name` precisa bater EXATAMENTE com o
     nome do modelo aprovado no WhatsApp Manager; `components` (lista, no
     formato que a Graph API espera pra' header/body/button) preenche as
-    variaveis do modelo -- None quando o modelo nao tem nenhuma. Ainda
-    NAO e' chamado de lugar nenhum do app -- `_send_site_whatsapp`
-    continua mandando o relatorio como texto corrido (`send_whatsapp`),
-    que so' funciona dentro da janela de 24h. Passar a usar isso pros
-    envios agendados exige antes desenhar o modelo (quais variaveis, qual
-    texto fixo) e submeter pra aprovacao da Meta -- so' ai' faz sentido
-    religar `_send_site_whatsapp` pra chamar esta funcao em vez de
-    `send_whatsapp`/`send_whatsapp_document`."""
+    variaveis do modelo -- None quando o modelo nao tem nenhuma. Usado
+    pelo relatorio (`send_relatorio_modelo`), chamado por
+    `app._send_site_whatsapp` quando WHATSAPP_PROVIDER=cloud_api."""
     if not phone:
         return False, "Numero de WhatsApp nao informado."
     if not _configurado():

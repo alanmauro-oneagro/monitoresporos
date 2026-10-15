@@ -1481,6 +1481,13 @@ def _site_whatsapp_destinations(site):
 # mais de 1 destinatario. Espalhar por HORAS (nao so' segundos) quebra
 # esse padrao de rajada nos dois casos.
 RECIPIENT_STAGGER_HORAS = 1
+# Nenhum envio AUTOMATICO sai antes disso (minutos do dia, Cuiaba) -- a
+# primeira leitura de clima do dia e' as 05:00 (weather_forecast.
+# HORARIOS_LEITURA); antes de 5h30 o relatorio sairia com o clima das
+# 16h do dia anterior. Pedido do usuario (15/10/2026). Horario configurado
+# antes disso passa a valer 5h30 (o escalonamento por destinatario/
+# telefone continua somando a partir dai').
+ENVIO_AUTOMATICO_MINIMO_MIN = 5 * 60 + 30
 
 
 def _enviar_whatsapp_manual_escalonado(site, safra, enviar_texto, enviar_pdf):
@@ -1784,8 +1791,9 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     # gerado uma vez so' e mandado como documento pra cada destinatario --
     # uma falha ao gerar o PDF NAO impede o envio do texto (so' fica
     # registrada no log).
+    modelo_oficial = whatsapp.usa_modelo_oficial()
     pdf_nome_fazenda = pdf_filename = pdf_bytes = None
-    if enviar_pdf:
+    if enviar_pdf or modelo_oficial:
         try:
             pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(
                 site, diseases, weather, produtos, cultura, safra, leitura_bioscout=leitura_bioscout,
@@ -1807,6 +1815,8 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     # nunca cortar/perder conteudo.
     LEGENDA_MAX_CHARS = 1024
     combinar = bool(text) and bool(pdf_bytes) and len(text) <= LEGENDA_MAX_CHARS
+    if modelo_oficial:
+        variaveis_base = _variaveis_modelo_relatorio(site, diseases, weather, mostrar_secao_doencas)
 
     sucesso, falha = [], []
     # Rastreados SEPARADOS de "sucesso" (que exige os dois formatos
@@ -1819,7 +1829,18 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
         erros = []
         ok_texto = True
         ok_pdf = True
-        if combinar:
+        if modelo_oficial:
+            # API oficial: um envio so' pelo modelo aprovado (resumo nas
+            # variaveis + PDF completo no cabecalho) -- cobre texto e PDF.
+            primeiro_nome = (rotulo or "").split()[0] if rotulo else "produtor"
+            ok_pdf, message_pdf = whatsapp.send_relatorio_modelo(
+                phone, pdf_bytes, pdf_filename, [primeiro_nome] + variaveis_base,
+            )
+            ok_texto = ok_pdf
+            models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"Modelo oficial (resumo+PDF): {message_pdf}")
+            if not ok_pdf:
+                erros.append(message_pdf)
+        elif combinar:
             ok_pdf, message_pdf = whatsapp.send_whatsapp_document(phone, pdf_bytes, pdf_filename, caption=text)
             ok_texto = ok_pdf  # combinado -- o mesmo envio carrega os dois
             models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"Texto+PDF combinado num so envio: {message_pdf}")
@@ -1850,6 +1871,31 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     ok_texto_geral = (not enviar_texto) or algum_texto_ok
     ok_pdf_geral = (not enviar_pdf) or algum_pdf_ok
     return ok_texto_geral, ok_pdf_geral, resumo
+
+
+def _variaveis_modelo_relatorio(site, diseases, weather, mostrar_secao_doencas):
+    """Variaveis {{2}}..{{6}} do modelo do relatorio na API oficial
+    (`whatsapp_cloud_api.TEMPLATE_RELATORIO`; {{1}} e' o nome de quem
+    recebe): fazenda, data, maior risco de infeccao entre as doencas em
+    alerta, doencas em alerta e chuva das ultimas 24h. O relatorio
+    completo vai no PDF do cabecalho."""
+    if not mostrar_secao_doencas:
+        risco, alerta = "-", "Sem monitoramento de doenças (só clima)"
+    elif diseases:
+        ordem = {"vermelho": 3, "amarelo": 2, "verde": 1}
+        maior = max((d.get("risco") for d in diseases if d.get("risco")), key=lambda r: ordem.get(r, 0), default=None)
+        risco = _risco_label(maior) or "-"
+        alerta = ", ".join(f"{d['doenca']} ({'Perigo' if d['status'] == 'Perigo' else 'Atenção'})" for d in diseases)
+    else:
+        risco, alerta = "Baixo", "Nenhuma"
+    chuva = (weather or {}).get("chuva_24h_mm")
+    return [
+        _nome_exibicao(site),
+        _hoje_cuiaba().strftime("%d/%m/%Y"),
+        risco,
+        alerta,
+        f"{chuva:.1f}".replace(".", ",") if chuva is not None else "-",
+    ]
 
 
 _SCHEDULER_STATE_KEY = "whatsapp_scheduler_state"
@@ -1905,8 +1951,8 @@ def _horario_efetivo_destinatario(hora_site, tipo, idx):
     fazenda com base tarde + muitos destinatarios fica com os ultimos
     todos as 23h59 em vez de nunca disparar (hora >= 24 nunca bateria
     com `agora_hm`, travando pra sempre)."""
-    total_minutos = hora_site[tipo] * 60 + hora_site[f"{tipo}_min"] + idx * RECIPIENT_STAGGER_HORAS * 60
-    total_minutos = min(total_minutos, 23 * 60 + 59)
+    base_minutos = max(hora_site[tipo] * 60 + hora_site[f"{tipo}_min"], ENVIO_AUTOMATICO_MINIMO_MIN)
+    total_minutos = min(base_minutos + idx * RECIPIENT_STAGGER_HORAS * 60, 23 * 60 + 59)
     return total_minutos // 60, total_minutos % 60
 
 
@@ -2208,6 +2254,12 @@ def _whatsapp_scheduler_loop():
     ate' esse fix."""
     while True:
         with app.app_context():
+            # Clima antes dos envios: no tick em que vira a janela de
+            # leitura, o relatorio ja' sai com o dado novo.
+            try:
+                _atualizar_open_meteo_diario()
+            except Exception:
+                pass
             try:
                 _run_scheduled_whatsapp_sends()
             except Exception:
@@ -2218,10 +2270,6 @@ def _whatsapp_scheduler_loop():
                 pass
             try:
                 _run_scheduled_ndvi_sends()
-            except Exception:
-                pass
-            try:
-                _atualizar_open_meteo_diario()
             except Exception:
                 pass
         time.sleep(60)
