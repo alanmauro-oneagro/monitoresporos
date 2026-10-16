@@ -1111,12 +1111,36 @@ def _calc_previsao_risco_germinacao(disease, weather):
     return resultado
 
 
-def _riscos_climaticos_relevantes(cards, weather):
+def _doencas_manuais_do_site(site, safra=None):
+    """Doencas cadastradas a mao na aba Doencas (sem leitura do BioScout)
+    que valem pra essa fazenda, no formato minimo de card
+    ({"doenca_en", "doenca"}) que `_build_riscos_climaticos_sem_leitura`
+    usa -- mesmas regras de cultura (`_filter_cards_by_cultura`) e de pais
+    (doenca sem pais marcado vale pra todos) das doencas do BioScout."""
+    info = _disease_info_cached()
+    cards = [{"doenca_en": en, "doenca": d["nome_pt"]} for en, d in info.items() if models.is_manual_disease(en)]
+    if not cards:
+        return []
+    cache = getattr(g, "_doencas_manuais_ctx", None)
+    if cache is None:
+        cache = g._doencas_manuais_ctx = (
+            models.get_all_farm_culturas(), models.get_doenca_culturas(),
+            models.get_all_site_countries(), models.get_doenca_paises(),
+        )
+    culturas_by_site, doenca_culturas, site_countries, doenca_paises = cache
+    cards = _filter_cards_by_cultura({site: cards}, culturas_by_site, doenca_culturas, safra=safra)[site]
+    pais = countries.get_country(site_countries.get(site, countries.DEFAULT_COUNTRY))["nome"]
+    return [c for c in cards if not doenca_paises.get(c["doenca_en"]) or pais in doenca_paises[c["doenca_en"]]]
+
+
+def _riscos_climaticos_relevantes(cards, weather, site=None, safra=None):
     """`_build_riscos_climaticos_sem_leitura` ja' com `risco`/`previsao_risco`
     calculados (mesma `_calc_risco_germinacao`/`_calc_previsao_risco_germinacao`
     de `diseases`), filtrado pra quem esta em risco medio/alto agora OU
     em algum dia da previsao dos proximos 5 dias -- risco baixo o tempo
     todo nao e' acionavel, so' vira ruido no relatorio."""
+    if site:
+        cards = list(cards) + _doencas_manuais_do_site(site, safra)
     riscos = _build_riscos_climaticos_sem_leitura(cards)
     for d in riscos:
         d["risco"] = _calc_risco_germinacao(d, weather)
@@ -1128,7 +1152,7 @@ def _riscos_climaticos_relevantes(cards, weather):
     ]
 
 
-def _riscos_climaticos_sem_alerta(cards, weather, diseases):
+def _riscos_climaticos_sem_alerta(cards, weather, diseases, site=None, safra=None):
     """Doencas da fazenda com risco de infeccao MEDIO/ALTO (agora ou em
     algum dos proximos 5 dias) que NAO estao em alerta de esporos
     (`diseases`, Atencao/Perigo) -- pedido do usuario (15/10/2026): toda
@@ -1136,7 +1160,7 @@ def _riscos_climaticos_sem_alerta(cards, weather, diseases):
     nao so' as com concentracao alta de esporos. Mesma conta e filtro de
     `_riscos_climaticos_relevantes`."""
     em_alerta = {d["doenca_en"] for d in diseases}
-    return [d for d in _riscos_climaticos_relevantes(cards, weather) if d["doenca_en"] not in em_alerta]
+    return [d for d in _riscos_climaticos_relevantes(cards, weather, site, safra) if d["doenca_en"] not in em_alerta]
 
 
 _STATUS_LABELS = {"Perigo": "Alta concentração de esporos", "Atencao": "Moderada concentração de esporos"}
@@ -1761,7 +1785,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
         # mas o risco CLIMATICO (so' clima x germinacao, nunca depende
         # do sensor) continua valido -- avisa mesmo sem confirmar a
         # doenca, pedido explicito do usuario.
-        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather)
+        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather, site, safra)
     else:
         cards_by_site = _filter_cards_by_cultura(
             {site: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
@@ -1774,7 +1798,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
     if not bloqueado and not is_clima_point:
-        riscos_climaticos = _riscos_climaticos_sem_alerta(cards, weather, diseases)
+        riscos_climaticos = _riscos_climaticos_sem_alerta(cards, weather, diseases, site, safra)
     produtos = _farm_produtos_estoque(site, safra)
 
     destinos = destinos_override if destinos_override is not None else _site_whatsapp_destinations(site)
@@ -3722,8 +3746,8 @@ def recommendations(safra):
         # O risco CLIMATICO (so' clima x germinacao, nao depende do
         # sensor) ainda entra, mesmo bloqueado -- ver
         # `_riscos_climaticos_relevantes`.
-        riscos_sem_alerta = _riscos_climaticos_sem_alerta(cards, weather, diseases)
-        riscos_climaticos = _riscos_climaticos_relevantes(cards, weather) if nivel_dados == "bloqueado" else riscos_sem_alerta
+        riscos_sem_alerta = _riscos_climaticos_sem_alerta(cards, weather, diseases, site, safra)
+        riscos_climaticos = _riscos_climaticos_relevantes(cards, weather, site, safra) if nivel_dados == "bloqueado" else riscos_sem_alerta
         whatsapp_text = _format_whatsapp_message(
             site, [] if nivel_dados == "bloqueado" else diseases, weather=weather,
             produtos=_farm_produtos_estoque(site, safra),
@@ -3829,7 +3853,7 @@ def recommendation_pdf(site_name):
     riscos_climaticos = []
     if bloqueado:
         diseases = []
-        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather)
+        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather, site_name, safra)
     else:
         cards_by_site = _filter_cards_by_cultura(
             {site_name: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
@@ -3840,7 +3864,7 @@ def recommendation_pdf(site_name):
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
     if not bloqueado:
-        riscos_climaticos = _riscos_climaticos_sem_alerta(cards_by_site.get(site_name, []), weather, diseases)
+        riscos_climaticos = _riscos_climaticos_sem_alerta(cards_by_site.get(site_name, []), weather, diseases, site_name, safra)
     produtos = _farm_produtos_estoque(site_name, safra)
     leitura_bioscout = models.fmt_data_br(max((c["data"] for c in raw_cards), default=None))
     _, filename, pdf_bytes = _build_site_pdf(
@@ -4920,6 +4944,7 @@ def admin_doencas():
             "temp_min": data["germ_temp_min"], "temp_max": data["germ_temp_max"],
             "ur_min": data["germ_ur_min"], "molhamento_horas": data["germ_molhamento_horas"],
             "agua_livre_inibe": data["germ_agua_livre_inibe"],
+            "manual": models.is_manual_disease(en),
         }
         for en, data in sorted(info.items(), key=lambda kv: _chave_alfabetica(kv[1]["nome_cientifico"] or ""))
     ]
@@ -5256,6 +5281,21 @@ def aplicar_pesquisa_germinacao():
         )
         aplicados += 1
     return _save_response(f"Pesquisa de germinacao aplicada -- {aplicados} doenca(s) preenchida(s).", "admin_doencas")
+
+
+@app.route("/admin/doencas/manual", methods=["POST"])
+@admin_required
+def adicionar_doenca_manual():
+    """Doenca que o BioScout nao identifica, cadastrada a mao so' pra'
+    entrar no risco de infeccao pelo clima dos relatorios (pedido do
+    usuario, 16/10/2026)."""
+    nome = (request.form.get("nome_pt") or "").strip()
+    if not nome:
+        return _save_response("Informe o nome da doenca.", "admin_doencas")
+    models.add_manual_disease(nome)
+    return _save_response(
+        f"Doenca '{nome}' adicionada -- preencha abaixo a germinacao, as culturas e os paises dela.", "admin_doencas"
+    )
 
 
 @app.route("/admin/doencas/excluir", methods=["POST"])
