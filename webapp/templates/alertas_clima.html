@@ -57,6 +57,18 @@
                 </label>
             </div>
             {% endfor %}
+                    {% set _codigos = ponto.estacoes_proximas | map(attribute='codigo') | list %}
+                    {% if ponto.estacao_selecionada and ponto.estacao_selecionada not in _codigos and not (ponto.estacao_selecionada == '__interp3__' and ponto.estacoes_proximas) %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="estacao_codigo"
+                            value="{% if ponto.estacao_selecionada == '__interp3__' %}__interp3__{% else %}{{ ponto.estacao_pais or 'BR' }}:{{ ponto.estacao_selecionada }}{% endif %}"
+                            id="ac_est_{{ ponto_idx }}_salva" checked>
+                        <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_salva">
+                            {% if ponto.estacao_selecionada == '__interp3__' %}🔀 Interpolacao das 3 estacoes (escolha salva){% else %}📡 Estacao salva ({{ ponto.estacao_selecionada }}){% endif %}
+                            <span class="text-muted">-- fora da lista agora (catalogo de estacoes indisponivel no momento); continua valendo</span>
+                        </label>
+                    </div>
+                    {% endif %}
             {% if ponto.estacoes_proximas %}
             <div class="form-check">
                 <input class="form-check-input" type="radio" name="estacao_codigo" value="__interp3__"

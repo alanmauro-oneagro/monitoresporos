@@ -3639,6 +3639,7 @@ def alertas_clima():
             "pais_nome": countries.get_country(_pais_code_clima)["nome"],
             "estacoes_proximas": countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], _pais_code_clima, n=2),
             "estacao_selecionada": escolha["codigo"] if escolha else "",
+            "estacao_pais": escolha["country_code"] if escolha else "",
             "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
             "weather": weather,
             "nota": anotacao,
@@ -4059,6 +4060,7 @@ def fazendas():
             "virtual": site in virtual_names,
             "estacoes_proximas": estacoes_proximas,
             "estacao_selecionada": escolha["codigo"] if escolha else "",
+            "estacao_pais": escolha["country_code"] if escolha else "",
             "country_code": country_code,
             "solo": site_solos.get(site),
             "ativo": site not in desativadas,
@@ -4649,6 +4651,10 @@ def save_weather_station_override():
     # propria fazenda, ver `countries.estacoes_mais_proximas_global`), nao
     # o da fazenda. "" (radio "coordenada da propria fazenda") continua
     # limpando a escolha manual, como antes.
+    if "estacao_codigo" not in request.form:
+        # Nenhuma opcao marcada (ex.: estacao salva fora da lista do
+        # momento) -- nao apaga a escolha ja' feita.
+        return _save_response("Nenhuma estacao escolhida -- nada foi alterado.", "fazendas")
     raw = request.form.get("estacao_codigo", "")
     if ":" in raw:
         country_code, estacao_codigo = raw.split(":", 1)
@@ -4745,6 +4751,9 @@ def save_site_display_name():
         # antiga pelo site_name ANTIGO (que muda junto do nome).
         _weather_cache.pop(site_name, None)
         return _save_response(f"Nome de '{nome}' salvo.", "fazendas")
+    nome_padrao = site_name.split(" - ", 1)[1] if " - " in site_name else site_name
+    if nome_exibicao.strip() == nome_padrao:
+        nome_exibicao = ""  # igual ao nome padrao -- nao guarda escolha manual a toa
     models.set_site_display_name(site_name, nome_exibicao)
     novo_nome = _nome_exibicao(site_name)
     return _save_response(f"Nome de exibicao atualizado para '{novo_nome}'.", "fazendas")

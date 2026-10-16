@@ -2463,11 +2463,12 @@ def sync_sites(site_names):
     conn = get_db()
     existentes = {r["site_name"] for r in conn.execute("SELECT site_name FROM sites")}
     novos = [name for name in site_names if name not in existentes]
-    for name in site_names:
-        conn.execute(
-            "INSERT OR IGNORE INTO sites (site_name) VALUES (?)", (name,)
-        )
-    conn.commit()
+    # So' grava fazenda nova -- roda em toda requisicao; antes fazia um
+    # INSERT por fazenda (e um commit) a cada pagina aberta, a toa.
+    for name in novos:
+        conn.execute("INSERT OR IGNORE INTO sites (site_name) VALUES (?)", (name,))
+    if novos:
+        conn.commit()
     conn.close()
     return novos
 
