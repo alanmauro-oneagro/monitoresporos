@@ -1133,6 +1133,19 @@ def _doencas_manuais_do_site(site, safra=None):
     return [c for c in cards if not doenca_paises.get(c["doenca_en"]) or pais in doenca_paises[c["doenca_en"]]]
 
 
+def _com_doencas_manuais(site, safra, weather, riscos):
+    """`riscos` (quadro "Risco de infeccao pelo clima") com TODAS as
+    doencas cadastradas a mao que valem pra fazenda, inclusive risco
+    baixo -- tela de Recomendacoes e PDF (pedido do usuario, 16/10/2026);
+    o texto do WhatsApp continua so' com risco medio/alto. Doenca manual
+    sem germinacao cadastrada fica de fora (nao da' pra calcular)."""
+    manuais = _build_riscos_climaticos_sem_leitura(_doencas_manuais_do_site(site, safra))
+    for d in manuais:
+        d["risco"] = _calc_risco_germinacao(d, weather)
+        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    return [d for d in (riscos or []) if not models.is_manual_disease(d["doenca_en"])] + manuais
+
+
 def _riscos_climaticos_relevantes(cards, weather, site=None, safra=None):
     """`_build_riscos_climaticos_sem_leitura` ja' com `risco`/`previsao_risco`
     calculados (mesma `_calc_risco_germinacao`/`_calc_previsao_risco_germinacao`
@@ -1694,6 +1707,9 @@ def _build_site_pdf(
     logo apos o clima. `riscos_climaticos` (ver
     `app._riscos_climaticos_relevantes`) e' o aviso de risco climatico
     sem leitura confirmada, independente de `mostrar_secao_doencas`."""
+    vf = models.get_virtual_farm(site)
+    if not (vf and vf.get("tipo") == "clima"):
+        riscos_climaticos = _com_doencas_manuais(site, safra, weather, riscos_climaticos)
     for d in diseases:
         d["historico"] = data_reader.get_site_disease_history(site, d["doenca_en"], dias=30)
     plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
@@ -3760,20 +3776,16 @@ def recommendations(safra):
         )
         plantio_linhas = [l for l in plantio_by_site.get(site, {}).get(safra, []) if any(l.values())]
         aplicacoes_linhas = [l for l in aplicacoes_by_site.get(site, {}).get(safra, []) if any(l.values())]
-        # Doencas cadastradas a mao na aba Doencas aparecem SEMPRE no
-        # quadro "Risco de infeccao pelo clima" da tela (inclusive risco
-        # baixo, e avisando quando falta a germinacao) -- pedido do usuario
-        # (16/10/2026). No texto/PDF continuam so' com risco medio/alto.
-        manuais_cards = _doencas_manuais_do_site(site, safra)
-        doencas_manuais = _build_riscos_climaticos_sem_leitura(manuais_cards)
-        for d in doencas_manuais:
-            d["risco"] = _calc_risco_germinacao(d, weather)
-            d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
-        com_germinacao = {d["doenca_en"] for d in doencas_manuais}
-        manuais_sem_germinacao = [c["doenca"] for c in manuais_cards if c["doenca_en"] not in com_germinacao]
+        # Doencas cadastradas a mao: sempre no quadro de risco pelo clima
+        # (ver `_com_doencas_manuais`); sem germinacao, aviso pra preencher.
+        riscos_tela = _com_doencas_manuais(site, safra, weather, riscos_sem_alerta)
+        com_germinacao = {d["doenca_en"] for d in riscos_tela}
+        manuais_sem_germinacao = [
+            c["doenca"] for c in _doencas_manuais_do_site(site, safra) if c["doenca_en"] not in com_germinacao
+        ]
         sites_data.append({
             "site": site, "nome_exibicao": _nome_exibicao(site), "diseases": diseases, "thumbnails": thumbnails,
-            "riscos_sem_alerta": [d for d in riscos_sem_alerta if not models.is_manual_disease(d["doenca_en"])] + doencas_manuais,
+            "riscos_sem_alerta": riscos_tela,
             "manuais_sem_germinacao": manuais_sem_germinacao,
             "virtual": is_virtual,
             "weather": weather,
