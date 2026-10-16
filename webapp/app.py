@@ -4394,16 +4394,19 @@ _NOME_DIRECAO_VENTO = {
 
 def _contagem_vento(site_name, dias):
     """Quantas leituras horarias de `dias` ("YYYY-MM-DD") vieram de cada
-    uma das 8 direcoes ({N: n, NE: n, ...}, mesma conta da rosa dos
-    ventos da aba Graficos) -- device BioScout da fazenda; sem leitura
-    dele, a leitura Open-Meteo guardada da coordenada da fazenda. None
-    sem dado."""
+    uma das 8 direcoes ({N: n, NE: n, ...}) -- mesma conta e mesma fonte
+    da rosa dos ventos da aba Graficos. Fazenda sem device (virtual): a
+    leitura Open-Meteo guardada da coordenada dela. None sem dado."""
     device = data_reader.read_site_device_ids().get(site_name)
     if device:
-        lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
+        # Mesma fonte da rosa da aba Graficos: clima do device, completado
+        # pela estacao oficial / estacao de referencia da fazenda.
+        lookup = _completar_clima_horario(
+            data_reader.build_hourly_weather_lookup(data_reader.read_weather()),
+            {site_name: device}, [site_name], dias,
+        )
         contagem = data_reader.contar_direcoes_vento(lookup, [device], dias)
-        if any(contagem.values()):
-            return contagem
+        return contagem if any(contagem.values()) else None
     latlon = _coords_all().get(site_name)
     if latlon:
         por_dia = weather_forecast.get_historico_por_dia(latlon[0], latlon[1], min(dias), max(dias))
