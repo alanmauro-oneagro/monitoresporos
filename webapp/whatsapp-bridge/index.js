@@ -58,18 +58,30 @@ let connected = false;
 let sendQueue = Promise.resolve();
 let pairingCodeState = null; // { code, phone } ou null
 
+function limparSessao() {
+    if (fs.existsSync(AUTH_DIR)) {
+        fs.readdirSync(AUTH_DIR).forEach((nome) => {
+            try { fs.unlinkSync(path.join(AUTH_DIR, nome)); } catch (err) { /* ignora */ }
+        });
+    }
+}
+
 async function startSock() {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log("Usando versao do WhatsApp Web " + version.join(".") + (isLatest ? " (atual)" : " (desatualizada!)"));
-    sock = makeWASocket({
+    const atual = makeWASocket({
         auth: state,
         version,
         browser: ["OneAgro Monitor", "Chrome", "120.0.0"],
         logger: pino({ level: "silent" }),
     });
-    sock.ev.on("creds.update", saveCreds);
-    sock.ev.on("connection.update", async (update) => {
+    sock = atual;
+    atual.ev.on("creds.update", saveCreds);
+    atual.ev.on("connection.update", async (update) => {
+        // Evento de um socket antigo (ja' trocado por /reset ou por um
+        // reinicio) -- ignora, senao nasciam 2 conexoes ao mesmo tempo.
+        if (sock !== atual) return;
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
             lastQrDataUrl = await QRCode.toDataURL(qr);
@@ -88,10 +100,23 @@ async function startSock() {
             const loggedOut = statusCode === DisconnectReason.loggedOut;
             console.log("Conexao fechada -- statusCode=" + statusCode + " motivo=" + (err ? err.message : "desconhecido"));
             if (loggedOut) {
-                console.log("Desconectado pelo celular -- apague a pasta auth_info e escaneie de novo.");
+                // Desconectado pelo celular (aparelho removido/numero
+                // trocado): a sessao salva nao vale mais. Antes o bridge so'
+                // logava e parava -- sem QR novo nunca, a tela ficava em
+                // "Gerando QR code..." pra sempre. Agora limpa a sessao e
+                // reinicia sozinho, gerando um QR novo.
+                console.log("Desconectado pelo celular -- limpando a sessao e gerando QR code novo...");
+                lastQrDataUrl = null;
+                pairingCodeState = null;
+                limparSessao();
+                setTimeout(() => {
+                    if (sock !== atual) return;
+                    startSock().catch((e) => console.error("Falha ao reiniciar:", e.message));
+                }, RECONNECT_DELAY_MS);
             } else {
                 console.log("Tentando reconectar em " + RECONNECT_DELAY_MS + "ms...");
                 setTimeout(() => {
+                    if (sock !== atual) return;
                     startSock().catch((e) => console.error("Falha ao reconectar:", e.message));
                 }, RECONNECT_DELAY_MS);
             }
@@ -274,11 +299,7 @@ app.post("/reset", async (req, res) => {
         connected = false;
         lastQrDataUrl = null;
         pairingCodeState = null;
-        if (fs.existsSync(AUTH_DIR)) {
-            fs.readdirSync(AUTH_DIR).forEach((nome) => {
-                try { fs.unlinkSync(path.join(AUTH_DIR, nome)); } catch (err) { /* ignora */ }
-            });
-        }
+        limparSessao();
         await startSock();
         res.json({ ok: true });
     } catch (err) {

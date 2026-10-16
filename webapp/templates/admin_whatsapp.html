@@ -30,6 +30,10 @@
                     Conectar um aparelho. O QR expira rapido -- essa pagina
                     atualiza sozinha.
                 </p>
+                <form method="post" action="{{ url_for('admin_whatsapp_reset') }}" class="mt-2"
+                      onsubmit="return confirm('Limpar a sessao salva do WhatsApp e gerar um QR code novo?');">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">🔄 Gerar novo QR code</button>
+                </form>
             </div>
         </div>
 
@@ -140,6 +144,10 @@
                     clearInterval(timer);
                     return;
                 }
+                var statusBox = document.getElementById('status-box');
+                statusBox.textContent = data.error
+                    ? '⚠ ' + data.error
+                    : '🔴 Nao conectado -- escaneie o QR code abaixo ou gere um codigo de pareamento.';
                 var container = document.getElementById('qr-container');
                 if (data.qr) {
                     container.innerHTML = '<img src="' + data.qr + '" alt="QR code" style="max-width: 220px;">';
