@@ -3240,62 +3240,11 @@ def mapa():
     cards_by_site = _cards_by_site_all(permitted, _load_translations())
     coords = _coords_all()
     virtual_names = models.virtual_farm_site_names()
-    overrides = models.get_all_weather_station_overrides()
     site_countries = models.get_all_site_countries()
-    # Catalogo de estacoes de todos os paises com pelo menos uma fazenda
-    # (ou ponto virtual) marcada -- 'BR' sempre entra. So chama o provedor
-    # de um pais (ex. DMC) se realmente tiver fazenda la', pra nao gastar
-    # a chamada (e exigir credencial) sem necessidade.
     active_countries = countries.active_country_codes(site_countries)
-    # Busca em paralelo (thread por pais) -- sequencial somaria o timeout
-    # de cada provedor sempre que o cache de 24h expirasse (bug real de
-    # performance, aba Mapa chegando a levar 40+ segundos com um pais
-    # fora do ar, ver estacoes_cache_util.py).
-    estacoes_catalogo = {}
-
-    def _catalogo_do_pais(code):
-        # "country_code" carimbado em cada estacao aqui -- usado so' pra
-        # rotular a agencia certa no tooltip (ver mapa.html), nao muda
-        # nenhuma logica de escolha/distancia.
-        return [(e["codigo"], {**e, "country_code": code}) for e in countries.get_country(code)["station_provider"].get_estacoes()]
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(active_countries), 1)) as executor:
-        for lista in executor.map(_catalogo_do_pais, active_countries):
-            for codigo, estacao in lista:
-                estacoes_catalogo[codigo] = estacao
     sites_data = []
-    estacoes_by_codigo = {}
 
     def _plotar_site(site, lat, lon, cards, tipo=""):
-        pais_da_fazenda = site_countries.get(site, countries.DEFAULT_COUNTRY)
-        provider = countries.get_country(pais_da_fazenda)["station_provider"]
-        escolha = overrides.get(site)
-        codigo_escolhido = escolha["codigo"] if escolha else None
-        estacao = None
-        if codigo_escolhido == INTERPOLACAO_SENTINEL:
-            # "Interpolacao (media) das 3 estacoes mais proximas" (aba
-            # Fazendas) -- mostra as 3 estacoes de VERDADE usadas (nao so'
-            # a mais perto), cada uma com essa fazenda entre quem ela
-            # alimenta (mesmo calculo de `_weather_coords_all`).
-            for e in countries.estacoes_mais_proximas_global(lat, lon, pais_da_fazenda, n=3):
-                entry = estacoes_by_codigo.setdefault(e["codigo"], {
-                    "codigo": e["codigo"], "cidade": e["cidade"], "uf": e["uf"],
-                    "lat": e["lat"], "lon": e["lon"], "country_code": e["country_code"], "fazendas": [],
-                })
-                entry["fazendas"].append({
-                    "site": site, "nome_exibicao": _nome_exibicao(site), "distancia_km": e["distancia_km"],
-                })
-        elif codigo_escolhido and codigo_escolhido in estacoes_catalogo:
-            # Estacao escolhida na aba Fazendas (ou aqui, Pontos Criados) como
-            # referencia de previsao -- essa, e nao a mais proxima, e' quem
-            # realmente alimenta o clima dessa fazenda/ponto.
-            base = estacoes_catalogo[codigo_escolhido]
-            distancia = inmet_stations._haversine_km(lat, lon, base["lat"], base["lon"])
-            estacao = {**base, "distancia_km": round(distancia, 1)}
-        else:
-            estacao = provider.estacao_mais_proxima(lat, lon)
-            if estacao:
-                estacao = {**estacao, "country_code": pais_da_fazenda}
         # Mesmo limiar que ja esconde as caixas de doenca no Painel (ver
         # _nivel_dados_defasados/DADOS_BLOQUEIO_DIAS) -- fazenda sem leitura
         # nova ha mais de 15 dias entra como "inativa" no mapa: pino menor
@@ -3313,14 +3262,6 @@ def mapa():
             "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
             "inativo": inativo,
         })
-        if estacao:
-            entry = estacoes_by_codigo.setdefault(estacao["codigo"], {
-                "codigo": estacao["codigo"], "cidade": estacao["cidade"], "uf": estacao["uf"],
-                "lat": estacao["lat"], "lon": estacao["lon"], "country_code": estacao.get("country_code"), "fazendas": [],
-            })
-            entry["fazendas"].append({
-                "site": site, "nome_exibicao": _nome_exibicao(site), "distancia_km": estacao["distancia_km"],
-            })
 
     for site, cards in cards_by_site.items():
         if site not in coords or not cards:
@@ -3343,12 +3284,10 @@ def mapa():
     # Fronteira desenhada mesmo sem fazenda no pais, desde que o pais ja'
     # tenha integracao de estacao oficial de verdade funcionando (Chile
     # via DMC) -- pedido explicito ("aplicar somente se tiver estacao no
-    # pais"). Os PINOS de estacao continuam so' aparecendo quando alguma
-    # fazenda de verdade usa aquela estacao como referencia (estacoes_by_codigo
-    # acima) -- isso e' literalmente "estacao utilizada", nao muda.
+    # pais"). Pinos de estacao sairam do Mapa (pedido do usuario, 16/10/2026).
     active_country_codes_mapa = sorted(active_countries | countries.paises_com_estacoes())
     return render_template(
-        "mapa.html", sites_data=sites_data, estacoes=list(estacoes_by_codigo.values()), no_access=False,
+        "mapa.html", sites_data=sites_data, no_access=False,
         active_country_codes_mapa=active_country_codes_mapa,
         **_country_map_context(),
     )
