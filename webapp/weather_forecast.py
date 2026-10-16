@@ -364,8 +364,14 @@ def atualizar_todos(coordenadas, estacoes=()):
         previsao_estacao(country_code, codigo)
     # Grades de chuva/nuvens dos mapas ja' pedidas -- busca agora, pra'
     # quem abrir o mapa nao esperar pela Open-Meteo.
+    corte = (_agora_cuiaba().date() - timedelta(days=3)).isoformat()
     with _lock:
-        grades = [g for g in _store["grades"].values() if g.get("lats") and g.get("dia") != janela_de_leitura()]
+        # So' grade que alguem abriu nos ultimos 3 dias -- senao uma grade
+        # abandonada seria rebuscada 3x por dia pra sempre.
+        grades = [
+            g for g in _store["grades"].values()
+            if g.get("lats") and g.get("dia") != janela_de_leitura() and g.get("pedida_em", "") >= corte
+        ]
     for g in grades:
         _grade_diaria(g["tipo"], g["lats"], g["lons"], g["campo_daily"], g["campo_saida"], salvar=False, pela_rodada=True)
     with _lock:

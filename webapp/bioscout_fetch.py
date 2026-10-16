@@ -221,7 +221,8 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
         writer.writerow({"siteId": s.get("siteId"), "siteName": s.get("siteName")})
     sites_path = data_dir / "sites.csv"
     try:
-        atual = sites_path.read_text(encoding="utf-8")
+        with open(sites_path, encoding="utf-8", newline="") as f:  # newline="": compara com o \r\n do csv
+            atual = f.read()
     except OSError:
         atual = None
     if atual != buffer.getvalue():  # so' regrava se a lista de fazendas mudou

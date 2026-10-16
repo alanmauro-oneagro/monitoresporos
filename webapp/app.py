@@ -2460,6 +2460,13 @@ def _auto_detectar_estacoes_novas():
         if site in overrides:
             continue
         pais_fazenda = site_countries.get(site, countries.DEFAULT_COUNTRY)
+        cache_pais = getattr(countries.get_country(pais_fazenda)["station_provider"], "_cache", None)
+        if cache_pais is not None and not cache_pais["estacoes"]:
+            # Catalogo do proprio pais ainda carregando (em segundo plano,
+            # ver estacoes_cache_util) -- espera, senao gravaria de vez uma
+            # estacao do pais vizinho que carregou primeiro.
+            countries.get_country(pais_fazenda)["station_provider"].get_estacoes()
+            continue
         candidatas = countries.estacoes_mais_proximas_global(lat, lon, pais_fazenda, n=1)
         if not candidatas:
             continue
