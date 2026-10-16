@@ -550,6 +550,9 @@ app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 # ida-e-volta ao servidor toda vez pra confirmar que nao mudou. Com
 # max-age, o navegador usa a copia local direto por 12h sem nem perguntar.
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 43200
+# ?v= nos .js do static: o navegador guarda 12h (linha acima), e sem isso
+# continuava com a versao antiga do arquivo depois de um deploy.
+app.jinja_env.globals["versao_estaticos"] = int(time.time())
 
 # Paginas (Manejos/Fungicidas ~400-500KB de HTML) e GeoJSON/rodovias
 # (1.5-4MB cada) iam sem compressao nenhuma -- gzip/brotli reduz ~10x.
