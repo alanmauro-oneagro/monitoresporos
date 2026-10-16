@@ -48,7 +48,7 @@
     Os nomes de
     cidade que aparecem por cima da imagem de satelite (capitais e cidades
     grandes com zoom baixo, cidades menores conforme vai dando zoom) ja
-    mostram a localizacao, sem precisar de linhas de divisa ou rodovia.
+    mostram a localizacao, e as linhas amarelas sao as divisas de estado.
 </p>
 {% endif %}
 {% endblock %}
@@ -543,26 +543,38 @@
         map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
     }
 
-    // Cliente com acesso a UMA fazenda so' (pedido do usuario, 16/10/2026):
-    // mapa abre e fica travado no estado dela -- nao da pra arrastar nem
-    // afastar o zoom pra fora do estado (aproximar continua liberado).
-    if ({{ travar_estado | tojson }} && sites.length) {
+    // Divisas de estado (Brasil pelo IBGE, demais paises ativos pelo adm1)
+    // -- so' contorno fino, nao clicavel.
+    function desenharDivisas(url) {
+        return fetchBoundaryGeojson(url).then(function (geojson) {
+            if (geojson) {
+                L.geoJSON(geojson, {
+                    style: { color: '#ffe100', weight: 1.5, fill: false, opacity: 0.8 },
+                    interactive: false,
+                }).addTo(map);
+            }
+            return geojson;
+        });
+    }
+    var estadosPorPais = { BR: desenharDivisas(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF') };
+    Object.keys(COUNTRY_BOUNDARIES).forEach(function (code) {
+        if (activeCountries[code] && COUNTRY_BOUNDARIES[code].adm1) {
+            estadosPorPais[code] = desenharDivisas(COUNTRY_BOUNDARIES[code].adm1);
+        }
+    });
+
+    // Cliente com acesso a UMA fazenda so': o Mapa ABRE enquadrado no estado
+    // dela, mas continua livre pra arrastar/afastar (a previsao de chuva
+    // cobre quase toda a America do Sul).
+    if ({{ abrir_no_estado | tojson }} && sites.length) {
         var alvo = sites[0];
-        var paisAlvo = siteCountries[alvo.site] || 'BR';
-        var urlEstados = paisAlvo === 'BR'
-            ? IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF'
-            : (COUNTRY_BOUNDARIES[paisAlvo] || {}).adm1;
-        if (urlEstados) {
-            fetchBoundaryGeojson(urlEstados).then(function (geojson) {
+        var estadosDoPais = estadosPorPais[siteCountries[alvo.site] || 'BR'];
+        if (estadosDoPais) {
+            estadosDoPais.then(function (geojson) {
                 var estado = ((geojson && geojson.features) || []).filter(function (f) {
                     return f.geometry && pointInGeometry([alvo.lon, alvo.lat], f.geometry);
                 })[0];
-                if (!estado) return;
-                var limites = L.geoJSON(estado).getBounds();
-                map.setMinZoom(map.getBoundsZoom(limites));
-                map.setMaxBounds(limites.pad(0.05));
-                map.options.maxBoundsViscosity = 1.0;
-                map.fitBounds(limites, { animate: false });
+                if (estado) map.fitBounds(L.geoJSON(estado).getBounds(), { animate: false });
             });
         }
     }
