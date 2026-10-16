@@ -3760,9 +3760,21 @@ def recommendations(safra):
         )
         plantio_linhas = [l for l in plantio_by_site.get(site, {}).get(safra, []) if any(l.values())]
         aplicacoes_linhas = [l for l in aplicacoes_by_site.get(site, {}).get(safra, []) if any(l.values())]
+        # Doencas cadastradas a mao na aba Doencas aparecem SEMPRE aqui na
+        # tela (inclusive risco baixo, e avisando quando falta a
+        # germinacao) -- pedido do usuario (16/10/2026). No texto/PDF
+        # continuam so' com risco medio/alto, igual as do BioScout.
+        manuais_cards = _doencas_manuais_do_site(site, safra)
+        doencas_manuais = _build_riscos_climaticos_sem_leitura(manuais_cards)
+        for d in doencas_manuais:
+            d["risco"] = _calc_risco_germinacao(d, weather)
+            d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+        com_germinacao = {d["doenca_en"] for d in doencas_manuais}
+        manuais_sem_germinacao = [c["doenca"] for c in manuais_cards if c["doenca_en"] not in com_germinacao]
         sites_data.append({
             "site": site, "nome_exibicao": _nome_exibicao(site), "diseases": diseases, "thumbnails": thumbnails,
-            "riscos_sem_alerta": riscos_sem_alerta,
+            "riscos_sem_alerta": [d for d in riscos_sem_alerta if not models.is_manual_disease(d["doenca_en"])],
+            "doencas_manuais": doencas_manuais, "manuais_sem_germinacao": manuais_sem_germinacao,
             "virtual": is_virtual,
             "weather": weather,
             "leitura_data": leitura_data,
