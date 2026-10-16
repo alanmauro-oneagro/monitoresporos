@@ -2,7 +2,7 @@
 {% block title %}Graficos - OneAgro{% endblock %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
-<script src="{{ url_for('static', filename='rosa_ventos.js') }}"></script>
+<script src="{{ url_for('static', filename='rosa_ventos.js', v=versao_estaticos) }}"></script>
 <style>
     /* Altura fixa (nao aspect-ratio) pro grafico -- com 2 eixos Y +
        legenda embaixo, a altura padrao do Chart.js (proporcional a

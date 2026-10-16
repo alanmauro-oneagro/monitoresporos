@@ -5,7 +5,7 @@
 .rec-topo { display: flex; align-items: center; gap: 1.5rem; }
 .rec-topo-esq { flex: 0 1 34rem; min-width: 0; }
 .vento-dia { display: flex; flex-direction: column; align-items: center; margin-bottom: 0.5rem; }
-.vento-dia .vento-texto { text-align: center; font-size: 0.75rem; line-height: 1.25; color: #0a1f44; }
+.vento-dia .vento-texto { text-align: center; font-size: 0.75rem; line-height: 1.25; color: #0a1f44; margin-bottom: 0.25rem; }
 .vento-dia .vento-rosa { position: relative; width: 190px; height: 160px; }
 .clima-titulo { font-size: 0.8rem; font-weight: 700; color: #0a1f44; margin: 0 0 0.2rem; }
 .clima-previsao-titulo { margin-top: 0.6rem; }
@@ -19,8 +19,11 @@
 .clima-prev-dia:last-child { border-right: 0; }
 .clima-prev-dia .clima-valor { font-size: 0.9rem; }
 @media (max-width: 575.98px) {
-    .rec-topo { flex-direction: column; gap: 0; }
-    .vento-dia { align-self: stretch; }
+    .rec-topo { flex-direction: column; align-items: stretch; gap: 0; }
+    .rec-topo-esq { flex: none; }
+    .clima-previsao { margin-bottom: 0.4rem; }
+    .vento-dia { margin-bottom: 0.4rem; }
+    .vento-dia .vento-rosa { width: 210px; height: 150px; }
     .clima-indicadores { grid-template-columns: repeat(2, 1fr); }
     .clima-ind:nth-child(2) { border-right: 0; }
     .clima-ind:nth-child(-n+2) { border-bottom: 1px solid #fff; }
@@ -159,24 +162,6 @@ html { font-size: 14px; }
             </div>
         </div>
         <div class="d-none mt-2" id="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
-        {% if not site_group.diseases %}
-        <div class="alert alert-info small mb-3">Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.</div>
-        {% endif %}
-
-        {% if site_group.nivel_dados == 'bloqueado' %}
-        <div class="text-muted small mb-2">
-            Sem leitura ha {{ site_group.dias_sem_leitura }} dias -- caixas de doenca ocultas ate a estacao voltar a enviar dados novos (dado velho demais pra confiar).
-        </div>
-        {% else %}
-        <div class="mini-thumbs">
-            {% for t in site_group.thumbnails %}
-            <div class="mini-card card-{{ 'perigo' if t.status == 'Perigo' else ('atencao' if t.status == 'Atencao' else 'normal') }}">
-                <div class="valor">{{ t.concentracao if t.concentracao is not none else '-' }}</div>
-                <div class="doenca">{{ t.doenca }}</div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
         <div class="rec-topo">
         <div class="rec-topo-esq">
 
@@ -208,6 +193,25 @@ html { font-size: 14px; }
         </div>
         {% endif %}
         </div>
+
+        {% if not site_group.diseases %}
+        <div class="alert alert-info small mb-3">Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.</div>
+        {% endif %}
+
+        {% if site_group.nivel_dados == 'bloqueado' %}
+        <div class="text-muted small mb-2">
+            Sem leitura ha {{ site_group.dias_sem_leitura }} dias -- caixas de doenca ocultas ate a estacao voltar a enviar dados novos (dado velho demais pra confiar).
+        </div>
+        {% else %}
+        <div class="mini-thumbs">
+            {% for t in site_group.thumbnails %}
+            <div class="mini-card card-{{ 'perigo' if t.status == 'Perigo' else ('atencao' if t.status == 'Atencao' else 'normal') }}">
+                <div class="valor">{{ t.concentracao if t.concentracao is not none else '-' }}</div>
+                <div class="doenca">{{ t.doenca }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
 
         {% for row in site_group.diseases %}
         <div class="{% if not loop.last %}border-bottom pb-3 mb-3{% endif %}">
@@ -389,7 +393,7 @@ html { font-size: 14px; }
 </div>
 {% endfor %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
-<script src="{{ url_for('static', filename='rosa_ventos.js') }}"></script>
+<script src="{{ url_for('static', filename='rosa_ventos.js', v=versao_estaticos) }}"></script>
 <script>
 // Grafico "Esporos por M3" da fazenda -- mesmos parametros do grafico da
 // aba Graficos (faixas verde/amarela/vermelha de atencao/perigo, valor
