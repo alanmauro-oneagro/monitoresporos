@@ -6,6 +6,15 @@
    ficar mais compacto numa visualizacao a 100%, sem precisar dar zoom
    out no navegador. */
 html { font-size: 14px; }
+/* Escolha de destinatarios do WhatsApp (painel que abre no botao). */
+.whatsapp-destinos > summary { list-style: none; }
+.whatsapp-destinos > summary::-webkit-details-marker { display: none; }
+.whatsapp-destinos { position: relative; }
+.whatsapp-destinos-painel { position: absolute; right: 0; z-index: 20; width: min(18rem, 90vw); }
+@media (max-width: 575.98px) {
+    .whatsapp-destinos[open] { flex-basis: 100%; }
+    .whatsapp-destinos-painel { position: static; width: auto; }
+}
 /* Tabela "Risco de infeccao pelo clima" -- compacta, celula colorida. */
 .risco-tabela { font-size: 0.8rem; width: auto; }
 .risco-tabela th, .risco-tabela td { padding: 0.15rem 0.45rem; white-space: nowrap; }
@@ -95,13 +104,35 @@ html { font-size: 14px; }
                         title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- copia so' o clima{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
                     📋 Copiar recomendacao
                 </button>
-                <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" id="{{ whatsapp_form_id }}" class="mb-0">
-                    <input type="hidden" name="safra" value="{{ safra }}">
-                    <button type="submit" class="btn btn-sm btn-outline-success" {% if not site_group.whatsapp_destinos %}disabled{% endif %}
-                            title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- envia so' o clima{% elif site_group.whatsapp_destinos %}Enviar para {{ site_group.whatsapp_destinos }} numero(s) os formatos marcados acima (texto/PDF){% else %}Nenhum numero cadastrado pra essa fazenda ainda{% endif %}">
-                        📲 Enviar por WhatsApp{% if site_group.whatsapp_destinos %} ({{ site_group.whatsapp_destinos }}){% endif %}
-                    </button>
-                </form>
+<details class="whatsapp-destinos">
+                    <summary class="btn btn-sm btn-outline-success"
+                             title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- envia so' o clima{% else %}Escolher quem recebe e enviar os formatos marcados (texto/PDF){% endif %}">
+                        📲 Enviar por WhatsApp{% if site_group.whatsapp_destinos %} ({{ site_group.whatsapp_destinos }}){% endif %} ▾
+                    </summary>
+                    <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" id="{{ whatsapp_form_id }}"
+                          class="whatsapp-destinos-painel card card-body shadow-sm p-2 mt-1 mb-0">
+                        <input type="hidden" name="safra" value="{{ safra }}">
+                        <input type="hidden" name="escolher_destinos" value="1">
+                        <div class="small fw-bold mb-1">Enviar para:</div>
+                        {% for d in site_group.whatsapp_lista %}
+                        <div class="form-check small">
+                            <input class="form-check-input" type="checkbox" name="destino" value="{{ d.telefone }}" checked
+                                   id="dest_{{ safra }}_{{ outer_loop.index0 }}_{{ loop.index0 }}">
+                            <label class="form-check-label" for="dest_{{ safra }}_{{ outer_loop.index0 }}_{{ loop.index0 }}">
+                                {{ d.nome }} <span class="text-muted">(…{{ d.telefone[-4:] }})</span>
+                            </label>
+                        </div>
+                        {% else %}
+                        <div class="small text-muted mb-1">Nenhum numero cadastrado pra essa fazenda.</div>
+                        {% endfor %}
+                        <label class="form-label small text-muted mt-2 mb-1">Outro numero (nao fica salvo):</label>
+                        <div class="d-flex gap-1">
+                            <input type="text" name="codigo_pais" value="55" inputmode="numeric" class="form-control form-control-sm" style="width: 3.5rem;" title="Codigo do pais (55 = Brasil, 56 = Chile)">
+                            <input type="tel" name="numero_telefone" inputmode="tel" placeholder="DDD + numero" class="form-control form-control-sm">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-success mt-2">📲 Enviar</button>
+                    </form>
+                </details>
             </div>
         </div>
         <div class="d-none mt-2" id="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
