@@ -329,6 +329,28 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(function () {});
 }
 </script>
+<script>
+// Personalizacoes de tela da CONTA do usuario (ver /preferencias em
+// app.py) -- valem em qualquer aparelho. `set` grava no servidor com um
+// pequeno atraso (varias mudancas seguidas viram uma gravacao so').
+window.OneAgroPrefs = (function () {
+    var dados = {{ user_prefs | tojson }};
+    var timers = {};
+    return {
+        get: function (chave) { return dados[chave]; },
+        set: function (chave, valor) {
+            dados[chave] = valor;
+            clearTimeout(timers[chave]);
+            timers[chave] = setTimeout(function () {
+                fetch('{{ url_for("salvar_preferencia") }}', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chave: chave, valor: valor }), keepalive: true,
+                }).catch(function () {});
+            }, 400);
+        },
+    };
+})();
+</script>
 <div class="container mt-3">
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}

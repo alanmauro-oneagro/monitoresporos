@@ -495,31 +495,32 @@
         el.addEventListener('change', filtrarEstacoesPorPais);
     });
 
-    // Congela os filtros entre visitas (localStorage, por navegador) --
-    // assim a pessoa nao precisa reconfigurar periodo/pais/estacao
-    // toda vez que reabre a aba. So' guarda no navegador de quem
-    // acessou, nunca no servidor. Data final NAO entra aqui de proposito
+    // Congela os filtros entre visitas, na CONTA do usuario (OneAgroPrefs,
+    // ver base.html) -- vale em qualquer aparelho. Antes ficava so' no
+    // navegador (localStorage); o que estiver la' e' migrado pra conta na
+    // primeira visita. Data final NAO entra aqui de proposito
     // -- sempre parte do "hoje" que o servidor ja manda (`value="{{ fim }}"`),
     // nunca de uma data antiga esquecida numa visita anterior. Pedido
     // explicito do usuario.
     var FILTROS_STORAGE_KEY = 'oneagro_graficos_filtros';
     function salvarFiltros() {
-        try {
-            localStorage.setItem(FILTROS_STORAGE_KEY, JSON.stringify({
-                inicio: document.getElementById('filtroInicio').value,
-                pais: Array.from(document.querySelectorAll('.filtro-pais:checked')).map(function (el) { return el.value; }),
-                estacao: Array.from(document.querySelectorAll('.filtro-estacao:checked')).map(function (el) { return el.value; }),
-                cultura: document.getElementById('filtroCultura').value,
-                ocultarRisco: document.getElementById('filtroOcultarRisco').checked,
-            }));
-        } catch (e) { /* localStorage indisponivel (modo privado etc.) -- ignora */ }
+        window.OneAgroPrefs.set('graficos_filtros', {
+            inicio: document.getElementById('filtroInicio').value,
+            pais: Array.from(document.querySelectorAll('.filtro-pais:checked')).map(function (el) { return el.value; }),
+            estacao: Array.from(document.querySelectorAll('.filtro-estacao:checked')).map(function (el) { return el.value; }),
+            cultura: document.getElementById('filtroCultura').value,
+            ocultarRisco: document.getElementById('filtroOcultarRisco').checked,
+        });
     }
     function restaurarFiltros() {
-        var bruto;
-        try { bruto = localStorage.getItem(FILTROS_STORAGE_KEY); } catch (e) { return; }
-        if (!bruto) return;
-        var f;
-        try { f = JSON.parse(bruto); } catch (e) { return; }
+        var f = window.OneAgroPrefs.get('graficos_filtros');
+        if (!f) {
+            var bruto = null;
+            try { bruto = localStorage.getItem(FILTROS_STORAGE_KEY); } catch (e) { /* indisponivel */ }
+            if (!bruto) return;
+            try { f = JSON.parse(bruto); } catch (e) { return; }
+            window.OneAgroPrefs.set('graficos_filtros', f);  // migra o filtro antigo do navegador pra conta
+        }
         if (f.inicio) document.getElementById('filtroInicio').value = f.inicio;
         if (Array.isArray(f.pais)) {
             document.querySelectorAll('.filtro-pais').forEach(function (el) { el.checked = f.pais.indexOf(el.value) !== -1; });
