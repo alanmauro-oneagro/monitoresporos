@@ -593,6 +593,7 @@ def _inject_nav_safras():
 FETCH_SCRIPT = Path(__file__).parent.parent / "Fetch-BioScoutData.ps1"
 POWERSHELL_EXE = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 SPORE_CSV = data_reader.DATA_DIR / "spore_counts.csv"
+ULTIMA_BUSCA_MARCA = data_reader.DATA_DIR / ".ultima_busca_bioscout"
 AUTO_REFRESH_MAX_AGE_SECONDS = 15 * 60  # se os dados tiverem mais que isso, atualiza sozinho ao abrir a pagina
 BIOSCOUT_USERNAME = os.environ.get("BIOSCOUT_USERNAME")
 BIOSCOUT_PASSWORD = os.environ.get("BIOSCOUT_PASSWORD")
@@ -630,6 +631,10 @@ def _run_fetch_in_background():
     finally:
         with _fetch_lock:
             _fetch_state["running"] = False
+        try:
+            ULTIMA_BUSCA_MARCA.touch()
+        except OSError:
+            pass
 
 
 def _start_fetch_if_not_running():
@@ -644,10 +649,16 @@ def _start_fetch_if_not_running():
 
 
 def _data_age_seconds():
-    try:
-        return time.time() - SPORE_CSV.stat().st_mtime
-    except FileNotFoundError:
-        return None  # nunca foi buscado ainda
+    """Tempo desde a ULTIMA BUSCA no BioScout (marca gravada no fim de
+    cada busca) -- antes era a data do spore_counts.csv, que nao muda
+    quando o BioScout nao traz leitura nova: ai' toda abertura de pagina
+    disparava outra busca completa, sem parar (deixava a navegacao lenta)."""
+    for caminho in (ULTIMA_BUSCA_MARCA, SPORE_CSV):
+        try:
+            return time.time() - caminho.stat().st_mtime
+        except FileNotFoundError:
+            continue
+    return None  # nunca foi buscado ainda
 
 
 def _maybe_auto_refresh():

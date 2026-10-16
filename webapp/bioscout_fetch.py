@@ -21,6 +21,7 @@ exatamente como estava, nunca "some".
 
 So usa `urllib` (biblioteca padrao), sem dependencia nova."""
 import csv
+import io
 import json
 import urllib.error
 import urllib.request
@@ -111,8 +112,19 @@ def _merge_csv(new_rows, path, key_props):
     merged = {}
     for row in existing:
         merged[_row_key(row, key_props)] = row
+    mudou = False
     for row in new_rows:
-        merged[_row_key(row, key_props)] = {k: ("" if v is None else v) for k, v in row.items()}
+        chave = _row_key(row, key_props)
+        novo = {k: ("" if v is None else v) for k, v in row.items()}
+        antigo = merged.get(chave)
+        if antigo is None or any(str(antigo.get(k, "")) != str(v) for k, v in novo.items()):
+            mudou = True
+        merged[chave] = novo
+    if not mudou and existing:
+        # Nada novo -- nao regrava (regravar muda a data do arquivo e
+        # obriga o site a reler/reprocessar o CSV inteiro na proxima
+        # pagina, a toa).
+        return
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="") as f:
@@ -202,11 +214,19 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
     # conteudo dessa conta mesmo, entao usa todos.
     all_sites = _http_json(f"{API_BASE}/api/Site/get?SiteRole=2&SiteRole=3&SiteRole=5&SiteRole=6", headers=headers)
     sites = all_sites
-    with open(data_dir / "sites.csv", "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["siteId", "siteName"])
-        writer.writeheader()
-        for s in sites:
-            writer.writerow({"siteId": s.get("siteId"), "siteName": s.get("siteName")})
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=["siteId", "siteName"])
+    writer.writeheader()
+    for s in sites:
+        writer.writerow({"siteId": s.get("siteId"), "siteName": s.get("siteName")})
+    sites_path = data_dir / "sites.csv"
+    try:
+        atual = sites_path.read_text(encoding="utf-8")
+    except OSError:
+        atual = None
+    if atual != buffer.getvalue():  # so' regrava se a lista de fazendas mudou
+        with open(sites_path, "w", encoding="utf-8", newline="") as f:
+            f.write(buffer.getvalue())
     site_ids = [str(s.get("siteId")) for s in sites]
     log(f"Sites sincronizados: {len(site_ids)}")
 
