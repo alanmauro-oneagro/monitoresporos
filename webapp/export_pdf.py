@@ -11,7 +11,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.graphics.shapes import Drawing, Path, Rect, String
+from reportlab.graphics.shapes import Circle, Drawing, Path, Rect, String
 from reportlab.platypus import (
     KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
@@ -73,26 +73,28 @@ def _linha_suave(pontos):
     return p
 
 
-def _build_spore_chart(historico, largura=17.4 * cm, altura=4.5 * cm):
-    """Graficozinho de concentracao de esporos ao longo do tempo, com as
-    mesmas faixas verde/amarelo/vermelho do dashboard do BioScout (fixas
-    por doenca -- warningConcentrationThreshold/dangerConcentrationThreshold/
-    maximumConcentrationThreshold, ver `data_reader.get_site_disease_history`).
-    Desenhado na mao com formas do reportlab (sem lib de grafico externa,
-    ja que reportlab ja e' dependencia do projeto) -- so' uma linha (a
-    fazenda deste relatorio), nao comparando com outras fazendas."""
+def _build_spore_chart(historico, largura=17.4 * cm, altura=4.8 * cm):
+    """Grafico "Esporos por M3" da doenca na fazenda -- mesmos parametros
+    do grafico da aba Graficos (pedido do usuario, 16/10/2026): faixas
+    verde/amarela/vermelha (warningConcentrationThreshold/
+    dangerConcentrationThreshold/maximumConcentrationThreshold do BioScout,
+    ver `data_reader.get_site_disease_history`), valor acima do maximo
+    cortado no topo e marcado com triangulo vermelho, um ponto por
+    leitura, dia sem leitura sem linha. Desenhado com formas do reportlab
+    (ja' e' dependencia do projeto, sem lib de grafico externa)."""
     if len(historico) < 2:
         return None
     warn = historico[-1]["warn"] or 0
     danger = historico[-1]["danger"] or (warn * 2 or 1)
-    maximo = historico[-1]["maximo"] or (danger * 1.5)
-    # `historico` agora sempre cobre uma janela CORRIDA de dias (ver
-    # `data_reader.get_site_disease_history`) -- dia sem leitura entra
-    # com concentracao=None (gap), precisa filtrar antes do max().
+    maximo = historico[-1]["maximo"]
+    # `historico` cobre uma janela CORRIDA de dias -- dia sem leitura vem
+    # com concentracao=None (gap), filtra antes do max().
     concentracoes = [h["concentracao"] for h in historico if h["concentracao"] is not None]
-    topo = max(maximo, (max(concentracoes) * 1.05) if concentracoes else maximo)
+    if not concentracoes:
+        return None
+    topo = maximo or max(danger * 1.5, max(concentracoes) * 1.05)
 
-    margem_esq, margem_dir, margem_topo, margem_baixo = 0.7 * cm, 0.2 * cm, 0.3 * cm, 0.9 * cm
+    margem_esq, margem_dir, margem_topo, margem_baixo = 0.9 * cm, 0.2 * cm, 0.55 * cm, 0.9 * cm
     plot_w = largura - margem_esq - margem_dir
     plot_h = altura - margem_topo - margem_baixo
     escala_y = plot_h / topo if topo else 0
@@ -102,35 +104,60 @@ def _build_spore_chart(historico, largura=17.4 * cm, altura=4.5 * cm):
     def y(valor):
         return margem_baixo + min(valor, topo) * escala_y
 
-    d.add(Rect(margem_esq, y(0), plot_w, y(warn) - y(0), fillColor=VERDE_FAIXA, strokeColor=None))
-    d.add(Rect(margem_esq, y(warn), plot_w, y(danger) - y(warn), fillColor=AMARELO_FAIXA, strokeColor=None))
-    d.add(Rect(margem_esq, y(danger), plot_w, y(topo) - y(danger), fillColor=VERMELHO_FAIXA, strokeColor=None))
+    d.add(Rect(margem_esq, y(0), plot_w, y(min(warn, topo)) - y(0), fillColor=VERDE_FAIXA, strokeColor=None))
+    d.add(Rect(margem_esq, y(min(warn, topo)), plot_w, y(min(danger, topo)) - y(min(warn, topo)), fillColor=AMARELO_FAIXA, strokeColor=None))
+    d.add(Rect(margem_esq, y(min(danger, topo)), plot_w, y(topo) - y(min(danger, topo)), fillColor=VERMELHO_FAIXA, strokeColor=None))
+    d.add(String(margem_esq, altura - 0.35 * cm, "Esporos por M³", fontSize=7, fontName="Helvetica-Bold", fillColor=colors.HexColor("#444444")))
 
     n = len(historico)
     escala_x = plot_w / (n - 1) if n > 1 else 0
+    cor_linha = AZUL_MARCA
+    vermelho = colors.HexColor("#dc3545")
     # Um trecho por sequencia continua sem gap (dia sem leitura quebra a
-    # linha em vez de ligar reto por cima do buraco, mesmo espirito do
-    # `spanGaps:false` ja usado no grafico de Risco de Infeccao da aba
-    # Graficos).
-    trecho = []
+    # linha, igual ao `spanGaps:false` da aba Graficos).
+    trecho, pontos = [], []
     for i, h in enumerate(historico):
         if h["concentracao"] is None:
             if len(trecho) >= 2:
                 d.add(_linha_suave(trecho))
             trecho = []
             continue
-        trecho.append((margem_esq + i * escala_x, y(h["concentracao"])))
+        ponto = (margem_esq + i * escala_x, y(h["concentracao"]))
+        trecho.append(ponto)
+        pontos.append((ponto, h["concentracao"] > topo))
     if len(trecho) >= 2:
         d.add(_linha_suave(trecho))
+    for (px, py), excedido in pontos:
+        if excedido:
+            tri = Path(fillColor=vermelho, strokeColor=vermelho, strokeWidth=0.5)
+            tri.moveTo(px, py + 3.2)
+            tri.lineTo(px - 3, py - 2)
+            tri.lineTo(px + 3, py - 2)
+            tri.closePath()
+            d.add(tri)
+        else:
+            d.add(Circle(px, py, 1.1, fillColor=cor_linha, strokeColor=cor_linha))
 
     for valor in sorted({0, warn, danger, topo}):
-        d.add(String(margem_esq - 4, y(valor) - 2.5, f"{valor:g}", fontSize=6.5, fillColor=colors.grey, textAnchor="end"))
+        if valor <= topo:
+            d.add(String(margem_esq - 4, y(valor) - 2.5, f"{valor:g}", fontSize=6.5, fillColor=colors.grey, textAnchor="end"))
 
     passo_label = max(1, n // 6)
     for i, h in enumerate(historico):
         if i % passo_label == 0 or i == n - 1:
             x = margem_esq + i * escala_x
-            d.add(String(x, 2, f"{h['data'][8:10]}/{h['data'][5:7]}", fontSize=6.5, fillColor=colors.grey, textAnchor="middle"))
+            ancora = "end" if i == n - 1 else ("start" if i == 0 else "middle")
+            d.add(String(x, 2, f"{h['data'][8:10]}/{h['data'][5:7]}", fontSize=6.5, fillColor=colors.grey, textAnchor=ancora))
+    if any(e for _, e in pontos):
+        lx = largura - margem_dir - 1.9 * cm
+        ly = altura - 0.33 * cm
+        tri = Path(fillColor=vermelho, strokeColor=vermelho, strokeWidth=0.5)
+        tri.moveTo(lx, ly + 5)
+        tri.lineTo(lx - 3, ly)
+        tri.lineTo(lx + 3, ly)
+        tri.closePath()
+        d.add(tri)
+        d.add(String(lx + 5, ly, "acima do máximo", fontSize=6.5, fillColor=vermelho))
 
     return d
 
