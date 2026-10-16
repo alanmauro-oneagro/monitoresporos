@@ -208,6 +208,13 @@ def init_db():
             value TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS user_prefs (
+            user_id INTEGER NOT NULL,
+            chave TEXT NOT NULL,
+            valor TEXT,
+            PRIMARY KEY (user_id, chave)
+        );
+
         CREATE TABLE IF NOT EXISTS whatsapp_schedule (
             site_name TEXT NOT NULL,
             weekday INTEGER NOT NULL,
@@ -821,6 +828,35 @@ def get_setting(key, default=None):
     row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
     conn.close()
     return row["value"] if row else default
+
+
+def get_user_prefs(user_id):
+    """Personalizacoes de tela do usuario (filtros dos Graficos, fazendas
+    abertas nas Recomendacoes...) -- {chave: valor ja decodificado do
+    JSON}. Ficam na conta, valem em qualquer aparelho."""
+    conn = get_db()
+    rows = conn.execute("SELECT chave, valor FROM user_prefs WHERE user_id = ?", (user_id,)).fetchall()
+    conn.close()
+    prefs = {}
+    for r in rows:
+        try:
+            prefs[r["chave"]] = json.loads(r["valor"])
+        except (TypeError, ValueError):
+            continue
+    return prefs
+
+
+def set_user_pref(user_id, chave, valor):
+    conn = get_db()
+    conn.execute(
+        """
+        INSERT INTO user_prefs (user_id, chave, valor) VALUES (?, ?, ?)
+        ON CONFLICT(user_id, chave) DO UPDATE SET valor = excluded.valor
+        """,
+        (user_id, chave, json.dumps(valor)),
+    )
+    conn.commit()
+    conn.close()
 
 
 _NDVI_OCULTAS_KEY = "ndvi_fazendas_ocultas"

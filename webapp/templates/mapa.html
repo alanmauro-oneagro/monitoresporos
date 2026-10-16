@@ -485,6 +485,7 @@
     }
 
     chuvaToggle.addEventListener('change', function () {
+        window.OneAgroPrefs.set('mapa_chuva', chuvaToggle.checked);
         if (!chuvaToggle.checked) {
             pararCicloAutomatico();
             limparCamadaChuva();
@@ -502,6 +503,11 @@
             buscarGradeChuva();
         }
     });
+    // Previsao de chuva ligada/desligada fica salva na conta do usuario.
+    if (window.OneAgroPrefs.get('mapa_chuva')) {
+        chuvaToggle.checked = true;
+        chuvaToggle.dispatchEvent(new Event('change'));
+    }
 
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
     var latlngs = sites.map(function (s) { return [s.lat, s.lon]; });

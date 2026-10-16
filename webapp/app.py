@@ -590,6 +590,35 @@ def _inject_nav_safras():
     ter que passar explicitamente."""
     return {"nav_safras": models.SAFRAS}
 
+
+# Personalizacoes de tela salvas na conta (pedido do usuario, 16/10/2026)
+# -- antes ficavam so' no navegador (localStorage), sem acompanhar a pessoa
+# em outro aparelho e misturando quem usa o mesmo computador.
+PREFERENCIAS_PERMITIDAS = {"graficos_filtros", "rec_abertas", "rec_formatos", "mapa_chuva"}
+
+
+@app.context_processor
+def _inject_user_prefs():
+    if not current_user.is_authenticated:
+        return {"user_prefs": {}}
+    prefs = getattr(g, "_user_prefs", None)
+    if prefs is None:
+        prefs = g._user_prefs = models.get_user_prefs(int(current_user.id))
+    return {"user_prefs": prefs}
+
+
+@app.route("/preferencias", methods=["POST"])
+@login_required
+def salvar_preferencia():
+    corpo = request.get_json(silent=True) or {}
+    chave = corpo.get("chave")
+    if chave not in PREFERENCIAS_PERMITIDAS or "valor" not in corpo:
+        abort(400)
+    if len(json.dumps(corpo["valor"])) > 8000:
+        abort(413)
+    models.set_user_pref(int(current_user.id), chave, corpo["valor"])
+    return jsonify({"ok": True})
+
 FETCH_SCRIPT = Path(__file__).parent.parent / "Fetch-BioScoutData.ps1"
 POWERSHELL_EXE = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 SPORE_CSV = data_reader.DATA_DIR / "spore_counts.csv"

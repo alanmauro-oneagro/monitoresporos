@@ -64,7 +64,7 @@ html { font-size: 14px; }
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}" data-site="{{ site_group.site }}">
                 <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
             </button>
             <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center gap-1 mb-0" data-autosave data-autosave-reload>
@@ -532,8 +532,38 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
         body.classList.toggle('d-none');
         icon.textContent = expanded ? '▶' : '▼';
         if (!expanded) body.querySelectorAll('.esporos-graficos').forEach(carregarGraficosEsporos);
+        // Fazendas abertas ficam salvas na conta do usuario (por safra).
+        var abertas = window.OneAgroPrefs.get('rec_abertas') || {};
+        var lista = (abertas[SAFRA_ATUAL] || []).filter(function (x) { return x !== btn.dataset.site; });
+        if (!expanded) lista.push(btn.dataset.site);
+        abertas[SAFRA_ATUAL] = lista;
+        window.OneAgroPrefs.set('rec_abertas', abertas);
     });
 });
+
+// Personalizacoes salvas na conta do usuario: fazendas abertas (por
+// safra) e Texto/PDF marcados no envio por WhatsApp.
+var SAFRA_ATUAL = {{ safra | tojson }};
+(function () {
+    var abertas = (window.OneAgroPrefs.get('rec_abertas') || {})[SAFRA_ATUAL] || [];
+    document.querySelectorAll('.farm-toggle').forEach(function (btn) {
+        var body = document.getElementById(btn.dataset.target);
+        if (abertas.indexOf(btn.dataset.site) !== -1 && body.classList.contains('d-none')) btn.click();
+    });
+    var formatos = window.OneAgroPrefs.get('rec_formatos');
+    ['texto', 'pdf'].forEach(function (tipo) {
+        var caixas = document.querySelectorAll('input[name="enviar_' + tipo + '"]');
+        if (formatos && typeof formatos[tipo] === 'boolean') caixas.forEach(function (c) { c.checked = formatos[tipo]; });
+        caixas.forEach(function (c) {
+            c.addEventListener('change', function () {
+                caixas.forEach(function (outra) { outra.checked = c.checked; });
+                var atual = window.OneAgroPrefs.get('rec_formatos') || {};
+                atual[tipo] = c.checked;
+                window.OneAgroPrefs.set('rec_formatos', atual);
+            });
+        });
+    });
+})();
 
 // Depois do reload disparado por um autosave "data-autosave-reload" (ex.:
 // trocar a Cultura atual), volta direto pra fazenda em questao (?site=...)
