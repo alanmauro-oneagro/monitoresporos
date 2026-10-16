@@ -2,11 +2,17 @@
 {% block title %}Recomendações {{ safra_label }} - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
-.vento-dia { margin-left: auto; margin-bottom: 0.9rem; border: 1px solid #e2e5e8; background: #fff; border-radius: 0.4rem; padding: 0.35rem 0.6rem 0.2rem; text-align: center; }
+.rec-topo { display: flex; align-items: flex-start; gap: 0.75rem; }
+.rec-topo-esq { flex: 1; min-width: 0; }
+.vento-dia { display: flex; align-items: center; gap: 0.5rem; border: 1px solid #e2e5e8; background: #fff; border-radius: 0.4rem; padding: 0.25rem 0.5rem; margin-bottom: 0.5rem; }
+.vento-dia .vento-texto { text-align: center; max-width: 6.5rem; }
 .vento-dia .vento-rotulo { font-size: 0.7rem; color: #6c757d; }
-.vento-dia .vento-valor { font-size: 0.8rem; font-weight: 700; color: #0a1f44; }
-.vento-dia .vento-rosa { position: relative; width: 170px; height: 150px; }
-@media (max-width: 575.98px) { .vento-dia { margin-left: 0; } }
+.vento-dia .vento-valor { font-size: 0.8rem; font-weight: 700; color: #0a1f44; line-height: 1.2; }
+.vento-dia .vento-rosa { position: relative; width: 130px; height: 110px; }
+@media (max-width: 575.98px) {
+    .rec-topo { flex-direction: column; gap: 0; }
+    .vento-dia { align-self: stretch; justify-content: center; }
+}
 /* Pagina com muita tabela/formulario -- reduz a base (rem) pra tudo
    ficar mais compacto numa visualizacao a 100%, sem precisar dar zoom
    out no navegador. */
@@ -145,7 +151,8 @@ html { font-size: 14px; }
         <div class="alert alert-info small mb-3">Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.</div>
         {% endif %}
 
-        <div class="d-flex flex-wrap align-items-start gap-2">
+        <div class="rec-topo">
+        <div class="rec-topo-esq">
         {% if site_group.nivel_dados == 'bloqueado' %}
         <div class="text-muted small mb-2">
             Sem leitura ha {{ site_group.dias_sem_leitura }} dias -- caixas de doenca ocultas ate a estacao voltar a enviar dados novos (dado velho demais pra confiar).
@@ -160,14 +167,6 @@ html { font-size: 14px; }
             {% endfor %}
         </div>
         {% endif %}
-        {% if site_group.vento_dia %}
-        <div class="vento-dia" title="Direcao de onde o vento soprou hoje -- cada gomo e' a % das leituras vindas daquela direcao">
-            <div class="vento-rotulo">Vento hoje</div>
-            <div class="vento-valor">predominante de {{ site_group.vento_dia.nome }}</div>
-            <div class="vento-rosa"><canvas data-percentuais="{{ site_group.vento_dia.percentuais | tojson | forceescape }}"></canvas></div>
-        </div>
-        {% endif %}
-        </div>
 
         {% if site_group.weather %}
         <div class="small text-muted mt-2 mb-2">
@@ -187,6 +186,17 @@ html { font-size: 14px; }
             {% endif %}
         </div>
         {% endif %}
+        </div>
+        {% if site_group.vento_dia %}
+        <div class="vento-dia" title="Direcao de onde o vento soprou hoje -- cada gomo e' a % das leituras vindas daquela direcao">
+            <div class="vento-texto">
+                <div class="vento-rotulo">Vento hoje</div>
+                <div class="vento-valor">predominante de {{ site_group.vento_dia.nome }}</div>
+            </div>
+            <div class="vento-rosa"><canvas data-percentuais="{{ site_group.vento_dia.percentuais | tojson | forceescape }}"></canvas></div>
+        </div>
+        {% endif %}
+        </div>
 
         {% for row in site_group.diseases %}
         <div class="{% if not loop.last %}border-bottom pb-3 mb-3{% endif %}">
