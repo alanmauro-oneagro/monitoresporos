@@ -6,6 +6,20 @@
    ficar mais compacto numa visualizacao a 100%, sem precisar dar zoom
    out no navegador. */
 html { font-size: 14px; }
+/* Tabela "Risco de infeccao pelo clima" -- compacta, celula colorida. */
+.risco-tabela { font-size: 0.8rem; width: auto; }
+.risco-tabela th, .risco-tabela td { padding: 0.15rem 0.45rem; white-space: nowrap; }
+.risco-tabela .risco-doenca { white-space: normal; min-width: 9rem; }
+.risco-tabela .risco-aviso { white-space: normal; }
+@media (max-width: 575.98px) {
+    .risco-tabela { font-size: 0.72rem; }
+    .risco-tabela th, .risco-tabela td { padding: 0.15rem 0.3rem; }
+    .risco-tabela .risco-doenca { min-width: 6.5rem; }
+    .risco-tabela .badge { font-size: 0.6rem; padding: 0.15em 0.35em; }
+}
+.risco-tabela .risco-vermelho { background-color: #f8d7da; color: #842029; font-weight: 600; }
+.risco-tabela .risco-amarelo { background-color: #fff3cd; color: #7a5a00; font-weight: 600; }
+.risco-tabela .risco-verde { background-color: #d1e7dd; color: #0f5132; }
 </style>
 {% endblock %}
 {% block content %}
@@ -176,39 +190,51 @@ html { font-size: 14px; }
         {% endfor %}
 
         {% if site_group.riscos_sem_alerta or site_group.manuais_sem_germinacao %}
+        {# Tabela compacta (pedido do usuario, 16/10/2026): uma linha por
+           doenca, uma coluna por dia, celula colorida com Alto/Medio/Baixo. #}
+        {% set ns = namespace(datas=[]) %}
+        {% for row in site_group.riscos_sem_alerta %}{% for p in row.previsao_risco or [] %}{% if p.data_fmt not in ns.datas %}{% set ns.datas = ns.datas + [p.data_fmt] %}{% endif %}{% endfor %}{% endfor %}
+        {% set ncols = ns.datas|length if ns.datas else 1 %}
         <div class="mt-3 pt-3 border-top">
             <div class="small fw-bold mb-2">🌡️ Risco de infecção pelo clima <span class="fw-normal text-muted">(sem alerta de esporos)</span></div>
-            {% for row in site_group.riscos_sem_alerta %}
-            <div class="{% if not loop.last or site_group.manuais_sem_germinacao %}mb-2{% endif %}">
-                <strong class="text-uppercase">{{ row.rotulo }}</strong>
-                {% if row.doenca_en.startswith('manual:') %}<span class="badge bg-info text-dark ms-1" title="Cadastrada manualmente na aba Doencas -- sem leitura BioScout">manual</span>{% endif %}
-                {% if row.cientifico %}<span class="small text-muted fst-italic ms-2">({{ row.cientifico }})</span>{% endif %}
-                {% if row.previsao_risco %}
-                <div class="small mt-1">
-                    <span class="fw-bold">Risco de infecção:</span>
-                    {% for p in row.previsao_risco %}
-                    <span class="text-nowrap ms-1">
-                        <span style="display: inline-block; width: 15px; height: 15px; border-radius: 50%; background-color: {{ '#c0392b' if p.risco == 'vermelho' else ('#b7860b' if p.risco == 'amarelo' else '#2e7d32') }}; vertical-align: middle;"></span>
-                        <strong>{{ p.data_fmt }}</strong>: {{ 'Alto' if p.risco == 'vermelho' else ('Médio' if p.risco == 'amarelo' else 'Baixo') }}
-                    </span>{% if not loop.last %} ·{% endif %}
-                    {% endfor %}
-                </div>
-                {% elif row.risco %}
-                <div class="small mt-1">
-                    <span class="badge {{ 'bg-danger' if row.risco == 'vermelho' else ('bg-warning text-dark' if row.risco == 'amarelo' else 'bg-success') }}">
-                        Risco de infecção: {{ 'Alto' if row.risco == 'vermelho' else ('Médio' if row.risco == 'amarelo' else 'Baixo') }}
-                    </span>
-                </div>
-                {% endif %}
+            <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle mb-0 risco-tabela">
+                <thead class="table-light">
+                    <tr>
+                        <th>Doença</th>
+                        {% for dt in ns.datas %}<th class="text-center">{{ dt }}</th>{% else %}<th class="text-center">Agora</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                {% for row in site_group.riscos_sem_alerta %}
+                    <tr>
+                        <td class="risco-doenca" {% if row.cientifico %}title="{{ row.cientifico }}"{% endif %}>
+                            <span class="fw-bold text-uppercase">{{ row.rotulo }}</span>
+                            {% if row.doenca_en.startswith('manual:') %}<span class="badge bg-info text-dark ms-1" title="Cadastrada manualmente na aba Doencas -- sem leitura BioScout">manual</span>{% endif %}
+                            {% if row.cientifico %}<span class="text-muted fst-italic d-none d-md-inline ms-1">({{ row.cientifico }})</span>{% endif %}
+                        </td>
+                        {% if row.previsao_risco %}
+                            {% for dt in ns.datas %}
+                            {% set p = row.previsao_risco | selectattr('data_fmt', 'equalto', dt) | first %}
+                            {% if p %}{% set rotulo = 'Alto' if p.risco == 'vermelho' else ('Médio' if p.risco == 'amarelo' else 'Baixo') %}<td class="text-center risco-{{ p.risco }}" title="{{ dt }}: {{ rotulo }}"><span class="d-none d-sm-inline">{{ rotulo }}</span><span class="d-sm-none">{{ rotulo[0] }}</span></td>{% else %}<td class="text-center text-muted">-</td>{% endif %}
+                            {% endfor %}
+                        {% elif row.risco %}
+                            <td class="text-center risco-{{ row.risco }}" colspan="{{ ncols }}">{{ 'Alto' if row.risco == 'vermelho' else ('Médio' if row.risco == 'amarelo' else 'Baixo') }} (agora)</td>
+                        {% else %}
+                            <td class="text-center text-muted" colspan="{{ ncols }}">Sem clima disponível</td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                {% for nome in site_group.manuais_sem_germinacao %}
+                    <tr>
+                        <td class="risco-doenca"><span class="fw-bold text-uppercase">{{ nome }}</span> <span class="badge bg-info text-dark ms-1">manual</span></td>
+                        <td class="text-warning-emphasis risco-aviso" colspan="{{ ncols }}">⚠ Sem condições de germinação -- preencha na aba Doenças</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
             </div>
-            {% endfor %}
-            {% for nome in site_group.manuais_sem_germinacao %}
-            <div class="{% if not loop.last %}mb-2{% endif %}">
-                <strong class="text-uppercase">{{ nome }}</strong>
-                <span class="badge bg-info text-dark ms-1">manual</span>
-                <div class="small text-warning-emphasis mt-1">⚠ Sem condições de germinação cadastradas -- preencha na aba Doenças para calcular o risco.</div>
-            </div>
-            {% endfor %}
+            <div class="d-sm-none text-muted mt-1" style="font-size: 0.75rem;">A = Alto · M = Médio · B = Baixo</div>
         </div>
         {% endif %}
 
