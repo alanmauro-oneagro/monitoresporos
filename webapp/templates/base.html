@@ -205,8 +205,8 @@
     var timers = new WeakMap();
     function statusFor(field, form) {
         var explicit = field.closest('[data-autosave-group]');
-        if (explicit) return explicit.querySelector('.autosave-status');
-        return form.querySelector('.autosave-status');
+        var status = explicit && explicit.querySelector('.autosave-status');
+        return status || form.querySelector('.autosave-status');
     }
     function formActionUrl(form) {
         // NAO usar form.action direto -- se o form tiver um campo/botao
@@ -218,11 +218,28 @@
         // navegador manda pra propria pagina, entao cai nesse default.
         return form.getAttribute('action') || location.href;
     }
-    function doSave(form, status) {
+    // Form com `data-autosave-por-grupo` (anotacoes em recommendations.html,
+    // um form so' pra todas as fazendas; TS/Sulco/Folha em fazendas.html,
+    // Folha tambem editado em Recomendacoes): manda SO' os campos do grupo
+    // editado -- mandar o form inteiro regravava as outras anotacoes com o
+    // que estava na tela de quem salvou, apagando o que outro usuario
+    // tinha escrito nesse meio tempo.
+    // Os campos ocultos do form fora de qualquer grupo (site_name, safra)
+    // vao junto.
+    function dadosDoGrupo(form, grupo) {
+        var dados = new FormData();
+        Array.prototype.forEach.call(form.elements, function (el) {
+            if (!el.name || el.disabled) return;
+            var dentro = grupo.contains(el);
+            if (dentro || (el.type === 'hidden' && !el.closest('[data-autosave-group]'))) dados.append(el.name, el.value);
+        });
+        return dados;
+    }
+    function doSave(form, status, grupo) {
         if (status) { status.textContent = 'Salvando...'; status.className = 'autosave-status small ms-2 text-muted'; }
         fetch(formActionUrl(form), {
             method: 'POST',
-            body: new FormData(form),
+            body: grupo ? dadosDoGrupo(form, grupo) : new FormData(form),
             headers: { 'X-Autosave': '1' },
         }).then(function (resp) {
             return resp.json().catch(function () { return { ok: resp.ok }; });
@@ -271,7 +288,9 @@
         return ['text', 'number', 'search', 'tel', 'email', 'url'].indexOf(tipo) !== -1;
     }
     function schedule(form, field) {
-        clearTimeout(timers.get(form));
+        var grupo = form.hasAttribute('data-autosave-por-grupo') ? field.closest('[data-autosave-group]') : null;
+        var chave = grupo || form;
+        clearTimeout(timers.get(chave));
         var status = statusFor(field, form);
         if (status) {
             clearTimeout(status._clearTimer);
@@ -288,7 +307,7 @@
         // ver o listener de "focusout" mais abaixo -- nunca no meio de
         // quem ainda esta' digitando.
         if (form.hasAttribute('data-autosave-reload') && ehCampoDeTexto(field)) return;
-        timers.set(form, setTimeout(function () { doSave(form, status); }, 1200));
+        timers.set(chave, setTimeout(function () { doSave(form, status, grupo); }, 1200));
     }
     ['input', 'change'].forEach(function (evtName) {
         document.addEventListener(evtName, function (e) {
