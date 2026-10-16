@@ -78,7 +78,7 @@ def _linha_suave(pontos):
 _DIRECOES_ROSA = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 
-def _build_rosa_ventos(percentuais, largura=7.5 * cm, altura=5.6 * cm):
+def _build_rosa_ventos(percentuais, largura=5.6 * cm, altura=4.4 * cm):
     """Rosa dos ventos -- mesmo desenho da aba Graficos (bussola azul de
     fundo, um gomo verde por direcao com raio proporcional ao % de
     leituras vindas dela). `percentuais`: {"N": %, "NE": %, ...}."""
@@ -368,6 +368,10 @@ def build_recommendation_pdf(
     story.append(Paragraph(subtitulo, _ESTILO_SUBTITULO))
 
     if weather:
+        # Clima/previsao numa coluna e a rosa dos ventos ao lado (quando
+        # houver) -- a rosa sozinha num bloco deixava um vazio grande a
+        # direita e separava o clima da previsao.
+        clima = []
         partes = []
         if weather.get("temperatura_atual") is not None:
             partes.append(f"Temp.: {weather['temperatura_atual']}°C")
@@ -378,16 +382,16 @@ def build_recommendation_pdf(
         if weather.get("chuva_24h_mm") is not None:
             partes.append(f"Chuva 24h: {weather['chuva_24h_mm']} mm")
         if partes:
-            story.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
+            partes = [p.replace(" ", "&nbsp;") for p in partes]
+            clima.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
         vento = weather.get("vento_30d")
+        rosa = _build_rosa_ventos(vento["percentuais"]) if vento else None
         if vento:
-            rosa = _build_rosa_ventos(vento["percentuais"])
-            legenda = Paragraph(
+            clima.append(Paragraph(
                 f"<b>Vento predominante no mês (últimos 30 dias):</b> de {vento['nome']}", _ESTILO_NORMAL
-            )
-            story.append(KeepTogether([legenda, rosa]) if rosa else legenda)
+            ))
         if leitura_bioscout:
-            story.append(Paragraph(f"<b>Leitura BioScout:</b> {leitura_bioscout}", _ESTILO_NORMAL))
+            clima.append(Paragraph(f"<b>Leitura BioScout:</b> {leitura_bioscout}", _ESTILO_NORMAL))
         if weather.get("previsao_5_dias"):
             partes_prev = []
             for i, d in enumerate(weather["previsao_5_dias"]):
@@ -398,11 +402,23 @@ def build_recommendation_pdf(
                     partes_prev.append(f"{data_fmt}: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)")
                 else:
                     partes_prev.append(f"{data_fmt}: {d['chuva_mm']}mm")
-            prev = " &nbsp;|&nbsp; ".join(partes_prev)
-            # <br/> depois do rotulo -- os 5 dias sozinhos numa linha
-            # cabem sem quebrar no meio de um dia (feio, deixava um
-            # pedacinho orfao numa 2a linha).
-            story.append(Paragraph(f"<b>Previsao:</b><br/>{prev}", _ESTILO_NORMAL))
+            # Quebra de linha so' ENTRE dias, nunca no meio de um (feio,
+            # deixava um pedacinho orfao na linha de baixo).
+            prev = " &nbsp;|&nbsp; ".join(p.replace(" ", "&nbsp;") for p in partes_prev)
+            clima.append(Paragraph(f"<b>Previsao:</b><br/>{prev}", _ESTILO_NORMAL))
+        if rosa:
+            largura_util = A4[0] - 3.6 * cm - 12  # margens + padding do frame (6pt de cada lado)
+            tabela = Table([[clima, rosa]], colWidths=[largura_util - rosa.width, rosa.width], hAlign="LEFT")
+            tabela.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            story.append(tabela)
+        else:
+            story.extend(clima)
         story.append(Spacer(1, 4))
 
     if anotacao:
