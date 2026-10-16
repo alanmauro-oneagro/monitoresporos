@@ -4104,6 +4104,8 @@ def ndvi():
         sites = sorted(models.get_user_permitted_site_names(int(current_user.id)))
         if not sites:
             return render_template("ndvi.html", sites_data=[], no_access=True, credenciais_ok=True)
+    ocultas = models.get_ndvi_ocultas()
+    sites = [s for s in sites if s not in ocultas]
 
     cars_by_site = models.get_all_farm_ndvi_cars()
     coords = _coords_all()
@@ -4123,11 +4125,30 @@ def ndvi():
         }
         for site in sites
     ]
+    pode_excluir = current_user.username == ALAN_MAURO_USERNAME
     return render_template(
         "ndvi.html", sites_data=sites_data, no_access=False,
         credenciais_ok=ndvi_service.credenciais_configuradas(),
         hoje=datetime.now(timezone.utc).date().isoformat(),
+        pode_excluir=pode_excluir,
+        ocultas=sorted(({"site": s, "nome_exibicao": _nome_exibicao(s)} for s in ocultas), key=lambda o: o["nome_exibicao"])
+        if pode_excluir else [],
     )
+
+
+@app.route("/ndvi/ocultar", methods=["POST"])
+@alan_mauro_required
+def ocultar_fazenda_ndvi():
+    """Botao "Excluir da aba NDVI" (pedido do usuario, 16/10/2026): tira a
+    fazenda so' da aba NDVI, pra todo mundo -- configuracao geral do site,
+    por isso so' o Alan Mauro. Nao apaga a fazenda nem os dados dela;
+    "Restaurar" no fim da aba traz de volta."""
+    site_name = request.form.get("site_name") or ""
+    oculta = request.form.get("acao") != "restaurar"
+    models.set_ndvi_oculta(site_name, oculta)
+    nome = _nome_exibicao(site_name)
+    flash(f"'{nome}' {'excluida da' if oculta else 'restaurada na'} aba NDVI.", "success")
+    return redirect(url_for("ndvi"))
 
 
 def _checar_acesso_site(site_name):

@@ -24,9 +24,19 @@
 {% set site_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
-        <div class="fw-bold mb-2">
-            {{ site_group.nome_exibicao }}
-            {% if site_group.coords %}- <span class="text-muted fw-normal small">{{ "%.5f"|format(site_group.coords[0]) }}, {{ "%.5f"|format(site_group.coords[1]) }}</span>{% endif %}
+        <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+            <div class="fw-bold flex-grow-1">
+                {{ site_group.nome_exibicao }}
+                {% if site_group.coords %}- <span class="text-muted fw-normal small">{{ "%.5f"|format(site_group.coords[0]) }}, {{ "%.5f"|format(site_group.coords[1]) }}</span>{% endif %}
+            </div>
+            {% if pode_excluir %}
+            <form method="post" action="{{ url_for('ocultar_fazenda_ndvi') }}" class="mb-0"
+                  data-msg="Excluir {{ site_group.nome_exibicao }} da aba NDVI? A fazenda e os dados dela continuam no site -- da pra restaurar no fim desta aba."
+                  onsubmit="return confirm(this.dataset.msg);">
+                <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Tira esta fazenda so' da aba NDVI (pra todos os usuarios)">🗑️ Excluir da aba NDVI</button>
+            </form>
+            {% endif %}
         </div>
         <div class="row g-3">
             <div class="col-12 col-lg-6">
@@ -163,6 +173,22 @@
     </div>
 </div>
 {% endfor %}
+{% endif %}
+
+{% if ocultas %}
+<div class="card shadow-sm mb-3 border-secondary">
+    <div class="card-body">
+        <div class="small fw-bold mb-2">Fazendas excluidas da aba NDVI ({{ ocultas|length }})</div>
+        {% for o in ocultas %}
+        <form method="post" action="{{ url_for('ocultar_fazenda_ndvi') }}" class="d-flex align-items-center gap-2 mb-1">
+            <input type="hidden" name="site_name" value="{{ o.site }}">
+            <input type="hidden" name="acao" value="restaurar">
+            <span class="small flex-grow-1">{{ o.nome_exibicao }}</span>
+            <button type="submit" class="btn btn-sm btn-outline-secondary">↩ Restaurar</button>
+        </form>
+        {% endfor %}
+    </div>
+</div>
 {% endif %}
 
 <p class="text-muted small border-top pt-3 mt-2">
