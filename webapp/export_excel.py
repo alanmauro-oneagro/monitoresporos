@@ -7,7 +7,7 @@ completa) e Relatorio Diario (clima + concentracao de esporos e risco
 de infeccao, dia a dia) -- exportacao restrita a `ALAN_MAURO_USERNAME`,
 ver `admin_exportar` em `app.py`."""
 import io
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -418,19 +418,21 @@ def _relatorio_diario_rows(completar_clima=None):
     era um bug antes desta funcao ganhar atividades: a doenca
     simplesmente sumia da aba, sem nenhum fallback) tambem ganha
     linha(s), so' com o clima em branco."""
-    report = data_reader.build_daily_weather_report(data_reader.read_weather(), UR_LIMIARES)
     translations = models.get_all_disease_translations()
     spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
-    hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
     device_by_site = data_reader.read_site_device_ids()
     device_to_site = {device: site for site, device in device_by_site.items()}
+    hourly_lookup = {}
     if completar_clima:
-        # Dias com leitura de esporo mas sem clima do device (o BioScout
-        # parou de mandar clima) -- `app._completar_clima_horario` preenche
-        # com o historico da Open-Meteo, so' pro Risco de Infeccao.
+        # Clima so' de fonte externa (`app._completar_clima_horario`) --
+        # do BioScout so' esporos. Cobre do 1o dia com leitura de esporo
+        # ate' hoje, por fazenda com device.
         dias_com_esporo = sorted({p["data"] for pontos in spore_lookup.values() for p in pontos})
-        sites_com_esporo = {site for site, _ in spore_lookup}
-        hourly_lookup = completar_clima(hourly_lookup, device_by_site, sites_com_esporo, dias_com_esporo)
+        if dias_com_esporo:
+            inicio = date.fromisoformat(dias_com_esporo[0])
+            dias = [(inicio + timedelta(days=i)).isoformat() for i in range((date.today() - inicio).days + 1)]
+            hourly_lookup = completar_clima({}, device_by_site, set(device_by_site), dias)
+    report = data_reader.relatorio_diario_de_horas(hourly_lookup, UR_LIMIARES)
 
     # (site, dia) -> lista de (nome_pt, concentracao, risco_pct, warn,
     # danger, maximo), ordenada por nome de doenca -- montada uma vez so',

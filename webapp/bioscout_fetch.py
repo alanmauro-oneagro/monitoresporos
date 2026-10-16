@@ -23,7 +23,6 @@ So usa `urllib` (biblioteca padrao), sem dependencia nova."""
 import csv
 import io
 import json
-import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -263,29 +262,9 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
             log(f"  erro contagem de esporos: {exc}")
             erros.append(f"contagem de esporos: {exc}")
 
-    weather_rows = []
-    for site_id in site_ids:
-        start = FULL_HISTORY_SINCE if site_id in new_site_ids else recent_start
-        from_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
-        to_iso = end.strftime("%Y-%m-%dT%H:%M:%SZ")
-        try:
-            w = _http_json(
-                f"{API_BASE}/api/Weather/readings/sites?SiteId={site_id}&StartDate={from_iso}&EndDate={to_iso}",
-                headers=headers,
-            )
-            if w:
-                weather_rows.extend(w)
-        except urllib.error.HTTPError as exc:
-            log(f"  erro clima site {site_id}: {exc}")
-            # 404 = BioScout sem leitura de clima pra esse site (o clima do
-            # site vem do INMET/Open-Meteo) -- nao e' falha da sincronizacao.
-            if exc.code != 404:
-                erros.append(f"clima site {site_id}: {exc}")
-        except Exception as exc:
-            log(f"  erro clima site {site_id}: {exc}")
-            erros.append(f"clima site {site_id}: {exc}")
-    _merge_csv(weather_rows, data_dir / "weather.csv", ["deviceId", "dateMeasured"])
-    log(f"  clima: {len(weather_rows)} registros")
+    # Clima NAO vem do BioScout (decisao do usuario, 16/10/2026): o de
+    # la' e' modelo meteorologico, nao sensor -- o site usa estacao
+    # oficial/Open-Meteo. Do BioScout, so' esporos.
 
     log(f"Concluido. Dados em {data_dir}")
     return erros

@@ -236,50 +236,6 @@ def read_spore_counts():
     return _read_csv_cached(DATA_DIR / "spore_counts.csv", postprocess=_normalizar_display_names)
 
 
-def read_weather():
-    return _read_csv_cached(DATA_DIR / "weather.csv")
-
-
-_weather_lookup_cache = {}
-
-
-def build_weather_lookup(weather_rows):
-    """chave: (deviceUserFriendlyId, data-yyyy-mm-dd) -> {umidade, chuva}.
-    Cacheado pelo mtime de weather.csv -- mesmo padrao/motivo de
-    `_read_csv_cached` (`weather_rows` ja' vem cacheado por mtime, mas
-    essa funcao reprocessava o CSV inteiro do zero em CADA chamada
-    mesmo assim; medido no Mapa: sozinha gastava mais de 1s por
-    requisicao, chamada em toda pagina que mostra card de doenca --
-    Mapa/Dashboard/Graficos/NDVI -- e o site inteiro sentia "pesado")."""
-    mtime = (DATA_DIR / "weather.csv").stat().st_mtime
-    cached = _weather_lookup_cache.get(mtime)
-    if cached is not None:
-        return cached
-    grouped = {}
-    for row in weather_rows:
-        try:
-            dt = _parse_dt(row["dateMeasured"])
-        except (KeyError, ValueError):
-            continue
-        key = (row.get("deviceUserFriendlyId"), dt.date().isoformat())
-        bucket = grouped.setdefault(key, {"humidity": [], "rain": []})
-        hum = _to_float(row.get("humidity"))
-        rain = _to_float(row.get("rainFall"))
-        if hum is not None:
-            bucket["humidity"].append(hum)
-        if rain is not None:
-            bucket["rain"].append(rain)
-
-    lookup = {}
-    for key, vals in grouped.items():
-        umidade = round(sum(vals["humidity"]) / len(vals["humidity"])) if vals["humidity"] else None
-        chuva = round(sum(vals["rain"]), 1) if vals["rain"] else 0
-        lookup[key] = {"umidade": umidade, "chuva": chuva}
-    _weather_lookup_cache.clear()  # so' guarda o mtime mais recente, nao acumula versoes antigas pra sempre
-    _weather_lookup_cache[mtime] = lookup
-    return lookup
-
-
 _disease_concentration_lookup_cache = {}
 
 
@@ -325,25 +281,6 @@ def build_disease_concentration_lookup(spore_rows):
     return lookup
 
 
-# Brasil aboliu horario de verao em 2019 -- offset fixo (mesmo truque
-# de `models._agora_cuiaba`), sem precisar de zoneinfo/tzdata (nao
-# instalado no ambiente de dev local nesta maquina).
-_TZ_OFFSET_HOURS = {
-    "America/Campo_Grande": -4,
-    "America/Sao_Paulo": -3,
-}
-
-
-def _offset_america_santiago(dt_utc):
-    """Chile (America/Santiago) AINDA tem horario de verao (diferente do
-    Brasil, que aboliu em 2019) -- um offset fixo erraria por boa parte
-    do ano. Aproximacao por mes (verao set-abr = UTC-3, inverno mai-ago =
-    UTC-4) em vez da data exata de transicao (que muda de ano a ano) --
-    suficiente aqui, ja que isso alimenta o calculo de risco por hora
-    (`build_hourly_weather_lookup`), nao um horario exibido pra alguem
-    conferir o minuto exato."""
-    return -3 if dt_utc.month in (9, 10, 11, 12, 1, 2, 3, 4) else -4
-
 _DIRECOES_VENTO = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
 
@@ -352,47 +289,6 @@ def _bucket_direcao_vento(graus):
         return None
     idx = round((graus % 360) / 45) % 8
     return _DIRECOES_VENTO[idx]
-
-
-_hourly_weather_lookup_cache = {}
-
-
-def build_hourly_weather_lookup(weather_rows):
-    """(deviceUserFriendlyId, dia local da estacao) -> lista de leituras
-    horarias [{"temp", "umidade", "chuva", "vento"}] daquele dia -- usado
-    pelo grafico de risco de germinacao por doenca da aba Graficos
-    (`app.calc_risco_diario_pct`), que precisa da hora a hora (temp E
-    UR/chuva favoraveis AO MESMO TEMPO, mesma regra de
-    `app._calc_risco_germinacao`) e nao so' de agregados diarios como
-    `build_daily_weather_report`. `vento` (graus, 0-360) alimenta
-    `vento_predominante_do_dia`, pro rotulo de direcao do vento no ponto
-    de risco do grafico. Cacheado pelo mtime de weather.csv (chamada em
-    3 lugares diferentes -- Alertas Clima, NDVI, Excel -- mesmo motivo
-    de `build_weather_lookup` acima)."""
-    mtime = (DATA_DIR / "weather.csv").stat().st_mtime
-    cached = _hourly_weather_lookup_cache.get(mtime)
-    if cached is not None:
-        return cached
-    grouped = {}
-    for row in weather_rows:
-        try:
-            dt_utc = _parse_dt(row["dateMeasured"])
-        except (KeyError, ValueError):
-            continue
-        tz_id = row.get("deviceTimeZoneId")
-        offset = _offset_america_santiago(dt_utc) if tz_id == "America/Santiago" else _TZ_OFFSET_HOURS.get(tz_id, -4)
-        dt_local = dt_utc + timedelta(hours=offset)
-        device = row.get("deviceUserFriendlyId")
-        key = (device, dt_local.date().isoformat())
-        grouped.setdefault(key, []).append({
-            "temp": _to_float(row.get("temperature")),
-            "umidade": _to_float(row.get("humidity")),
-            "chuva": _to_float(row.get("rainFall")) or 0,
-            "vento": _to_float(row.get("windDirection")),
-        })
-    _hourly_weather_lookup_cache.clear()
-    _hourly_weather_lookup_cache[mtime] = grouped
-    return grouped
 
 
 def vento_predominante_do_dia(horas_do_dia):
@@ -451,77 +347,29 @@ def contar_direcoes_vento(hourly_lookup, devices, dias):
     return contagem
 
 
-_daily_weather_report_cache = {}
-
-
-def build_daily_weather_report(weather_rows, ur_limiares=(80, 85, 90, 95), ur_molhamento=90):
-    """Agrupa as leituras horarias do weather.csv por (estacao, dia
-    local da estacao) e calcula, por dia: temp min/max, quantas horas
-    tiveram UR >= cada limiar de `ur_limiares` (a rede manda 1 leitura
-    por hora, entao contar leituras == contar horas), horas de
-    "molhamento foliar" (proxy: UR >= `ur_molhamento` -- a rede nao tem
-    sensor de molhamento real, ver nota em app.py junto de
-    `_PESQUISA_GERMINACAO_2026_08_27`) e a direcao de vento predominante
-    (moda das leituras do dia, em 8 direcoes). Cacheado pelo mtime de
-    weather.csv (+ os parametros, que na pratica sao sempre os mesmos
-    valores default -- so' por seguranca caso um dia alguem chame com
-    limiares diferentes) -- mesmo motivo de `build_weather_lookup` acima."""
-    chave = ((DATA_DIR / "weather.csv").stat().st_mtime, ur_limiares, ur_molhamento)
-    cached = _daily_weather_report_cache.get(chave)
-    if cached is not None:
-        return cached
-    grouped = {}
-    for row in weather_rows:
-        try:
-            dt_utc = _parse_dt(row["dateMeasured"])
-        except (KeyError, ValueError):
-            continue
-        tz_id = row.get("deviceTimeZoneId")
-        offset = _offset_america_santiago(dt_utc) if tz_id == "America/Santiago" else _TZ_OFFSET_HOURS.get(tz_id, -4)
-        dt_local = dt_utc + timedelta(hours=offset)
-        device = row.get("deviceUserFriendlyId")
-        key = (device, dt_local.date().isoformat())
-        bucket = grouped.setdefault(key, {
-            "temps": [], "ur_counts": {l: 0 for l in ur_limiares}, "molhamento": 0, "ventos": [],
-        })
-        temp = _to_float(row.get("temperature"))
-        if temp is not None:
-            bucket["temps"].append(temp)
-        ur = _to_float(row.get("humidity"))
-        if ur is not None:
-            for limiar in ur_limiares:
-                if ur >= limiar:
-                    bucket["ur_counts"][limiar] += 1
-            if ur >= ur_molhamento:
-                bucket["molhamento"] += 1
-        vento = _to_float(row.get("windDirection"))
-        if vento is not None:
-            bucket["ventos"].append(vento)
-
+def relatorio_diario_de_horas(hourly_lookup, ur_limiares=(80, 85, 90, 95), ur_molhamento=90):
+    """Mesmas linhas de `build_daily_weather_report` (temp min/max, horas
+    com UR >= cada limiar, horas de molhamento, vento predominante), a
+    partir de um lookup {(estacao, dia): [{"temp", "umidade", "chuva",
+    "vento"}, ...]} -- o clima horario de fonte externa
+    (`app._completar_clima_horario`), ja' que o clima nao vem mais do
+    BioScout."""
     rows = []
-    for (device, data_iso), vals in grouped.items():
-        temps = vals["temps"]
-        direcoes = [d for d in (_bucket_direcao_vento(v) for v in vals["ventos"]) if d]
-        predominante = Counter(direcoes).most_common(1)[0][0] if direcoes else None
+    for (estacao, data_iso), horas in hourly_lookup.items():
+        temps = [h["temp"] for h in horas if h.get("temp") is not None]
+        urs = [h["umidade"] for h in horas if h.get("umidade") is not None]
+        direcoes = [d for d in (_bucket_direcao_vento(h.get("vento")) for h in horas) if d]
         rows.append({
-            "estacao": device,
+            "estacao": estacao,
             "data": data_iso,
             "temp_min": min(temps) if temps else None,
             "temp_max": max(temps) if temps else None,
-            "ur_counts": vals["ur_counts"],
-            "horas_molhamento": vals["molhamento"],
-            "vento_predominante": predominante,
+            "ur_counts": {l: sum(1 for ur in urs if ur >= l) for l in ur_limiares},
+            "horas_molhamento": sum(1 for ur in urs if ur >= ur_molhamento),
+            "vento_predominante": Counter(direcoes).most_common(1)[0][0] if direcoes else None,
         })
-    # Data mais NOVA primeiro (agrupando o relatorio inteiro por dia),
-    # e dentro de cada dia a estacao em ordem alfabetica -- pedido
-    # explicito do usuario. Dois sorts stable em sequencia (primeiro por
-    # estacao, depois por data decrescente) em vez de uma chave composta,
-    # pra inverter so' a data sem perder a ordem alfabetica da estacao
-    # dentro de cada dia.
     rows.sort(key=lambda r: (r["estacao"] or "").lower())
     rows.sort(key=lambda r: r["data"], reverse=True)
-    _daily_weather_report_cache.clear()
-    _daily_weather_report_cache[chave] = rows
     return rows
 
 
@@ -588,10 +436,8 @@ def compute_status(concentration, warning_threshold, danger_threshold):
 
 def get_dashboard_data(permitted_site_names=None, translations=None):
     """Por fazenda permitida, retorna a ultima leitura de cada doenca com
-    status, umidade e chuva do dia daquela leitura."""
+    status."""
     spore_rows = read_spore_counts()
-    weather_rows = read_weather()
-    weather_lookup = build_weather_lookup(weather_rows)
 
     latest = {}
     for row in spore_rows:
@@ -615,7 +461,6 @@ def get_dashboard_data(permitted_site_names=None, translations=None):
         warn = _to_float(row.get("warningConcentrationThreshold"))
         danger = _to_float(row.get("dangerConcentrationThreshold"))
         status = compute_status(conc or 0, warn, danger)
-        w = weather_lookup.get((row.get("deviceUserFriendlyId"), dt.date().isoformat()))
         cientifico_salvo = translations.get(disease, {}).get("nome_cientifico") if translations else None
         card = {
             "doenca": get_doenca(disease, translations),
@@ -624,8 +469,6 @@ def get_dashboard_data(permitted_site_names=None, translations=None):
             "concentracao": round(conc, 1) if conc is not None else None,
             "status": status,
             "data": dt.date().isoformat(),
-            "umidade": w["umidade"] if w else None,
-            "chuva": w["chuva"] if w else None,
             "warn": warn,
             "danger": danger,
         }

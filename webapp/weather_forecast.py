@@ -697,7 +697,7 @@ def get_historico_por_dia(lat, lon, data_inicio, data_fim):
     """Chuva (mm) e direcao de vento (graus) hora a hora, observados,
     entre `data_inicio` e `data_fim` ("YYYY-MM-DD", inclusive), agrupado
     por dia local -- formato {"chuva", "vento"} de
-    `data_reader.build_hourly_weather_lookup`, pra reusar
+    `app._completar_clima_horario`, pra reusar
     `data_reader.contar_direcoes_vento` (ver `app._chuva_vento_ultimos_30_dias`).
     Sai da leitura diaria guardada (`_ponto`). {} se nao houver dado."""
     return {
@@ -710,7 +710,7 @@ def get_historico_horario(lat, lon, data_inicio, data_fim):
     """Temperatura, umidade, chuva e direcao de vento hora a hora,
     observados, entre `data_inicio` e `data_fim` ("YYYY-MM-DD", inclusive),
     agrupado por dia local -- mesmo formato de
-    `data_reader.build_hourly_weather_lookup`. Usado pelo Risco de
+    `app._completar_clima_horario`. Usado pelo Risco de
     Infeccao quando o device BioScout nao tem clima pro dia. Sai da
     leitura diaria guardada (`_ponto`, historico acumulado de ate'
     `DIAS_HISTORICO_GUARDADOS` dias). {} se nao houver dado."""
