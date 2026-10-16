@@ -3549,6 +3549,11 @@ def chuva_grade():
         abort(400)
     if len(lats) > 3000:
         abort(400)
+    if corpo.get("sem_esperar"):
+        resultado = weather_forecast.get_rain_forecast_grid(lats, lons, esperar=False)
+        if resultado is None:
+            return jsonify({"pendente": True}), 202
+        return jsonify(resultado)
     return jsonify(weather_forecast.get_rain_forecast_grid(lats, lons))
 
 

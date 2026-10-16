@@ -592,7 +592,7 @@ def _grade_pronta(registro, dia):
     return bool(registro.get("resultado")) or time.time() - registro.get("falha_em", 0) < GRADE_RETENTATIVA_SEGUNDOS
 
 
-def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_rodada=False):
+def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_rodada=False, esperar=True):
     """Grade em lote (camadas de nuvens/chuva dos mapas) -- uma chamada
     Open-Meteo pra todos os pontos, guardada por janela de leitura: a mesma
     grade so' e' buscada 1x por janela (cada ponto da grade conta como uma
@@ -612,6 +612,16 @@ def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_
         if _grade_pronta(registro, dia):
             return _resultado_vigente(registro)
         busca_lock = _grade_busca_locks.setdefault(chave, threading.Lock())
+    if not esperar:
+        # Pedido de pagina nao fica preso na busca (grade grande leva
+        # minutos, em lotes -- com 4 threads no gunicorn, poucos pedidos
+        # presos derrubavam o site inteiro): busca em segundo plano e devolve
+        # a grade anterior se houver, ou None ("ainda carregando").
+        if not busca_lock.locked():
+            threading.Thread(
+                target=_grade_diaria, args=(tipo, lats, lons, campo_daily, campo_saida), daemon=True
+            ).start()
+        return _resultado_vigente(registro) if (registro or {}).get("resultado") else None
     # Uma busca por grade de cada vez: quem chega enquanto ela roda (grade
     # grande leva minutos, ver GRADE_LOTE_PONTOS) espera e usa o resultado.
     with busca_lock:
@@ -662,10 +672,11 @@ def get_cloud_forecast_grid(lats, lons):
     return _grade_diaria("nuvens", lats, lons, "cloud_cover_mean", "nuvens_pct_por_dia")
 
 
-def get_rain_forecast_grid(lats, lons):
+def get_rain_forecast_grid(lats, lons, esperar=True):
     """Chuva acumulada (mm, 6 dias) pra uma grade de pontos -- camada de
-    chuva do Mapa/Mapa Interpolado (ver `_grade_diaria`)."""
-    return _grade_diaria("chuva", lats, lons, "precipitation_sum", "chuva_mm_por_dia")
+    chuva do Mapa/Mapa Interpolado (ver `_grade_diaria`). Com
+    `esperar=False`, None enquanto a busca roda em segundo plano."""
+    return _grade_diaria("chuva", lats, lons, "precipitation_sum", "chuva_mm_por_dia", esperar=esperar)
 
 
 def _horas_observadas_por_dia(lat, lon, data_inicio, data_fim):

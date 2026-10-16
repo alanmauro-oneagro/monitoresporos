@@ -520,31 +520,60 @@
         }, 2000);
     }
 
+    // O servidor nao segura o pedido enquanto busca a grade na Open-Meteo
+    // (pode levar minutos, em lotes) -- responde 202 "pendente" e a busca
+    // segue em segundo plano; aqui so' pergunta de novo a cada 15s.
+    var buscandoChuva = false;
+    function agendarNovoPedidoChuva(ms) {
+        buscandoChuva = true;
+        setTimeout(function () {
+            buscandoChuva = false;
+            if (chuvaToggle.checked && !malhaChuva) buscarGradeChuva();
+        }, ms);
+    }
+
+    function pedirGradeChuva() {
+        return fetch('{{ url_for("chuva_grade") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                lats: nosGrade.map(function (n) { return +(n[0] * GRADE_PASSO_GRAUS).toFixed(3); }),
+                lons: nosGrade.map(function (n) { return +(n[1] * GRADE_PASSO_GRAUS).toFixed(3); }),
+                sem_esperar: true,
+            }),
+        }).then(function (r) {
+            if (r.status === 202) return null;
+            return r.ok ? r.json() : [];
+        });
+    }
+
     function buscarGradeChuva() {
+        if (buscandoChuva) return;
+        buscandoChuva = true;
         chuvaStatus.textContent = 'Carregando previsao de chuva...';
         chuvaStatus.classList.remove('d-none');
-        var codigosAtivos = Object.keys(activeCountries);
-        Promise.all(codigosAtivos.map(function (code) { return paisGeojsonPromises[code]; })).then(function (geojsons) {
-            var paises = [];
-            codigosAtivos.forEach(function (code, i) {
-                var bbox = CLOUD_BBOXES[code];
-                if (bbox && geojsons[i] && geojsons[i].features && geojsons[i].features.length) {
-                    paises.push({ bbox: bbox, geojson: geojsons[i] });
-                }
+        var preparar;
+        if (nosGrade.length) {
+            preparar = Promise.resolve();
+        } else {
+            var codigosAtivos = Object.keys(activeCountries);
+            preparar = Promise.all(codigosAtivos.map(function (code) { return paisGeojsonPromises[code]; })).then(function (geojsons) {
+                var paises = [];
+                codigosAtivos.forEach(function (code, i) {
+                    var bbox = CLOUD_BBOXES[code];
+                    if (bbox && geojsons[i] && geojsons[i].features && geojsons[i].features.length) {
+                        paises.push({ bbox: bbox, geojson: geojsons[i] });
+                    }
+                });
+                poligonosChuva = paises.map(function (pais) { return pais.geojson.features[0].geometry; });
+                nosGrade = gerarNosGrade(paises);
+                if (!nosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
             });
-            poligonosChuva = paises.map(function (pais) { return pais.geojson.features[0].geometry; });
-            nosGrade = gerarNosGrade(paises);
-            if (!nosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
-            return fetch('{{ url_for("chuva_grade") }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    lats: nosGrade.map(function (n) { return +(n[0] * GRADE_PASSO_GRAUS).toFixed(3); }),
-                    lons: nosGrade.map(function (n) { return +(n[1] * GRADE_PASSO_GRAUS).toFixed(3); }),
-                }),
-            });
-        }).then(function (r) { return r.ok ? r.json() : []; })
+        }
+        preparar.then(pedirGradeChuva)
             .then(function (dados) {
+                buscandoChuva = false;
+                if (dados === null) { agendarNovoPedidoChuva(15000); return; }
                 gradeChuva = dados;
                 montarMalhaChuva();
                 if (!malhaChuva) throw new Error('grade de chuva vazia');
@@ -557,10 +586,9 @@
             .catch(function () {
                 // Open-Meteo fora/limite estourado: sem mensagem de erro na
                 // tela, tenta de novo sozinho enquanto a chuva estiver ligada.
+                buscandoChuva = false;
                 if (!chuvaToggle.checked) { chuvaStatus.classList.add('d-none'); return; }
-                setTimeout(function () {
-                    if (chuvaToggle.checked && !malhaChuva) buscarGradeChuva();
-                }, 120000);
+                agendarNovoPedidoChuva(60000);
             });
     }
 
