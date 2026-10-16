@@ -1313,8 +1313,7 @@ def _format_whatsapp_message(
     acontecendo (ponto "so clima", ou fazenda real com estacao sem
     leitura ha muito tempo), pra nao sugerir que a fazenda foi checada e
     esta tudo bem quando na verdade nao foi checada. Esse caminho curto NAO repete
-    Produtos/Plantio/Pulverizacao (ao contrario do PDF, que sempre mostra
-    essas secoes), de proposito, pra' manter o aviso "esta tudo tranquilo"
+    Produtos (ao contrario do PDF, que sempre mostra essa secao), de proposito, pra' manter o aviso "esta tudo tranquilo"
     curto. As caixas de Observacao
     (por doenca) e Produtos Fazenda sempre aparecem, mesmo vazias --
     nesse caso o valor e' so "*", pra manter o mesmo formato de relatorio
@@ -1329,18 +1328,15 @@ def _format_whatsapp_message(
     relatorio: titulo -> Manejo/Cultura -> Clima agora -> separador ->
     "Doencas em Atencao/Perigo" -> um bloco por doenca (nome, contagem,
     risco, germinacao, recomendacao, sugestao) -> Produtos ja
-    disponiveis -> Datas de Plantio -> Datas de Pulverizacao -> rodape
+    disponiveis -> rodape. Datas de Plantio, Datas de Pulverizacao e o
+    Risco de infeccao pelo clima NAO entram no texto (pedido do usuario,
+    16/10/2026 -- o PDF continua com eles); `plantio_linhas`,
+    `aplicacoes_linhas` e `riscos_climaticos` sao aceitos e ignorados. Rodape
     (so' o aviso de nao substituir agronomo -- pedido explicito do
     usuario pra' tirar fonte do clima/atualizado em/instituicoes
     consultadas/"Powered by BioScout" do relatorio de TEXTO, mantendo so'
     o aviso de responsabilidade; o PDF continua com essa info completa,
-    ver `_build_site_pdf`/`export_pdf.build_recommendation_pdf`).
-    `riscos_climaticos` (ver `app._riscos_climaticos_relevantes`) e' um
-    aviso a parte, so' de risco climatico (sem status/concentracao
-    confirmados) -- aparece mesmo com `mostrar_secao_doencas=False`
-    (diferente do aviso "esta tudo tranquilo", que fica escondido nesse
-    caso), pois nao afirma deteccao nenhuma, so' que o clima favorece a
-    germinacao de uma doenca ja monitorada nessa fazenda."""
+    ver `_build_site_pdf`/`export_pdf.build_recommendation_pdf`)."""
     _AVISO_AGRONOMO = "Isso não substitui a avaliação de um agrônomo responsável."
 
     def _linhas_clima():
@@ -1390,35 +1386,6 @@ def _format_whatsapp_message(
             linhas.append("Previsao: " + " | ".join(partes_prev))
         return linhas
 
-    def _linhas_risco_climatico():
-        """Aviso "Risco Climatico" -- so' clima comparado com a
-        germinacao de cada doenca ja monitorada nessa fazenda
-        (`riscos_climaticos`, ver `app._riscos_climaticos_relevantes`),
-        SEM depender de leitura confirmada do sensor. Titulo e formato
-        diferentes do bloco "Doencas em Atencao/Perigo" de proposito --
-        deixa claro que isso e' uma previsao baseada em clima, nao uma
-        deteccao confirmada."""
-        if not riscos_climaticos:
-            return []
-        titulo = "*🌡️ Risco de infecção pelo clima (sem alerta de esporos)*" if mostrar_secao_doencas else "*🌡️ Risco Climático (sem leitura recente do sensor)*"
-        linhas = ["", _WHATSAPP_SEPARADOR, titulo]
-        for d in riscos_climaticos:
-            linhas.append("")
-            previsao_risco = d.get("previsao_risco")
-            cabecalho = f"*{d['rotulo'].upper()}*"
-            if not previsao_risco:
-                risco_label = _risco_label(d.get("risco"))
-                if risco_label:
-                    cabecalho += f" — Risco de infecção: {risco_label}"
-            linhas.append(cabecalho)
-            if previsao_risco:
-                dias_txt = " · ".join(
-                    f"{_RISCO_EMOJI.get(p['risco'], '')} *{p['data_fmt']}*: {_risco_label(p['risco'])}"
-                    for p in previsao_risco
-                )
-                linhas.append(f"Risco de infecção: {dias_txt}")
-        return linhas
-
     if not diseases:
         partes = [_whatsapp_titulo(site), ""]
         if safra_label:
@@ -1428,7 +1395,6 @@ def _format_whatsapp_message(
         if safra_label or cultura:
             partes.append("")
         partes.extend(_linhas_clima())
-        partes.extend(_linhas_risco_climatico())
         if mostrar_secao_doencas:
             partes.append("")
             partes.append("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.")
@@ -1483,8 +1449,6 @@ def _format_whatsapp_message(
         lines.append(_WHATSAPP_SEPARADOR)
         lines.append(f"📝 Sugestão: {d.get('nota') or '*'}")
 
-    lines.extend(_linhas_risco_climatico())
-
     lines.append("")
     lines.append(_WHATSAPP_SEPARADOR)
     lines.append("📦 *Produtos ja disponiveis na fazenda*")
@@ -1496,40 +1460,6 @@ def _format_whatsapp_message(
             for p in itens if p.get("nome")
         ]
         lines.append(f"{emoji} *{titulo}:* {', '.join(partes) if partes else '*'}")
-    lines.append("")
-
-    lines.append(_WHATSAPP_SEPARADOR)
-    lines.append("🌱 *Datas de Plantio*")
-    plantio_validas = [l for l in (plantio_linhas or []) if any(l.values())]
-    if not plantio_validas:
-        lines.append("Nenhum plantio cadastrado para esta safra.")
-    else:
-        for l in plantio_validas:
-            partes_plantio = [models.fmt_data_br(l.get("data_plantio")) or "-"]
-            if l.get("talhao"):
-                partes_plantio.append(f"Talhão {l['talhao']}")
-            if l.get("variedade"):
-                partes_plantio.append(l["variedade"])
-            if l.get("ciclo_dias"):
-                partes_plantio.append(f"Ciclo {l['ciclo_dias']} dias")
-            lines.append(" - ".join(partes_plantio))
-    lines.append("")
-
-    lines.append(_WHATSAPP_SEPARADOR)
-    lines.append("🚿 *Datas de Pulverização*")
-    aplicacoes_validas = [l for l in (aplicacoes_linhas or []) if any(l.values())]
-    if not aplicacoes_validas:
-        lines.append("Nenhuma pulverizacao cadastrada para esta safra.")
-    else:
-        for l in aplicacoes_validas:
-            partes_ap = [models.fmt_data_br(l.get("data_aplicacao")) or "-"]
-            if l.get("talhao"):
-                partes_ap.append(f"Talhão {l['talhao']}")
-            if l.get("fungicidas_quimicos"):
-                partes_ap.append(f"Químicos: {l['fungicidas_quimicos']}")
-            if l.get("fungicidas_biologicos"):
-                partes_ap.append(f"Biológicos: {l['fungicidas_biologicos']}")
-            lines.append(" - ".join(partes_ap))
     lines.append("")
 
     lines.append(_WHATSAPP_SEPARADOR)
