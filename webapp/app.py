@@ -3547,7 +3547,7 @@ def chuva_grade():
     lons = corpo.get("lons") or []
     if not lats or len(lats) != len(lons):
         abort(400)
-    if len(lats) > 600:
+    if len(lats) > 3000:
         abort(400)
     return jsonify(weather_forecast.get_rain_forecast_grid(lats, lons))
 

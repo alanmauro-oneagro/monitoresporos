@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import threading
+import time
 import urllib.request
 import urllib.parse
 import estacoes_dados
@@ -527,6 +528,46 @@ def _resultado_vigente(registro):
     return [{**p, campo: (p.get(campo) or [])[atraso:]} for p in resultado]
 
 
+# Limite da Open-Meteo gratuita: 600 chamadas/minuto, e cada ponto de uma
+# grade em lote conta como uma chamada -- grade maior que isso vai em lotes,
+# esperando a janela de 1 minuto liberar entre um e outro.
+GRADE_LOTE_PONTOS = 500
+_GRADE_LIMITE_MINUTO = 550
+_grade_envios = []  # [(timestamp, pontos)] dos ultimos 60s
+_grade_envios_lock = threading.Lock()
+_grade_busca_locks = {}
+
+
+def _aguardar_cota_minuto(pontos):
+    while True:
+        with _grade_envios_lock:
+            agora = time.monotonic()
+            _grade_envios[:] = [(t, n) for t, n in _grade_envios if agora - t < 60]
+            usados = sum(n for _, n in _grade_envios)
+            if not _grade_envios or usados + pontos <= _GRADE_LIMITE_MINUTO:
+                _grade_envios.append((agora, pontos))
+                return
+            espera = 60 - (agora - _grade_envios[0][0]) + 0.5
+        time.sleep(max(espera, 0.5))
+
+
+def _buscar_grade_em_lotes(lats, lons, campo_daily):
+    resultados = []
+    for i in range(0, len(lats), GRADE_LOTE_PONTOS):
+        lote_lats, lote_lons = lats[i:i + GRADE_LOTE_PONTOS], lons[i:i + GRADE_LOTE_PONTOS]
+        params = {
+            "latitude": ",".join(str(v) for v in lote_lats),
+            "longitude": ",".join(str(v) for v in lote_lons),
+            "daily": campo_daily,
+            "forecast_days": 6,
+            "timezone": "auto",
+        }
+        _aguardar_cota_minuto(len(lote_lats))
+        lote = _abrir_json(f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}", timeout=45)
+        resultados.extend(lote if isinstance(lote, list) else [lote])
+    return resultados
+
+
 def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_rodada=False):
     """Grade em lote (camadas de nuvens/chuva dos mapas) -- uma chamada
     Open-Meteo pra todos os pontos, guardada por janela de leitura: a mesma
@@ -546,27 +587,31 @@ def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_
             registro["pedida_em"] = hoje
         if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
             return _resultado_vigente(registro)
-    params = {
-        "latitude": ",".join(str(v) for v in lats),
-        "longitude": ",".join(str(v) for v in lons),
-        "daily": campo_daily,
-        "forecast_days": 6,
-        "timezone": "auto",
-    }
-    url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
+        busca_lock = _grade_busca_locks.setdefault(chave, threading.Lock())
+    # Uma busca por grade de cada vez: quem chega enquanto ela roda (grade
+    # grande leva minutos, ver GRADE_LOTE_PONTOS) espera e usa o resultado.
+    with busca_lock:
+        with _lock:
+            registro = _carregar()["grades"].get(chave)
+            if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
+                return _resultado_vigente(registro)
+        return _buscar_e_guardar_grade(
+            chave, registro, tipo, lats, lons, campo_daily, campo_saida, salvar, pela_rodada, dia, hoje
+        )
+
+
+def _buscar_e_guardar_grade(chave, registro, tipo, lats, lons, campo_daily, campo_saida, salvar, pela_rodada, dia, hoje):
     base = {
         "tipo": tipo, "lats": list(lats), "lons": list(lons), "campo_daily": campo_daily, "campo_saida": campo_saida,
         "pedida_em": (registro or {}).get("pedida_em", hoje) if pela_rodada else hoje,
     }
     try:
-        resultados = _abrir_json(url, timeout=45)
+        resultados = _buscar_grade_em_lotes(list(lats), list(lons), campo_daily)
     except Exception:
         with _lock:
             registro = {**(registro or {}), **base, "falha_janela": dia}
             _store["grades"][chave] = registro
         return _resultado_vigente(registro)
-    if not isinstance(resultados, list):
-        resultados = [resultados]
     saida = []
     for r in resultados:
         daily = r.get("daily", {})

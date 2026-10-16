@@ -249,7 +249,7 @@
         }
         return rotulos;
     })();
-    var GRADE_PASSO_GRAUS = 1.5;
+    var GRADE_PASSO_GRAUS = 1.0;
     var diaSelecionado = 0;
     var gradeChuva = null;
     var chuvaLayers = [];
@@ -273,7 +273,10 @@
         { mm: 90, cor: '#c31f8f' },
     ];
     function limparCamadaChuva() {
-        chuvaLayers.forEach(function (layer) { map.removeLayer(layer); });
+        chuvaLayers.forEach(function (layer) {
+            map.removeLayer(layer);
+            if (layer._urlChuva) URL.revokeObjectURL(layer._urlChuva);
+        });
         chuvaLayers = [];
     }
 
@@ -282,129 +285,195 @@
         return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
     }
 
-    // mm -> cor da faixa (lookup direto na tabela discreta CHUVA_FAIXAS,
-    // sem gradiente/mistura) -- null quando abaixo do minimo (transparente,
-    // sem chuva). Substitui o antigo CHUVA_GRADIENTE (que era plumbing
-    // especifico do Leaflet.heat).
-    function corParaMm(mm) {
-        if (mm === null || mm === undefined || mm < CHUVA_MINIMA_MM) return null;
-        for (var i = 0; i < CHUVA_FAIXAS.length; i++) {
-            if (mm <= CHUVA_FAIXAS[i].mm || i === CHUVA_FAIXAS.length - 1) return CHUVA_FAIXAS[i].cor;
-        }
-    }
+    // Grade UNICA pra todos os paises ativos, com nos em multiplos exatos
+    // de GRADE_PASSO_GRAUS (lat = i*passo, lon = j*passo) -- antes cada pais
+    // tinha a propria grade (origem no bbox dele) e um raster proprio, e os
+    // rasters sobrepostos de paises vizinhos apareciam como retangulos/
+    // cortes retos no mapa. Alem dos nos dentro do contorno, entra o anel de
+    // nos vizinhos (fora dele), pra interpolacao chegar inteira ate a divisa
+    // -- o recorte final e' feito pelo proprio contorno (ver desenharCamadaChuva).
+    var nosGrade = [];        // [[i, j], ...] na ordem pedida ao servidor
+    var poligonosChuva = [];  // geometrias dos paises ativos (recorte)
+    var malhaChuva = null;    // {iMin, jMin, linhas, colunas, dias: [Float32Array]}
 
-    // Indexa os pontos da grade (ja recortados pelo contorno do pais) pelas
-    // linha/coluna inteiras da grade regular, usando o proprio bbox do pais
-    // como origem -- os mesmos indices usados por gerarGradePais pra' gerar
-    // esses pontos (Math.round protege de deriva de ponto flutuante do
-    // "+= GRADE_PASSO_GRAUS" repetido).
-    function construirGradeIndexada(pontosPais, bbox) {
-        var grade = {};
-        pontosPais.forEach(function (ponto) {
-            var mm = (ponto.chuva_mm_por_dia || [])[diaSelecionado];
-            if (mm === null || mm === undefined) return;
-            var gi = Math.round((ponto.lat - bbox.lat_min) / GRADE_PASSO_GRAUS);
-            var gj = Math.round((ponto.lon - bbox.lon_min) / GRADE_PASSO_GRAUS);
-            grade[gi + ',' + gj] = mm;
-        });
-        return grade;
-    }
-
-    // Desenha o raster de UM pais: interpola (bilinear, SEM somar) o valor
-    // de cada pixel a partir dos 4 nos da grade mais proximos (ignorando
-    // cantos sem dado, cortados pelo contorno do pais) e converte pra cor
-    // via corParaMm. O raster e' calculado uma unica vez em coordenadas
-    // geograficas fixas (bounds = bbox do pais) e mostrado via
-    // L.imageOverlay -- o Leaflet reescala a IMAGEM (nao os dados) ao
-    // navegar/dar zoom, entao a cor em qualquer coordenada real NUNCA muda
-    // so' por causa do zoom (o bug relatado pelo usuario em Manaus).
-    function desenharRasterPais(bbox, pontosPais) {
-        var grade = construirGradeIndexada(pontosPais, bbox);
-        var giMax = Math.round((bbox.lat_max - bbox.lat_min) / GRADE_PASSO_GRAUS);
-        var gjMax = Math.round((bbox.lon_max - bbox.lon_min) / GRADE_PASSO_GRAUS);
-        if (giMax < 1 || gjMax < 1) return null;
-        var PX_POR_CELULA = 48;
-        var MAX_DIM = 1600;
-        var largura = (gjMax + 1) * PX_POR_CELULA;
-        var altura = (giMax + 1) * PX_POR_CELULA;
-        var escala = Math.min(1, MAX_DIM / Math.max(largura, altura));
-        largura = Math.max(2, Math.round(largura * escala));
-        altura = Math.max(2, Math.round(altura * escala));
-
-        var canvas = document.createElement('canvas');
-        canvas.width = largura;
-        canvas.height = altura;
-        var ctx = canvas.getContext('2d');
-        var imgData = ctx.createImageData(largura, altura);
-
-        for (var py = 0; py < altura; py++) {
-            // Linha 0 do canvas = topo = lat_max (imagem cresce pra baixo,
-            // latitude cresce pra cima -- eixo Y invertido).
-            var giFrac = (1 - py / (altura - 1)) * giMax;
-            var gi0 = Math.floor(giFrac);
-            var gi1 = Math.min(gi0 + 1, giMax);
-            var fy = giFrac - gi0;
-            for (var px = 0; px < largura; px++) {
-                var gjFrac = (px / (largura - 1)) * gjMax;
-                var gj0 = Math.floor(gjFrac);
-                var gj1 = Math.min(gj0 + 1, gjMax);
-                var fx = gjFrac - gj0;
-
-                var cantos = [
-                    { v: grade[gi0 + ',' + gj0], w: (1 - fx) * (1 - fy) },
-                    { v: grade[gi0 + ',' + gj1], w: fx * (1 - fy) },
-                    { v: grade[gi1 + ',' + gj0], w: (1 - fx) * fy },
-                    { v: grade[gi1 + ',' + gj1], w: fx * fy },
-                ];
-                var somaPeso = 0, somaValor = 0;
-                cantos.forEach(function (c) {
-                    if (c.v === undefined) return;
-                    somaPeso += c.w;
-                    somaValor += c.w * c.v;
-                });
-                var idx = (py * largura + px) * 4;
-                if (somaPeso <= 0) { imgData.data[idx + 3] = 0; continue; }
-                var cor = corParaMm(somaValor / somaPeso);
-                if (!cor) { imgData.data[idx + 3] = 0; continue; }
-                var rgb = hexParaRgb(cor);
-                imgData.data[idx] = rgb.r;
-                imgData.data[idx + 1] = rgb.g;
-                imgData.data[idx + 2] = rgb.b;
-                imgData.data[idx + 3] = 255;
-            }
-        }
-        ctx.putImageData(imgData, 0, 0);
-        var bounds = L.latLngBounds([bbox.lat_min, bbox.lon_min], [bbox.lat_max, bbox.lon_max]);
-        return L.imageOverlay(canvas.toDataURL(), bounds, { opacity: 0.75, interactive: false }).addTo(map);
-    }
-
-    function desenharCamadaChuva() {
-        limparCamadaChuva();
-        if (!gradeChuva || !gradeChuva.length) return;
-        Object.keys(activeCountries).forEach(function (code) {
-            var bbox = CLOUD_BBOXES[code];
-            if (!bbox) return;
-            var pontosPais = gradeChuva.filter(function (p) {
-                return p.lat >= bbox.lat_min - 1e-6 && p.lat <= bbox.lat_max + 1e-6 &&
-                    p.lon >= bbox.lon_min - 1e-6 && p.lon <= bbox.lon_max + 1e-6;
-            });
-            if (!pontosPais.length) return;
-            var layer = desenharRasterPais(bbox, pontosPais);
-            if (layer) chuvaLayers.push(layer);
-        });
-    }
-
-    function gerarGradePais(bbox, paisGeojson) {
-        var pontos = [];
-        for (var lat = bbox.lat_min; lat <= bbox.lat_max; lat += GRADE_PASSO_GRAUS) {
-            for (var lon = bbox.lon_min; lon <= bbox.lon_max; lon += GRADE_PASSO_GRAUS) {
-                if (pointInGeometry([lon, lat], paisGeojson.features[0].geometry)) {
-                    pontos.push([lat, lon]);
+    function gerarNosGrade(paises) {
+        var dentro = {};
+        var todos = {};
+        paises.forEach(function (pais) {
+            var bbox = pais.bbox, geom = pais.geojson.features[0].geometry;
+            for (var i = Math.ceil(bbox.lat_min / GRADE_PASSO_GRAUS); i <= Math.floor(bbox.lat_max / GRADE_PASSO_GRAUS); i++) {
+                for (var j = Math.ceil(bbox.lon_min / GRADE_PASSO_GRAUS); j <= Math.floor(bbox.lon_max / GRADE_PASSO_GRAUS); j++) {
+                    if (dentro[i + ',' + j]) continue;
+                    if (pointInGeometry([j * GRADE_PASSO_GRAUS, i * GRADE_PASSO_GRAUS], geom)) dentro[i + ',' + j] = [i, j];
                 }
             }
-        }
-        return pontos;
+        });
+        Object.keys(dentro).forEach(function (chave) {
+            var i = dentro[chave][0], j = dentro[chave][1];
+            for (var di = -1; di <= 1; di++) {
+                for (var dj = -1; dj <= 1; dj++) todos[(i + di) + ',' + (j + dj)] = [i + di, j + dj];
+            }
+        });
+        return Object.keys(todos).map(function (chave) { return todos[chave]; });
     }
+
+    function montarMalhaChuva() {
+        if (!nosGrade.length || !gradeChuva || gradeChuva.length !== nosGrade.length) { malhaChuva = null; return; }
+        var iMin = Infinity, iMax = -Infinity, jMin = Infinity, jMax = -Infinity;
+        nosGrade.forEach(function (n) {
+            iMin = Math.min(iMin, n[0]); iMax = Math.max(iMax, n[0]);
+            jMin = Math.min(jMin, n[1]); jMax = Math.max(jMax, n[1]);
+        });
+        var linhas = iMax - iMin + 1, colunas = jMax - jMin + 1;
+        var dias = [];
+        for (var d = 0; d < DIAS_CHUVA.length; d++) {
+            var valores = new Float32Array(linhas * colunas).fill(NaN);
+            nosGrade.forEach(function (n, k) {
+                var mm = ((gradeChuva[k] || {}).chuva_mm_por_dia || [])[d];
+                if (mm !== null && mm !== undefined) valores[(n[0] - iMin) * colunas + (n[1] - jMin)] = mm;
+            });
+            dias.push(valores);
+        }
+        malhaChuva = { iMin: iMin, jMin: jMin, linhas: linhas, colunas: colunas, dias: dias };
+    }
+
+    // Pesos Catmull-Rom (interpolacao bicubica) -- contornos arredondados
+    // em vez dos losangos/degraus da bilinear.
+    function pesosCubicos(t) {
+        var t2 = t * t, t3 = t2 * t;
+        return [(-t + 2 * t2 - t3) / 2, (2 - 5 * t2 + 3 * t3) / 2, (t + 4 * t2 - 3 * t3) / 2, (-t2 + t3) / 2];
+    }
+    // Por coluna (lon) ou linha (lat) da tela: indice do no a esquerda/
+    // abaixo e os pesos -- iguais pra linha/coluna inteira, calculados 1x.
+    function eixoInterpolacao(coord, origem, total) {
+        var g = coord / GRADE_PASSO_GRAUS - origem;
+        if (!(g >= 0 && g <= total - 1)) return null;
+        var k0 = Math.min(Math.floor(g), total - 2);
+        var t = g - k0;
+        return { k0: k0, t: t, w: pesosCubicos(t) };
+    }
+
+    // mm -> cor da faixa (tabela discreta CHUVA_FAIXAS) -- null abaixo do
+    // minimo (transparente, sem chuva).
+    var CHUVA_RGB = CHUVA_FAIXAS.map(function (f) { return hexParaRgb(f.cor); });
+    function rgbParaMm(mm) {
+        if (!(mm >= CHUVA_MINIMA_MM)) return null;
+        for (var i = 0; i < CHUVA_FAIXAS.length; i++) {
+            if (mm <= CHUVA_FAIXAS[i].mm) return CHUVA_RGB[i];
+        }
+        return CHUVA_RGB[CHUVA_RGB.length - 1];
+    }
+
+    function valorNaMalha(v, colunas, linhas, ex, ey) {
+        // Bicubica com os 16 nos em volta; perto da borda da grade (algum
+        // no faltando) cai pra bilinear com os 4 nos mais proximos que existirem.
+        var soma = 0, completo = true;
+        for (var a = 0; a < 4 && completo; a++) {
+            var i = ey.k0 - 1 + a;
+            if (i < 0 || i >= linhas) { completo = false; break; }
+            var linha = 0;
+            for (var b = 0; b < 4; b++) {
+                var j = ex.k0 - 1 + b;
+                var val = (j < 0 || j >= colunas) ? NaN : v[i * colunas + j];
+                if (val !== val) { completo = false; break; }
+                linha += ex.w[b] * val;
+            }
+            soma += ey.w[a] * linha;
+        }
+        if (completo) return soma;
+        var cantos = [
+            [ey.k0, ex.k0, (1 - ex.t) * (1 - ey.t)], [ey.k0, ex.k0 + 1, ex.t * (1 - ey.t)],
+            [ey.k0 + 1, ex.k0, (1 - ex.t) * ey.t], [ey.k0 + 1, ex.k0 + 1, ex.t * ey.t],
+        ];
+        var somaPeso = 0, somaValor = 0;
+        cantos.forEach(function (c) {
+            var val = v[c[0] * colunas + c[1]];
+            if (val !== val) return;
+            somaPeso += c[2];
+            somaValor += c[2] * val;
+        });
+        return somaPeso > 0 ? somaValor / somaPeso : NaN;
+    }
+
+    // Raster refeito na resolucao da TELA (a cada zoom/arrasto e a cada
+    // troca de dia) em vez de uma imagem fixa esticada pelo Leaflet -- borda
+    // nitida em qualquer zoom. O valor em cada coordenada vem so' dos dados
+    // (interpolacao em lat/lon), entao a cor de um lugar nao muda com o zoom.
+    var desenhoChuvaSeq = 0;
+    function desenharCamadaChuva() {
+        if (!malhaChuva) { limparCamadaChuva(); return; }
+        var seq = ++desenhoChuvaSeq;
+        var tamanho = map.getSize();
+        var MARGEM = 0.15;
+        var escala = Math.min(window.devicePixelRatio || 1, 1.5);
+        var x0 = -tamanho.x * MARGEM, y0 = -tamanho.y * MARGEM;
+        var larguraCss = tamanho.x * (1 + 2 * MARGEM), alturaCss = tamanho.y * (1 + 2 * MARGEM);
+        var largura = Math.round(larguraCss * escala), altura = Math.round(alturaCss * escala);
+        if (largura < 2 || altura < 2) return;
+
+        var colunasX = [], linhasY = [];
+        for (var px = 0; px < largura; px++) {
+            colunasX.push(eixoInterpolacao(map.containerPointToLatLng(L.point(x0 + (px + 0.5) / escala, 0)).lng, malhaChuva.jMin, malhaChuva.colunas));
+        }
+        for (var py = 0; py < altura; py++) {
+            linhasY.push(eixoInterpolacao(map.containerPointToLatLng(L.point(0, y0 + (py + 0.5) / escala)).lat, malhaChuva.iMin, malhaChuva.linhas));
+        }
+        var valores = malhaChuva.dias[diaSelecionado];
+        var bruto = document.createElement('canvas');
+        bruto.width = largura; bruto.height = altura;
+        var ctxBruto = bruto.getContext('2d');
+        var img = ctxBruto.createImageData(largura, altura);
+        for (py = 0; py < altura; py++) {
+            var ey = linhasY[py];
+            if (!ey) continue;
+            for (px = 0; px < largura; px++) {
+                var ex = colunasX[px];
+                if (!ex) continue;
+                var rgb = rgbParaMm(valorNaMalha(valores, malhaChuva.colunas, malhaChuva.linhas, ex, ey));
+                if (!rgb) continue;
+                var idx = (py * largura + px) * 4;
+                img.data[idx] = rgb.r; img.data[idx + 1] = rgb.g; img.data[idx + 2] = rgb.b; img.data[idx + 3] = 255;
+            }
+        }
+        ctxBruto.putImageData(img, 0, 0);
+
+        // Recorte pelo contorno real de cada pais (em vez dos degraus da grade).
+        var canvas = document.createElement('canvas');
+        canvas.width = largura; canvas.height = altura;
+        var ctx = canvas.getContext('2d');
+        ctx.beginPath();
+        poligonosChuva.forEach(function (geom) {
+            var poligonos = geom.type === 'Polygon' ? [geom.coordinates] : (geom.type === 'MultiPolygon' ? geom.coordinates : []);
+            poligonos.forEach(function (aneis) {
+                aneis.forEach(function (anel) {
+                    anel.forEach(function (c, k) {
+                        var p = map.latLngToContainerPoint([c[1], c[0]]);
+                        var x = (p.x - x0) * escala, y = (p.y - y0) * escala;
+                        if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    });
+                    ctx.closePath();
+                });
+            });
+        });
+        ctx.clip('evenodd');
+        ctx.drawImage(bruto, 0, 0);
+
+        var bounds = L.latLngBounds(
+            map.containerPointToLatLng(L.point(x0, y0 + alturaCss)),
+            map.containerPointToLatLng(L.point(x0 + larguraCss, y0))
+        );
+        canvas.toBlob(function (blob) {
+            if (!blob || seq !== desenhoChuvaSeq || !chuvaToggle.checked) return;
+            var url = URL.createObjectURL(blob);
+            limparCamadaChuva();
+            var layer = L.imageOverlay(url, bounds, { opacity: 0.75, interactive: false }).addTo(map);
+            layer._urlChuva = url;
+            chuvaLayers.push(layer);
+        });
+    }
+    map.on('moveend', function () {
+        if (chuvaToggle.checked && malhaChuva) desenharCamadaChuva();
+    });
 
     var chuvaToggle = document.getElementById('chuva-toggle');
     var chuvaStatus = document.getElementById('chuva-status');
@@ -456,23 +525,28 @@
         chuvaStatus.classList.remove('d-none');
         var codigosAtivos = Object.keys(activeCountries);
         Promise.all(codigosAtivos.map(function (code) { return paisGeojsonPromises[code]; })).then(function (geojsons) {
-            var pontosGrade = [];
+            var paises = [];
             codigosAtivos.forEach(function (code, i) {
                 var bbox = CLOUD_BBOXES[code];
-                if (bbox && geojsons[i]) pontosGrade = pontosGrade.concat(gerarGradePais(bbox, geojsons[i]));
+                if (bbox && geojsons[i] && geojsons[i].features && geojsons[i].features.length) {
+                    paises.push({ bbox: bbox, geojson: geojsons[i] });
+                }
             });
-            if (!pontosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
+            poligonosChuva = paises.map(function (pais) { return pais.geojson.features[0].geometry; });
+            nosGrade = gerarNosGrade(paises);
+            if (!nosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
             return fetch('{{ url_for("chuva_grade") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    lats: pontosGrade.map(function (p) { return p[0]; }),
-                    lons: pontosGrade.map(function (p) { return p[1]; }),
+                    lats: nosGrade.map(function (n) { return +(n[0] * GRADE_PASSO_GRAUS).toFixed(3); }),
+                    lons: nosGrade.map(function (n) { return +(n[1] * GRADE_PASSO_GRAUS).toFixed(3); }),
                 }),
             });
         }).then(function (r) { return r.ok ? r.json() : []; })
             .then(function (dados) {
                 gradeChuva = dados;
+                montarMalhaChuva();
                 if (chuvaToggle.checked) {
                     desenharCamadaChuva();
                     chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
@@ -494,7 +568,7 @@
             return;
         }
         mostrarLegendaChuva();
-        if (gradeChuva) {
+        if (malhaChuva) {
             desenharCamadaChuva();
             chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
             chuvaStatus.classList.remove('d-none');
