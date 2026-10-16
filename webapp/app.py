@@ -1567,7 +1567,11 @@ def _site_whatsapp_destinations(site):
 # min um do outro) toma a MESMA rajada, mesmo sem nenhuma fazenda ter
 # mais de 1 destinatario. Espalhar por HORAS (nao so' segundos) quebra
 # esse padrao de rajada nos dois casos.
-RECIPIENT_STAGGER_HORAS = 1
+# Substituido em 16/10/2026 (pedido do usuario): em vez de espalhar por
+# horas, todo envio sai um de cada vez com 15s entre um e outro
+# (`whatsapp.INTERVALO_ENTRE_ENVIOS_S`). 0 desliga o escalonamento por hora
+# sem mexer na logica de agenda/dedup por telefone que usa esta constante.
+RECIPIENT_STAGGER_HORAS = 0
 # Nenhum envio AUTOMATICO sai antes disso (minutos do dia, Cuiaba) -- a
 # primeira leitura de clima do dia e' as 04:45 (weather_forecast.
 # HORARIOS_LEITURA); antes de 5h30 o relatorio sairia com o clima das
@@ -1578,75 +1582,40 @@ ENVIO_AUTOMATICO_MINIMO_MIN = 5 * 60 + 30
 
 
 def _enviar_whatsapp_manual_escalonado(site, safra, enviar_texto, enviar_pdf, destinos=None):
-    """Envio manual (botao "Enviar por WhatsApp") pra' uma fazenda com
-    VARIOS destinatarios -- manda pro PRIMEIRO na hora (resposta imediata
-    pra quem clicou) e ENFILEIRA os demais (`models.enqueue_whatsapp_manual`)
-    pra' serem despachados mais tarde pelo loop de fundo
-    (`_run_manual_whatsapp_fila`), um a cada `RECIPIENT_STAGGER_HORAS`
-    horas -- ver esse comentario ali em cima pro motivo. Horario calculado
-    com `_agora_cuiaba_dt()` (NUNCA `datetime.now()` puro -- ver docstring
-    dela). Descarta qualquer lote anterior ainda pendente pra' essa
-    fazenda (`models.clear_whatsapp_manual_fila`) antes de enfileirar o
-    novo -- clicar "Enviar por WhatsApp" de novo (ex.: por duvida se
-    funcionou) SUBSTITUI o lote pendente em vez de empilhar mais um, senao
-    os subordinados acabariam recebendo o mesmo relatorio 2+ vezes.
-
-    Antes de decidir o horario de CADA destinatario (inclusive o
-    "primeiro", que normalmente sai na hora), confere
-    `models.get_horarios_ocupados_por_telefone_hoje()` -- o ultimo envio
-    JA' feito ou enfileirado HOJE pro mesmo numero, vindo de QUALQUER
-    fazenda e QUALQUER mecanismo (agendado ou outro clique manual). Sem
-    isso, o "primeiro" deste lote sempre saia na hora mesmo que o numero
-    tivesse acabado de receber outra fazenda minutos atras -- bug real,
-    confirmado em producao 2026-09-22 (2 mensagens 34min uma da outra pro
-    mesmo numero, ambas retidas pelo WhatsApp). Se ATE' o primeiro
-    precisar esperar, ninguem sai sincrono neste clique -- todos entram
-    na fila, sem excecao (evita a confusao de "por que so' o 3o
-    destinatario saiu na hora"). Retorna (ok_texto, ok_pdf,
-    mensagem-resumo), mesma assinatura de `_send_site_whatsapp`.
-    `destinos` [(telefone, rotulo)] = so' os escolhidos na tela (e/ou um
-    numero digitado); None = todos os cadastrados da fazenda."""
+    """Envio manual (botao "Enviar por WhatsApp") pra' uma fazenda: manda
+    pra cada destinatario em sequencia, numa thread de fundo -- a tela
+    responde na hora, e cada mensagem sai so' 15s depois da anterior
+    terminar, sem nunca coincidir com outro envio (agendado ou de outra
+    fazenda), ver `whatsapp._um_envio_por_vez`. Descarta o que ainda
+    estiver pendente pra' essa fazenda na fila antiga
+    (`models.clear_whatsapp_manual_fila`), senao clicar de novo mandaria
+    em dobro. `destinos` [(telefone, rotulo)] = so' os escolhidos na tela
+    (e/ou um numero digitado); None = todos os cadastrados da fazenda.
+    Retorna (ok_texto, ok_pdf, mensagem-resumo), mesma assinatura de
+    `_send_site_whatsapp`."""
     if destinos is None:
         destinos = _site_whatsapp_destinations(site)
     models.clear_whatsapp_manual_fila(site)
     if not destinos:
         return _send_site_whatsapp(site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
 
-    agora = _agora_cuiaba_dt()
-    ocupados = models.get_horarios_ocupados_por_telefone_hoje()
-    planejados = []
-    for i, (telefone, rotulo) in enumerate(destinos):
-        desejado = agora + timedelta(hours=RECIPIENT_STAGGER_HORAS * i)
-        ocupado_ate = ocupados.get(telefone)
-        if ocupado_ate:
-            liberado_em = datetime.strptime(ocupado_ate, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc) + timedelta(hours=RECIPIENT_STAGGER_HORAS)
-            desejado = max(desejado, liberado_em)
-        planejados.append((telefone, rotulo, desejado))
+    def enviar_todos():
+        with app.app_context():
+            for telefone, rotulo in destinos:
+                try:
+                    _send_site_whatsapp(
+                        site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf,
+                        destinos_override=[(telefone, rotulo)],
+                    )
+                except Exception as exc:
+                    models.log_whatsapp_envio(site, rotulo, telefone, False, f"erro inesperado: {exc}")
 
-    primeiro_telefone, primeiro_rotulo, primeiro_quando = planejados[0]
-    if primeiro_quando <= agora:
-        ok_texto, ok_pdf, resumo = _send_site_whatsapp(
-            site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf,
-            destinos_override=[(primeiro_telefone, primeiro_rotulo)],
-        )
-        resto = planejados[1:]
-    else:
-        ok_texto, ok_pdf = True, True
-        resto = planejados
-        resumo = (
-            f"ninguem ainda (numero(s) ja receberam mensagem de outra fazenda ha pouco) -- "
-            f"primeiro destinatario sai as {primeiro_quando.strftime('%H:%M')}"
-        )
-
-    if resto:
-        for telefone, rotulo, quando in resto:
-            models.enqueue_whatsapp_manual(site, safra, telefone, rotulo, enviar_texto, enviar_pdf, quando)
-        resumo += (
-            f" -- {len(resto)} destinatario(s) restante(s) serao enviados ao longo do dia "
-            f"(1 a cada {RECIPIENT_STAGGER_HORAS}h, ou mais tarde se o numero ja tiver recebido "
-            f"algo de outra fazenda hoje), pra evitar retencao do WhatsApp."
-        )
-    return ok_texto, ok_pdf, resumo
+    threading.Thread(target=enviar_todos, daemon=True).start()
+    nomes = ", ".join(rotulo for _, rotulo in destinos)
+    return True, True, (
+        f"{len(destinos)} destinatario(s) ({nomes}) -- sai um de cada vez, "
+        f"{whatsapp.INTERVALO_ENTRE_ENVIOS_S}s entre mensagens"
+    )
 
 
 def _run_manual_whatsapp_fila():

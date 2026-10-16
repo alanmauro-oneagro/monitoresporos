@@ -90,3 +90,12 @@ MAIS de uma fazenda enviando (agendado E/OU manual) pro mesmo numero em
 janela curta -- `models.get_horarios_ocupados_por_telefone_hoje()` e' o
 lugar certo pra' depurar isso (deveria sempre refletir o ultimo envio
 real, de qualquer origem, antes de qualquer novo calculo).
+
+
+**SUBSTITUIDO em 2026-10-16 (decisao explicita do Alan, avisado do risco
+de "Aguardando mensagem" voltar):** regra nova pra manual E agendado --
+nunca dois envios ao mesmo tempo, e um novo envio so' comeca 15s depois
+do anterior terminar (`whatsapp.INTERVALO_ENTRE_ENVIOS_S`, portao
+`_um_envio_por_vez` em webapp/whatsapp.py). `RECIPIENT_STAGGER_HORAS = 0`.
+Se a retencao voltar, o historico acima explica a causa e o fix antigo
+(1h) -- mas so' voltar pra ele com o OK do Alan.

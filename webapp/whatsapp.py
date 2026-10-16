@@ -17,8 +17,11 @@ configurar. Enquanto `WHATSAPP_PROVIDER` nao for definido como
 "cloud_api", este arquivo continua se comportando exatamente como
 sempre (nada muda so' por `whatsapp_cloud_api.py` existir)."""
 import base64
+import functools
 import json
 import os
+import threading
+import time
 import urllib.request
 import urllib.error
 
@@ -36,6 +39,29 @@ BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "http://127.0.0.1:3001")
 # (app.py inteiro so' conhece as funcoes deste modulo, nunca o provedor
 # por baixo).
 WHATSAPP_PROVIDER = os.environ.get("WHATSAPP_PROVIDER", "bridge")
+
+# Regra do usuario (16/10/2026): nunca dois envios ao mesmo tempo (manual,
+# agendado, NDVI, de fazendas diferentes...) -- um novo envio so' comeca
+# INTERVALO_ENTRE_ENVIOS_S segundos depois que o anterior terminou. Todo
+# envio do site passa pelas funcoes publicas abaixo, entao o portao fica
+# aqui. Substitui o escalonamento de 1h por destinatario/numero.
+INTERVALO_ENTRE_ENVIOS_S = 15
+_portao_envio = threading.Lock()
+_fim_ultimo_envio = [0.0]
+
+
+def _um_envio_por_vez(funcao):
+    @functools.wraps(funcao)
+    def envolvida(*args, **kwargs):
+        with _portao_envio:
+            espera = _fim_ultimo_envio[0] + INTERVALO_ENTRE_ENVIOS_S - time.monotonic()
+            if espera > 0:
+                time.sleep(espera)
+            try:
+                return funcao(*args, **kwargs)
+            finally:
+                _fim_ultimo_envio[0] = time.monotonic()
+    return envolvida
 
 
 def get_status():
@@ -115,6 +141,7 @@ def reset_session():
         return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
 
 
+@_um_envio_por_vez
 def send_whatsapp(phone, text):
     """Retorna (ok: bool, mensagem: str) -- do provedor ativo (`WHATSAPP_PROVIDER`)."""
     if WHATSAPP_PROVIDER == "cloud_api":
@@ -160,6 +187,7 @@ def _send_whatsapp_bridge(phone, text):
         return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
 
 
+@_um_envio_por_vez
 def send_whatsapp_image(phone, imagem_bytes, caption=None):
     """Manda uma imagem (PNG) anexada -- o mesmo /send do bridge, so' que
     com `imageBase64` em vez de `message`/`documentBase64` (o WhatsApp
@@ -214,6 +242,7 @@ def usa_modelo_oficial():
     return WHATSAPP_PROVIDER == "cloud_api"
 
 
+@_um_envio_por_vez
 def send_relatorio_modelo(phone, pdf_bytes, filename, variaveis):
     """Relatorio pelo modelo aprovado (so' na API oficial, ver
     `whatsapp_cloud_api.send_relatorio_modelo`)."""
@@ -222,6 +251,7 @@ def send_relatorio_modelo(phone, pdf_bytes, filename, variaveis):
     return whatsapp_cloud_api.send_relatorio_modelo(phone, pdf_bytes, filename, variaveis)
 
 
+@_um_envio_por_vez
 def send_whatsapp_document(phone, pdf_bytes, filename, caption=None):
     """Manda um PDF como documento anexado (nao so' texto) -- o mesmo
     /send do bridge, so' que com `documentBase64`/`fileName` em vez de
