@@ -401,8 +401,10 @@ def _completar_clima_horario(hourly_lookup, device_by_site, sites, dias):
     mandar clima dos devices (404 no endpoint de clima, ver
     bioscout_fetch), e sem isso o Risco de Infeccao/vento da aba
     Graficos ficava vazio em todo dia passado. Ordem de preferencia:
-    device BioScout > estacao oficial da fazenda (`_estacao_oficial_do_site`,
-    pais com integracao de dados medidos) > Open-Meteo."""
+    clima BioScout (e' MODELO meteorologico, nao sensor -- o device so'
+    mede esporo; ver .claude/memory/oneagro_clima_bioscout_modelo.md) >
+    estacao oficial da fazenda (`_estacao_oficial_do_site`, pais com
+    integracao de dados medidos) > Open-Meteo."""
     if not dias:
         return hourly_lookup
     coords_clima = _weather_coords_all()
@@ -2640,8 +2642,8 @@ def dashboard():
     # Painel mostra TODAS as caixas de doenca sempre -- o filtro de cultura
     # so se aplica nas abas Recomendacoes (Safra / 2 Safra), nao aqui.
     # Umidade/chuva vem SEMPRE da Open-Meteo (mesma fonte usada em
-    # Recomendacoes/Alertas Clima/WhatsApp) -- nao mais do sensor do
-    # proprio dispositivo BioScout, que so' ficava tao fresco quanto a
+    # Recomendacoes/Alertas Clima/WhatsApp) -- nao mais do clima que o
+    # BioScout mandava por device (modelo, nao sensor), que so' ficava tao fresco quanto a
     # ultima sincronizacao daquele aparelho (podendo ficar velho bem na
     # hora que a fazenda mais precisa de clima confiavel, ver
     # DADOS_BLOQUEIO_DIAS) -- pedido explicito do usuario ("sempre
