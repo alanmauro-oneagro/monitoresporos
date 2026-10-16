@@ -199,14 +199,6 @@
 <script>
 (function () {
     var sites = {{ sites_data | tojson }};
-    var estacoes = {{ estacoes | tojson }};
-    // Nome da agencia por pais (INMET, DMC, SMN...) -- so' pro rotulo do
-    // tooltip de estacao, ver buildStationTooltipHtml. Vem de
-    // countries.py (agencia_estacoes), nao hardcoded aqui.
-    var AGENCIA_POR_PAIS = {{ agencia_por_pais | tojson }};
-    function agenciaDaEstacao(estacao) {
-        return AGENCIA_POR_PAIS[estacao.country_code] || 'Estacao oficial';
-    }
     var LOGO_URL = '{{ url_for("static", filename="oneagro-logo.png") }}';
     var PIN_COR_NORMAL = '#ffffff';
     // Amarelo claro -- unica marca visual de que e' uma fazenda criada
@@ -250,19 +242,6 @@
             'width:18px;height:18px;"></div>',
         className: 'mapa-pin-icon', iconSize: [18, 18], iconAnchor: [9, 9],
     });
-    // Tamanho 40% menor que o pino de estacao do Mapa normal -- aqui
-    // aparecem TODAS as estacoes do Brasil (nao so as em uso), fica
-    // cheio de pino, e o menor ajuda a nao poluir o mapa.
-    var stationIcon = L.divIcon({
-        html: '<div style="background:#1971c2;border:1px solid #ffffff;border-radius:50%;' +
-            'width:6.5px;height:6.5px;display:flex;align-items:center;justify-content:center;' +
-            'font-size:3.5px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">📡</div>',
-        className: 'mapa-pin-icon',
-        iconSize: [6.5, 6.5],
-        iconAnchor: [3.5, 3.5],
-        tooltipAnchor: [0, -4],
-    });
-
     function escapeHtml(s) {
         return String(s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -293,11 +272,6 @@
         }).join('');
         return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
             '<div class="mapa-tt-data">Leitura de ' + escapeHtml(site.ultima_leitura) + '</div>' + rows + '</div>';
-    }
-
-    function buildStationTooltipHtml(estacao) {
-        return '<div class="mapa-tooltip"><div class="mapa-tt-title">📡 ' + escapeHtml(estacao.cidade) + '/' + escapeHtml(estacao.uf) + '</div>' +
-            '<div class="mapa-tt-data">Estacao ' + escapeHtml(agenciaDaEstacao(estacao)) + ' ' + escapeHtml(estacao.codigo) + '</div></div>';
     }
 
     var map = L.map('farm-map');
@@ -779,16 +753,6 @@
         } else {
             buscarGradeChuva();
         }
-    });
-
-    // Todas as estacoes automaticas do INMET no Brasil (nao so as de
-    // algum estado especifico) -- da uma visao completa da rede de
-    // referencia disponivel em qualquer lugar do pais antes de escolher
-    // onde marcar um ponto novo.
-    estacoes.forEach(function (estacao) {
-        L.marker([estacao.lat, estacao.lon], { icon: stationIcon })
-            .addTo(map)
-            .bindTooltip(buildStationTooltipHtml(estacao), { direction: 'top', sticky: true, opacity: 0.95 });
     });
 
     // Alcance do raio escolhido em volta de cada fazenda REAL, ao vivo --

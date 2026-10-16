@@ -3205,19 +3205,10 @@ def _country_map_context():
             for nivel, caminho in info["boundary_files"].items()
         }
     cloud_bboxes = {code: info["cloud_grid_bbox"] for code, info in countries.COUNTRIES.items()}
-    # Nome da agencia de cada pais (INMET, DMC, SMN...) -- so' pro rotulo
-    # do tooltip de estacao no mapa (ver mapa.html/mapa_interpolado.html),
-    # nao muda nenhuma logica de escolha/distancia. Pais sem provedor de
-    # estacoes de verdade (`sem_estacoes.py`) nunca aparece aqui, ja que
-    # nunca gera uma estacao pra rotular.
-    agencia_por_pais = {
-        code: info["agencia_estacoes"] for code, info in countries.COUNTRIES.items() if "agencia_estacoes" in info
-    }
     return {
         "country_by_site": models.get_all_site_countries(),
         "country_boundary_urls": country_boundary_urls,
         "cloud_bboxes": cloud_bboxes,
-        "agencia_por_pais": agencia_por_pais,
         # Todo pais do registro (nao so os ativos) -- usado pra restringir
         # a busca de localidade (Nominatim) do Mapa Interpolado aos paises
         # que o app atende, sem travar num so' -- precisa incluir um pais
@@ -3366,31 +3357,16 @@ def mapa_interpolado():
     sites_data.sort(key=lambda s: s["site"])
     pontos_virtuais.sort(key=lambda p: p["nome"])
 
-    # Estacoes de todo pais ativo (com fazenda/ponto marcado, igual o
-    # Mapa normal) MAIS todo pais que ja' tem integracao de estacao oficial
-    # de verdade funcionando (hoje Brasil e Chile, ver `paises_com_estacoes`)
-    # -- essa tela e' pra escolher onde criar o PRIMEIRO ponto de um pais
-    # novo, entao o Chile precisa aparecer mesmo sem fazenda la' ainda
-    # ("aplicar somente se tiver estacao no pais", pedido explicito). NAO
-    # inclui todo pais do registro incondicionalmente -- com 10+ paises
-    # cadastrados so' com fronteira pronta (sem estacao/uso ainda), isso
-    # baixaria ~14MB de contorno por visita a toa.
+    # Todo pais ativo (com fazenda/ponto marcado) MAIS todo pais que ja'
+    # tem integracao de estacao oficial (`paises_com_estacoes`) -- a tela
+    # serve pra criar o PRIMEIRO ponto de um pais novo, entao a fronteira
+    # do Chile precisa aparecer mesmo sem fazenda la'. NAO inclui todo pais
+    # do registro (baixaria ~14MB de contorno por visita a toa). Pinos de
+    # estacao sairam daqui (pedido do usuario, 16/10/2026).
     active_interpolado = countries.active_country_codes(site_countries) | countries.paises_com_estacoes()
 
-    # Busca em paralelo (thread por pais) -- mesmo motivo do /mapa (ver
-    # comentario la'): sequencial somaria o timeout de cada provedor.
-    def _catalogo_do_pais(code):
-        # "country_code" carimbado em cada estacao -- so' pra rotular a
-        # agencia certa no tooltip (ver mapa_interpolado.html).
-        return [{**e, "country_code": code} for e in countries.get_country(code)["station_provider"].get_estacoes()]
-
-    estacoes = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(active_interpolado), 1)) as executor:
-        for lista in executor.map(_catalogo_do_pais, active_interpolado):
-            estacoes.extend(lista)
-
     return render_template(
-        "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, estacoes=estacoes,
+        "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
         **_country_map_context(),
     )
