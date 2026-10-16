@@ -4149,7 +4149,7 @@ def _get_ndvi_preview(site_name):
 
 
 @app.route("/ndvi")
-@login_required
+@admin_required
 def ndvi():
     virtual_names = models.virtual_farm_site_names()
     if current_user.is_admin:
@@ -4213,7 +4213,7 @@ def _checar_acesso_site(site_name):
 
 
 @app.route("/ndvi/agendamento/save", methods=["POST"])
-@login_required
+@admin_required
 def save_ndvi_agendamento():
     """Ativa/desativa o envio automatico de NDVI dessa fazenda (data de
     inicio + frequencia semanal/quinzenal/mensal -- ver
@@ -4314,7 +4314,7 @@ def save_whatsapp_site_recipients():
 
 
 @app.route("/ndvi/destinatario/toggle", methods=["POST"])
-@login_required
+@admin_required
 def toggle_ndvi_ativo():
     """Marca/desmarca um destinatario como "ativo" pra NDVI dessa
     fazenda -- persistido (`models.set_ndvi_ativo`), usado tanto pra
@@ -4332,7 +4332,7 @@ def toggle_ndvi_ativo():
 
 
 @app.route("/ndvi/car/save", methods=["POST"])
-@login_required
+@admin_required
 def save_ndvi_car():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4361,7 +4361,7 @@ def save_ndvi_car():
 
 
 @app.route("/ndvi/car/delete", methods=["POST"])
-@login_required
+@admin_required
 def delete_ndvi_car():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4456,7 +4456,7 @@ def _chuva_vento_ultimos_30_dias(site_name, data_final):
 
 
 @app.route("/ndvi/pre_visualizar", methods=["POST"])
-@login_required
+@admin_required
 def pre_visualizar_ndvi():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4500,7 +4500,7 @@ def pre_visualizar_ndvi():
 
 
 @app.route("/ndvi/pre_visualizar/imagem/<path:site_name>")
-@login_required
+@admin_required
 def imagem_ndvi_preview(site_name):
     _checar_acesso_site(site_name)
     preview = _get_ndvi_preview(site_name)
@@ -4510,7 +4510,7 @@ def imagem_ndvi_preview(site_name):
 
 
 @app.route("/ndvi/pre_visualizar/confirmar", methods=["POST"])
-@login_required
+@admin_required
 def confirmar_ndvi_preview():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4527,7 +4527,7 @@ def confirmar_ndvi_preview():
 
 
 @app.route("/ndvi/pre_visualizar/descartar", methods=["POST"])
-@login_required
+@admin_required
 def descartar_ndvi_preview():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4536,7 +4536,7 @@ def descartar_ndvi_preview():
 
 
 @app.route("/ndvi/imagem/<path:site_name>")
-@login_required
+@admin_required
 def imagem_ndvi(site_name):
     _checar_acesso_site(site_name)
     imagem = models.get_farm_ndvi_image(site_name)
@@ -4546,7 +4546,7 @@ def imagem_ndvi(site_name):
 
 
 @app.route("/ndvi/imagem_historico/<int:historico_id>/<path:site_name>")
-@login_required
+@admin_required
 def imagem_ndvi_historico(historico_id, site_name):
     """Imagem de um item do historico -- unico por historico_id e nunca
     muda depois de salva, entao pode ficar em cache local por muito tempo
@@ -4561,7 +4561,7 @@ def imagem_ndvi_historico(historico_id, site_name):
 
 
 @app.route("/ndvi/imagem_historico_thumb/<int:historico_id>/<path:site_name>")
-@login_required
+@admin_required
 def imagem_ndvi_historico_thumb(historico_id, site_name):
     """Miniatura (ver `ndvi_service.gerar_thumbnail`) usada na galeria --
     bem mais leve que a imagem completa (que so' e' baixada quando o
@@ -4576,7 +4576,7 @@ def imagem_ndvi_historico_thumb(historico_id, site_name):
 
 
 @app.route("/ndvi/ver/<int:historico_id>/<path:site_name>")
-@login_required
+@admin_required
 def ver_ndvi_historico(historico_id, site_name):
     _checar_acesso_site(site_name)
     item = models.get_farm_ndvi_historico_item(historico_id, site_name)
@@ -4588,7 +4588,7 @@ def ver_ndvi_historico(historico_id, site_name):
 
 
 @app.route("/ndvi/historico/delete", methods=["POST"])
-@login_required
+@admin_required
 def delete_ndvi_historico():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4600,7 +4600,7 @@ def delete_ndvi_historico():
 
 
 @app.route("/ndvi/historico/enviar-whatsapp", methods=["POST"])
-@login_required
+@admin_required
 def enviar_ndvi_historico_whatsapp():
     """Manda, por WhatsApp, uma ou mais imagens marcadas na galeria da
     aba NDVI -- cada imagem selecionada vira uma mensagem separada (o
@@ -4665,7 +4665,7 @@ def enviar_ndvi_historico_whatsapp():
 
 
 @app.route("/ndvi/debug/<path:site_name>")
-@login_required
+@admin_required
 def debug_ndvi(site_name):
     """Diagnostico temporario -- a Copernicus rejeita poligono
     auto-intersectante sem dizer quais vertices sao o problema, entao essa
