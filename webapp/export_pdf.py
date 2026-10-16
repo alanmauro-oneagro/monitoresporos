@@ -35,8 +35,11 @@ _ESTILO_SUBTITULO = ParagraphStyle(
 _ESTILO_RODAPE = ParagraphStyle(
     "Rodape", parent=_styles["Normal"], textColor=colors.grey, fontSize=8, spaceAfter=3,
 )
+# keepWithNext: titulo de secao nunca fica sozinho no fim da pagina,
+# separado do quadro dele.
 _ESTILO_SECAO = ParagraphStyle(
     "Secao", parent=_styles["Heading2"], textColor=AZUL_MARCA, fontSize=12, spaceBefore=12, spaceAfter=4,
+    keepWithNext=1,
 )
 _ESTILO_NORMAL = ParagraphStyle("NormalPdf", parent=_styles["Normal"], fontSize=9.5, leading=13)
 _ESTILO_DOENCA = ParagraphStyle(
@@ -368,7 +371,9 @@ def _caixa(conteudo, fundo=None):
     """Envolve `conteudo` (lista de flowables) numa caixa de largura
     total -- com fundo cinza claro (`fundo=CINZA_CLARO`) ou so com borda,
     sem preenchimento (`fundo=None`, transparente)."""
-    caixa = Table([[conteudo]], colWidths=[17.4 * cm])
+    # splitInRow: caixa maior que o espaco da pagina continua na
+    # proxima (antes, texto maior que uma pagina derrubava o PDF inteiro).
+    caixa = Table([[conteudo]], colWidths=[17.4 * cm], splitInRow=1)
     estilo = [
         ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),

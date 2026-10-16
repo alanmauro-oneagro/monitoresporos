@@ -171,12 +171,17 @@
         } catch (e) { /* quota cheia ou localStorage indisponivel -- so perde o cache, sem quebrar nada */ }
     }
     function fetchBoundaryGeojson(url) {
-        var cached = boundaryFromCache(url);
+        // So' o IBGE (servico externo) vai pro localStorage -- os contornos
+        // dos outros paises sao arquivos nossos (ja' ficam no cache do
+        // navegador) e varios MB, que nao cabem no localStorage: tentar
+        // guardar gastava ~0.3s a cada abertura do Mapa a toa.
+        var usarLocalStorage = url.indexOf(IBGE_BASE) === 0;
+        var cached = usarLocalStorage && boundaryFromCache(url);
         if (cached) return Promise.resolve(cached);
         return fetch(url)
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (geojson) {
-                if (geojson) boundaryToCache(url, geojson);
+                if (geojson && usarLocalStorage) boundaryToCache(url, geojson);
                 return geojson;
             })
             .catch(function () { return null; /* fonte fora do ar ou sem internet -- so perde o recorte da grade de chuva desse pais */ });
@@ -292,15 +297,50 @@
     // cortes retos no mapa. Alem dos nos dentro do contorno, entra o anel de
     // nos vizinhos (fora dele), pra interpolacao chegar inteira ate a divisa
     // -- o recorte final e' feito pelo proprio contorno (ver desenharCamadaChuva).
+    // Divisas de estado (arquivos de varios MB, ex.: Chile) travavam a tela
+    // ~1s antes da chuva aparecer -- com a chuva ligada, so' sao desenhadas
+    // depois do 1o quadro (ou de 4s, se a chuva demorar).
+    var liberarDivisas;
+    var divisasLiberadas = new Promise(function (resolver) { liberarDivisas = resolver; });
+    setTimeout(function () { liberarDivisas(); }, 4000);
     var nosGrade = [];        // [[i, j], ...] na ordem pedida ao servidor
     var poligonosChuva = [];  // geometrias dos paises ativos (recorte)
     var malhaChuva = null;    // {iMin, jMin, linhas, colunas, dias: [Float32Array]}
+
+    // Contorno do pais simplificado pro recorte da chuva: 1 vertice a cada
+    // ~2 km e sem as ilhotas menores que isso -- os arquivos de contorno
+    // (ex.: Bolivia, Chile) tem dezenas de milhares de vertices e milhares
+    // de ilhas, e desenhar o recorte com tudo isso a cada quadro custava
+    // ~0.7s num celular. Na escala do mapa de chuva nao muda nada visivel.
+    var TOLERANCIA_CONTORNO_GRAUS = 0.02;
+    function simplificarAnel(anel) {
+        var saida = [anel[0]];
+        var minX = anel[0][0], maxX = minX, minY = anel[0][1], maxY = minY;
+        for (var k = 1; k < anel.length; k++) {
+            var ultimo = saida[saida.length - 1], p = anel[k];
+            minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+            minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
+            if (Math.abs(p[0] - ultimo[0]) + Math.abs(p[1] - ultimo[1]) >= TOLERANCIA_CONTORNO_GRAUS) saida.push(p);
+        }
+        if (maxX - minX < TOLERANCIA_CONTORNO_GRAUS && maxY - minY < TOLERANCIA_CONTORNO_GRAUS) return null;
+        return saida.length >= 3 ? saida : null;
+    }
+    function simplificarGeometria(geom) {
+        var poligonos = geom.type === 'Polygon' ? [geom.coordinates] : (geom.type === 'MultiPolygon' ? geom.coordinates : []);
+        var saida = [];
+        poligonos.forEach(function (aneis) {
+            var externo = simplificarAnel(aneis[0]);
+            if (!externo) return;
+            saida.push([externo].concat(aneis.slice(1).map(simplificarAnel).filter(Boolean)));
+        });
+        return { type: 'MultiPolygon', coordinates: saida };
+    }
 
     function gerarNosGrade(paises) {
         var dentro = {};
         var todos = {};
         paises.forEach(function (pais) {
-            var bbox = pais.bbox, geom = pais.geojson.features[0].geometry;
+            var bbox = pais.bbox, geom = pais.geom;
             for (var i = Math.ceil(bbox.lat_min / GRADE_PASSO_GRAUS); i <= Math.floor(bbox.lat_max / GRADE_PASSO_GRAUS); i++) {
                 for (var j = Math.ceil(bbox.lon_min / GRADE_PASSO_GRAUS); j <= Math.floor(bbox.lon_max / GRADE_PASSO_GRAUS); j++) {
                     if (dentro[i + ',' + j]) continue;
@@ -404,8 +444,8 @@
         if (!malhaChuva) { limparCamadaChuva(); return; }
         var seq = ++desenhoChuvaSeq;
         var tamanho = map.getSize();
-        var MARGEM = 0.15;
-        var escala = Math.min(window.devicePixelRatio || 1, 1.5);
+        var MARGEM = 0.1;
+        var escala = 1;
         var x0 = -tamanho.x * MARGEM, y0 = -tamanho.y * MARGEM;
         var larguraCss = tamanho.x * (1 + 2 * MARGEM), alturaCss = tamanho.y * (1 + 2 * MARGEM);
         var largura = Math.round(larguraCss * escala), altura = Math.round(alturaCss * escala);
@@ -469,6 +509,7 @@
             var layer = L.imageOverlay(url, bounds, { opacity: 0.75, interactive: false }).addTo(map);
             layer._urlChuva = url;
             chuvaLayers.push(layer);
+            liberarDivisas();
         });
     }
     map.on('moveend', function () {
@@ -528,7 +569,7 @@
         buscandoChuva = true;
         setTimeout(function () {
             buscandoChuva = false;
-            if (chuvaToggle.checked && !malhaChuva) buscarGradeChuva();
+            if (chuvaToggle.checked && (!malhaChuva || chuvaDoCache)) buscarGradeChuva();
         }, ms);
     }
 
@@ -547,41 +588,68 @@
         });
     }
 
+    // Grade de pontos e ultima previsao guardadas no navegador: ao reabrir
+    // o Mapa no mesmo dia a chuva aparece na hora (sem recalcular a grade
+    // nem esperar o servidor) e a previsao atualizada chega por tras.
+    var CHUVA_CACHE_CHAVE = 'oneagro_chuva_mapa_v1';
+    var chuvaDoCache = false;
+    function chaveGradeChuva() { return Object.keys(activeCountries).sort().join(',') + '|' + GRADE_PASSO_GRAUS; }
+    function hojeLocal() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+    function lerCacheChuva() {
+        try {
+            var c = JSON.parse(localStorage.getItem(CHUVA_CACHE_CHAVE));
+            return c && c.chave === chaveGradeChuva() ? c : null;
+        } catch (e) { return null; }
+    }
+    function salvarCacheChuva() {
+        try {
+            localStorage.setItem(CHUVA_CACHE_CHAVE, JSON.stringify({ chave: chaveGradeChuva(), dia: hojeLocal(), nos: nosGrade, dados: gradeChuva }));
+        } catch (e) { /* sem espaco/indisponivel -- so' perde o atalho */ }
+    }
+    function mostrarChuva() {
+        montarMalhaChuva();
+        if (!malhaChuva) return false;
+        if (chuvaToggle.checked) {
+            desenharCamadaChuva();
+            chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
+            chuvaStatus.classList.remove('d-none');
+            if (!cicloAutomatico) iniciarCicloAutomatico();
+        }
+        return true;
+    }
+
     function buscarGradeChuva() {
         if (buscandoChuva) return;
         buscandoChuva = true;
-        chuvaStatus.textContent = 'Carregando previsao de chuva...';
-        chuvaStatus.classList.remove('d-none');
-        var preparar;
-        if (nosGrade.length) {
-            preparar = Promise.resolve();
-        } else {
-            var codigosAtivos = Object.keys(activeCountries);
-            preparar = Promise.all(codigosAtivos.map(function (code) { return paisGeojsonPromises[code]; })).then(function (geojsons) {
-                var paises = [];
-                codigosAtivos.forEach(function (code, i) {
-                    var bbox = CLOUD_BBOXES[code];
-                    if (bbox && geojsons[i] && geojsons[i].features && geojsons[i].features.length) {
-                        paises.push({ bbox: bbox, geojson: geojsons[i] });
-                    }
-                });
-                poligonosChuva = paises.map(function (pais) { return pais.geojson.features[0].geometry; });
-                nosGrade = gerarNosGrade(paises);
-                if (!nosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
-            });
+        if (!malhaChuva) {
+            chuvaStatus.textContent = 'Carregando previsao de chuva...';
+            chuvaStatus.classList.remove('d-none');
         }
-        preparar.then(pedirGradeChuva)
+        var cache = lerCacheChuva();
+        var codigosAtivos = Object.keys(activeCountries);
+        Promise.all(codigosAtivos.map(function (code) { return paisGeojsonPromises[code]; })).then(function (geojsons) {
+            var paises = [];
+            codigosAtivos.forEach(function (code, i) {
+                var bbox = CLOUD_BBOXES[code];
+                if (bbox && geojsons[i] && geojsons[i].features && geojsons[i].features.length) {
+                    paises.push({ bbox: bbox, geom: simplificarGeometria(geojsons[i].features[0].geometry) });
+                }
+            });
+            poligonosChuva = paises.map(function (pais) { return pais.geom; });
+            if (!nosGrade.length) nosGrade = (cache && cache.nos) || gerarNosGrade(paises);
+            if (!nosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
+            if (!malhaChuva && cache && cache.dia === hojeLocal()) {
+                gradeChuva = cache.dados;
+                chuvaDoCache = mostrarChuva();
+            }
+        }).then(pedirGradeChuva)
             .then(function (dados) {
                 buscandoChuva = false;
                 if (dados === null) { agendarNovoPedidoChuva(15000); return; }
                 gradeChuva = dados;
-                montarMalhaChuva();
-                if (!malhaChuva) throw new Error('grade de chuva vazia');
-                if (chuvaToggle.checked) {
-                    desenharCamadaChuva();
-                    chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
-                    iniciarCicloAutomatico();
-                }
+                if (!mostrarChuva()) throw new Error('grade de chuva vazia');
+                chuvaDoCache = false;
+                salvarCacheChuva();
             })
             .catch(function () {
                 // Open-Meteo fora/limite estourado: sem mensagem de erro na
@@ -615,6 +683,8 @@
     if (window.OneAgroPrefs.get('mapa_chuva')) {
         chuvaToggle.checked = true;
         chuvaToggle.dispatchEvent(new Event('change'));
+    } else {
+        liberarDivisas();
     }
 
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
@@ -660,7 +730,7 @@
     // Divisas de estado (Brasil pelo IBGE, demais paises ativos pelo adm1)
     // -- so' contorno fino, nao clicavel.
     function desenharDivisas(url) {
-        return fetchBoundaryGeojson(url).then(function (geojson) {
+        return divisasLiberadas.then(function () { return fetchBoundaryGeojson(url); }).then(function (geojson) {
             if (geojson) {
                 L.geoJSON(geojson, {
                     style: { color: '#ffe100', weight: 1.5, fill: false, opacity: 0.8 },
