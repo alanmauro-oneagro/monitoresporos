@@ -547,6 +547,7 @@
             .then(function (dados) {
                 gradeChuva = dados;
                 montarMalhaChuva();
+                if (!malhaChuva) throw new Error('grade de chuva vazia');
                 if (chuvaToggle.checked) {
                     desenharCamadaChuva();
                     chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
@@ -554,7 +555,12 @@
                 }
             })
             .catch(function () {
-                chuvaStatus.classList.add('d-none');
+                // Open-Meteo fora/limite estourado: sem mensagem de erro na
+                // tela, tenta de novo sozinho enquanto a chuva estiver ligada.
+                if (!chuvaToggle.checked) { chuvaStatus.classList.add('d-none'); return; }
+                setTimeout(function () {
+                    if (chuvaToggle.checked && !malhaChuva) buscarGradeChuva();
+                }, 120000);
             });
     }
 
