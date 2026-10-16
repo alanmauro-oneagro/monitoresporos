@@ -1550,7 +1550,7 @@ RECIPIENT_STAGGER_HORAS = 1
 ENVIO_AUTOMATICO_MINIMO_MIN = 5 * 60 + 30
 
 
-def _enviar_whatsapp_manual_escalonado(site, safra, enviar_texto, enviar_pdf):
+def _enviar_whatsapp_manual_escalonado(site, safra, enviar_texto, enviar_pdf, destinos=None):
     """Envio manual (botao "Enviar por WhatsApp") pra' uma fazenda com
     VARIOS destinatarios -- manda pro PRIMEIRO na hora (resposta imediata
     pra quem clicou) e ENFILEIRA os demais (`models.enqueue_whatsapp_manual`)
@@ -1576,8 +1576,11 @@ def _enviar_whatsapp_manual_escalonado(site, safra, enviar_texto, enviar_pdf):
     precisar esperar, ninguem sai sincrono neste clique -- todos entram
     na fila, sem excecao (evita a confusao de "por que so' o 3o
     destinatario saiu na hora"). Retorna (ok_texto, ok_pdf,
-    mensagem-resumo), mesma assinatura de `_send_site_whatsapp`."""
-    destinos = _site_whatsapp_destinations(site)
+    mensagem-resumo), mesma assinatura de `_send_site_whatsapp`.
+    `destinos` [(telefone, rotulo)] = so' os escolhidos na tela (e/ou um
+    numero digitado); None = todos os cadastrados da fazenda."""
+    if destinos is None:
+        destinos = _site_whatsapp_destinations(site)
     models.clear_whatsapp_manual_fila(site)
     if not destinos:
         return _send_site_whatsapp(site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
@@ -3815,6 +3818,9 @@ def recommendations(safra):
             "dias_sem_leitura": dias_sem_leitura,
             "nivel_dados": nivel_dados,
             "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
+            "whatsapp_lista": [
+                {"telefone": r["telefone"], "nome": r["username"]} for r in whatsapp_destinos_by_site.get(site, [])
+            ],
             "whatsapp_text": whatsapp_text,
             "plantio_linhas": plantio_linhas,
             "aplicacoes_linhas": aplicacoes_linhas,
@@ -3859,7 +3865,26 @@ def send_site_whatsapp(site_name):
     # quando os dois vem marcados).
     enviar_texto = bool(request.form.get("enviar_texto"))
     enviar_pdf = bool(request.form.get("enviar_pdf"))
-    ok_texto, ok_pdf, message = _enviar_whatsapp_manual_escalonado(site_name, safra, enviar_texto, enviar_pdf)
+    destinos = None
+    if request.form.get("escolher_destinos"):
+        # Escolha de quem recebe (pedido do usuario, 16/10/2026): so' os
+        # cadastrados marcados -- nunca um telefone qualquer vindo do
+        # formulario por esse campo -- mais, opcionalmente, um numero
+        # digitado na hora (nao fica salvo em lugar nenhum).
+        cadastrados = dict(_site_whatsapp_destinations(site_name))
+        destinos = [(tel, cadastrados[tel]) for tel in request.form.getlist("destino") if tel in cadastrados]
+        numero = request.form.get("numero_telefone", "").strip()
+        if numero:
+            telefone = _telefone_from_form(request.form)
+            if not _is_valid_phone(telefone):
+                flash(f"Numero '{numero}' invalido -- use DDD + numero (ex.: 65 99999-9999), com o codigo do pais ao lado.", "error")
+                return redirect(url_for("recommendations", safra=safra))
+            if telefone not in dict(destinos):
+                destinos.append((telefone, f"numero digitado ({telefone})"))
+        if not destinos:
+            flash("Escolha pelo menos um destinatario ou digite um numero.", "error")
+            return redirect(url_for("recommendations", safra=safra))
+    ok_texto, ok_pdf, message = _enviar_whatsapp_manual_escalonado(site_name, safra, enviar_texto, enviar_pdf, destinos=destinos)
     ok = (ok_texto if enviar_texto else True) and (ok_pdf if enviar_pdf else True)
     nome_exibicao = _nome_exibicao(site_name)
     if ok:
