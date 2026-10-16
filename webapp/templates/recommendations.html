@@ -2,6 +2,18 @@
 {% block title %}Recomendações {{ safra_label }} - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
+.anotacoes-box { border: 1px solid #dee2e6; border-radius: 0.4rem; padding: 0.35rem 0.6rem; }
+.anotacao-linha { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.25rem 0; }
+.anotacao-linha + .anotacao-linha { border-top: 1px solid #f1f3f5; }
+.anotacao-doenca { flex: 0 0 11rem; font-size: 0.8rem; font-weight: 700; padding-top: 0.3rem; margin: 0; }
+.anotacao-linha textarea { flex: 1; min-width: 0; border-color: transparent; background: #f8f9fa; }
+.anotacao-linha textarea:focus { background: #fff; }
+.anotacao-linha .autosave-status { flex: 0 0 auto; padding-top: 0.3rem; }
+.anotacao-linha .autosave-status:empty { display: none; }
+@media (max-width: 575.98px) {
+    .anotacao-linha { flex-wrap: wrap; gap: 0.15rem; }
+    .anotacao-doenca { flex-basis: 100%; padding-top: 0; }
+}
 .rec-topo { display: flex; align-items: center; gap: 1.5rem; }
 .rec-topo-esq { flex: 0 1 34rem; min-width: 0; }
 .vento-dia { display: flex; flex-direction: column; align-items: center; margin-bottom: 0.5rem; }
@@ -318,15 +330,20 @@ html { font-size: 14px; }
 
         <div class="mt-3 pt-3 border-top">
             <label class="form-label small fw-bold d-block mb-2">Anotações</label>
-            {% for row in site_group.diseases %}
-            <div class="mb-2" data-autosave-group>
-                <div class="small fw-bold mb-1">{{ row.rotulo }}</div>
-                <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
-                <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
-                <textarea name="nota" form="notesForm" class="form-control auto-grow-textarea" rows="5" placeholder="Ex.: produto, dose, epoca de aplicacao, observacoes do agronomo...">{{ row.nota }}</textarea>
-                <span class="autosave-status small"></span>
+            {# Uma caixa so' com uma linha por doenca (pedido do usuario,
+               economiza espaco) -- cada linha continua sendo a anotacao
+               daquela doenca (texto/PDF mostram por doenca). #}
+            <div class="anotacoes-box">
+                {% for row in site_group.diseases %}
+                <div class="anotacao-linha" data-autosave-group>
+                    <label class="anotacao-doenca" for="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}">{{ row.rotulo }}:</label>
+                    <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
+                    <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
+                    <textarea name="nota" form="notesForm" id="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="1" placeholder="produto, dose, epoca de aplicacao, observacoes...">{{ row.nota }}</textarea>
+                    <span class="autosave-status small"></span>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
 
         <div class="mt-3 pt-3 border-top">
@@ -571,6 +588,8 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
         body.classList.toggle('d-none');
         icon.textContent = expanded ? '▶' : '▼';
         if (!expanded) body.querySelectorAll('.esporos-graficos').forEach(carregarGraficosEsporos);
+        // Caixa de texto escondida (fazenda fechada) mede altura 0 -- ajusta ao abrir.
+        if (!expanded) body.querySelectorAll('.auto-grow-textarea').forEach(autoGrowTextarea);
         // Rosa so' depois de visivel (Chart.js num container escondido fica 0x0).
         if (!expanded) body.querySelectorAll('.vento-rosa canvas').forEach(function (canvas) {
             if (canvas.dataset.criada) return;
