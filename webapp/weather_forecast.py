@@ -562,10 +562,34 @@ def _buscar_grade_em_lotes(lats, lons, campo_daily):
             "forecast_days": 6,
             "timezone": "auto",
         }
-        _aguardar_cota_minuto(len(lote_lats))
-        lote = _abrir_json(f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}", timeout=45)
+        for tentativa in range(3):
+            _aguardar_cota_minuto(len(lote_lats))
+            try:
+                lote = _abrir_json(f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}", timeout=45)
+                break
+            except Exception as exc:
+                print(f"[grade] lote {i // GRADE_LOTE_PONTOS + 1} ({len(lote_lats)} pontos) falhou: {exc}", flush=True)
+                if tentativa == 2:
+                    raise
+                time.sleep(65)
         resultados.extend(lote if isinstance(lote, list) else [lote])
     return resultados
+
+
+GRADE_RETENTATIVA_SEGUNDOS = 180
+
+
+def _grade_pronta(registro, dia):
+    """Leitura da janela ja feita -- ou falhou ha pouco nesta janela. Sem
+    nenhum resultado guardado (grade nova), a falha so' segura 3 min:
+    senao o mapa ficava vazio ate' o proximo horario de leitura."""
+    if not registro:
+        return False
+    if registro.get("dia") == dia:
+        return True
+    if not _falhou_ha_pouco(registro):
+        return False
+    return bool(registro.get("resultado")) or time.time() - registro.get("falha_em", 0) < GRADE_RETENTATIVA_SEGUNDOS
 
 
 def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_rodada=False):
@@ -585,7 +609,7 @@ def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_
         registro = _carregar()["grades"].get(chave)
         if registro and not pela_rodada:
             registro["pedida_em"] = hoje
-        if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
+        if _grade_pronta(registro, dia):
             return _resultado_vigente(registro)
         busca_lock = _grade_busca_locks.setdefault(chave, threading.Lock())
     # Uma busca por grade de cada vez: quem chega enquanto ela roda (grade
@@ -593,7 +617,7 @@ def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_
     with busca_lock:
         with _lock:
             registro = _carregar()["grades"].get(chave)
-            if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
+            if _grade_pronta(registro, dia):
                 return _resultado_vigente(registro)
         return _buscar_e_guardar_grade(
             chave, registro, tipo, lats, lons, campo_daily, campo_saida, salvar, pela_rodada, dia, hoje
@@ -609,7 +633,7 @@ def _buscar_e_guardar_grade(chave, registro, tipo, lats, lons, campo_daily, camp
         resultados = _buscar_grade_em_lotes(list(lats), list(lons), campo_daily)
     except Exception:
         with _lock:
-            registro = {**(registro or {}), **base, "falha_janela": dia}
+            registro = {**(registro or {}), **base, "falha_janela": dia, "falha_em": time.time()}
             _store["grades"][chave] = registro
         return _resultado_vigente(registro)
     saida = []
