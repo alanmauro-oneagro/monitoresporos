@@ -95,12 +95,15 @@ menos que seja pedido explicitamente paridade para outros admins.
   + destinatarios por fazenda (inclusive pontos "so' clima"). Substituiu a
   agenda que antes ficava espalhada em Manejos/NDVI/Alertas Clima — ao
   mexer em agenda de envio, e' aqui que fica agora.
-- **Escalonamento de WhatsApp** (retencao "Aguardando mensagem", validado em
-  producao — ver `.claude\memory\oneagro_whatsapp_stagger_validado.md`):
-  `RECIPIENT_STAGGER_HORAS = 1` (horas, nao segundos) entre destinatarios da
-  mesma fazenda E entre fazendas diferentes pro mesmo numero
-  (`_horarios_efetivos_por_telefone`). Dedup "ja enviado hoje" sempre por
-  TELEFONE, nunca por indice/posicao na lista.
+- **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
+  substitui o escalonamento de 1h validado em set/2026, ver
+  `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois
+  envios ao mesmo tempo (manual, agendado, NDVI, fazendas diferentes); um
+  novo envio so' comeca `whatsapp.INTERVALO_ENTRE_ENVIOS_S = 15` segundos
+  depois do anterior terminar (portao `_um_envio_por_vez` em
+  `webapp/whatsapp.py`). `RECIPIENT_STAGGER_HORAS = 0`. Envio manual roda
+  em thread de fundo (a tela responde na hora). Dedup "ja enviado hoje"
+  continua por TELEFONE.
 
 ## Como trabalhar neste projeto (licoes ja aprendidas — nao repetir)
 

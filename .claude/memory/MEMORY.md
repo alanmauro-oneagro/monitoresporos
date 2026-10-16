@@ -1,4 +1,4 @@
 - [Sole site admin](oneagro_sole_site_admin.md) — only "Alan Mauro" adjusts OneAgro Monitor settings; some reports are username-gated, not just is_admin.
-- [WhatsApp stagger validado](oneagro_whatsapp_stagger_validado.md) — envios por WhatsApp (mesma fazenda ou mesmo numero em varias fazendas) precisam de escalonamento por HORAS; validado em producao.
+- [WhatsApp intervalo](oneagro_whatsapp_stagger_validado.md) — HOJE: 1 envio por vez, 15s apos o anterior (manual e agendado, decisao 16/10/2026); historico do escalonamento de 1h (set/2026) e por que existia.
 - [WhatsApp Meta pausado](oneagro_whatsapp_meta_pausado.md) — onde parou a configuracao da API oficial da Meta (numero sem o nono digito, modelo, token).
 - [Clima BioScout e modelo](oneagro_clima_bioscout_modelo.md) — device so mede esporo; REGRA: clima so de fonte externa (estacao oficial > Open-Meteo), do BioScout so esporos; CEMADEN descartado.
