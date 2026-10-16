@@ -64,8 +64,8 @@
             var rotulos = opcoes.rotulos || ['NORTE', 'LESTE', 'SUL', 'OESTE'];
             var ctx = chart.ctx;
             var cx = scale.xCenter, cy = scale.yCenter;
-            // Compacta: rotulo de 1 letra logo depois da ponta dos raios
-            // (que vao ate' 1.1x o circulo), sem encostar neles.
+            // Compacta: rotulo logo depois da ponta dos raios (que vao
+            // ate' 1.1x o circulo), sem encostar neles.
             var raio = opcoes.compacta ? scale.drawingArea * 1.1 + 7 : scale.drawingArea + fonte + 1;
             var recuo = opcoes.compacta ? 0 : fonte - 1;
             ctx.save();
@@ -86,8 +86,8 @@
     var DIRECOES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
     window.OneAgroRosa = {
-        // `percentuais`: {N: %, NE: %, ...}. `compacta`: rotulos N/L/S/O
-        // menores, pra caber num quadro pequeno.
+        // `percentuais`: {N: %, NE: %, ...}. `compacta`: rotulos menores,
+        // pra caber num quadro pequeno.
         criar: function (canvas, percentuais, compacta) {
             var valores = DIRECOES.map(function (d) { return (percentuais || {})[d] || 0; });
             return new Chart(canvas.getContext('2d'), {
@@ -102,14 +102,14 @@
                     // LESTE/OESTE se estendem na horizontal a partir da
                     // borda do circulo -- precisam de mais espaco dos
                     // lados que NORTE/SUL em cima/embaixo.
-                    layout: { padding: compacta ? { left: 22, right: 22, top: 20, bottom: 20 } : { left: 50, right: 50, top: 24, bottom: 24 } },
+                    layout: { padding: compacta ? { left: 44, right: 44, top: 18, bottom: 18 } : { left: 50, right: 50, top: 24, bottom: 24 } },
                     // Gomo de cada direcao centrado no rotulo dela (por
                     // padrao o Chart.js comeca o gomo N com a borda em cima).
                     scales: { r: { ticks: { display: false }, startAngle: -22.5 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: { callbacks: { label: function (ctx) { return ctx.label + ': ' + ctx.raw + '%'; } } },
-                        rosaLabels: compacta ? { fonte: 10, rotulos: ['N', 'L', 'S', 'O'], compacta: true } : {},
+                        rosaLabels: compacta ? { fonte: 9, compacta: true } : {},
                     },
                 },
             });
