@@ -327,6 +327,10 @@ def build_recommendation_pdf(
             partes.append(f"Chuva 24h: {weather['chuva_24h_mm']} mm")
         if partes:
             story.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
+        if weather.get("vento_predominante_30d"):
+            story.append(Paragraph(
+                f"<b>Vento predominante no mês (últimos 30 dias):</b> de {weather['vento_predominante_30d']}", _ESTILO_NORMAL
+            ))
         if leitura_bioscout:
             story.append(Paragraph(f"<b>Leitura BioScout:</b> {leitura_bioscout}", _ESTILO_NORMAL))
         if weather.get("previsao_5_dias"):
