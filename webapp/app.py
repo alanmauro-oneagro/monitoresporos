@@ -1754,9 +1754,9 @@ def _build_site_pdf(
     if not (vf and vf.get("tipo") == "clima"):
         riscos_climaticos = _com_doencas_manuais(site, safra, weather, riscos_climaticos)
     hoje = weather_forecast._agora_cuiaba().date()
-    codigo_vento = _vento_predominante(site, [(hoje - timedelta(days=i)).isoformat() for i in range(30)])
-    if weather and codigo_vento:
-        weather = {**weather, "vento_predominante_30d": _NOME_DIRECAO_VENTO[codigo_vento]}
+    rosa = _rosa_ventos(site, [(hoje - timedelta(days=i)).isoformat() for i in range(30)])
+    if weather and rosa:
+        weather = {**weather, "vento_30d": rosa}
     for d in diseases:
         d["historico"] = data_reader.get_site_disease_history(site, d["doenca_en"], dias=30)
     plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
@@ -3862,7 +3862,7 @@ def recommendations(safra):
             "whatsapp_text": whatsapp_text,
             "plantio_linhas": plantio_linhas,
             "aplicacoes_linhas": aplicacoes_linhas,
-            "vento_dia": _vento_do_dia(site),
+            "vento_dia": _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]),
         })
     sites_data.sort(key=lambda s: s["site"])
     any_whatsapp_configured = any(s["whatsapp_destinos"] > 0 for s in sites_data)
@@ -4392,34 +4392,39 @@ _NOME_DIRECAO_VENTO = {
 }
 
 
-def _vento_predominante(site_name, dias):
-    """Codigo (N/NE/.../NW) da direcao de onde o vento mais soprou nas
-    leituras horarias de `dias` ("YYYY-MM-DD") -- device BioScout da
-    fazenda; sem leitura dele, a leitura Open-Meteo guardada da
-    coordenada da fazenda. None sem dado."""
+def _contagem_vento(site_name, dias):
+    """Quantas leituras horarias de `dias` ("YYYY-MM-DD") vieram de cada
+    uma das 8 direcoes ({N: n, NE: n, ...}, mesma conta da rosa dos
+    ventos da aba Graficos) -- device BioScout da fazenda; sem leitura
+    dele, a leitura Open-Meteo guardada da coordenada da fazenda. None
+    sem dado."""
     device = data_reader.read_site_device_ids().get(site_name)
     if device:
         lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
         contagem = data_reader.contar_direcoes_vento(lookup, [device], dias)
         if any(contagem.values()):
-            return max(contagem, key=contagem.get)
+            return contagem
     latlon = _coords_all().get(site_name)
     if latlon:
         por_dia = weather_forecast.get_historico_por_dia(latlon[0], latlon[1], min(dias), max(dias))
         contagem = data_reader.contar_direcoes_vento({("om", d): h for d, h in por_dia.items()}, ["om"], dias)
         if any(contagem.values()):
-            return max(contagem, key=contagem.get)
+            return contagem
     return None
 
 
-_GRAUS_DIRECAO_VENTO = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
-
-
-def _vento_do_dia(site_name):
-    codigo = _vento_predominante(site_name, [weather_forecast._agora_cuiaba().date().isoformat()])
-    if not codigo:
+def _rosa_ventos(site_name, dias):
+    """{"codigo", "nome", "percentuais"} da direcao predominante + % de
+    cada direcao (rosa dos ventos da tela/PDF de Recomendacoes)."""
+    contagem = _contagem_vento(site_name, dias)
+    if not contagem:
         return None
-    return {"codigo": codigo, "nome": _NOME_DIRECAO_VENTO[codigo], "graus": _GRAUS_DIRECAO_VENTO[codigo]}
+    total = sum(contagem.values())
+    codigo = max(contagem, key=contagem.get)
+    return {
+        "codigo": codigo, "nome": _NOME_DIRECAO_VENTO[codigo],
+        "percentuais": {d: round(n / total * 100, 1) for d, n in contagem.items()},
+    }
 
 
 def _chuva_vento_ultimos_30_dias(site_name, data_final):

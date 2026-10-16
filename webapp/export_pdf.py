@@ -11,7 +11,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.graphics.shapes import Circle, Drawing, Path, Rect, String
+import math
+
+from reportlab.graphics.shapes import Circle, Drawing, Line, Path, Polygon, Rect, String, Wedge
 from reportlab.platypus import (
     KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
@@ -71,6 +73,56 @@ def _linha_suave(pontos):
         c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
         p.curveTo(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
     return p
+
+
+_DIRECOES_ROSA = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+
+
+def _build_rosa_ventos(percentuais, largura=7.5 * cm, altura=5.6 * cm):
+    """Rosa dos ventos -- mesmo desenho da aba Graficos (bussola azul de
+    fundo, um gomo verde por direcao com raio proporcional ao % de
+    leituras vindas dela). `percentuais`: {"N": %, "NE": %, ...}."""
+    maximo = max(percentuais.get(d) or 0 for d in _DIRECOES_ROSA)
+    if maximo <= 0:
+        return None
+    d = Drawing(largura, altura)
+    cx, cy = largura / 2, altura / 2
+    raio = min(altura / 2 - 14, largura / 2 - 40)
+    linha = colors.Color(10 / 255, 31 / 255, 68 / 255, alpha=0.4)
+    preenchimento = colors.Color(10 / 255, 31 / 255, 68 / 255, alpha=0.35)
+
+    def ponto(bearing, r):
+        ang = math.radians(bearing)
+        return cx + math.sin(ang) * r, cy + math.cos(ang) * r
+
+    for r in (raio, raio * 0.68):
+        d.add(Circle(cx, cy, r, strokeColor=linha, strokeWidth=0.8, fillColor=None))
+    for i in range(8):
+        x1, y1 = ponto(i * 45, raio * 0.12)
+        x2, y2 = ponto(i * 45, raio * 1.1)
+        d.add(Line(x1, y1, x2, y2, strokeColor=linha, strokeWidth=0.8))
+    for bearing, comprimento, meia_largura in [(b, raio * 1.05, raio * 0.11) for b in (0, 90, 180, 270)] + \
+            [(b, raio * 0.75, raio * 0.055) for b in (45, 135, 225, 315)]:
+        ponta = ponto(bearing, comprimento)
+        lado1 = ponto(bearing + 90, meia_largura)
+        lado2 = ponto(bearing - 90, meia_largura)
+        d.add(Polygon([ponta[0], ponta[1], lado1[0], lado1[1], cx, cy, lado2[0], lado2[1]],
+                      fillColor=preenchimento, strokeColor=None))
+    verde = colors.HexColor("#63b445")
+    verde_claro = colors.Color(verde.red, verde.green, verde.blue, alpha=0.33)
+    for i, direcao in enumerate(_DIRECOES_ROSA):
+        valor = percentuais.get(direcao) or 0
+        if valor <= 0:
+            continue
+        centro = 90 - i * 45
+        d.add(Wedge(cx, cy, raio * valor / maximo, centro - 22.5, centro + 22.5,
+                    fillColor=verde_claro, strokeColor=verde, strokeWidth=0.8))
+    estilo = {"fontName": "Helvetica-Bold", "fontSize": 8, "fillColor": colors.HexColor("#495057")}
+    d.add(String(cx, cy + raio + 4, "NORTE", textAnchor="middle", **estilo))
+    d.add(String(cx, cy - raio - 10, "SUL", textAnchor="middle", **estilo))
+    d.add(String(cx + raio + 5, cy - 3, "LESTE", textAnchor="start", **estilo))
+    d.add(String(cx - raio - 5, cy - 3, "OESTE", textAnchor="end", **estilo))
+    return d
 
 
 def _build_spore_chart(historico, largura=17.4 * cm, altura=4.8 * cm):
@@ -327,10 +379,13 @@ def build_recommendation_pdf(
             partes.append(f"Chuva 24h: {weather['chuva_24h_mm']} mm")
         if partes:
             story.append(Paragraph("<b>Clima agora:</b> " + " &nbsp;·&nbsp; ".join(partes), _ESTILO_NORMAL))
-        if weather.get("vento_predominante_30d"):
-            story.append(Paragraph(
-                f"<b>Vento predominante no mês (últimos 30 dias):</b> de {weather['vento_predominante_30d']}", _ESTILO_NORMAL
-            ))
+        vento = weather.get("vento_30d")
+        if vento:
+            rosa = _build_rosa_ventos(vento["percentuais"])
+            legenda = Paragraph(
+                f"<b>Vento predominante no mês (últimos 30 dias):</b> de {vento['nome']}", _ESTILO_NORMAL
+            )
+            story.append(KeepTogether([legenda, rosa]) if rosa else legenda)
         if leitura_bioscout:
             story.append(Paragraph(f"<b>Leitura BioScout:</b> {leitura_bioscout}", _ESTILO_NORMAL))
         if weather.get("previsao_5_dias"):
