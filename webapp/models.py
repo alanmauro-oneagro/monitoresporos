@@ -1,6 +1,7 @@
 """Esquema do banco (SQLite) e funcoes de acesso a usuarios/permissoes/fazendas."""
 import os
 import sqlite3
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from werkzeug.security import generate_password_hash
@@ -1282,6 +1283,37 @@ def merge_duplicate_disease_translations(canonico_por_atual):
         )
     conn.commit()
     conn.close()
+
+
+# Doenca cadastrada a mao na aba Doencas (nao vem do BioScout) -- so' pro
+# risco de infeccao pelo clima nos relatorios. Chave com prefixo proprio
+# pra nunca colidir com um displayName do BioScout.
+MANUAL_DISEASE_PREFIX = "manual:"
+
+
+def is_manual_disease(display_name_en):
+    return display_name_en.startswith(MANUAL_DISEASE_PREFIX)
+
+
+def add_manual_disease(nome_pt):
+    """Cria a doenca manual (linha em disease_translations com chave
+    `manual:<nome>`) e devolve a chave -- germinacao, nome cientifico,
+    culturas e paises sao preenchidos depois na propria aba Doencas."""
+    base = MANUAL_DISEASE_PREFIX + "".join(
+        ch if ch.isalnum() else "-" for ch in unicodedata.normalize("NFKD", nome_pt.lower()) if not unicodedata.combining(ch)
+    ).strip("-")
+    conn = get_db()
+    existentes = {r[0] for r in conn.execute("SELECT display_name_en FROM disease_translations")}
+    chave, n = base, 2
+    while chave in existentes:
+        chave, n = f"{base}-{n}", n + 1
+    conn.execute(
+        "INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, '')",
+        (chave, nome_pt),
+    )
+    conn.commit()
+    conn.close()
+    return chave
 
 
 def delete_disease_translation(display_name_en):
