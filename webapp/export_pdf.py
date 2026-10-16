@@ -162,6 +162,59 @@ def _build_spore_chart(historico, largura=17.4 * cm, altura=4.8 * cm):
     return d
 
 
+_ESTILO_TAB_RISCO = ParagraphStyle("TabRisco", parent=_styles["Normal"], fontSize=8, leading=9.5)
+_FUNDO_RISCO = {"vermelho": VERMELHO_FAIXA, "amarelo": AMARELO_FAIXA, "verde": VERDE_FAIXA}
+
+
+def _tabela_riscos_climaticos(riscos):
+    """Quadro "Risco de infeccao pelo clima" em tabela compacta (mesmo
+    formato da tela de Recomendacoes, pedido do usuario 16/10/2026): uma
+    linha por doenca, uma coluna por dia, celula colorida com
+    Alto/Medio/Baixo."""
+    datas = []
+    for d in riscos:
+        for p in d.get("previsao_risco") or []:
+            if p["data_fmt"] not in datas:
+                datas.append(p["data_fmt"])
+    ncols = max(len(datas), 1)
+    dados = [[Paragraph("<b>Doença</b>", _ESTILO_TAB_RISCO)] + ([f"{dt}" for dt in datas] or ["Agora"])]
+    estilo = [
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), CINZA_CLARO),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("FONTNAME", (1, 0), (-1, 0), "Helvetica-Bold"),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]
+    for i, d in enumerate(riscos, start=1):
+        nome = f"<b>{d['rotulo'].upper()}</b>"
+        if d.get("cientifico"):
+            nome += f' <font color="#777777"><i>({d["cientifico"]})</i></font>'
+        linha = [Paragraph(nome, _ESTILO_TAB_RISCO)]
+        previsao = {p["data_fmt"]: p["risco"] for p in d.get("previsao_risco") or []}
+        if previsao:
+            for j, dt in enumerate(datas, start=1):
+                risco = previsao.get(dt)
+                linha.append(_RISCO_LABELS.get(risco, "-"))
+                if risco in _FUNDO_RISCO:
+                    estilo.append(("BACKGROUND", (j, i), (j, i), _FUNDO_RISCO[risco]))
+                    estilo.append(("TEXTCOLOR", (j, i), (j, i), colors.HexColor(_RISCO_CORES[risco])))
+        else:
+            risco = d.get("risco")
+            linha.append(f"{_RISCO_LABELS[risco]} (agora)" if risco in _RISCO_LABELS else "Sem clima disponível")
+            linha += [""] * (ncols - 1)
+            estilo.append(("SPAN", (1, i), (ncols, i)))
+            if risco in _FUNDO_RISCO:
+                estilo.append(("BACKGROUND", (1, i), (ncols, i), _FUNDO_RISCO[risco]))
+        dados.append(linha)
+    largura_dia = 1.6 * cm
+    tabela = Table(dados, colWidths=[17.4 * cm - largura_dia * ncols] + [largura_dia] * ncols, repeatRows=1)
+    tabela.setStyle(TableStyle(estilo))
+    return tabela
+
+
 def _fmt_ingrediente(item, classe_label):
     if item.get("classe"):
         return f"{item['ingrediente']} ({classe_label.get(item['classe'], item['classe'])})"
@@ -359,30 +412,8 @@ def build_recommendation_pdf(
         # confirmados (ver docstring). Aparece mesmo com
         # mostrar_secao_doencas=False, de proposito.
         titulo_riscos = "Risco de infecção pelo clima (sem alerta de esporos)" if mostrar_secao_doencas else "Risco Climático (sem leitura recente do sensor)"
-        story.append(Paragraph(titulo_riscos, _ESTILO_SECAO))
-        for d in riscos_climaticos:
-            cabecalho = []
-            previsao_risco = d.get("previsao_risco")
-            risco_label = _RISCO_LABELS.get(d.get("risco"))
-            titulo_txt = f'<b>{d["rotulo"].upper()}</b>'
-            if previsao_risco:
-                cabecalho.append(Paragraph(titulo_txt, _ESTILO_DOENCA))
-                dias_txt = " &nbsp;·&nbsp; ".join(
-                    f'<font color="{_RISCO_CORES.get(p["risco"], "#666666")}">●</font> '
-                    f'<b>{p["data_fmt"]}</b>: {_RISCO_LABELS.get(p["risco"], "")}'
-                    for p in previsao_risco
-                )
-                cabecalho.append(Paragraph(f"Risco de infecção: {dias_txt}", _ESTILO_PREVISAO_RISCO))
-            elif risco_label:
-                cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
-                cabecalho.append(Paragraph(
-                    f'{titulo_txt} — <font color="{cor_risco}">●</font> Risco de infecção: <b>{risco_label}</b>',
-                    _ESTILO_RISCO_CLIMATICO,
-                ))
-            if d.get("cientifico"):
-                cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
-            story.append(KeepTogether(cabecalho))
-            story.append(Spacer(1, 3))
+        story.append(KeepTogether([Paragraph(titulo_riscos, _ESTILO_SECAO), _tabela_riscos_climaticos(riscos_climaticos)]))
+        story.append(Spacer(1, 4))
 
     produtos = produtos or {}
     story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
