@@ -41,19 +41,13 @@
 </div>
 <div id="farm-map"></div>
 <p class="text-muted small mt-3 pt-3 border-top">
-    Passe o mouse sobre um pino para ver os alertas daquela estacao, ou
+    Passe o mouse sobre um pino para ver os alertas daquela fazenda, ou
     clique/toque para abrir direto aquela fazenda na aba Manejos (no
     celular, o 1o toque so mostra os alertas -- toque de novo pra abrir).
     Os nomes de
     cidade que aparecem por cima da imagem de satelite (capitais e cidades
     grandes com zoom baixo, cidades menores conforme vai dando zoom) ja
     mostram a localizacao, sem precisar de linhas de divisa ou rodovia.
-    Os pinos azuis 📡 sao so as estacoes do
-    INMET que estao realmente sendo usadas como base pra alguma fazenda
-    (a mais proxima de cada uma, a escolhida manualmente na aba Manejos,
-    ou as 3 usadas por quem estiver na opcao "Interpolacao das 3 estacoes
-    mais proximas") -- so como referencia de localizacao/cidade, os dados
-    de clima do app vem da Open-Meteo.
 </p>
 {% endif %}
 {% endblock %}
@@ -107,17 +101,6 @@
 
     var climaIcon = buildPinIcon(PIN_COR_CLIMA);
 
-    var stationIconPx = Math.round(22 * ESCALA_MOBILE);
-    var stationIcon = L.divIcon({
-        html: '<div style="background:#1971c2;border:2px solid #ffffff;border-radius:50%;' +
-            'width:' + stationIconPx + 'px;height:' + stationIconPx + 'px;display:flex;align-items:center;justify-content:center;' +
-            'font-size:' + Math.round(12 * ESCALA_MOBILE) + 'px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">📡</div>',
-        className: 'mapa-pin-icon',
-        iconSize: [stationIconPx, stationIconPx],
-        iconAnchor: [Math.round(stationIconPx / 2), Math.round(stationIconPx / 2)],
-        tooltipAnchor: [0, -Math.round(14 * ESCALA_MOBILE)],
-    });
-
     function escapeHtml(s) {
         return String(s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -146,24 +129,6 @@
         }).join('');
         return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
             '<div class="mapa-tt-data">Leitura de ' + escapeHtml(site.ultima_leitura) + '</div>' + rows + '</div>';
-    }
-
-    function buildStationTooltipHtml(estacao) {
-        var titulo = '<div class="mapa-tooltip"><div class="mapa-tt-title">📡 ' + escapeHtml(estacao.cidade) + '/' + escapeHtml(estacao.uf) + '</div>';
-        var agencia = agenciaDaEstacao(estacao);
-        if (!estacao.fazendas.length) {
-            return titulo + '<div class="mapa-tt-data">Estacao ' + escapeHtml(agencia) + ' ' + escapeHtml(estacao.codigo) + ' -- referencia da regiao</div></div>';
-        }
-        var fazendasHtml = estacao.fazendas.map(function (f) {
-            return '<div class="mapa-tt-row">' +
-                '<span class="mapa-tt-doenca">' + escapeHtml(f.nome_exibicao) + '</span>' +
-                '<span class="mapa-tt-valor">' + escapeHtml(f.distancia_km) + ' km</span>' +
-                '</div>';
-        }).join('');
-        // "usada por" (nao "mais proxima de") porque numa fazenda com
-        // "Interpolacao das 3 estacoes" essa pode ser a 2a ou 3a mais
-        // perto, nao necessariamente a mais proxima -- ver _plotar_site.
-        return titulo + '<div class="mapa-tt-data">Estacao ' + escapeHtml(agencia) + ' ' + escapeHtml(estacao.codigo) + ' -- usada por:</div>' + fazendasHtml + '</div>';
     }
 
     var map = L.map('farm-map');
@@ -239,15 +204,6 @@
         if (geom.type === 'MultiPolygon') return geom.coordinates.some(function (poly) { return pointInRings(pt, poly); });
         return false;
     }
-    var estacoes = {{ estacoes | tojson }};
-    // Nome da agencia por pais (INMET, DMC, SMN...) -- so' pro rotulo do
-    // tooltip de estacao, ver buildStationTooltipHtml. Vem de
-    // countries.py (agencia_estacoes), nao hardcoded aqui.
-    var AGENCIA_POR_PAIS = {{ agencia_por_pais | tojson }};
-    function agenciaDaEstacao(estacao) {
-        return AGENCIA_POR_PAIS[estacao.country_code] || 'Estacao oficial';
-    }
-
     // Pais de cada fazenda (aba Fazendas > Pais -- ver models.get_all_site_countries),
     // sem entrada = 'BR' (padrao). Decide quais paises alem do Brasil tem
     // contorno buscado pra recortar a grade de chuva -- 'BR' sempre entra,
@@ -578,12 +534,6 @@
                 }
                 window.location.href = FAZENDAS_URL + '?site=' + encodeURIComponent(site.site);
             });
-    });
-
-    estacoes.forEach(function (estacao) {
-        L.marker([estacao.lat, estacao.lon], { icon: stationIcon })
-            .addTo(map)
-            .bindTooltip(buildStationTooltipHtml(estacao), { direction: 'top', sticky: true, opacity: 0.95 });
     });
 
     if (latlngs.length === 1) {
