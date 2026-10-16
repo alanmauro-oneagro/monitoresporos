@@ -480,7 +480,7 @@
                 }
             })
             .catch(function () {
-                chuvaStatus.textContent = 'Nao foi possivel buscar a previsao de chuva agora -- tente de novo.';
+                chuvaStatus.classList.add('d-none');
             });
     }
 

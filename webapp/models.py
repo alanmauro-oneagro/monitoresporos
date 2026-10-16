@@ -2480,7 +2480,7 @@ WHATSAPP_DIAS_PADRAO_PDF = {4}
 
 # Horario sugerido de envio automatico pra fazenda que ainda nao tem
 # nenhum horario customizado -- comeca as 5h30 (depois da leitura de clima
-# das 05:00, ver weather_forecast.HORARIOS_LEITURA), espalhado de poucos
+# das 04:45, ver weather_forecast.HORARIOS_LEITURA), espalhado de poucos
 # minutos por fazenda (nunca no MESMO minuto), pedido explicito do
 # usuario pra reduzir a chance de varias fazendas caindo juntas na fila
 # sequencial do whatsapp-bridge (ver `_run_scheduled_whatsapp_sends`/
