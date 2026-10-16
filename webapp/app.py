@@ -69,10 +69,7 @@ if hasattr(time, "tzset"):
 # agendado de WhatsApp (`models.get_whatsapp_send_hour`), timestamps de log e
 # rodape de relatorio pra TODOS os paises igual -- nao (ainda) por
 # fazenda/pais. Um ajuste fino por pais e' possivel depois se isso vier
-# a importar de verdade; ver `data_reader._offset_america_santiago` pro
-# unico lugar onde o fuso do Chile ja e' tratado com mais precisao (o
-# calculo de risco de doenca por hora, mais sensivel a isso que so'
-# timestamp).
+# a importar de verdade.
 
 WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda ... 6=Domingo (Python date.weekday())
 NDVI_AGENDAMENTO_COBERTURA_MAXIMA = 3  # % -- mais estrito que o preview manual (5%), pedido explicito do usuario pro envio automatico
@@ -394,17 +391,15 @@ def _historico_horario_open_meteo(latlon, inicio, fim):
 
 
 def _completar_clima_horario(hourly_lookup, device_by_site, sites, dias):
-    """Copia de `hourly_lookup` (clima horario dos devices BioScout) com
-    os dias SEM leitura do device preenchidos pelo historico horario da
-    Open-Meteo na coordenada de clima da fazenda (`_weather_coords_all`,
-    mesma estacao de referencia do resto do site) -- o BioScout parou de
-    mandar clima dos devices (404 no endpoint de clima, ver
-    bioscout_fetch), e sem isso o Risco de Infeccao/vento da aba
-    Graficos ficava vazio em todo dia passado. Ordem de preferencia:
-    clima BioScout (e' MODELO meteorologico, nao sensor -- o device so'
-    mede esporo; ver .claude/memory/oneagro_clima_bioscout_modelo.md) >
-    estacao oficial da fazenda (`_estacao_oficial_do_site`, pais com
-    integracao de dados medidos) > Open-Meteo."""
+    """Copia de `hourly_lookup` com os dias que faltam preenchidos pelo
+    clima horario de FONTE EXTERNA da fazenda, chaveado pelo device dela.
+    Clima nunca vem do BioScout (decisao do usuario, 16/10/2026 -- o
+    clima de la' e' modelo, nao sensor; ver
+    .claude/memory/oneagro_clima_bioscout_modelo.md): os chamadores
+    passam `hourly_lookup` vazio. Ordem de preferencia: estacao oficial
+    da fazenda (`_estacao_oficial_do_site`, pais com integracao de dados
+    medidos) > Open-Meteo na coordenada de clima da fazenda
+    (`_weather_coords_all`, mesma estacao de referencia do resto do site)."""
     if not dias:
         return hourly_lookup
     coords_clima = _weather_coords_all()
@@ -1069,8 +1064,8 @@ def _calc_risco_germinacao(disease, weather):
 def calc_risco_diario_pct(disease, horas_do_dia):
     """Mesma regra de `_calc_risco_germinacao` (temp E umidade/chuva
     favoraveis ao mesmo tempo, ver comentario la' pra detalhe de
-    `agua_livre_inibe`), mas aplicada num dia HISTORICO do weather.csv
-    (ver `data_reader.build_hourly_weather_lookup`) em vez do forecast ao
+    `agua_livre_inibe`), mas aplicada num dia HISTORICO (clima horario de
+    fonte externa, ver `_completar_clima_horario`) em vez do forecast ao
     vivo, e devolvendo um percentual 0-100 (horas favoraveis / horas de
     molhamento minimo da doenca, capado em 100%) em vez da luz
     verde/amarelo/vermelho -- usado no grafico de risco de infeccao da
@@ -3054,7 +3049,9 @@ def graficos_dados():
 
     translations = models.get_all_disease_translations()
     spore_lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
-    hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
+    # Clima so' de fonte externa (pedido do usuario): do BioScout, so'
+    # esporos -- `_completar_clima_horario` mais abaixo preenche tudo.
+    hourly_lookup = {}
     device_by_site = data_reader.read_site_device_ids()
 
     def _horas_do_dia(site, dia_iso):
@@ -4399,12 +4396,9 @@ def _contagem_vento(site_name, dias):
     leitura Open-Meteo guardada da coordenada dela. None sem dado."""
     device = data_reader.read_site_device_ids().get(site_name)
     if device:
-        # Mesma fonte da rosa da aba Graficos: clima do device, completado
-        # pela estacao oficial / estacao de referencia da fazenda.
-        lookup = _completar_clima_horario(
-            data_reader.build_hourly_weather_lookup(data_reader.read_weather()),
-            {site_name: device}, [site_name], dias,
-        )
+        # Mesma fonte da rosa da aba Graficos: estacao oficial / estacao
+        # de referencia da fazenda (clima nunca vem do BioScout).
+        lookup = _completar_clima_horario({}, {site_name: device}, [site_name], dias)
         contagem = data_reader.contar_direcoes_vento(lookup, [device], dias)
         return contagem if any(contagem.values()) else None
     latlon = _coords_all().get(site_name)
@@ -4436,10 +4430,9 @@ def _chuva_vento_ultimos_30_dias(site_name, data_final):
     (inclusive) -- pras linhas desenhadas na imagem NDVI (ver
     `ndvi_service.desenhar_informacoes`).
 
-    Preferencia 1: leitura do device BioScout da propria fazenda (mesma
-    fonte do Relatorio Diario/aba Graficos,
-    `data_reader.read_site_device_ids`/`build_hourly_weather_lookup`) --
-    mais precisa (sensor na propria fazenda).
+    Preferencia 1: fazenda com device BioScout -- clima de fonte externa
+    da fazenda (estacao oficial / estacao de referencia, mesma fonte do
+    Relatorio Diario/aba Graficos, ver `_completar_clima_horario`).
 
     Preferencia 2 (fazenda virtual/estimada, ou fazenda real sem leitura
     na janela -- sem device proprio pra' consultar): media das 3
@@ -4462,7 +4455,7 @@ def _chuva_vento_ultimos_30_dias(site_name, data_final):
 
     device = data_reader.read_site_device_ids().get(site_name)
     if device:
-        hourly_lookup = data_reader.build_hourly_weather_lookup(data_reader.read_weather())
+        hourly_lookup = _completar_clima_horario({}, {site_name: device}, [site_name], dias_janela)
         horas = [h for dia in dias_janela for h in hourly_lookup.get((device, dia), [])]
         if horas:
             chuva_acumulada = round(sum(h.get("chuva") or 0 for h in horas), 1)
