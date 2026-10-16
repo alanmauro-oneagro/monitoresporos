@@ -48,11 +48,11 @@
             </div>
             {% for safra_group in site_group.safras %}
             <div class="{% if not loop.first %}d-none{% endif %}" id="safra-body-{{ farm_idx }}-{{ safra_group.safra }}">
-                <form method="post" action="{{ url_for('save_farm_produtos') }}" data-autosave>
+                <form method="post" action="{{ url_for('save_farm_produtos') }}" data-autosave data-autosave-por-grupo>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <input type="hidden" name="safra" value="{{ safra_group.safra }}">
                     {% for secao in safra_group.secoes %}
-                    <div class="mb-3 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+                    <div class="mb-3 pb-2 {% if not loop.last %}border-bottom{% endif %}" data-autosave-group>
                         <div class="fw-bold mb-2">{{ secao.titulo }}</div>
                         <div class="row gx-4">
                             {% for grupo in secao.grupos %}

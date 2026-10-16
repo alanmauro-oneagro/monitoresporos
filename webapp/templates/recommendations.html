@@ -55,7 +55,7 @@ html { font-size: 14px; }
 <datalist id="catalogo-ia-quimico">{% for p in catalogo_produtos.quimico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
 <datalist id="catalogo-nomes-biologico">{% for nome in catalogo_produtos.biologico | map(attribute='nome') | unique %}<option value="{{ nome }}">{% endfor %}</datalist>
 <datalist id="catalogo-ia-biologico">{% for p in catalogo_produtos.biologico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
-<form method="post" action="{{ url_for('save_recommendations') }}" id="notesForm" data-autosave>
+<form method="post" action="{{ url_for('save_recommendations') }}" id="notesForm" data-autosave data-autosave-por-grupo>
     <input type="hidden" name="safra" value="{{ safra }}">
 </form>
 

@@ -4852,6 +4852,8 @@ def save_farm_produtos():
     safra = _safra_or_default(request.form)
     for momento in models.MOMENTOS:
         for tipo in models.TIPOS_PRODUTO:
+            if f"data_{momento}_{tipo}" not in request.form:
+                continue  # autosave manda so' a secao editada -- nao apagar as outras
             datas = request.form.getlist(f"data_{momento}_{tipo}")
             nomes = request.form.getlist(f"nome_{momento}_{tipo}")
             ativos = request.form.getlist(f"ia_{momento}_{tipo}")
