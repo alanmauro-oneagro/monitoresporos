@@ -5169,117 +5169,112 @@ def aplicar_pesquisa_registro():
     return _save_response(mensagem, "admin_fungicidas")
 
 
-# Pesquisa de condicoes de germinacao (temperatura, UR, molhamento foliar)
-# feita em literatura de fitopatologia (EMBRAPA, APS, Crop Protection
-# Network, revisoes peer-reviewed) por doenca -- ver nome cientifico de
-# cada uma na aba Doencas. So' preenche a doenca se ainda nao tiver limite
-# salvo (nao sobrescreve edicao manual ja feita). temp_min/temp_max/ur_min
-# alimentam a luz de risco (verde/amarelo/vermelho) E o texto exibido na
-# aba Manejo, gerado a partir deles -- ver `_formatar_condicoes_germinacao`
-# e `_calc_risco_germinacao`. molhamento_horas e' so' informativo (a rede
-# nao tem sensor de molhamento foliar de verdade, nao entra no calculo).
-# agua_livre_inibe=True e' o caso do oidio, onde chuva/agua livre atrapalha
-# em vez de ajudar a germinar.
-_PESQUISA_GERMINACAO_2026_08_27 = {
-    "Anthracnose": {"temp_min": 20, "temp_max": 28, "ur_min": 95, "molhamento_horas": 6, "agua_livre_inibe": False},
-    "Septoria": {"temp_min": 15, "temp_max": 30, "ur_min": 80, "molhamento_horas": 6, "agua_livre_inibe": False},
-    "Soybean Rust": {"temp_min": 15, "temp_max": 28, "ur_min": 95, "molhamento_horas": 6, "agua_livre_inibe": False},
-    "General Rust": {"temp_min": 16, "temp_max": 23, "ur_min": 90, "molhamento_horas": 6, "agua_livre_inibe": False},
-    "Dry rot": {"temp_min": 25, "temp_max": 30, "ur_min": 85, "molhamento_horas": 8, "agua_livre_inibe": False},
-    "Target Spot": {"temp_min": 25, "temp_max": 30, "ur_min": 90, "molhamento_horas": 12, "agua_livre_inibe": False},
-    "General Alternaria": {"temp_min": 20, "temp_max": 30, "ur_min": 90, "molhamento_horas": 8, "agua_livre_inibe": False},
-    "Moniliophthora spp. BETA": {"temp_min": 25, "temp_max": 30, "ur_min": 90, "molhamento_horas": 18, "agua_livre_inibe": False},
-    "Powdery Mildew": {"temp_min": 20, "temp_max": 25, "ur_min": 80, "molhamento_horas": None, "agua_livre_inibe": True},
-    # Adicionada em 2026-09 (doenca nova, provavelmente de fazenda do
-    # Chile -- ver aba Doencas) -- literatura (UConn Extension, PNW Pest
-    # Management Handbooks, revisao sobre Alternaria solani em tomate)
-    # aponta faixa bem parecida com "General Alternaria" acima (mesmo
-    # genero Alternaria spp.): 20-30 C timido, UR>=87-95% ou agua livre,
-    # molhamento minimo de 4h com severidade crescente ate 12h (usado 8h
-    # aqui, mesmo valor ja adotado pra General Alternaria).
-    "Alternaria Leaf Blight": {"temp_min": 20, "temp_max": 30, "ur_min": 90, "molhamento_horas": 8, "agua_livre_inibe": False},
-    # Adicionadas em 2026-09 -- doencas de videira/batata (cliente com
-    # fazenda de uva e/ou batata, provavelmente Chile) que apareceram sem
-    # nenhuma condicao de germinacao pesquisada ainda. Fontes
-    # internacionais (UC IPM, APS/Plant Disease journal, PNW Pest
-    # Management Handbooks, Cornell/Cooperative Extension) alem das ja
-    # usadas antes (EMBRAPA/APS/Crop Protection Network), pedido
-    # explicito do usuario.
-    #
-    # Botrytis cinerea (grey mould/bunch rot): germina 1-30 C, otimo
-    # 15-20 C; infeccao com UR>90% e agua livre; regra classica de
-    # viticultura (UC IPM/Ohioline) = 15h de molhamento continuo a pelo
-    # menos 15 C ja basta pra infeccao.
-    "Grey Mould": {"temp_min": 15, "temp_max": 28, "ur_min": 90, "molhamento_horas": 15, "agua_livre_inibe": False},
-    # Botryosphaeriaceae spp. (canker/bunch rot -- doenca de tronco,
-    # entra por ferimento de poda): germina acima de 5 C, desenvolvimento
-    # otimo 20-30 C e alta umidade; infeccao favorecida por periodos
-    # PROLONGADOS de molhamento (chuva), mais longos que doenca foliar
-    # tipica (PNW Handbooks/Lodi Growers).
-    "Canker & Bunch Rot": {"temp_min": 20, "temp_max": 30, "ur_min": 90, "molhamento_horas": 24, "agua_livre_inibe": False},
-    # Eutypa lata (Diatrypaceae spp., tambem doenca de tronco/ferimento
-    # de poda): ascosporos germinam 10-30 C, precisam de ~12h de umidade
-    # continua pra germinar (Plant Disease journal/UC IPM).
-    "Eutypa Dieback": {"temp_min": 10, "temp_max": 30, "ur_min": 90, "molhamento_horas": 12, "agua_livre_inibe": False},
-    # Erysiphe necator (oidio da videira) -- mesmo genero/comportamento
-    # ja cadastrado em "Powdery Mildew" acima (agua livre ATRAPALHA a
-    # germinacao dos conidios, ao contrario da maioria dos fungos, ver
-    # CABI/PNW Handbooks) -- mesmos valores, so' com nome de exibicao
-    # diferente (BioScout reportou como entrada separada).
-    "Grape Powdery Mildew": {"temp_min": 20, "temp_max": 25, "ur_min": 80, "molhamento_horas": None, "agua_livre_inibe": True},
-    # Plasmopara viticola (mildio da videira): zoosporos germinam 5-30 C,
-    # tubo germinativo penetra o estomato so' entre 10-25 C; regra
-    # classica internacional de previsao ("regra 10-10-24": 10 C, chuva,
-    # 24h de molhamento foliar continuo) usada mundialmente (APS
-    # Education Center/extensao).
-    "Grape Downy Mildew": {"temp_min": 10, "temp_max": 25, "ur_min": 90, "molhamento_horas": 24, "agua_livre_inibe": False},
-    # Helminthosporium solani (sarna prateada da batata -- doenca de
-    # tuberculo/armazenamento, nao foliar): desenvolve de 5 C ate' otimo
-    # 20-25 C, espalha rapido em armazem quente e umido (15-20 C, UR>90%)
-    # com condensacao/agua livre no tuberculo (Cornell/Univ. Maine
-    # Extension). "Molhamento" aqui representa a umidade/condensacao
-    # persistente do armazenamento, nao chuva de campo.
-    # Nome de exibicao com "s" minusculo em "scurf" mesmo -- e' assim que
-    # o BioScout reportou (ver print do usuario, campo "Nome no nosso
-    # site" ainda no padrao/sem edicao, que equivale ao display_name_en
-    # original enquanto ninguem traduzir na mao).
-    "Silver scurf": {"temp_min": 15, "temp_max": 25, "ur_min": 90, "molhamento_horas": 24, "agua_livre_inibe": False},
-    # Phytophthora infestans (requeima da batata): favorecida por
-    # UR>90% e temperaturas 10-25 C; criterio internacional classico de
-    # previsao ("Smith Period", usado no Reino Unido e adotado em varios
-    # paises) exige >=11h com UR>=90% e temp minima >=10 C em 2 dias
-    # seguidos -- usado aqui como o limiar de molhamento.
-    "Late Blight": {"temp_min": 10, "temp_max": 25, "ur_min": 90, "molhamento_horas": 11, "agua_livre_inibe": False},
+# Condicoes de germinacao de esporos por NOME CIENTIFICO do fungo
+# (pedido do usuario, 16/10/2026 -- antes era por nome em ingles do
+# BioScout). Chave = "genero especie" ou so' "genero" (minusculo, sem
+# acento); `_pesquisa_germinacao_por_cientifico` tenta especie e depois
+# genero. Valores de literatura de fitopatologia (EMBRAPA, APS, Crop
+# Protection Network, UC IPM, PNW Pest Management Handbooks, Cornell/
+# extensao) -- os mesmos ja usados antes por nome em ingles, mais alguns
+# fungos comuns em soja/milho/algodao pra' doenca cadastrada a mao.
+# Sempre editaveis no quadro da doenca.
+_G = lambda tmin, tmax, ur, molh, inibe=False: {  # noqa: E731
+    "temp_min": tmin, "temp_max": tmax, "ur_min": ur, "molhamento_horas": molh, "agua_livre_inibe": inibe,
 }
+_PESQUISA_GERMINACAO = {
+    "colletotrichum": _G(20, 28, 95, 6),           # antracnose
+    "septoria": _G(15, 30, 80, 6),                 # septoriose
+    "phakopsora": _G(15, 28, 95, 6),               # ferrugem asiatica da soja
+    "phakopsora pachyrhizi": _G(15, 28, 95, 6),
+    "puccinia": _G(16, 23, 90, 6),                 # ferrugens (P. sorghi -- ferrugem comum do milho)
+    "puccinia sorghi": _G(16, 23, 90, 6),
+    "puccinia polysora": _G(22, 30, 95, 6),        # ferrugem polissora do milho (mais quente)
+    "fusarium": _G(25, 30, 85, 8),
+    "corynespora": _G(25, 30, 90, 12),             # mancha-alvo
+    "corynespora cassiicola": _G(25, 30, 90, 12),
+    "alternaria": _G(20, 30, 90, 8),               # A. solani: molhamento minimo 4h, severidade crescente ate' 12h
+    "moniliophthora": _G(25, 30, 90, 18),
+    # Oidio: agua livre ATRAPALHA a germinacao dos conidios.
+    "erysiphe": _G(20, 25, 80, None, True),
+    "podosphaera": _G(20, 25, 80, None, True),
+    "erysiphe necator": _G(20, 25, 80, None, True),
+    "microsphaera": _G(20, 25, 80, None, True),
+    "botrytis": _G(15, 28, 90, 15),                # mofo cinzento: 15h de molhamento a >=15 C
+    "botrytis cinerea": _G(15, 28, 90, 15),
+    # Botryosphaeriaceae (cancro/podridao de cacho, entra por ferimento de poda).
+    "botryosphaeria": _G(20, 30, 90, 24),
+    "neofusicoccum": _G(20, 30, 90, 24),
+    "diplodia": _G(20, 30, 90, 24),
+    "lasiodiplodia": _G(20, 30, 90, 24),
+    "eutypa": _G(10, 30, 90, 12),
+    "eutypa lata": _G(10, 30, 90, 12),
+    "plasmopara viticola": _G(10, 25, 90, 24),    # mildio da videira, regra 10-10-24
+    "plasmopara": _G(10, 25, 90, 24),
+    "helminthosporium solani": _G(15, 25, 90, 24),  # sarna prateada (armazenamento)
+    "phytophthora infestans": _G(10, 25, 90, 11),  # requeima, criterio "Smith Period"
+    "cercospora": _G(22, 30, 90, 12),              # crestamento/olho-de-ra (soja), cercosporiose (milho)
+    "cercospora zeae": _G(22, 30, 95, 12),
+    "sclerotinia": _G(15, 25, 90, 16),             # mofo-branco: molhamento prolongado
+    "sclerotinia sclerotiorum": _G(15, 25, 90, 16),
+    "exserohilum": _G(18, 27, 90, 6),              # helmintosporiose do milho
+    "exserohilum turcicum": _G(18, 27, 90, 6),
+    "bipolaris": _G(20, 32, 90, 6),
+    "bipolaris maydis": _G(20, 32, 90, 6),
+    "ramularia": _G(18, 30, 90, 12),               # mancha de ramularia (algodao)
+    "ramularia areola": _G(18, 30, 90, 12),
+}
+_PALAVRAS_IGNORADAS_CIENTIFICO = {"spp", "sp", "and", "e", "var", "f", "complex", "complexo"}
 
 
-@app.route("/admin/doencas/aplicar-pesquisa-germinacao", methods=["POST"])
+def _pesquisa_germinacao_por_cientifico(nome_cientifico):
+    """(chave usada, dados) da pesquisa -- "genero especie" se houver,
+    senao so' o genero; (None, None) se o nome nao tem nenhum dos dois na
+    tabela (ex.: "Two Celled Spore", que o BioScout manda pra septoria)."""
+    texto = unicodedata.normalize("NFKD", nome_cientifico or "").encode("ascii", "ignore").decode().lower()
+    palavras = [p for p in re.findall(r"[a-z]+", texto) if p not in _PALAVRAS_IGNORADAS_CIENTIFICO]
+    for i in range(len(palavras) - 1):
+        chave = f"{palavras[i]} {palavras[i + 1]}"
+        if chave in _PESQUISA_GERMINACAO:
+            return chave, _PESQUISA_GERMINACAO[chave]
+    for palavra in palavras:
+        if palavra in _PESQUISA_GERMINACAO:
+            return palavra, _PESQUISA_GERMINACAO[palavra]
+    return None, None
+
+
+@app.route("/admin/doencas/buscar-germinacao", methods=["POST"])
 @admin_required
-def aplicar_pesquisa_germinacao():
-    info = models.get_all_disease_info()
-    aplicados = 0
-    for doenca_en, dados in _PESQUISA_GERMINACAO_2026_08_27.items():
-        atual = info.get(doenca_en)
-        if atual is None:
-            continue  # doenca nao existe ainda
-        # So aplica se os 4 campos numericos estiverem TODOS vazios --
-        # olhar so' germ_temp_min (como era antes) deixava passar o caso
-        # de alguem ja ter validado manualmente ur_min/molhamento_horas/
-        # temp_max mas ainda nao ter preenchido temp_min: o clique aqui
-        # sobrescrevia esses 3 ja validados junto, porque
-        # save_disease_germ_limits grava os 5 campos sempre juntos.
-        campos_numericos = (
-            atual["germ_temp_min"], atual["germ_temp_max"],
-            atual["germ_ur_min"], atual["germ_molhamento_horas"],
-        )
-        if any(v is not None for v in campos_numericos):
-            continue  # pelo menos um campo ja foi validado/editado -- nao mexe em nenhum
-        models.save_disease_germ_limits(
-            doenca_en, dados["temp_min"], dados["temp_max"], dados["ur_min"],
-            dados["molhamento_horas"], dados["agua_livre_inibe"],
-        )
-        aplicados += 1
-    return _save_response(f"Pesquisa de germinacao aplicada -- {aplicados} doenca(s) preenchida(s).", "admin_doencas")
+def buscar_germinacao_doenca():
+    """Botao "Buscar pelo nome cientifico" de UM quadro da aba Doencas --
+    so' grava a germinacao daquela doenca (pedido do usuario: uma busca
+    nao pode mexer no dado de outra). Usa o nome cientifico digitado no
+    quadro (salva ele junto, caso o salvamento automatico ainda nao tenha
+    rodado)."""
+    display_name_en = request.form.get("display_name_en") or ""
+    nome_cientifico = (request.form.get("nome_cientifico") or "").strip()
+    info = models.get_all_disease_info().get(display_name_en)
+    if info is None:
+        abort(404)
+    chave, dados = _pesquisa_germinacao_por_cientifico(nome_cientifico)
+    if not dados:
+        return jsonify({
+            "ok": False,
+            "mensagem": f"Sem dados de pesquisa para '{nome_cientifico or '(vazio)'}' -- informe genero e especie do fungo "
+                        "(ex.: Corynespora cassiicola) ou preencha os campos a mao.",
+        })
+    if nome_cientifico != (info.get("nome_cientifico") or ""):
+        models.save_disease_translation(display_name_en, info["nome_pt"], nome_cientifico)
+    models.save_disease_germ_limits(
+        display_name_en, dados["temp_min"], dados["temp_max"], dados["ur_min"],
+        dados["molhamento_horas"], dados["agua_livre_inibe"],
+    )
+    salvo = models.get_all_disease_info()[display_name_en]
+    return jsonify({
+        "ok": True,
+        "mensagem": f"Condicoes de germinacao preenchidas pela pesquisa de '{chave}'.",
+        "temp_min": dados["temp_min"], "temp_max": dados["temp_max"], "ur_min": dados["ur_min"],
+        "molhamento_horas": dados["molhamento_horas"], "germinacao": _formatar_condicoes_germinacao(salvo),
+    })
 
 
 @app.route("/admin/doencas/manual", methods=["POST"])
