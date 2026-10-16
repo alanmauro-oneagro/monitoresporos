@@ -34,7 +34,8 @@ def _abrir_json(url, timeout):
 
 # ---------------------------------------------------------------------------
 # Leituras CADENCIADAS (pedido do usuario, 15/10/2026 -- deixar o site mais
-# leve): clima e previsao sao buscados so' as 05:00, 11:00 e 16:00 de Cuiaba
+# leve): clima e previsao sao buscados so' as 04:45, 11:45 e 17:45 de Cuiaba
+# (horarios trocados a pedido do usuario em 16/10/2026)
 # (`HORARIOS_LEITURA`). Cada coordenada/estacao e' buscada no maximo 1x por
 # "janela de leitura" (`janela_de_leitura`), numa chamada so' que ja traz
 # historico horario dos ultimos 92 dias + previsao de 7 dias. Tudo fica
@@ -47,7 +48,7 @@ def _abrir_json(url, timeout):
 # ---------------------------------------------------------------------------
 DATA_DIR = Path(os.environ.get("BIOSCOUT_DATA_DIR", str(Path(__file__).parent.parent / "data")))
 STORE_PATH = DATA_DIR / "open_meteo_diario.json"
-HORARIOS_LEITURA = (5, 11, 16)  # horario de Cuiaba
+HORARIOS_LEITURA = ((4, 45), (11, 45), (17, 45))  # (hora, minuto) de Cuiaba
 DIAS_HISTORICO_GUARDADOS = 400
 _HOURLY_CAMPOS = "temperature_2m,relative_humidity_2m,precipitation,wind_direction_10m"
 _DAILY_CAMPOS = "precipitation_sum,temperature_2m_max,temperature_2m_min,cloud_cover_mean"
@@ -62,14 +63,15 @@ def _agora_cuiaba():
 
 def janela_de_leitura(agora=None):
     """Identificador da leitura vigente ("YYYY-MM-DD HHh") -- o ultimo
-    horario de `HORARIOS_LEITURA` que ja passou (antes das 05:00 ainda vale
-    a das 16:00 do dia anterior). Muda 3x por dia; a cada mudanca o
+    horario de `HORARIOS_LEITURA` que ja passou (antes das 04:45 ainda vale
+    a das 17:45 do dia anterior). Muda 3x por dia; a cada mudanca o
     agendador busca tudo de novo."""
     agora = agora or _agora_cuiaba()
-    passados = [h for h in HORARIOS_LEITURA if h <= agora.hour]
+    passados = [(h, m) for h, m in HORARIOS_LEITURA if (h, m) <= (agora.hour, agora.minute)]
     if passados:
-        return f"{agora.date().isoformat()} {passados[-1]:02d}h"
-    return f"{(agora - timedelta(days=1)).date().isoformat()} {HORARIOS_LEITURA[-1]:02d}h"
+        return f"{agora.date().isoformat()} {passados[-1][0]:02d}h{passados[-1][1]:02d}"
+    h, m = HORARIOS_LEITURA[-1]
+    return f"{(agora - timedelta(days=1)).date().isoformat()} {h:02d}h{m:02d}"
 
 
 def _carregar():
@@ -102,7 +104,7 @@ def _chave(lat, lon):
 
 def _falhou_ha_pouco(registro):
     """Ja falhou NESTA janela de leitura -- so' tenta de novo no proximo
-    horario (05:00/11:00/16:00), pra' nao ficar repetindo a chamada
+    horario (04:45/11:45/17:45), pra' nao ficar repetindo a chamada
     (pedido do usuario: site mais leve). Enquanto isso valem o backup e a
     ultima leitura guardada."""
     return (registro or {}).get("falha_janela") == janela_de_leitura()
@@ -342,7 +344,7 @@ def rodada_pendente():
 
 
 def atualizar_todos(coordenadas, estacoes=()):
-    """Rodada das 05:00/11:00/16:00: busca a leitura da janela de cada
+    """Rodada das 04:45/11:45/17:45: busca a leitura da janela de cada
     (lat, lon) e estacao, gravando o arquivo uma vez so' no fim. O que
     falhar fica pra' proxima janela (`_falhou_ha_pouco`) -- a rodada conta
     como feita e o agendador nao repete as chamadas ate' o proximo
@@ -360,6 +362,12 @@ def atualizar_todos(coordenadas, estacoes=()):
         vistas.add(f"{country_code}:{codigo}")
         _estacao(country_code, codigo, uf, salvar=False)
         previsao_estacao(country_code, codigo)
+    # Grades de chuva/nuvens dos mapas ja' pedidas -- busca agora, pra'
+    # quem abrir o mapa nao esperar pela Open-Meteo.
+    with _lock:
+        grades = [g for g in _store["grades"].values() if g.get("lats") and g.get("dia") != janela_de_leitura()]
+    for g in grades:
+        _grade_diaria(g["tipo"], g["lats"], g["lons"], g["campo_daily"], g["campo_saida"], salvar=False, pela_rodada=True)
     with _lock:
         _store["ultima_rodada"] = janela_de_leitura()
         _salvar()
@@ -500,18 +508,38 @@ def get_weather_forecast_interpolado(coords_list):
     }
 
 
-def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida):
+def _resultado_vigente(registro):
+    """Grade guardada sem os dias que ja passaram -- quando a leitura e' de
+    uma janela anterior (falha na atual), o 1o dia dela pode ser ontem."""
+    resultado = (registro or {}).get("resultado") or []
+    inicio, campo = (registro or {}).get("inicio"), (registro or {}).get("campo_saida")
+    if not resultado or not inicio or not campo:
+        return resultado
+    atraso = (_agora_cuiaba().date() - datetime.fromisoformat(inicio).date()).days
+    if atraso <= 0:
+        return resultado
+    return [{**p, campo: (p.get(campo) or [])[atraso:]} for p in resultado]
+
+
+def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_rodada=False):
     """Grade em lote (camadas de nuvens/chuva dos mapas) -- uma chamada
     Open-Meteo pra todos os pontos, guardada por janela de leitura: a mesma
     grade so' e' buscada 1x por janela (cada ponto da grade conta como uma
-    chamada pro limite da Open-Meteo, entao isso pesava muito)."""
+    chamada pro limite da Open-Meteo, entao isso pesava muito). A grade
+    pedida fica guardada (lats/lons) e a rodada das 04:45/11:45/17:45 ja'
+    busca de novo sozinha (`atualizar_todos`) -- quem abre o mapa nao
+    espera pela Open-Meteo. Em falha, devolve a ultima grade boa, sem
+    aviso na tela (pedido do usuario, 16/10/2026)."""
     assinatura = json.dumps([[round(float(v), 3) for v in lats], [round(float(v), 3) for v in lons]])
     chave = f"{tipo}:{hashlib.sha1(assinatura.encode()).hexdigest()}"
     dia = janela_de_leitura()
+    hoje = _agora_cuiaba().date().isoformat()
     with _lock:
         registro = _carregar()["grades"].get(chave)
+        if registro and not pela_rodada:
+            registro["pedida_em"] = hoje
         if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
-            return registro.get("resultado") or []
+            return _resultado_vigente(registro)
     params = {
         "latitude": ",".join(str(v) for v in lats),
         "longitude": ",".join(str(v) for v in lons),
@@ -520,14 +548,17 @@ def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida):
         "timezone": "auto",
     }
     url = f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}"
+    base = {
+        "tipo": tipo, "lats": list(lats), "lons": list(lons), "campo_daily": campo_daily, "campo_saida": campo_saida,
+        "pedida_em": (registro or {}).get("pedida_em", hoje) if pela_rodada else hoje,
+    }
     try:
         resultados = _abrir_json(url, timeout=45)
     except Exception:
         with _lock:
-            registro = dict(registro or {})
-            registro["falha_janela"] = janela_de_leitura()
+            registro = {**(registro or {}), **base, "falha_janela": dia}
             _store["grades"][chave] = registro
-        return registro.get("resultado") or []
+        return _resultado_vigente(registro)
     if not isinstance(resultados, list):
         resultados = [resultados]
     saida = []
@@ -538,11 +569,15 @@ def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida):
             "lon": r.get("longitude"),
             campo_saida: daily.get(campo_daily, [])[:6],
         })
+    inicio = ((resultados[0].get("daily") or {}).get("time") or [None])[0] if resultados else None
+    corte = (_agora_cuiaba().date() - timedelta(days=3)).isoformat()
     with _lock:
-        grades = {k: v for k, v in _store["grades"].items() if v.get("dia") == dia}
-        grades[chave] = {"dia": dia, "resultado": saida}
+        # Grade que ninguem abre ha 3 dias sai do arquivo (e da rodada).
+        grades = {k: v for k, v in _store["grades"].items() if v.get("pedida_em", "") >= corte}
+        grades[chave] = {**base, "dia": dia, "resultado": saida, "inicio": inicio}
         _store["grades"] = grades
-        _salvar()
+        if salvar:
+            _salvar()
     return saida
 
 

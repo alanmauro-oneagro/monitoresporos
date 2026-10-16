@@ -1518,9 +1518,9 @@ def _site_whatsapp_destinations(site):
 # esse padrao de rajada nos dois casos.
 RECIPIENT_STAGGER_HORAS = 1
 # Nenhum envio AUTOMATICO sai antes disso (minutos do dia, Cuiaba) -- a
-# primeira leitura de clima do dia e' as 05:00 (weather_forecast.
+# primeira leitura de clima do dia e' as 04:45 (weather_forecast.
 # HORARIOS_LEITURA); antes de 5h30 o relatorio sairia com o clima das
-# 16h do dia anterior. Pedido do usuario (15/10/2026). Horario configurado
+# 17h45 do dia anterior. Pedido do usuario (15/10/2026). Horario configurado
 # antes disso passa a valer 5h30 (o escalonamento por destinatario/
 # telefone continua somando a partir dai').
 ENVIO_AUTOMATICO_MINIMO_MIN = 5 * 60 + 30
@@ -2317,7 +2317,7 @@ def _whatsapp_scheduler_loop():
 
 
 def _atualizar_open_meteo_diario():
-    """Leitura cadenciada (05:00, 11:00 e 16:00 de Cuiaba, ver
+    """Leitura cadenciada (04:45, 11:45 e 17:45 de Cuiaba, ver
     `weather_forecast.janela_de_leitura`) da previsao (Open-Meteo, MET
     Norway de backup) e das estacoes oficiais (INMET, DMC, SMN) pra toda
     fazenda -- a estacao de referencia (`_weather_coords_all`), as 3
@@ -2706,7 +2706,6 @@ def dashboard():
         "dashboard.html", cards_by_site=cards_by_site, no_access=False,
         weather_by_site=weather_by_site, dados_status_by_site=dados_status_by_site,
         fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
-        open_meteo_erro=weather_forecast.ultimo_erro if current_user.is_admin and weather_forecast.ultimo_erro["erro"] else None,
     )
 
 

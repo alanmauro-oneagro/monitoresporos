@@ -14,11 +14,6 @@
 </div>
 {% endif %}
 
-{% if open_meteo_erro %}
-<div class="alert alert-warning small">
-    ⚠ A ultima busca de clima/previsao na Open-Meteo falhou em {{ open_meteo_erro.quando }} (so' admin ve este aviso): <code>{{ open_meteo_erro.erro }}</code>
-</div>
-{% endif %}
 
 {% if no_access %}
 <div class="alert alert-warning">
