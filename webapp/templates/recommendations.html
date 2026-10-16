@@ -2,6 +2,11 @@
 {% block title %}Recomendações {{ safra_label }} - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
+.vento-dia { margin-left: auto; margin-bottom: 0.9rem; display: flex; align-items: center; gap: 0.6rem; border: 1px solid #cfe3f5; background: #f1f7fd; border-radius: 0.4rem; padding: 0.35rem 0.75rem; }
+.vento-dia .vento-seta { display: inline-block; font-size: 1.5rem; font-weight: 700; line-height: 1; color: #1f6fd6; }
+.vento-dia .vento-rotulo { font-size: 0.7rem; color: #6c757d; }
+.vento-dia .vento-valor { font-size: 0.9rem; font-weight: 700; color: #0a1f44; }
+@media (max-width: 575.98px) { .vento-dia { margin-left: 0; } }
 /* Pagina com muita tabela/formulario -- reduz a base (rem) pra tudo
    ficar mais compacto numa visualizacao a 100%, sem precisar dar zoom
    out no navegador. */
@@ -140,6 +145,7 @@ html { font-size: 14px; }
         <div class="alert alert-info small mb-3">Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.</div>
         {% endif %}
 
+        <div class="d-flex flex-wrap align-items-start gap-2">
         {% if site_group.nivel_dados == 'bloqueado' %}
         <div class="text-muted small mb-2">
             Sem leitura ha {{ site_group.dias_sem_leitura }} dias -- caixas de doenca ocultas ate a estacao voltar a enviar dados novos (dado velho demais pra confiar).
@@ -154,6 +160,16 @@ html { font-size: 14px; }
             {% endfor %}
         </div>
         {% endif %}
+        {% if site_group.vento_dia %}
+        <div class="vento-dia" title="Direcao de onde o vento mais soprou hoje (seta = para onde ele vai)">
+            <span class="vento-seta" style="transform: rotate({{ site_group.vento_dia.graus + 180 }}deg);">↑</span>
+            <div>
+                <div class="vento-rotulo">Vento predominante hoje</div>
+                <div class="vento-valor">de {{ site_group.vento_dia.nome }} ({{ site_group.vento_dia.codigo }})</div>
+            </div>
+        </div>
+        {% endif %}
+        </div>
 
         {% if site_group.weather %}
         <div class="small text-muted mt-2 mb-2">
