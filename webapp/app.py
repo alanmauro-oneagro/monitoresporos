@@ -3279,7 +3279,7 @@ def mapa():
     active_country_codes_mapa = sorted(active_countries | countries.paises_com_estacoes())
     return render_template(
         "mapa.html", sites_data=sites_data, no_access=False,
-        travar_estado=not current_user.is_admin and len(permitted) == 1,
+        abrir_no_estado=not current_user.is_admin and len(permitted) == 1,
         active_country_codes_mapa=active_country_codes_mapa,
         **_country_map_context(),
     )
