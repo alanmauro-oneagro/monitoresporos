@@ -584,7 +584,7 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
 });
 
 // Personalizacoes salvas na conta do usuario: fazendas abertas (por
-// safra) e Texto/PDF marcados no envio por WhatsApp.
+// safra) e Texto/PDF marcados no envio por WhatsApp (por fazenda).
 var SAFRA_ATUAL = {{ safra | tojson }};
 (function () {
     var abertas = (window.OneAgroPrefs.get('rec_abertas') || {})[SAFRA_ATUAL] || [];
@@ -592,15 +592,20 @@ var SAFRA_ATUAL = {{ safra | tojson }};
         var body = document.getElementById(btn.dataset.target);
         if (abertas.indexOf(btn.dataset.site) !== -1 && body.classList.contains('d-none')) btn.click();
     });
-    var formatos = window.OneAgroPrefs.get('rec_formatos');
+    // Texto/PDF independentes por fazenda: {fazenda: {texto, pdf}}.
+    function formatosSalvos() {
+        var f = window.OneAgroPrefs.get('rec_formatos') || {};
+        return typeof f.texto === 'boolean' || typeof f.pdf === 'boolean' ? {} : f;  // formato antigo (igual pra todas)
+    }
     ['texto', 'pdf'].forEach(function (tipo) {
-        var caixas = document.querySelectorAll('input[name="enviar_' + tipo + '"]');
-        if (formatos && typeof formatos[tipo] === 'boolean') caixas.forEach(function (c) { c.checked = formatos[tipo]; });
-        caixas.forEach(function (c) {
+        document.querySelectorAll('input[name="enviar_' + tipo + '"]').forEach(function (c) {
+            var site = c.closest('.card[data-site]').dataset.site;
+            var daFazenda = formatosSalvos()[site];
+            if (daFazenda && typeof daFazenda[tipo] === 'boolean') c.checked = daFazenda[tipo];
             c.addEventListener('change', function () {
-                caixas.forEach(function (outra) { outra.checked = c.checked; });
-                var atual = window.OneAgroPrefs.get('rec_formatos') || {};
-                atual[tipo] = c.checked;
+                var atual = formatosSalvos();
+                atual[site] = atual[site] || {};
+                atual[site][tipo] = c.checked;
                 window.OneAgroPrefs.set('rec_formatos', atual);
             });
         });
