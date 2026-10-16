@@ -333,8 +333,7 @@ html { font-size: 14px; }
             <form method="post" action="{{ url_for('save_produtos_folha') }}" data-autosave>
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <input type="hidden" name="safra" value="{{ safra }}">
-                <label class="form-label small fw-bold d-block mb-1">Folha (aplicação foliar)</label>
-                <div class="small text-muted mb-2">Mesmo dado da aba Manejos — editar aqui atualiza lá também.</div>
+                <label class="form-label small fw-bold d-block mb-2">Folha (aplicação foliar)</label>
                 <div class="row gx-4">
                     {% for tipo, titulo in [('quimico', 'Fungicidas quimicos'), ('biologico', 'Biológicos')] %}
                     <div class="col-12 col-lg-6 mb-2">
