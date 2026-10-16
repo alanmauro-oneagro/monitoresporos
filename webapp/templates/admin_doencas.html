@@ -12,18 +12,6 @@
 {% block content %}
 <h4 class="mb-2">Doencas</h4>
 
-<form method="post" action="{{ url_for('aplicar_pesquisa_germinacao') }}" class="mb-3">
-    <button type="submit" class="btn btn-sm btn-outline-primary">
-        🔎 Aplicar pesquisa de condicoes de germinacao (27/08/2026)
-    </button>
-    <div class="text-muted small mt-1">
-        Preenche os campos de germinacao com dados pesquisados em literatura de fitopatologia
-        (EMBRAPA, APS, Crop Protection Network). So preenche quem estiver vazio -- nao
-        sobrescreve edicao manual. Pode clicar mais de uma vez sem problema -- so precisa
-        fazer isso uma vez em cada ambiente (local e o site publicado usam bancos separados).
-    </div>
-</form>
-
 <form method="post" action="{{ url_for('adicionar_doenca_manual') }}" class="card shadow-sm mb-3">
     <div class="card-body">
         <div class="small fw-bold mb-1">Adicionar doenca manualmente</div>
@@ -70,7 +58,14 @@
         </div>
 
         <hr class="my-3">
-        <div class="small fw-bold text-muted mb-2">Condicoes para germinacao de esporos</div>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <div class="small fw-bold text-muted">Condicoes para germinacao de esporos</div>
+            <button type="button" class="btn btn-sm btn-outline-primary buscar-germinacao-btn" data-en="{{ d.en }}"
+                    title="Preenche so' esta doenca com a pesquisa de literatura, pelo nome cientifico (genero e especie, ou so' o genero)">
+                🔎 Buscar pelo nome cientifico
+            </button>
+            <span class="buscar-germinacao-msg small"></span>
+        </div>
         <div class="row gx-2 row-cols-2 row-cols-md-4">
             <div class="col">
                 <label class="form-label small text-muted mb-1">Temp min (°C)</label>
@@ -89,9 +84,7 @@
                 <input type="number" step="1" name="germ_molhamento_horas" class="form-control form-control-sm" value="{{ d.molhamento_horas if d.molhamento_horas is not none else '' }}">
             </div>
         </div>
-        {% if d.germinacao %}
-        <div class="small text-muted fst-italic mt-2">→ {{ d.germinacao }}</div>
-        {% endif %}
+        <div class="small text-muted fst-italic mt-2 germinacao-resumo{% if not d.germinacao %} d-none{% endif %}">→ {{ d.germinacao }}</div>
     </div>
 </div>
 {% endfor %}
@@ -226,6 +219,41 @@
 {% endblock %}
 {% block extra_scripts %}
 <script>
+// Busca de germinacao de UM quadro (pelo nome cientifico digitado nele)
+// -- grava so' essa doenca e preenche os campos do proprio quadro.
+document.querySelectorAll('.buscar-germinacao-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var card = btn.closest('.card-body');
+        var campo = function (nome) { return card.querySelector('input[name="' + nome + '"]'); };
+        var msg = card.querySelector('.buscar-germinacao-msg');
+        var preenchido = ['germ_temp_min', 'germ_temp_max', 'germ_ur_min', 'germ_molhamento_horas'].some(function (n) { return campo(n).value !== ''; });
+        if (preenchido && !confirm('Substituir as condicoes de germinacao ja preenchidas nesta doenca pelas da pesquisa?')) return;
+        btn.disabled = true;
+        msg.className = 'buscar-germinacao-msg small text-muted';
+        msg.textContent = 'Buscando...';
+        var body = new URLSearchParams({ display_name_en: btn.dataset.en, nome_cientifico: campo('nome_cientifico').value });
+        fetch('{{ url_for("buscar_germinacao_doenca") }}', { method: 'POST', body: body, headers: { 'X-Autosave': '1' } })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                msg.className = 'buscar-germinacao-msg small ' + (res.ok ? 'text-success' : 'text-danger');
+                msg.textContent = res.mensagem;
+                if (!res.ok) return;
+                var vazio = function (v) { return v === null || v === undefined ? '' : v; };
+                campo('germ_temp_min').value = vazio(res.temp_min);
+                campo('germ_temp_max').value = vazio(res.temp_max);
+                campo('germ_ur_min').value = vazio(res.ur_min);
+                campo('germ_molhamento_horas').value = vazio(res.molhamento_horas);
+                var resumo = card.querySelector('.germinacao-resumo');
+                if (resumo) { resumo.textContent = '→ ' + res.germinacao; resumo.classList.remove('d-none'); }
+            })
+            .catch(function () {
+                msg.className = 'buscar-germinacao-msg small text-danger';
+                msg.textContent = 'Falha na busca -- tente de novo.';
+            })
+            .finally(function () { btn.disabled = false; });
+    });
+});
+
 // Botao "Excluir" fica FORA do form gigante de autosave (que repete
 // name="display_name_en" uma vez por doenca) -- um submit normal ali
 // dentro mandaria os campos errados. Chama a rota direto via fetch, sem
