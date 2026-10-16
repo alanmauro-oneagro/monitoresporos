@@ -1,4 +1,5 @@
 """Esquema do banco (SQLite) e funcoes de acesso a usuarios/permissoes/fazendas."""
+import json
 import os
 import sqlite3
 import unicodedata
@@ -820,6 +821,24 @@ def get_setting(key, default=None):
     row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
     conn.close()
     return row["value"] if row else default
+
+
+_NDVI_OCULTAS_KEY = "ndvi_fazendas_ocultas"
+
+
+def get_ndvi_ocultas():
+    """Fazendas tiradas da aba NDVI (botao "Excluir da aba NDVI") -- so'
+    some daquela aba, a fazenda e os dados dela continuam."""
+    try:
+        return set(json.loads(get_setting(_NDVI_OCULTAS_KEY) or "[]"))
+    except ValueError:
+        return set()
+
+
+def set_ndvi_oculta(site_name, oculta):
+    ocultas = get_ndvi_ocultas()
+    (ocultas.add if oculta else ocultas.discard)(site_name)
+    set_setting(_NDVI_OCULTAS_KEY, json.dumps(sorted(ocultas)))
 
 
 def set_setting(key, value):
