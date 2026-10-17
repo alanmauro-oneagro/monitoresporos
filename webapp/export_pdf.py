@@ -495,21 +495,6 @@ def build_recommendation_pdf(
         story.append(_cabecalho_clima(weather, leitura_bioscout))
         story.append(Spacer(1, 6))
 
-    # Anotacoes das doencas numa caixa so' (igual a tela e ao texto do
-    # WhatsApp), so' as preenchidas -- logo apos o clima, pra caber na
-    # primeira pagina junto com os 2 primeiros graficos.
-    linhas_anotacao = [Paragraph(anotacao, _ESTILO_NORMAL)] if anotacao else []
-    linhas_anotacao += [
-        Paragraph(f"<b>{escape(d['rotulo'])}:</b> {escape(d['nota'].strip())}".replace("\n", "<br/>"), _ESTILO_NORMAL)
-        for d in diseases if (d.get("nota") or "").strip()
-    ]
-    if linhas_anotacao:
-        # Mesma caixa cinza das outras secoes de anotacao livre (Produtos/
-        # Plantio/Pulverizacao).
-        story.append(Paragraph("Anotações", _ESTILO_SECAO))
-        story.append(_caixa(linhas_anotacao, fundo=CINZA_CLARO))
-        story.append(Spacer(1, 2))
-
     if mostrar_secao_doencas:
         story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
     fontes_pesquisadas = []
@@ -556,6 +541,21 @@ def build_recommendation_pdf(
                 for grupo in (d.get("biologicos"), d.get("quimicos")):
                     if grupo and grupo.get("fonte"):
                         fontes_pesquisadas.append(grupo["fonte"].split(" -- ")[0])
+
+    # Anotacoes das doencas numa caixa so' (igual a tela e ao texto do
+    # WhatsApp), so' as preenchidas -- logo abaixo da ultima caixa de
+    # recomendacoes das doencas.
+    linhas_anotacao = [Paragraph(anotacao, _ESTILO_NORMAL)] if anotacao else []
+    linhas_anotacao += [
+        Paragraph(f"<b>{escape(d['rotulo'])}:</b> {escape(d['nota'].strip())}".replace("\n", "<br/>"), _ESTILO_NORMAL)
+        for d in diseases if (d.get("nota") or "").strip()
+    ]
+    if linhas_anotacao:
+        # Mesma caixa cinza das outras secoes de anotacao livre (Produtos/
+        # Plantio/Pulverizacao).
+        story.append(Paragraph("Anotações", _ESTILO_SECAO))
+        story.append(_caixa(linhas_anotacao, fundo=CINZA_CLARO))
+        story.append(Spacer(1, 2))
 
     if riscos_climaticos:
         # Bloco a parte de "Doencas em Atencao/Perigo" -- so' clima
