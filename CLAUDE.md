@@ -85,6 +85,14 @@ menos que seja pedido explicitamente paridade para outros admins.
   resolveria). Toggle em Manejos e em Mapa Interpolado > Pontos Criados
   (rota `save_site_ativo`, redireciona pro `request.referrer`). Preferir
   desativar a apagar quando o pedido for "sumir com uma fazenda".
+- **Fazendas ocultas** (Configuracoes -> Fazendas ocultas, so' "Alan Mauro",
+  rota `fazendas_ocultas`): lista as desativadas e as sem leitura ha mais
+  de `DADOS_BLOQUEIO_DIAS`, com botao Reativar. Reativar uma sem leitura
+  grava a data da ultima leitura (setting `bloqueio_liberado`) e
+  `_nivel_dados_site` passa a tratar como 'atencao' ate' chegar leitura
+  nova. Usar `_nivel_dados_site(site, cards)`, nao
+  `_nivel_dados_defasados` direto, onde houver fazenda. Fazenda bloqueada e
+  ponto so' clima NUNCA mandam PDF (`_send_site_whatsapp`).
 - **3 mecanismos diferentes de "listar fazendas"** (sem choke point unico):
   CSV cru (`read_sites()`/`get_dashboard_data(None,...)`) pro admin em
   varias telas, `models.get_user_permitted_site_names()` (DB) pro
