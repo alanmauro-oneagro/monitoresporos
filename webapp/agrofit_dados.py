@@ -22,6 +22,13 @@ RESOURCE_PAGE = (
     "https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit/resource/" + RESOURCE_ID
 )
 _RESOURCE_SHOW = "https://dados.agricultura.gov.br/api/3/action/resource_show?id=" + RESOURCE_ID
+_DOWNLOAD_DIRETO = RESOURCE_PAGE + "/download/agrofitprodutosformulados.csv"
+# O portal recusa (403) o User-Agent padrao do Python.
+_CABECALHOS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/124.0 Safari/537.36",
+    "Accept": "text/csv,application/json,application/zip,*/*",
+}
 INTERVALO_ATUALIZACAO = timedelta(days=30)
 # Falha no download (portal fora do ar etc) -- tenta de novo so' depois disso.
 RETENTATIVA_APOS_FALHA = timedelta(hours=6)
@@ -139,12 +146,27 @@ def status():
     }
 
 
+def _abrir(url, timeout):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=_CABECALHOS), timeout=timeout)
+
+
+def _url_do_arquivo():
+    try:
+        with _abrir(_RESOURCE_SHOW, 60) as resp:
+            return json.loads(resp.read().decode("utf-8"))["result"]["url"]
+    except Exception:
+        return _DOWNLOAD_DIRETO
+
+
 def _baixar():
-    with urllib.request.urlopen(_RESOURCE_SHOW, timeout=60) as resp:
-        url = json.loads(resp.read().decode("utf-8"))["result"]["url"]
+    url = _url_do_arquivo()
     tmp = INDICE_PATH.with_suffix(".download")
     try:
-        with urllib.request.urlopen(url, timeout=600) as resp, open(tmp, "wb") as f:
+        try:
+            resp = _abrir(url, 600)
+        except Exception as exc:
+            raise RuntimeError(f"{exc} ({url})") from exc
+        with resp, open(tmp, "wb") as f:
             while True:
                 bloco = resp.read(1 << 20)
                 if not bloco:
@@ -160,33 +182,36 @@ def atualizar(forcar=False):
     """Baixa e reindexa a base, se estiver vencida (ou `forcar`). Roda
     no proprio thread de quem chamou -- ver `atualizar_em_segundo_plano`."""
     with _lock:
-        meta = _ler_meta()
-        agora = _agora()
-        if not forcar:
-            if meta.get("baixado_em") and agora - datetime.fromisoformat(meta["baixado_em"]) < INTERVALO_ATUALIZACAO:
-                return
-            if meta.get("tentativa_em") and agora - datetime.fromisoformat(meta["tentativa_em"]) < RETENTATIVA_APOS_FALHA:
-                return
         _baixando.set()
         try:
-            dados = _baixar()
-            dados["meta"] = {"baixado_em": agora.isoformat(), "fonte": RESOURCE_PAGE}
-        except Exception as exc:
-            if INDICE_PATH.exists():
-                dados = carregar()
-                dados["meta"] = {**dados.get("meta", {}), "tentativa_em": agora.isoformat(), "erro": str(exc)[:300]}
-            else:
-                dados = {"meta": {"tentativa_em": agora.isoformat(), "erro": str(exc)[:300]}}
+            _atualizar(forcar)
         finally:
             _baixando.clear()
-        tmp = INDICE_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(INDICE_PATH)
+
+
+def _atualizar(forcar):
+    meta = _ler_meta()
+    agora = _agora()
+    if not forcar:
+        if meta.get("baixado_em") and agora - datetime.fromisoformat(meta["baixado_em"]) < INTERVALO_ATUALIZACAO:
+            return
+        if meta.get("tentativa_em") and agora - datetime.fromisoformat(meta["tentativa_em"]) < RETENTATIVA_APOS_FALHA:
+            return
+    try:
+        dados = _baixar()
+        dados["meta"] = {"baixado_em": agora.isoformat(), "fonte": RESOURCE_PAGE}
+    except Exception as exc:
+        dados = carregar() if INDICE_PATH.exists() else {}
+        dados["meta"] = {**dados.get("meta", {}), "tentativa_em": agora.isoformat(), "erro": str(exc)[:300]}
+    tmp = INDICE_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(INDICE_PATH)
 
 
 def atualizar_em_segundo_plano(forcar=False):
     if _baixando.is_set():
         return
+    _baixando.set()
     threading.Thread(target=atualizar, kwargs={"forcar": forcar}, daemon=True).start()
 
 
