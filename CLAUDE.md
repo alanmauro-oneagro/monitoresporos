@@ -94,7 +94,8 @@ menos que seja pedido explicitamente paridade para outros admins.
   `whatsapp_gerenciamento`/`/whatsapp`): consolida agenda de texto/PDF/NDVI
   + destinatarios por fazenda (inclusive pontos "so' clima"). Substituiu a
   agenda que antes ficava espalhada em Manejos/NDVI/Alertas Clima — ao
-  mexer em agenda de envio, e' aqui que fica agora.
+  mexer em agenda de envio, e' aqui que fica agora. Pontos "so' clima" NAO
+  tem PDF nem anotacao (pedido do Alan): so' texto, manual ou agendado.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);

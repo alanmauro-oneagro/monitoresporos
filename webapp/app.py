@@ -2022,7 +2022,11 @@ def _run_scheduled_whatsapp_sends():
             devido_texto = (
                 weekday in schedule_texto.get(site, set()) and f"{site}::{telefone}::texto" not in ja_enviados
             )
-            devido_pdf = weekday in schedule_pdf.get(site, set()) and f"{site}::{telefone}::pdf" not in ja_enviados
+            # Ponto "so' clima" nao tem PDF (pedido do Alan).
+            devido_pdf = (
+                site not in virtual_clima_names
+                and weekday in schedule_pdf.get(site, set()) and f"{site}::{telefone}::pdf" not in ja_enviados
+            )
             if not devido_texto and not devido_pdf:
                 continue
             desejado_texto = _horario_efetivo_destinatario(hora_site, "texto", idx) if devido_texto else None
@@ -3532,27 +3536,14 @@ def alertas_clima():
 def alertas_clima_whatsapp(site_name):
     _get_clima_virtual_farm_or_404(site_name)
     enviar_texto = bool(request.form.get("enviar_texto"))
-    enviar_pdf = bool(request.form.get("enviar_pdf"))
-    ok_texto, ok_pdf, message = _enviar_whatsapp_manual_escalonado(site_name, None, enviar_texto, enviar_pdf)
-    ok = (ok_texto if enviar_texto else True) and (ok_pdf if enviar_pdf else True)
+    ok_texto, _, message = _enviar_whatsapp_manual_escalonado(site_name, None, enviar_texto, False)
+    ok = ok_texto if enviar_texto else True
     nome_exibicao = _nome_exibicao(site_name)
     if ok:
         flash(f"WhatsApp de '{nome_exibicao}' enviado para {message}.", "success")
     else:
         flash(f"Falha ao enviar WhatsApp de '{nome_exibicao}': {message}", "error")
     return redirect(url_for("alertas_clima"))
-
-
-@app.route("/alertas-clima/pdf/<path:site_name>")
-@alan_mauro_required
-def alertas_clima_pdf(site_name):
-    _get_clima_virtual_farm_or_404(site_name)
-    weather = _get_weather_for_site(site_name, _weather_coords_all())
-    produtos = _farm_produtos_estoque(site_name, None)
-    _, filename, pdf_bytes = _build_site_pdf(
-        site_name, [], weather, produtos, cultura=None, safra=None, mostrar_secao_doencas=False,
-    )
-    return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
 @app.route("/alertas-clima/nota/save", methods=["POST"])
