@@ -6,6 +6,7 @@ poder ser encaminhado por email ou impresso. Ver `recommendation_pdf` em
 `app.py`."""
 import io
 import os
+from xml.sax.saxutils import escape
 
 import models
 from reportlab.lib import colors
@@ -29,10 +30,10 @@ VERMELHO_FAIXA = colors.HexColor("#f6d4d0")
 
 _styles = getSampleStyleSheet()
 _ESTILO_TITULO = ParagraphStyle(
-    "TituloFazenda", parent=_styles["Heading1"], textColor=AZUL_MARCA, fontSize=16, spaceAfter=2,
+    "TituloFazenda", parent=_styles["Heading1"], textColor=AZUL_MARCA, fontSize=14, leading=17, spaceBefore=0, spaceAfter=1,
 )
 _ESTILO_SUBTITULO = ParagraphStyle(
-    "Subtitulo", parent=_styles["Normal"], textColor=colors.grey, fontSize=9, spaceAfter=10,
+    "Subtitulo", parent=_styles["Normal"], textColor=colors.grey, fontSize=8.5, spaceAfter=6,
 )
 _ESTILO_RODAPE = ParagraphStyle(
     "Rodape", parent=_styles["Normal"], textColor=colors.grey, fontSize=8, spaceAfter=3,
@@ -40,12 +41,12 @@ _ESTILO_RODAPE = ParagraphStyle(
 # keepWithNext: titulo de secao nunca fica sozinho no fim da pagina,
 # separado do quadro dele.
 _ESTILO_SECAO = ParagraphStyle(
-    "Secao", parent=_styles["Heading2"], textColor=AZUL_MARCA, fontSize=12, spaceBefore=12, spaceAfter=4,
+    "Secao", parent=_styles["Heading2"], textColor=AZUL_MARCA, fontSize=11, leading=13, spaceBefore=8, spaceAfter=3,
     keepWithNext=1,
 )
-_ESTILO_NORMAL = ParagraphStyle("NormalPdf", parent=_styles["Normal"], fontSize=9.5, leading=13)
+_ESTILO_NORMAL = ParagraphStyle("NormalPdf", parent=_styles["Normal"], fontSize=8.5, leading=11)
 _ESTILO_DOENCA = ParagraphStyle(
-    "Doenca", parent=_styles["Normal"], fontSize=10.5, leading=14, spaceBefore=6, spaceAfter=2,
+    "Doenca", parent=_styles["Normal"], fontSize=9.5, leading=12, spaceBefore=4, spaceAfter=1,
 )
 _ESTILO_GERMINACAO = ParagraphStyle(
     "Germinacao", parent=_styles["Normal"], fontSize=8.5, textColor=colors.grey, spaceAfter=2,
@@ -221,7 +222,7 @@ def _cabecalho_clima(weather, leitura_bioscout):
     return tabela
 
 
-def _build_spore_chart(historico, largura=17.4 * cm, altura=4.8 * cm):
+def _build_spore_chart(historico, largura=17.4 * cm, altura=3.6 * cm):
     """Grafico "Esporos por M3" da doenca na fazenda -- mesmos parametros
     do grafico da aba Graficos (pedido do usuario, 16/10/2026): faixas
     verde/amarela/vermelha (warningConcentrationThreshold/
@@ -386,8 +387,8 @@ def _caixa(conteudo, fundo=None):
         ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]
     if fundo:
         estilo.append(("BACKGROUND", (0, 0), (-1, -1), fundo))
@@ -401,7 +402,7 @@ def _caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, classe_la
     Fungicidas), pra deixar claro que essa parte NAO e' uma anotacao da
     fazenda (essa sim, com fundo cinza -- ver `_caixa`)."""
     linhas = [Paragraph("Recomendações das Instituições de Pesquisa", ParagraphStyle(
-        "RecInst", parent=_ESTILO_NORMAL, fontName="Helvetica-Bold", spaceAfter=3,
+        "RecInst", parent=_ESTILO_NORMAL, fontName="Helvetica-Bold", spaceAfter=2,
     ))]
     if biologicos_itens:
         ativos = " // ".join(_fmt_ingrediente(p, classe_label) for p in biologicos_itens)
@@ -435,14 +436,19 @@ _LOGO_ONEAGRO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static
 _LOGO_ALTURA = 0.6 * cm
 
 
-def _logo_rodape(canvas, doc):
-    """Logo da OneAgro no canto inferior direito de toda pagina."""
-    largura, altura = ImageReader(_LOGO_ONEAGRO).getSize()
-    w = _LOGO_ALTURA * largura / altura
-    canvas.drawImage(
-        _LOGO_ONEAGRO, A4[0] - doc.rightMargin - w, 0.7 * cm,
-        width=w, height=_LOGO_ALTURA, mask="auto",
-    )
+def _rodape_pagina(extraido_em):
+    """Logo da OneAgro no canto inferior direito de toda pagina, com a
+    data de extracao do relatorio logo abaixo."""
+    def desenhar(canvas, doc):
+        largura, altura = ImageReader(_LOGO_ONEAGRO).getSize()
+        w = _LOGO_ALTURA * largura / altura
+        direita = A4[0] - doc.rightMargin
+        canvas.drawImage(_LOGO_ONEAGRO, direita - w, 0.95 * cm, width=w, height=_LOGO_ALTURA, mask="auto")
+        if extraido_em:
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.grey)
+            canvas.drawRightString(direita, 0.6 * cm, extraido_em)
+    return desenhar
 
 
 def build_recommendation_pdf(
@@ -489,13 +495,20 @@ def build_recommendation_pdf(
         story.append(_cabecalho_clima(weather, leitura_bioscout))
         story.append(Spacer(1, 6))
 
-    if anotacao:
+    # Anotacoes das doencas numa caixa so' (igual a tela e ao texto do
+    # WhatsApp), so' as preenchidas -- logo apos o clima, pra caber na
+    # primeira pagina junto com os 2 primeiros graficos.
+    linhas_anotacao = [Paragraph(anotacao, _ESTILO_NORMAL)] if anotacao else []
+    linhas_anotacao += [
+        Paragraph(f"<b>{escape(d['rotulo'])}:</b> {escape(d['nota'].strip())}".replace("\n", "<br/>"), _ESTILO_NORMAL)
+        for d in diseases if (d.get("nota") or "").strip()
+    ]
+    if linhas_anotacao:
         # Mesma caixa cinza das outras secoes de anotacao livre (Produtos/
-        # Plantio/Pulverizacao) -- destaque visual, em vez de uma linha
-        # em negrito perdida junto do clima.
+        # Plantio/Pulverizacao).
         story.append(Paragraph("Anotações", _ESTILO_SECAO))
-        story.append(_caixa([Paragraph(anotacao, _ESTILO_NORMAL)], fundo=CINZA_CLARO))
-        story.append(Spacer(1, 4))
+        story.append(_caixa(linhas_anotacao, fundo=CINZA_CLARO))
+        story.append(Spacer(1, 2))
 
     if mostrar_secao_doencas:
         story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
@@ -543,11 +556,6 @@ def build_recommendation_pdf(
                 for grupo in (d.get("biologicos"), d.get("quimicos")):
                     if grupo and grupo.get("fonte"):
                         fontes_pesquisadas.append(grupo["fonte"].split(" -- ")[0])
-            story.append(Spacer(1, 3))
-            story.append(_caixa(
-                [Paragraph(f"Sugestão: {d.get('nota') or '-'}", _ESTILO_NORMAL)],
-                fundo=CINZA_CLARO,
-            ))
 
     if riscos_climaticos:
         # Bloco a parte de "Doencas em Atencao/Perigo" -- so' clima
@@ -611,11 +619,8 @@ def build_recommendation_pdf(
         ))
 
     story.append(Spacer(1, 10))
-    rodape = rodape_data
     if weather and weather.get("fonte"):
-        rodape = f"Fonte do clima: {weather['fonte']}" + (f" · {rodape_data}" if rodape_data else "")
-    if rodape:
-        story.append(Paragraph(rodape, _ESTILO_RODAPE))
+        story.append(Paragraph(f"Fonte do clima: {weather['fonte']}", _ESTILO_RODAPE))
     if fontes_pesquisadas:
         fontes_unicas = sorted(set(fontes_pesquisadas))
         story.append(Paragraph(
@@ -631,6 +636,7 @@ def build_recommendation_pdf(
         _ESTILO_RODAPE,
     ))
 
-    doc.build(story, onFirstPage=_logo_rodape, onLaterPages=_logo_rodape)
+    rodape_pagina = _rodape_pagina(rodape_data)
+    doc.build(story, onFirstPage=rodape_pagina, onLaterPages=rodape_pagina)
     buffer.seek(0)
     return buffer

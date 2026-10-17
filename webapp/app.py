@@ -1587,7 +1587,7 @@ def _build_site_pdf(
     plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
     nome_fazenda = _nome_exibicao(site)
     safra_label = SAFRA_LABELS[safra] if safra else "todas as safras"
-    rodape_data = f"Atualizado em {datetime.now().strftime('%d/%m/%y %H:%M')}"
+    rodape_data = f"Extraído em {weather_forecast._agora_cuiaba().strftime('%d/%m/%Y %H:%M')}"
     buffer = export_pdf.build_recommendation_pdf(
         nome_fazenda, safra_label, diseases, weather=weather, produtos=produtos,
         cultura=cultura, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
