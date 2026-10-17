@@ -35,6 +35,12 @@ RETENTATIVA_APOS_FALHA = timedelta(hours=6)
 
 INDICE_PATH = Path(models.DB_PATH).parent / "agrofit_indice.json"
 _PALAVRAS_IGNORADAS = {"spp", "sp", "and", "e", "var", "f", "complex", "complexo"}
+# Ingrediente com um desses generos (microrganismo) conta como biologico.
+_GENEROS_BIOLOGICOS = (
+    "bacillus", "trichoderma", "pseudomonas", "streptomyces", "clonostachys", "saccharomyces",
+    "aureobasidium", "gliocladium", "paenibacillus", "burkholderia", "coniothyrium", "ulocladium",
+    "beauveria", "metarhizium", "isaria", "cordyceps", "purpureocillium", "pochonia", "azospirillum",
+)
 
 _lock = threading.Lock()
 _baixando = threading.Event()
@@ -59,6 +65,12 @@ def ativos(ingrediente):
     sem_parenteses = re.sub(r"\([^)]*\)", " ", ingrediente or "")
     partes = [normalizar(p).strip(" .;,") for p in re.split(r"\+|;", sem_parenteses)]
     return tuple(sorted({p for p in partes if p}))
+
+
+def especies(ingrediente):
+    """Biologico comparado so' por genero+especie de cada organismo
+    ("Bacillus velezensis BV02" = "Bacillus velezensis")."""
+    return tuple(sorted({" ".join(a.split(" ")[:2]) for a in ativos(ingrediente)}))
 
 
 def _coluna(cabecalho, *palavras):
@@ -92,9 +104,10 @@ def montar_indice(arquivo):
     col_ingrediente = _coluna(cabecalho, "ingrediente")
     col_cultura = _coluna(cabecalho, "cultura")
     col_praga = _coluna(cabecalho, "praga", "cientif")
+    col_classe = _coluna(cabecalho, "classe")
     if None in (col_ingrediente, col_cultura, col_praga):
         raise ValueError(f"Colunas nao reconhecidas no CSV do Agrofit: {cabecalho}")
-    pragas, nomes, culturas = {}, {}, set()
+    pragas, nomes, culturas, biologicos = {}, {}, set(), set()
     for linha in leitor:
         _progresso["linhas"] += 1
         if len(linha) <= max(col_ingrediente, col_cultura, col_praga):
@@ -105,6 +118,9 @@ def montar_indice(arquivo):
             continue
         culturas.add(cultura)
         texto_ativos = " + ".join(chave)
+        classe = normalizar(linha[col_classe]) if col_classe is not None and col_classe < len(linha) else ""
+        if "microbiol" in classe or "biolog" in classe or any(g in texto_ativos for g in _GENEROS_BIOLOGICOS):
+            biologicos.add(texto_ativos)
         nomes.setdefault(texto_ativos, " + ".join(
             normalizar(re.sub(r"\([^)]*\)", " ", p)).strip(" .;,")
             for p in re.split(r"\+|;", linha[col_ingrediente]) if p.strip()
@@ -117,6 +133,7 @@ def montar_indice(arquivo):
         "pragas": {p: sorted(map(list, v)) for p, v in pragas.items()},
         "nomes": nomes,
         "culturas": sorted(culturas),
+        "biologicos": sorted(biologicos),
     }
 
 

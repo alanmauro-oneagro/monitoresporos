@@ -104,9 +104,13 @@ menos que seja pedido explicitamente paridade para outros admins.
   (dados.agricultura.gov.br, recurso "Produto Formulado"), baixada pelo
   servidor UMA VEZ POR MES (`agrofit_dados.atualizar_se_necessario` no
   scheduler; indice em `agrofit_indice.json` ao lado do banco). Busca pelo
-  NOME CIENTIFICO do fungo; marca/desmarca culturas dos quimicos e, em
-  doenca sem quimicos, importa os mais registrados (tabela
-  `fungicida_importado`, lida por `fungicida_data.get_recomendacao`). A
+  NOME CIENTIFICO do fungo; marca/desmarca culturas dos quimicos e
+  completa as linhas vazias com os mais registrados -- toda doenca tem
+  sempre 10 quimicos e 4 biologicos (`fungicida_data.LINHAS_POR_TIPO`),
+  mesmo padrao pra doenca do BioScout ou manual (sem nada no
+  fungicida_data.py, a lista inteira vem da tabela
+  `fungicida_importado_item`, lida por `fungicida_data.get_recomendacao`).
+  Na Biblioteca, doencas do Brasil (ou sem pais) vem antes das demais. A
   API AgroAPI da Embrapa foi descartada (nao gerava token). O portal do
   MAPA respondeu 403 ao download pelo Railway (provavel bloqueio de IP fora
   do Brasil) -- por isso existe o envio manual do arquivo na propria

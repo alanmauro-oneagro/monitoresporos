@@ -304,6 +304,16 @@ CLASSE_LABEL = {
 }
 
 
+# Linhas da Biblioteca de fungicidas por doenca: sempre pelo menos 10
+# quimicos e 4 biologicos (as que faltam ficam em branco pra preencher a
+# mao ou pelo botao Agrofit).
+LINHAS_POR_TIPO = {"quimico": 10, "biologico": 4}
+
+
+def n_linhas(tipo, n_real):
+    return max(n_real, LINHAS_POR_TIPO[tipo])
+
+
 _importados_cache = {}
 
 
@@ -315,7 +325,7 @@ def get_recomendacao(doenca_en):
     """Retorna {quimicos, biologicos} para a doenca (chave = nome original em
     ingles do BioScout), ou None se ainda nao tem nada cadastrado na
     biblioteca (precisa ser pesquisado). Doenca sem nada aqui pode ter
-    quimicos trazidos do Agrofit pelo botao da Biblioteca de fungicidas
+    ingredientes trazidos do Agrofit pelo botao da Biblioteca de fungicidas
     (`models.get_all_fungicidas_importados`)."""
     rec = RECOMENDACOES.get(doenca_en)
     if rec:
@@ -323,14 +333,16 @@ def get_recomendacao(doenca_en):
     if "dados" not in _importados_cache:
         import models
         _importados_cache["dados"] = models.get_all_fungicidas_importados()
-    ingredientes = _importados_cache["dados"].get(doenca_en)
-    if not ingredientes:
+    importados = _importados_cache["dados"].get(doenca_en)
+    if not importados:
         return None
+    fonte = "Agrofit/MAPA (dados abertos) -- produtos registrados para o fungo"
+    url = "https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit"
     return {
-        "quimicos": {
-            "fonte": "Agrofit/MAPA (dados abertos) -- produtos registrados para o fungo",
-            "fonte_url": "https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit",
-            "itens": [{"ingrediente": ing, "classe": None} for ing in ingredientes],
-        },
-        "biologicos": {"fonte": "", "fonte_url": "", "itens": []},
+        tipo + "s": {
+            "fonte": fonte if importados.get(tipo) else "",
+            "fonte_url": url if importados.get(tipo) else "",
+            "itens": [{"ingrediente": ing, "classe": None} for ing in importados.get(tipo, [])],
+        }
+        for tipo in ("quimico", "biologico")
     }

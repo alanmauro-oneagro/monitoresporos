@@ -273,11 +273,14 @@ def init_db():
             nota TEXT NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS fungicida_importado (
+        DROP TABLE IF EXISTS fungicida_importado;
+
+        CREATE TABLE IF NOT EXISTS fungicida_importado_item (
             doenca TEXT NOT NULL,
+            tipo TEXT NOT NULL,
             idx INTEGER NOT NULL,
             ingrediente TEXT NOT NULL,
-            PRIMARY KEY (doenca, idx)
+            PRIMARY KEY (doenca, tipo, idx)
         );
 
         CREATE TABLE IF NOT EXISTS farm_produtos (
@@ -1237,7 +1240,7 @@ def merge_duplicate_disease_translations(canonico_por_atual):
             for tabela, coluna in (
                 ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
                 ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
-        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado", "doenca"),
+        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado_item", "doenca"),
             ):
                 # OR IGNORE: se a canonica ja tiver uma linha com a mesma
                 # chave (tipo/idx/etc), mantem a dela -- o DELETE logo
@@ -1306,7 +1309,7 @@ def delete_disease_translation(display_name_en):
     for tabela, coluna in (
         ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
         ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
-        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado", "doenca"),
+        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado_item", "doenca"),
     ):
         conn.execute(f"DELETE FROM {tabela} WHERE {coluna} = ?", (display_name_en,))
     conn.execute("DELETE FROM disease_translations WHERE display_name_en = ?", (display_name_en,))
@@ -1504,23 +1507,26 @@ def set_fungicida_nota(doenca, nota):
 
 
 def get_all_fungicidas_importados():
-    """doenca_en -> [ingrediente, ...] trazidos do Agrofit pra doenca que
-    nao tem nada no fungicida_data.py (ver `fungicida_data.get_recomendacao`)."""
+    """doenca_en -> {"quimico": [...], "biologico": [...]} trazidos do
+    Agrofit pra doenca que nao tem nada no fungicida_data.py (ver
+    `fungicida_data.get_recomendacao`)."""
     conn = get_db()
-    rows = conn.execute("SELECT doenca, ingrediente FROM fungicida_importado ORDER BY doenca, idx").fetchall()
+    rows = conn.execute(
+        "SELECT doenca, tipo, ingrediente FROM fungicida_importado_item ORDER BY doenca, tipo, idx"
+    ).fetchall()
     conn.close()
     result = {}
     for r in rows:
-        result.setdefault(r["doenca"], []).append(r["ingrediente"])
+        result.setdefault(r["doenca"], {}).setdefault(r["tipo"], []).append(r["ingrediente"])
     return result
 
 
-def set_fungicidas_importados(doenca, ingredientes):
+def set_fungicidas_importados(doenca, tipo, ingredientes):
     conn = get_db()
-    conn.execute("DELETE FROM fungicida_importado WHERE doenca = ?", (doenca,))
+    conn.execute("DELETE FROM fungicida_importado_item WHERE doenca = ? AND tipo = ?", (doenca, tipo))
     conn.executemany(
-        "INSERT INTO fungicida_importado (doenca, idx, ingrediente) VALUES (?, ?, ?)",
-        [(doenca, i, ing) for i, ing in enumerate(ingredientes)],
+        "INSERT INTO fungicida_importado_item (doenca, tipo, idx, ingrediente) VALUES (?, ?, ?, ?)",
+        [(doenca, tipo, i, ing) for i, ing in enumerate(ingredientes)],
     )
     conn.commit()
     conn.close()
