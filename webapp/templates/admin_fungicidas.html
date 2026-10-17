@@ -12,7 +12,9 @@
     .fung-culturas .form-check-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
     .fung-titulo { font-size: 0.95rem; }
     .fung-bandeiras { padding: 0.2em 0.35em; }
-    .fungicida-pesquisa-btn { padding-left: 0.4rem; padding-right: 0.4rem; }
+    .fung-agrofit { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .fung-agrofit > span { grid-column: 1 / -1; }
+    .fungicida-pesquisa-btn { padding-left: 0.3rem; padding-right: 0.3rem; }
     .fungicida-mover-btn { padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
 }
 </style>
@@ -54,21 +56,29 @@
                 <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum pais marcado na matriz Doencas x Pais -- se aplica a qualquer pais">🌎<span class="d-none d-sm-inline"> Todos os paises</span></span>
                 {% endif %}
             </h5>
-            <button type="button" class="btn btn-sm btn-outline-primary text-nowrap fungicida-pesquisa-btn" data-doenca="{{ d.doenca }}"
-                    {% if d.pesquisa_fora_brasil %}disabled title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% else %}title="Busca no Agrofit/MAPA pelo nome cientifico do fungo e marca as culturas com registro / desmarca as sem registro, so' nos quimicos desta doenca"{% endif %}>
-                🔎 <span class="d-none d-sm-inline">Aplicar pesquisa </span>Agrofit<span class="d-none d-sm-inline">/MAPA</span>
-            </button>
         </div>
         <div class="mb-3" style="margin-top: -0.6rem;">
             <input type="hidden" name="cientifico_key" value="{{ d.doenca }}">
             <input type="text" name="cientifico" class="form-control form-control-sm fst-italic text-muted fung-cientifico" value="{{ d.cientifico }}"
                    data-doenca="{{ d.doenca }}" placeholder="Nome cientifico do fungo (genero e especie)" aria-label="Nome cientifico de {{ d.rotulo }}">
+            <div class="d-flex flex-wrap align-items-center gap-1 mt-2 fung-agrofit"
+                 {% if d.pesquisa_fora_brasil %}title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% endif %}>
+                <span class="small text-muted me-1">🔎 Agrofit:</span>
+                {% for operacao, rotulo, dica in [
+                    ('quimicos', 'Quimicos', 'Completa as linhas vazias de quimicos com os mais registrados para o fungo'),
+                    ('biologicos', 'Biologicos', 'Completa as linhas vazias de biologicos com os mais registrados para o fungo'),
+                    ('registros', 'Registros', 'Marca as culturas com registro e desmarca as sem registro nos quimicos desta doenca'),
+                ] %}
+                <button type="button" class="btn btn-sm btn-outline-primary fungicida-pesquisa-btn" data-doenca="{{ d.doenca }}" data-operacao="{{ operacao }}"
+                        {% if d.pesquisa_fora_brasil %}disabled{% else %}title="{{ dica }}"{% endif %}>{{ rotulo }}</button>
+                {% endfor %}
+            </div>
         </div>
         {% if d.sem_dados %}
         <p class="text-muted small mb-0">
             <span class="badge bg-secondary me-1">Sem dados ainda</span>
-            Confira o nome cientifico do fungo acima e clique em <strong>🔎 Agrofit</strong>
-            para trazer os ingredientes ativos registrados para ele no Agrofit/MAPA.
+            Confira o nome cientifico do fungo acima e clique em <strong>Quimicos</strong> e
+            <strong>Biologicos</strong> para trazer os produtos registrados para ele no Agrofit/MAPA.
         </p>
         {% endif %}
         {% for g in d.grupos %}
@@ -146,13 +156,14 @@
     (aba Doencas) -- <strong>excecao</strong>: uma cultura recem-cadastrada la nasce
     desmarcada em todo quimico ja existente (ninguem pesquisou registro
     pra ela ainda), exigindo confirmar uma a uma em vez de assumir que
-    esta tudo certo. O botao <strong>🔎 Agrofit/MAPA</strong> de cada doenca aplica a
-    busca na base aberta do Agrofit/MAPA (baixada pelo servidor uma vez por mes) pelo nome
-    cientifico do fungo (abaixo do nome da doenca) e, so' nos quimicos daquela doenca, marca
-    as culturas com registro e desmarca as sem registro (cultura que o Agrofit nao tem fica
-    como esta). As linhas vazias (sempre 10 quimicos e 4 biologicos por doenca) recebem os
-    ingredientes mais registrados para o fungo, do mesmo jeito para doencas do BioScout ou
-    cadastradas a mao. Doencas do Brasil (ou sem pais marcado) aparecem primeiro.
+    esta tudo certo. Os botoes <strong>🔎 Agrofit</strong> de cada doenca buscam na base aberta do
+    Agrofit/MAPA (atualizada uma vez por mes) pelo nome cientifico do fungo, cada um com uma
+    operacao separada: <strong>Quimicos</strong> e <strong>Biologicos</strong> completam as linhas
+    vazias (sempre 10 quimicos e 4 biologicos) com os produtos mais registrados para o fungo, e
+    <strong>Registros</strong> marca as culturas com registro e desmarca as sem registro nos
+    quimicos (cultura que o Agrofit nao tem e produto cujo nome nao foi encontrado no Agrofit
+    ficam como estao). Mesmo jeito para doencas do BioScout ou cadastradas a mao. Doencas do
+    Brasil (ou sem pais marcado) aparecem primeiro.
     A caixa <strong>Anotações</strong> de cada doenca aparece nas Recomendacoes, no texto e no
     PDF de toda fazenda que nao tiver anotacao propria dessa doenca.
 </p>
@@ -184,6 +195,7 @@ document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
             method: 'POST',
             body: new URLSearchParams({
                 doenca: btn.dataset.doenca,
+                operacao: btn.dataset.operacao,
                 nome_cientifico: document.querySelector('.fung-cientifico[data-doenca="' + CSS.escape(btn.dataset.doenca) + '"]').value,
             }),
         }).then(function (r) {

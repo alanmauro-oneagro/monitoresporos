@@ -5145,25 +5145,108 @@ def agrofit_atualizar_agora():
     return redirect(url_for("admin_fungicidas"))
 
 
+def _ingredientes_da_biblioteca(doenca, tipo):
+    """[(idx, ingrediente)] de todas as linhas (10 quimicos / 4 biologicos)
+    da doenca na Biblioteca, ja com as edicoes do admin; ingrediente ""
+    = linha vazia, None = removida de proposito."""
+    rec = fungicida_data.get_recomendacao(doenca)
+    padrao = rec[tipo + "s"]["itens"] if rec else []
+    overrides = models.get_all_fungicida_overrides()
+    linhas = []
+    for idx in range(fungicida_data.n_linhas(tipo, len(padrao))):
+        override = overrides.get((doenca, tipo, idx))
+        if override and override["removido"]:
+            linhas.append((idx, None))
+        elif override:
+            linhas.append((idx, override["ingrediente"]))
+        else:
+            linhas.append((idx, padrao[idx]["ingrediente"] if idx < len(padrao) else ""))
+    return linhas
+
+
+def _agrofit_completar_lista(doenca, tipo, achados):
+    """Operacao "Quimicos"/"Biologicos" do botao Agrofit: completa as
+    linhas vazias da doenca com os produtos mais registrados pro fungo (os
+    que ja estao na lista ficam). Doenca sem nada no fungicida_data.py
+    (manual ou do BioScout ainda nao pesquisada) tem a lista daquele tipo
+    inteira vinda do Agrofit."""
+    chave = agrofit_dados.chave_biologico if tipo == "biologico" else agrofit_dados.chave_quimico
+    candidatos = sorted(achados[tipo], key=lambda c: (-len(achados[tipo][c]), c))
+    if fungicida_data.RECOMENDACOES.get(doenca) is None:
+        itens = [achados["nomes"][c] for c in candidatos[: fungicida_data.LINHAS_POR_TIPO[tipo]]]
+        models.set_fungicidas_importados(doenca, tipo, itens)
+        fungicida_data.limpar_cache_importados()
+        return f"{len(itens)} {'biologico(s)' if tipo == 'biologico' else 'quimico(s)'} trazido(s) do Agrofit."
+    linhas = _ingredientes_da_biblioteca(doenca, tipo)
+    existentes = {chave(ing) for _, ing in linhas if ing}
+    vazias = [idx for idx, ing in linhas if ing == ""]
+    novos = [c for c in candidatos if c not in existentes]
+    for idx, c in zip(vazias, novos):
+        models.save_fungicida_override(doenca, tipo, idx, achados["nomes"][c], "", False)
+    n = min(len(vazias), len(novos))
+    if not vazias:
+        return "Lista ja completa -- nenhuma linha vazia para preencher."
+    return f"{n} produto(s) novo(s) nas {len(vazias)} linha(s) vazia(s)."
+
+
+def _agrofit_registros(doenca, achados):
+    """Operacao "Registros": em cada quimico da doenca, marca as culturas
+    com registro pro fungo e desmarca as sem registro. Quimico cujo nome
+    nao existe no Agrofit (grafia muito diferente, produto banido) NAO e'
+    mexido -- vai listado no resumo pra conferir a mao. Cultura que o
+    Agrofit nao tem fica como esta."""
+    bloqueios = models.get_all_fungicida_registro_bloqueado()
+    equivalentes = {
+        c: agrofit_dados.cultura_do_agrofit(c, achados["culturas"]) for c in models.get_culturas_ativas()
+    }
+    com_registro, sem_registro, nao_encontrados = 0, 0, []
+    for idx, ingrediente in _ingredientes_da_biblioteca(doenca, "quimico"):
+        if not ingrediente:
+            continue
+        chave = agrofit_dados.chave_quimico(ingrediente)
+        if not chave or any(a not in achados["conhecidos"] for a in chave.split(" + ")):
+            nao_encontrados.append(ingrediente)
+            continue
+        registradas = achados["quimico"].get(chave, set())
+        bloqueadas = set()
+        for cultura, nomes_agrofit in equivalentes.items():
+            if not nomes_agrofit:
+                if cultura in bloqueios.get((doenca, "quimico", idx), set()):
+                    bloqueadas.add(cultura)
+            elif not nomes_agrofit & registradas:
+                bloqueadas.add(cultura)
+        models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, sorted(bloqueadas))
+        if registradas:
+            com_registro += 1
+        else:
+            sem_registro += 1
+    msg = (f"{com_registro} quimico(s) com registro (culturas marcadas), "
+           f"{sem_registro} sem registro para esse fungo (desmarcados).")
+    if nao_encontrados:
+        msg += " Nao encontrados no Agrofit (nao alterados, confira a mao): " + "; ".join(nao_encontrados) + "."
+    return msg
+
+
+_OPERACOES_AGROFIT = ("quimicos", "biologicos", "registros")
+
+
 @app.route("/admin/fungicidas/aplicar-pesquisa-registro", methods=["POST"])
 @admin_required
 def aplicar_pesquisa_registro():
-    """Botao "Agrofit" de UMA doenca da Biblioteca de fungicidas: busca na
-    base aberta do Agrofit/MAPA (`agrofit_dados`, baixada uma vez por mes)
-    os produtos registrados para o fungo do nome cientifico e, em cada
-    quimico da doenca, marca as culturas com registro e desmarca as sem
-    registro (cultura que o Agrofit nao conhece fica como esta). Mesmo
-    padrao pra doenca do BioScout ou manual: as linhas vazias (ate' 10
-    quimicos e 4 biologicos) recebem os ingredientes mais registrados para
-    o fungo -- doenca sem nada no fungicida_data.py tem a lista inteira
-    vinda do Agrofit. Agrofit/MAPA e' o registro do BRASIL --
-    doenca marcada na matriz Doencas x Pais SO' pra outro pais fica de
-    fora (sem nenhum pais marcado = vale pra qualquer pais, entra)."""
+    """Botoes "Agrofit" de UMA doenca da Biblioteca de fungicidas, cada um
+    com uma operacao separada (`operacao`): "quimicos" e "biologicos"
+    completam a lista daquele tipo, "registros" marca/desmarca as culturas
+    dos quimicos. Busca na base aberta do Agrofit/MAPA (`agrofit_dados`)
+    pelo nome cientifico do fungo -- mesmo padrao pra doenca do BioScout ou
+    manual. Agrofit/MAPA e' o registro do BRASIL -- doenca marcada na
+    matriz Doencas x Pais SO' pra outro pais fica de fora (sem nenhum pais
+    marcado = vale pra qualquer pais, entra)."""
     doenca = request.form.get("doenca", "")
+    operacao = request.form.get("operacao", "")
     nome_cientifico = (request.form.get("nome_cientifico") or "").strip()
     info = _load_translations().get(doenca)
-    if not info:
-        return jsonify({"ok": False, "erro": "Doenca nao encontrada."}), 400
+    if not info or operacao not in _OPERACOES_AGROFIT:
+        return jsonify({"ok": False, "erro": "Pedido invalido."}), 400
     if nome_cientifico != (info.get("nome_cientifico") or ""):
         models.save_disease_translation(doenca, info["nome_pt"], nome_cientifico)
     paises_da_doenca = models.get_doenca_paises().get(doenca)
@@ -5175,93 +5258,21 @@ def aplicar_pesquisa_registro():
             "ok": False,
             "erro": "A base do Agrofit/MAPA ainda esta sendo baixada -- tente de novo em alguns minutos.",
         }), 409
-    pragas, por_ativos, dados = agrofit_dados.registros(nome_cientifico)
-    if not pragas:
+    achados = agrofit_dados.registros(nome_cientifico)
+    if not achados["pragas"]:
         return jsonify({
             "ok": False,
             "erro": f"Nenhum produto registrado no Agrofit para '{nome_cientifico or 'vazio'}'. "
                     "Confira o nome cientifico (genero e especie do fungo).",
         }), 404
-
-    biologicos_agrofit = set(dados.get("biologicos", []))
-    candidatos = {
-        tipo: sorted(
-            (a for a in por_ativos if (a in biologicos_agrofit) == (tipo == "biologico")),
-            key=lambda a: (-len(por_ativos[a]), a),
-        )
-        for tipo in ("quimico", "biologico")
-    }
-    preenchidos = 0
-    if fungicida_data.RECOMENDACOES.get(doenca) is None:
-        # Doenca sem nada no fungicida_data.py (manual ou do BioScout ainda
-        # nao pesquisada): a lista inteira vem do Agrofit.
-        for tipo, limite in fungicida_data.LINHAS_POR_TIPO.items():
-            itens = [dados["nomes"].get(a, a) for a in candidatos[tipo][:limite]]
-            models.set_fungicidas_importados(doenca, tipo, itens)
-            preenchidos += len(itens)
-        fungicida_data.limpar_cache_importados()
+    if operacao == "registros":
+        if fungicida_data.get_recomendacao(doenca) is None:
+            return jsonify({"ok": False, "erro": "Essa doenca ainda nao tem quimicos -- use antes o botao Quimicos."}), 400
+        resumo = _agrofit_registros(doenca, achados)
     else:
-        # Lista ja pesquisada: mantem o que existe e so' completa as linhas
-        # vazias ate' 10 quimicos / 4 biologicos.
-        rec = fungicida_data.get_recomendacao(doenca)
-        overrides = models.get_all_fungicida_overrides()
-        for tipo in ("quimico", "biologico"):
-            padrao = rec[tipo + "s"]["itens"]
-            existentes, vazias = set(), []
-            for idx in range(fungicida_data.n_linhas(tipo, len(padrao))):
-                override = overrides.get((doenca, tipo, idx))
-                if override and override["removido"]:
-                    continue
-                if override:
-                    ingrediente = override["ingrediente"]
-                else:
-                    ingrediente = padrao[idx]["ingrediente"] if idx < len(padrao) else ""
-                chave = agrofit_dados.especies if tipo == "biologico" else agrofit_dados.ativos
-                if ingrediente:
-                    existentes.add(chave(ingrediente))
-                else:
-                    vazias.append(idx)
-            novos = [a for a in candidatos[tipo] if chave(a) not in existentes]
-            for idx, a in zip(vazias, novos):
-                models.save_fungicida_override(doenca, tipo, idx, dados["nomes"].get(a, a), "", False)
-                preenchidos += 1
-
-    rec = fungicida_data.get_recomendacao(doenca)
-    bloqueios = models.get_all_fungicida_registro_bloqueado()
-    overrides = models.get_all_fungicida_overrides()
-    culturas_agrofit = dados.get("culturas", [])
-    equivalentes = {
-        c: agrofit_dados.cultura_do_agrofit(c, culturas_agrofit) for c in models.get_culturas_ativas()
-    }
-    com_registro, sem_registro = 0, 0
-    padrao = rec["quimicos"]["itens"]
-    for idx in range(fungicida_data.n_linhas("quimico", len(padrao))):
-        override = overrides.get((doenca, "quimico", idx))
-        if override:
-            ingrediente = "" if override["removido"] else override["ingrediente"]
-        else:
-            ingrediente = padrao[idx]["ingrediente"] if idx < len(padrao) else ""
-        if not ingrediente:
-            continue
-        culturas_registradas = por_ativos.get(" + ".join(agrofit_dados.ativos(ingrediente)), set())
-        bloqueadas = set()
-        for cultura, nomes_agrofit in equivalentes.items():
-            if not nomes_agrofit:
-                if cultura in bloqueios.get((doenca, "quimico", idx), set()):
-                    bloqueadas.add(cultura)
-            elif not nomes_agrofit & culturas_registradas:
-                bloqueadas.add(cultura)
-        models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, sorted(bloqueadas))
-        if culturas_registradas:
-            com_registro += 1
-        else:
-            sem_registro += 1
-    return jsonify({
-        "ok": True,
-        "mensagem": f"Agrofit ({', '.join(p.capitalize() for p in pragas)}): {preenchidos} produto(s) novo(s) na lista; "
-                    f"{com_registro} quimico(s) com registro, {sem_registro} sem registro para esse fungo "
-                    "(desmarcado(s) em todas as culturas).",
-    })
+        resumo = _agrofit_completar_lista(doenca, operacao[:-1], achados)
+    pragas = ", ".join(p.capitalize() for p in achados["pragas"][:6]) + ("..." if len(achados["pragas"]) > 6 else "")
+    return jsonify({"ok": True, "mensagem": f"Agrofit ({pragas}): {resumo}"})
 
 
 # Condicoes de germinacao de esporos por NOME CIENTIFICO do fungo

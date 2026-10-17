@@ -104,8 +104,13 @@ menos que seja pedido explicitamente paridade para outros admins.
   (dados.agricultura.gov.br, recurso "Produto Formulado"), baixada pelo
   servidor UMA VEZ POR MES (`agrofit_dados.atualizar_se_necessario` no
   scheduler; indice em `agrofit_indice.json` ao lado do banco). Busca pelo
-  NOME CIENTIFICO do fungo; marca/desmarca culturas dos quimicos e
-  completa as linhas vazias com os mais registrados -- toda doenca tem
+  NOME CIENTIFICO do fungo, em 3 operacoes SEPARADAS (pedido do Alan):
+  "Quimicos" e "Biologicos" completam as linhas vazias com os mais
+  registrados; "Registros" marca/desmarca culturas dos quimicos. Comparacao
+  de nomes tolerante a grafia (`agrofit_dados.chave_quimico`/
+  `chave_biologico`: benzovindiflupyr=benzovindiflupir, bixafem=bixafeno,
+  "B. velezensis" expandido); quimico cujo nome nao existe no Agrofit
+  (ex.: carbendazim, banido) NAO e' desmarcado, so' listado. Toda doenca tem
   sempre 10 quimicos e 4 biologicos (`fungicida_data.LINHAS_POR_TIPO`),
   mesmo padrao pra doenca do BioScout ou manual (sem nada no
   fungicida_data.py, a lista inteira vem da tabela

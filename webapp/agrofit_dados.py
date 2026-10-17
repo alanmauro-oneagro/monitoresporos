@@ -81,10 +81,42 @@ def ativos(ingrediente):
     return tuple(sorted({p for p in partes if p}))
 
 
-def especies(ingrediente):
-    """Biologico comparado so' por genero+especie de cada organismo
-    ("Bacillus velezensis BV02" = "Bacillus velezensis")."""
-    return tuple(sorted({" ".join(a.split(" ")[:2]) for a in ativos(ingrediente)}))
+def _canon_palavra(palavra):
+    """Grafia do Agrofit x Biblioteca: "benzovindiflupyr" = "benzovindiflupir",
+    "bixafem" = "bixafeno", "metominostrobin" = "metominostrobina",
+    "oxatiapiprolim" = "oxatiapiprolina"."""
+    palavra = palavra.replace("y", "i")
+    palavra = re.sub(r"[aeo]$", "", palavra)
+    return re.sub(r"m$", "n", palavra)
+
+
+def chave_quimico(ingrediente):
+    """Chave de comparacao de um quimico: ingredientes ativos sem
+    parenteses, acento nem diferenca de grafia, em ordem alfabetica."""
+    partes = set()
+    for ativo in ativos(ingrediente):
+        palavras = re.findall(r"[a-z0-9]+", ativo)
+        if palavras:
+            partes.add(" ".join(_canon_palavra(w) for w in palavras))
+    return " + ".join(sorted(partes))
+
+
+def chave_biologico(ingrediente):
+    """Chave de um biologico: so' genero + especie de cada organismo, com
+    abreviacao expandida -- "Bacillus subtilis + B. velezensis BV02" =
+    "Bacillus velezensis, isolado X + Bacillus subtilis"."""
+    partes, genero = set(), None
+    for parte in re.split(r"\+|;", _sem_parenteses(ingrediente)):
+        palavras = re.findall(r"[a-z]+\.?", normalizar(parte))
+        if not palavras:
+            continue
+        if palavras[0].endswith(".") and genero and genero.startswith(palavras[0][:-1]):
+            primeira = genero
+        else:
+            primeira = genero = palavras[0].rstrip(".")
+        especie = palavras[1].rstrip(".") if len(palavras) > 1 else "spp"
+        partes.add(f"{primeira} {especie}")
+    return " + ".join(sorted(partes))
 
 
 def _coluna(cabecalho, *palavras):
@@ -323,15 +355,36 @@ def pragas_do_nome_cientifico(nome_cientifico, pragas):
     return sorted(achadas)
 
 
+def _ativos_conhecidos(dados):
+    """Todos os ingredientes (quimicos, ja na chave de comparacao) que
+    existem no Agrofit, pra separar "sem registro pra esse fungo" de "nome
+    nao encontrado" (grafia muito diferente ou produto fora do Agrofit)."""
+    if _cache.get("conhecidos_mtime") != _cache["mtime"]:
+        conhecidos = set()
+        for itens in dados.get("pragas", {}).values():
+            for texto_ativos, _ in itens:
+                conhecidos.update(chave_quimico(texto_ativos).split(" + "))
+        _cache["conhecidos"], _cache["conhecidos_mtime"] = conhecidos, _cache["mtime"]
+    return _cache["conhecidos"]
+
+
 def registros(nome_cientifico):
-    """(pragas encontradas, {ativos: set(culturas do Agrofit)}, indice)."""
+    """Produtos registrados no Agrofit pro fungo do nome cientifico:
+    {"pragas": [...], "quimico": {chave: set(culturas)}, "biologico": {chave:
+    set(culturas)}, "nomes": {chave: texto exibido}, "conhecidos": set,
+    "culturas": [...]} -- chaves de `chave_quimico`/`chave_biologico`."""
     dados = carregar()
     pragas = pragas_do_nome_cientifico(nome_cientifico, dados.get("pragas", {}))
-    por_ativos = {}
+    biologicos = set(dados.get("biologicos", []))
+    resultado = {"pragas": pragas, "quimico": {}, "biologico": {}, "nomes": {},
+                 "conhecidos": _ativos_conhecidos(dados), "culturas": dados.get("culturas", [])}
     for praga in pragas:
         for texto_ativos, cultura in dados["pragas"][praga]:
-            por_ativos.setdefault(texto_ativos, set()).add(cultura)
-    return pragas, por_ativos, dados
+            tipo = "biologico" if texto_ativos in biologicos else "quimico"
+            chave = chave_biologico(texto_ativos) if tipo == "biologico" else chave_quimico(texto_ativos)
+            resultado[tipo].setdefault(chave, set()).add(cultura)
+            resultado["nomes"].setdefault(chave, dados["nomes"].get(texto_ativos, texto_ativos))
+    return resultado
 
 
 def cultura_do_agrofit(cultura, culturas_agrofit):
