@@ -109,6 +109,10 @@
 </p>
 
 <h4 class="mb-2 mt-4">Doencas x Culturas</h4>
+<style>
+    /* Doenca sem nenhuma cultura marcada: linha laranja (80% transparente). */
+    tr.sem-cultura > td { background-color: rgba(253, 126, 20, 0.2) !important; }
+</style>
 
 <form method="post" data-autosave>
     <input type="hidden" name="form_id" value="matriz_culturas">
@@ -129,7 +133,7 @@
             <tbody>
             {% for d in matriz %}
                 {% set doenca_loop = loop %}
-                <tr>
+                <tr class="linha-matriz-cultura{% if not d.marcadas %} sem-cultura{% endif %}">
                     <td>
                         {{ d.pt }}
                         <input type="hidden" name="doenca_en" value="{{ d.en }}">
@@ -286,6 +290,15 @@ document.querySelectorAll('.cultura-nome-input').forEach(function (input) {
         checkboxes.forEach(function (chk) { chk.disabled = !habilitado; });
     };
     input.addEventListener('input', atualizar);
+});
+// Matriz Doencas x Culturas: linha laranja enquanto nenhuma cultura
+// estiver marcada (atualiza ao marcar/desmarcar).
+document.querySelectorAll('tr.linha-matriz-cultura').forEach(function (linha) {
+    function atualizarLinha() {
+        linha.classList.toggle('sem-cultura', !linha.querySelector('input[type=checkbox]:checked'));
+    }
+    atualizarLinha();
+    linha.addEventListener('change', atualizarLinha);
 });
 </script>
 {% endblock %}

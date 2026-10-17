@@ -4923,6 +4923,9 @@ def admin_doencas():
         {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_culturas.get(d["en"], set())}
         for d in doencas
     ]
+    # Doencas marcadas na 1a cultura (1a coluna) primeiro -- o resto mantem
+    # a ordem por nome cientifico (sort estavel). Pedido do usuario.
+    matriz.sort(key=lambda d: not (culturas[0] and culturas[0] in d["marcadas"]))
     matriz_paises = [
         {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_paises.get(d["en"], set())}
         for d in doencas
