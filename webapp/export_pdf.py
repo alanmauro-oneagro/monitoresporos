@@ -309,6 +309,8 @@ def _build_spore_chart(historico, largura=17.4 * cm, altura=4.8 * cm):
 
 
 _ESTILO_TAB_RISCO = ParagraphStyle("TabRisco", parent=_styles["Normal"], fontSize=8, leading=9.5)
+_ESTILO_SUBTITULO_RISCO = ParagraphStyle("SubtituloRisco", parent=_styles["Normal"], fontSize=8.5, leading=11, textColor=colors.HexColor("#555555"))
+_ESTILO_LEGENDA_RISCO = ParagraphStyle("LegendaRisco", parent=_styles["Normal"], fontSize=7.5, leading=9, textColor=colors.HexColor("#555555"))
 _FUNDO_RISCO = {"vermelho": VERMELHO_FAIXA, "amarelo": AMARELO_FAIXA, "verde": VERDE_FAIXA}
 
 
@@ -316,7 +318,8 @@ def _tabela_riscos_climaticos(riscos):
     """Quadro "Risco de infeccao pelo clima" em tabela compacta (mesmo
     formato da tela de Recomendacoes, pedido do usuario 16/10/2026): uma
     linha por doenca, uma coluna por dia, celula colorida com
-    Alto/Medio/Baixo."""
+    Alto/Medio/Baixo. Doenca cadastrada a mao vai por ultimo, com *."""
+    riscos = sorted(riscos, key=lambda d: d["doenca_en"].startswith("manual:"))
     datas = []
     for d in riscos:
         for p in d.get("previsao_risco") or []:
@@ -335,7 +338,8 @@ def _tabela_riscos_climaticos(riscos):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]
     for i, d in enumerate(riscos, start=1):
-        nome = f"<b>{d['rotulo'].upper()}</b>"
+        manual = d["doenca_en"].startswith("manual:")
+        nome = f"<b>{d['rotulo'].upper()}{' *' if manual else ''}</b>"
         if d.get("cientifico"):
             nome += f' <font color="#777777"><i>({d["cientifico"]})</i></font>'
         linha = [Paragraph(nome, _ESTILO_TAB_RISCO)]
@@ -358,7 +362,9 @@ def _tabela_riscos_climaticos(riscos):
     largura_dia = 1.6 * cm
     tabela = Table(dados, colWidths=[17.4 * cm - largura_dia * ncols] + [largura_dia] * ncols, repeatRows=1)
     tabela.setStyle(TableStyle(estilo))
-    return tabela
+    if not any(d["doenca_en"].startswith("manual:") for d in riscos):
+        return [tabela]
+    return [tabela, Spacer(1, 2), Paragraph("* Doenças não monitoradas pela estação", _ESTILO_LEGENDA_RISCO)]
 
 
 def _fmt_ingrediente(item, classe_label):
@@ -532,8 +538,16 @@ def build_recommendation_pdf(
         # comparado com a germinacao, sem status/concentracao
         # confirmados (ver docstring). Aparece mesmo com
         # mostrar_secao_doencas=False, de proposito.
-        titulo_riscos = "Risco de infecção pelo clima (sem alerta de esporos)" if mostrar_secao_doencas else "Risco Climático (sem leitura recente do sensor)"
-        story.append(KeepTogether([Paragraph(titulo_riscos, _ESTILO_SECAO), _tabela_riscos_climaticos(riscos_climaticos)]))
+        story.append(KeepTogether([
+            Paragraph("Favorabilidade climática para doenças na lavoura", _ESTILO_SECAO),
+            Paragraph(
+                "Condições climáticas previstas para os próximos 5 dias e seu potencial para favorecer o "
+                "desenvolvimento das principais doenças, independentemente da presença de esporos no ar.",
+                _ESTILO_SUBTITULO_RISCO,
+            ),
+            Spacer(1, 4),
+            *_tabela_riscos_climaticos(riscos_climaticos),
+        ]))
         story.append(Spacer(1, 4))
 
     produtos = produtos or {}

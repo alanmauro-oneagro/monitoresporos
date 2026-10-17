@@ -308,11 +308,12 @@ html { font-size: 14px; }
         {% if site_group.riscos_sem_alerta or site_group.manuais_sem_germinacao %}
         {# Tabela compacta (pedido do usuario, 16/10/2026): uma linha por
            doenca, uma coluna por dia, celula colorida com Alto/Medio/Baixo. #}
-        {% set ns = namespace(datas=[]) %}
-        {% for row in site_group.riscos_sem_alerta %}{% for p in row.previsao_risco or [] %}{% if p.data_fmt not in ns.datas %}{% set ns.datas = ns.datas + [p.data_fmt] %}{% endif %}{% endfor %}{% endfor %}
+        {% set ns = namespace(datas=[], manual=False) %}
+        {% for row in site_group.riscos_sem_alerta %}{% if row.doenca_en.startswith('manual:') %}{% set ns.manual = True %}{% endif %}{% for p in row.previsao_risco or [] %}{% if p.data_fmt not in ns.datas %}{% set ns.datas = ns.datas + [p.data_fmt] %}{% endif %}{% endfor %}{% endfor %}
         {% set ncols = ns.datas|length if ns.datas else 1 %}
         <div class="mt-3 pt-3 border-top">
-            <div class="small fw-bold mb-2">🌡️ Risco de infecção pelo clima <span class="fw-normal text-muted">(sem alerta de esporos)</span></div>
+            <div class="small fw-bold">🌡️ Favorabilidade climática para doenças na lavoura</div>
+            <div class="small text-muted mb-2">Condições climáticas previstas para os próximos 5 dias e seu potencial para favorecer o desenvolvimento das principais doenças, independentemente da presença de esporos no ar.</div>
             <div class="table-responsive">
             <table class="table table-sm table-bordered align-middle mb-0 risco-tabela">
                 <thead class="table-light">
@@ -325,8 +326,7 @@ html { font-size: 14px; }
                 {% for row in site_group.riscos_sem_alerta %}
                     <tr>
                         <td class="risco-doenca" {% if row.cientifico %}title="{{ row.cientifico }}"{% endif %}>
-                            <span class="fw-bold text-uppercase">{{ row.rotulo }}</span>
-                            {% if row.doenca_en.startswith('manual:') %}<span class="badge bg-info text-dark ms-1" title="Cadastrada manualmente na aba Doencas -- sem leitura BioScout">manual</span>{% endif %}
+                            <span class="fw-bold text-uppercase">{{ row.rotulo }}{% if row.doenca_en.startswith('manual:') %} *{% endif %}</span>
                             {% if row.cientifico %}<span class="text-muted fst-italic d-none d-md-inline ms-1">({{ row.cientifico }})</span>{% endif %}
                         </td>
                         {% if row.previsao_risco %}
@@ -343,13 +343,14 @@ html { font-size: 14px; }
                 {% endfor %}
                 {% for nome in site_group.manuais_sem_germinacao %}
                     <tr>
-                        <td class="risco-doenca"><span class="fw-bold text-uppercase">{{ nome }}</span> <span class="badge bg-info text-dark ms-1">manual</span></td>
+                        <td class="risco-doenca"><span class="fw-bold text-uppercase">{{ nome }} *</span></td>
                         <td class="text-warning-emphasis risco-aviso" colspan="{{ ncols }}">⚠ Sem condições de germinação -- preencha na aba Doenças</td>
                     </tr>
                 {% endfor %}
                 </tbody>
             </table>
             </div>
+            {% if site_group.manuais_sem_germinacao or ns.manual %}<div class="text-muted mt-1" style="font-size: 0.75rem;">* Doenças não monitoradas pela estação</div>{% endif %}
             <div class="d-sm-none text-muted mt-1" style="font-size: 0.75rem;">A = Alto · M = Médio · B = Baixo</div>
         </div>
         {% endif %}
