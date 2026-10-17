@@ -304,8 +304,33 @@ CLASSE_LABEL = {
 }
 
 
+_importados_cache = {}
+
+
+def limpar_cache_importados():
+    _importados_cache.clear()
+
+
 def get_recomendacao(doenca_en):
     """Retorna {quimicos, biologicos} para a doenca (chave = nome original em
     ingles do BioScout), ou None se ainda nao tem nada cadastrado na
-    biblioteca (precisa ser pesquisado)."""
-    return RECOMENDACOES.get(doenca_en)
+    biblioteca (precisa ser pesquisado). Doenca sem nada aqui pode ter
+    quimicos trazidos do Agrofit pelo botao da Biblioteca de fungicidas
+    (`models.get_all_fungicidas_importados`)."""
+    rec = RECOMENDACOES.get(doenca_en)
+    if rec:
+        return rec
+    if "dados" not in _importados_cache:
+        import models
+        _importados_cache["dados"] = models.get_all_fungicidas_importados()
+    ingredientes = _importados_cache["dados"].get(doenca_en)
+    if not ingredientes:
+        return None
+    return {
+        "quimicos": {
+            "fonte": "Agrofit/MAPA (dados abertos) -- produtos registrados para o fungo",
+            "fonte_url": "https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit",
+            "itens": [{"ingrediente": ing, "classe": None} for ing in ingredientes],
+        },
+        "biologicos": {"fonte": "", "fonte_url": "", "itens": []},
+    }

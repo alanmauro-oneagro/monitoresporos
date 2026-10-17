@@ -34,6 +34,7 @@ from datetime import datetime, timedelta, timezone
 
 import models
 import fungicida_data
+import agrofit_dados
 import data_reader
 import bioscout_fetch
 import export_excel
@@ -2174,6 +2175,10 @@ def _whatsapp_scheduler_loop():
                 pass  # nunca deixa o loop do agendador morrer
             try:
                 _run_scheduled_ndvi_sends()
+            except Exception:
+                pass
+            try:
+                agrofit_dados.atualizar_se_necessario()
             except Exception:
                 pass
         time.sleep(60)
@@ -5043,6 +5048,7 @@ def admin_fungicidas():
                 "bandeiras": bandeiras,
                 "nota": notas.get(doenca_en, ""),
                 "cientifico": info.get("nome_cientifico") or "",
+                "pesquisa_fora_brasil": bool(paises_doenca) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises_doenca),
             })
             continue
         grupos = []
@@ -5088,131 +5094,87 @@ def admin_fungicidas():
     classes = [("", "Sem classificacao")] + list(fungicida_data.CLASSE_LABEL.items())
     return render_template(
         "admin_fungicidas.html", doencas_data=doencas_data, classes=classes, culturas_ativas=culturas_ativas,
+        agrofit=agrofit_dados.status(),
     )
 
 
-# Resultado da pesquisa de registro Agrofit/MAPA feita em 2026-08-26 (ver
-# conversa) -- por doenca+cultura, quais quimicos da biblioteca NAO tem
-# registro confirmado (bloqueados). Isso e' dado de runtime (tabela
-# fungicida_registro_bloqueado), nao versionado no banco -- precisa ser
-# aplicado uma vez em cada banco (local e o hospedado no Railway sao
-# arquivos separados). O botao "Aplicar pesquisa de registro" na aba
-# Fungicidas chama isso; pode ser clicado mais de uma vez sem problema
-# (cada chamada so substitui o conjunto bloqueado daquele item, resultado
-# final e' sempre o mesmo).
-_PESQUISA_REGISTRO_2026_08_26 = {
-    ("Target Spot", "quimico", 0): ["Algodao"],
-    ("Target Spot", "quimico", 3): ["Algodao"],
-    ("Target Spot", "quimico", 5): ["Algodao"],
-    ("Target Spot", "quimico", 6): ["Soja", "Algodao"],
-    ("Target Spot", "quimico", 7): ["Algodao"],
-    ("Target Spot", "quimico", 8): ["Soja", "Algodao"],
-    ("Target Spot", "quimico", 9): ["Algodao"],
-    ("Powdery Mildew", "quimico", 5): ["Soja"],
-    ("Powdery Mildew", "quimico", 6): ["Soja"],
-    ("Septoria", "quimico", 1): ["Algodao"],
-    ("Septoria", "quimico", 3): ["Milho", "Algodao"],
-    ("Septoria", "quimico", 4): ["Algodao"],
-    ("Septoria", "quimico", 7): ["Milho", "Algodao"],
-    ("General Alternaria", "quimico", 0): ["Soja", "Algodao"],
-    ("General Alternaria", "quimico", 1): ["Soja", "Algodao"],
-    ("General Alternaria", "quimico", 2): ["Soja", "Algodao"],
-    ("General Alternaria", "quimico", 3): ["Soja", "Algodao"],
-    ("General Alternaria", "quimico", 4): ["Soja", "Algodao"],
-    ("Anthracnose", "quimico", 1): ["Algodao", "Milho", "Feijao"],
-    ("Anthracnose", "quimico", 2): ["Soja", "Algodao", "Milho", "Feijao"],  # carbendazim -- banido pela Anvisa
-    ("Anthracnose", "quimico", 3): ["Algodao", "Milho"],
-    ("Anthracnose", "quimico", 4): ["Algodao", "Milho"],
-    ("Anthracnose", "quimico", 5): ["Algodao", "Milho", "Feijao"],
-    ("Anthracnose", "quimico", 6): ["Algodao", "Milho", "Feijao"],
-    ("Anthracnose", "quimico", 7): ["Algodao", "Milho"],
-    ("Anthracnose", "quimico", 8): ["Algodao", "Milho"],
-    ("Anthracnose", "quimico", 9): ["Soja", "Algodao", "Milho", "Feijao"],  # produto nao encontrado
-    ("Dry rot", "quimico", 1): ["Algodao"],
-    ("Dry rot", "quimico", 4): ["Algodao", "Milho"],
-    ("Dry rot", "quimico", 5): ["Milho"],
-    ("Dry rot", "quimico", 6): ["Soja", "Algodao", "Milho"],
-    ("Dry rot", "quimico", 7): ["Algodao", "Milho"],
-    ("Dry rot", "quimico", 9): ["Algodao", "Milho"],
-
-    # Moniliophthora spp. BETA: biblioteca reescrita com os quimicos da
-    # "anomalia das vagens da soja" (Diaporthe/Phomopsis + Colletotrichum
-    # + Cercospora) -- os antigos itens de vassoura-de-bruxa do cacaueiro
-    # foram removidos do fungicida_data.py (soja/algodao nem hospedam
-    # Moniliophthora). Confirmados so' pra Soja, nao pra Algodao.
-    ("Moniliophthora spp. BETA", "quimico", 0): ["Algodao"],
-    ("Moniliophthora spp. BETA", "quimico", 1): ["Algodao"],
-    ("Moniliophthora spp. BETA", "quimico", 2): ["Algodao"],
-    ("Moniliophthora spp. BETA", "quimico", 3): ["Algodao"],
-    ("Moniliophthora spp. BETA", "quimico", 4): ["Algodao"],
-    ("Moniliophthora spp. BETA", "quimico", 5): ["Algodao"],
-}
-
-
-# Fungo (genero) pesquisado em cada doenca da pesquisa acima -- o botao
-# so' aplica se o nome cientifico da doenca bater com ele.
-_FUNGOS_PESQUISA_REGISTRO = {
-    "Target Spot": {"corynespora"},
-    "Powdery Mildew": {"erysiphe", "podosphaera", "microsphaera"},
-    "Septoria": {"septoria"},
-    "General Alternaria": {"alternaria"},
-    "Anthracnose": {"colletotrichum"},
-    "Dry rot": {"fusarium"},
-    "Moniliophthora spp. BETA": {"moniliophthora", "diaporthe", "phomopsis"},
-}
-
-
-def _generos_do_nome_cientifico(nome_cientifico):
-    texto = unicodedata.normalize("NFKD", nome_cientifico or "").encode("ascii", "ignore").decode().lower()
-    return set(re.findall(r"[a-z]+", texto)) - _PALAVRAS_IGNORADAS_CIENTIFICO
-
-
-# Culturas cobertas pela pesquisa acima -- nas demais (cultura cadastrada
-# depois), o registro continua como estiver.
-_CULTURAS_PESQUISA_REGISTRO = {"soja", "algodao", "milho", "feijao"}
+# Quantos ingredientes trazer do Agrofit pra doenca que nao tem nada na
+# Biblioteca (os mais registrados primeiro).
+AGROFIT_MAX_IMPORTADOS = 10
 
 
 @app.route("/admin/fungicidas/aplicar-pesquisa-registro", methods=["POST"])
 @admin_required
 def aplicar_pesquisa_registro():
-    """Aplica a pesquisa Agrofit/MAPA so' na doenca do botao clicado
-    (`doenca`): em cada quimico dela, desmarca as culturas sem registro
-    confirmado e marca as que tem. Agrofit/MAPA e' o registro do BRASIL --
+    """Botao "Agrofit" de UMA doenca da Biblioteca de fungicidas: busca na
+    base aberta do Agrofit/MAPA (`agrofit_dados`, baixada uma vez por mes)
+    os produtos registrados para o fungo do nome cientifico e, em cada
+    quimico da doenca, marca as culturas com registro e desmarca as sem
+    registro (cultura que o Agrofit nao conhece fica como esta). Doenca
+    sem nenhum quimico na Biblioteca recebe os ingredientes mais
+    registrados para o fungo. Agrofit/MAPA e' o registro do BRASIL --
     doenca marcada na matriz Doencas x Pais SO' pra outro pais fica de
     fora (sem nenhum pais marcado = vale pra qualquer pais, entra)."""
     doenca = request.form.get("doenca", "")
     nome_cientifico = (request.form.get("nome_cientifico") or "").strip()
     info = _load_translations().get(doenca)
-    if info and nome_cientifico != (info.get("nome_cientifico") or ""):
+    if not info:
+        return jsonify({"ok": False, "erro": "Doenca nao encontrada."}), 400
+    if nome_cientifico != (info.get("nome_cientifico") or ""):
         models.save_disease_translation(doenca, info["nome_pt"], nome_cientifico)
     paises_da_doenca = models.get_doenca_paises().get(doenca)
     if paises_da_doenca and _chave_alfabetica(countries.get_country("BR")["nome"]) not in map(_chave_alfabetica, paises_da_doenca):
         return jsonify({"ok": False, "erro": "Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil."}), 400
+    if not agrofit_dados.status()["baixado_em"]:
+        agrofit_dados.atualizar_em_segundo_plano()
+        return jsonify({
+            "ok": False,
+            "erro": "A base do Agrofit/MAPA ainda esta sendo baixada -- tente de novo em alguns minutos.",
+        }), 409
+    pragas, por_ativos, dados = agrofit_dados.registros(nome_cientifico)
+    if not pragas:
+        return jsonify({
+            "ok": False,
+            "erro": f"Nenhum produto registrado no Agrofit para '{nome_cientifico or 'vazio'}'. "
+                    "Confira o nome cientifico (genero e especie do fungo).",
+        }), 404
+
+    if not fungicida_data.get_recomendacao(doenca):
+        mais_registrados = sorted(por_ativos, key=lambda a: (-len(por_ativos[a]), a))[:AGROFIT_MAX_IMPORTADOS]
+        models.set_fungicidas_importados(doenca, [dados["nomes"].get(a, a) for a in mais_registrados])
+        fungicida_data.limpar_cache_importados()
+
     rec = fungicida_data.get_recomendacao(doenca)
-    if not rec or not any(d == doenca for d, _, _ in _PESQUISA_REGISTRO_2026_08_26):
-        return jsonify({
-            "ok": False,
-            "erro": "Ainda nao ha' pesquisa de registro Agrofit/MAPA salva para essa doenca -- "
-                    "marque as culturas manualmente em \"Registrado para\".",
-        }), 400
-    fungos = _FUNGOS_PESQUISA_REGISTRO.get(doenca, set())
-    if not fungos & _generos_do_nome_cientifico(nome_cientifico):
-        return jsonify({
-            "ok": False,
-            "erro": f"A pesquisa salva e' para {' / '.join(sorted(f.capitalize() for f in fungos))} -- "
-                    f"o nome cientifico desta doenca ('{nome_cientifico or 'vazio'}') nao bate. "
-                    "Corrija o nome cientifico (genero e especie do fungo) e clique de novo.",
-        }), 400
-    culturas_pesquisadas = {
-        c for c in models.get_culturas_ativas() if _chave_alfabetica(c) in _CULTURAS_PESQUISA_REGISTRO
-    }
     bloqueios = models.get_all_fungicida_registro_bloqueado()
-    for idx in range(len(rec["quimicos"]["itens"])):
-        sem_registro = {_chave_alfabetica(c) for c in _PESQUISA_REGISTRO_2026_08_26.get((doenca, "quimico", idx), [])}
-        bloqueadas = {c for c in bloqueios.get((doenca, "quimico", idx), set()) if c not in culturas_pesquisadas}
-        bloqueadas |= {c for c in culturas_pesquisadas if _chave_alfabetica(c) in sem_registro}
+    overrides = models.get_all_fungicida_overrides()
+    culturas_agrofit = dados.get("culturas", [])
+    equivalentes = {
+        c: agrofit_dados.cultura_do_agrofit(c, culturas_agrofit) for c in models.get_culturas_ativas()
+    }
+    com_registro, sem_registro = 0, 0
+    for idx, item in enumerate(rec["quimicos"]["itens"]):
+        override = overrides.get((doenca, "quimico", idx))
+        ingrediente = override["ingrediente"] if override else item["ingrediente"]
+        if not ingrediente:
+            continue
+        culturas_registradas = por_ativos.get(" + ".join(agrofit_dados.ativos(ingrediente)), set())
+        bloqueadas = set()
+        for cultura, nomes_agrofit in equivalentes.items():
+            if not nomes_agrofit:
+                if cultura in bloqueios.get((doenca, "quimico", idx), set()):
+                    bloqueadas.add(cultura)
+            elif not nomes_agrofit & culturas_registradas:
+                bloqueadas.add(cultura)
         models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, sorted(bloqueadas))
-    return jsonify({"ok": True})
+        if culturas_registradas:
+            com_registro += 1
+        else:
+            sem_registro += 1
+    return jsonify({
+        "ok": True,
+        "mensagem": f"Agrofit ({', '.join(p.capitalize() for p in pragas)}): {com_registro} quimico(s) com registro, "
+                    f"{sem_registro} sem registro para esse fungo (desmarcado(s) em todas as culturas).",
+    })
 
 
 # Condicoes de germinacao de esporos por NOME CIENTIFICO do fungo

@@ -98,8 +98,17 @@ menos que seja pedido explicitamente paridade para outros admins.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);
-  anotacao escrita na fazenda aparece so' la'. A pesquisa Agrofit/MAPA e'
-  aplicada por doenca (botao no card de cada doenca).
+  anotacao escrita na fazenda aparece so' la'.
+- **Botao Agrofit por doenca** (Biblioteca de fungicidas, rota
+  `aplicar_pesquisa_registro`): usa a base ABERTA do Agrofit/MAPA
+  (dados.agricultura.gov.br, recurso "Produto Formulado"), baixada pelo
+  servidor UMA VEZ POR MES (`agrofit_dados.atualizar_se_necessario` no
+  scheduler; indice em `agrofit_indice.json` ao lado do banco). Busca pelo
+  NOME CIENTIFICO do fungo; marca/desmarca culturas dos quimicos e, em
+  doenca sem quimicos, importa os mais registrados (tabela
+  `fungicida_importado`, lida por `fungicida_data.get_recomendacao`). A
+  API AgroAPI da Embrapa foi descartada (nao gerava token). O ambiente
+  de nuvem do Claude nao alcanca esse portal -- so' o Railway.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois
