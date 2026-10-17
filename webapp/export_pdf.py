@@ -575,44 +575,39 @@ def build_recommendation_pdf(
         story.append(Spacer(1, 4))
 
     produtos = produtos or {}
-    story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
-    tem_produtos = any(produtos.get(tipo) for tipo in ("quimico", "biologico"))
-    if not tem_produtos:
-        conteudo = [Paragraph("Nenhum produto cadastrado para esta fazenda.", _ESTILO_NORMAL)]
-    else:
-        conteudo = []
-        for tipo, titulo in (("biologico", "Biologicos"), ("quimico", "Quimicos")):
-            itens = produtos.get(tipo) or []
-            partes = [
-                f"{p['nome']} ({p['data_anotacao']})" if p.get("data_anotacao") else p["nome"]
-                for p in itens if p.get("nome")
-            ]
-            conteudo.append(Paragraph(f"<b>{titulo}:</b> {', '.join(partes) if partes else '-'}", _ESTILO_NORMAL))
-    story.append(_caixa(conteudo, fundo=CINZA_CLARO))
+    # Secao vazia (sem produto/plantio/pulverizacao cadastrado) nao entra
+    # no relatorio.
+    conteudo = []
+    for tipo, titulo in (("biologico", "Biologicos"), ("quimico", "Quimicos")):
+        partes = [
+            f"{p['nome']} ({p['data_anotacao']})" if p.get("data_anotacao") else p["nome"]
+            for p in (produtos.get(tipo) or []) if p.get("nome")
+        ]
+        if partes:
+            conteudo.append(Paragraph(f"<b>{titulo}:</b> {', '.join(partes)}", _ESTILO_NORMAL))
+    if conteudo:
+        story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
+        story.append(_caixa(conteudo, fundo=CINZA_CLARO))
 
     plantio_linhas = [l for l in (plantio_linhas or []) if any(l.values())]
-    story.append(Paragraph("Datas de Plantio", _ESTILO_SECAO))
-    if not plantio_linhas:
-        story.append(_caixa([Paragraph("Nenhum plantio cadastrado para esta safra.", _ESTILO_NORMAL)], fundo=CINZA_CLARO))
-    else:
+    if plantio_linhas:
         rows = [
             [models.fmt_data_br(l["data_plantio"]) or "-", l["talhao"] or "-", l["variedade"] or "-", l["ciclo_dias"] or "-"]
             for l in plantio_linhas
         ]
+        story.append(Paragraph("Datas de Plantio", _ESTILO_SECAO))
         story.append(_tabela_padrao(
             ["Data", "Talhao", "Variedade", "Ciclo (dias)"], rows,
             [3.2 * cm, 4.5 * cm, 6 * cm, 3.2 * cm],
         ))
 
     aplicacoes_linhas = [l for l in (aplicacoes_linhas or []) if any(l.values())]
-    story.append(Paragraph("Datas de Pulverizacao", _ESTILO_SECAO))
-    if not aplicacoes_linhas:
-        story.append(_caixa([Paragraph("Nenhuma pulverizacao cadastrada para esta safra.", _ESTILO_NORMAL)], fundo=CINZA_CLARO))
-    else:
+    if aplicacoes_linhas:
         rows = [
             [models.fmt_data_br(l["data_aplicacao"]) or "-", l["talhao"] or "-", l["fungicidas_quimicos"] or "-", l["fungicidas_biologicos"] or "-"]
             for l in aplicacoes_linhas
         ]
+        story.append(Paragraph("Datas de Pulverizacao", _ESTILO_SECAO))
         story.append(_tabela_padrao(
             ["Data", "Talhao", "Fungicidas quimicos", "Fungicidas biologicos"], rows,
             [3.2 * cm, 3.2 * cm, 5.2 * cm, 5.3 * cm],
