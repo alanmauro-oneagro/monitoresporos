@@ -1690,7 +1690,6 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     raw_cards = _resolve_site_cards(site, translations)
     dias_sem_leitura = _dias_sem_leitura(raw_cards)
     leitura_bioscout = models.fmt_data_br(max((c["data"] for c in raw_cards), default=None))
-    anotacao = models.get_site_climate_note(site)
     culturas_by_site = models.get_all_farm_culturas()
     cultura = _cultura_label(site, safra, culturas_by_site)
     vf = models.get_virtual_farm(site)
@@ -1749,7 +1748,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
             site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura,
             safra_label=safra_label, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
             leitura_bioscout=leitura_bioscout, mostrar_secao_doencas=mostrar_secao_doencas,
-            anotacao=anotacao, riscos_climaticos=riscos_climaticos,
+            riscos_climaticos=riscos_climaticos,
         )
 
     # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
@@ -1762,7 +1761,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
         try:
             pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(
                 site, diseases, weather, produtos, cultura, safra, leitura_bioscout=leitura_bioscout,
-                mostrar_secao_doencas=mostrar_secao_doencas, anotacao=anotacao,
+                mostrar_secao_doencas=mostrar_secao_doencas,
                 riscos_climaticos=riscos_climaticos,
             )
         except Exception as exc:
@@ -3487,7 +3486,7 @@ def _get_clima_virtual_farm_or_404(site_name):
 def alertas_clima():
     """Tela dedicada aos pontos "so clima" (ver `mapa_interpolado`/
     `create_virtual_farm`, tipo='clima') -- escolher a estacao oficial de
-    referencia, anotacao e mandar/baixar o relatorio na hora, tudo num
+    referencia e mandar/baixar o relatorio na hora, tudo num
     lugar so'. A agenda de envio automatico (texto/PDF, dias da semana)
     desses pontos e' configurada na aba Envios junto com todas as outras
     fazendas (removida daqui pra nao duplicar -- ver
@@ -3498,7 +3497,6 @@ def alertas_clima():
     site_countries = models.get_all_site_countries()
     weather_overrides = models.get_all_weather_station_overrides()
     whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
-    notes_by_site = models.get_all_site_climate_notes()
     coords = _weather_coords_all()
     desativadas = models.get_deactivated_site_names()
 
@@ -3511,7 +3509,6 @@ def alertas_clima():
             continue
         weather = _get_weather_for_site(site, coords)
         escolha = weather_overrides.get(site)
-        anotacao = notes_by_site.get(site, "")
         _pais_code_clima = site_countries.get(site, countries.DEFAULT_COUNTRY)
         pontos.append({
             **vf,
@@ -3522,9 +3519,8 @@ def alertas_clima():
             "estacao_pais": escolha["country_code"] if escolha else "",
             "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
             "weather": weather,
-            "nota": anotacao,
             "whatsapp_text": _format_whatsapp_message(
-                site, [], weather=weather, is_virtual=True, mostrar_secao_doencas=False, anotacao=anotacao,
+                site, [], weather=weather, is_virtual=True, mostrar_secao_doencas=False,
             ),
         })
     pontos.sort(key=lambda p: p["nome"])
@@ -3555,7 +3551,6 @@ def alertas_clima_pdf(site_name):
     produtos = _farm_produtos_estoque(site_name, None)
     _, filename, pdf_bytes = _build_site_pdf(
         site_name, [], weather, produtos, cultura=None, safra=None, mostrar_secao_doencas=False,
-        anotacao=models.get_site_climate_note(site_name),
     )
     return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=filename)
 

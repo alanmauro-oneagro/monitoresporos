@@ -28,15 +28,6 @@
     </div>
 
     <div class="mb-2">
-        <form method="post" action="{{ url_for('save_site_climate_note') }}" data-autosave>
-            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
-            <label class="form-label small text-muted d-block mb-1">Anotações (aparecem no relatório de texto e PDF desse ponto):</label>
-            <textarea name="nota" class="form-control form-control-sm" rows="2" placeholder="Ex.: referência pra manejo do cliente, contexto da região, etc.">{{ ponto.nota }}</textarea>
-            <span class="autosave-status small ms-2"></span>
-        </form>
-    </div>
-
-    <div class="mb-2">
         <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
             <label class="form-label small text-muted d-block mb-1">Estacao meteorologica de referencia para a previsao (clima do ponto vem da Open-Meteo, na coordenada escolhida aqui):</label>
@@ -116,7 +107,7 @@
 {% endfor %}
 
 <p class="text-muted small d-none d-md-block border-top pt-3 mt-2">
-    Estacao meteorologica de referencia, anotacao e envio manual dos pontos <strong>☁️ so' clima</strong> aparecem
+    Estacao meteorologica de referencia e envio manual dos pontos <strong>☁️ so' clima</strong> aparecem
     em cada card acima. Agenda de envio automatico fica na aba <strong>Envios</strong>. Nome, coordenada, raio,
     pais, ativar/desativar e remocao de um ponto ficam na aba <strong>Mapa Interpolado</strong> > Pontos Criados.
     Quem recebe (numero de WhatsApp) se configura na aba <strong>Usuarios</strong>. Pontos "so' clima" nao
