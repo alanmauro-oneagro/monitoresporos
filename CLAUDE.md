@@ -109,13 +109,14 @@ menos que seja pedido explicitamente paridade para outros admins.
   registrados; "Registros" marca/desmarca culturas dos quimicos. Comparacao
   de nomes tolerante a grafia (`agrofit_dados.chave_quimico`/
   `chave_biologico`: benzovindiflupyr=benzovindiflupir, bixafem=bixafeno,
-  "B. velezensis" expandido); quimico cujo nome nao existe no Agrofit
-  (ex.: carbendazim, banido) NAO e' desmarcado, so' listado. Toda doenca tem
+  "B. velezensis" expandido); sem produto no Agrofit
+  (ex.: carbendazim, banido) ou linha vazia = culturas desmarcadas. Toda doenca tem
   sempre 10 quimicos e 4 biologicos (`fungicida_data.LINHAS_POR_TIPO`),
   mesmo padrao pra doenca do BioScout ou manual (sem nada no
   fungicida_data.py, a lista inteira vem da tabela
   `fungicida_importado_item`, lida por `fungicida_data.get_recomendacao`).
-  Na Biblioteca, doencas do Brasil (ou sem pais) vem antes das demais. A
+  Ordem na Biblioteca: BioScout do Brasil (ou sem pais), depois manuais,
+  por ultimo as de outros paises. A
   API AgroAPI da Embrapa foi descartada (nao gerava token). O portal do
   MAPA respondeu 403 ao link pelo NOME do dataset; o link com o id
   (`agrofit_dados._DOWNLOAD_DIRETO`, mesmo usado por

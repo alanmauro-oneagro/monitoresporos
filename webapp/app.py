@@ -5042,7 +5042,8 @@ def admin_fungicidas():
     # coisa cadastrada) primeiro, ordem alfabetica dentro de cada grupo;
     # "sem dados ainda" sempre por ultimo -- pedido explicito do usuario,
     # pra facilitar achar rapido o que ainda falta pesquisar.
-    # Doencas do Brasil (ou sem pais marcado) sempre antes das de outros paises.
+    # Doencas do Brasil (ou sem pais marcado) sempre antes das de outros
+    # paises; dentro delas, as do BioScout antes das cadastradas a mao.
     def _fora_do_brasil(doenca_en):
         paises = doenca_paises.get(doenca_en)
         return bool(paises) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises)
@@ -5050,7 +5051,8 @@ def admin_fungicidas():
     doencas_ordenadas = sorted(
         translations.items(),
         key=lambda kv: (
-            _fora_do_brasil(kv[0]), not fungicida_data.get_recomendacao(kv[0]), _chave_alfabetica(kv[1]["nome_pt"]),
+            _fora_do_brasil(kv[0]), models.is_manual_disease(kv[0]),
+            not fungicida_data.get_recomendacao(kv[0]), _chave_alfabetica(kv[1]["nome_pt"]),
         ),
     )
     for doenca_en, info in doencas_ordenadas:
@@ -5083,17 +5085,19 @@ def admin_fungicidas():
                 item = grupo["itens"][idx] if idx < n_real else {"ingrediente": "", "classe": ""}
                 override = overrides.get((doenca_en, tipo, idx))
                 culturas_bloqueadas = registro_bloqueado.get((doenca_en, tipo, idx), set())
+                ingrediente = override["ingrediente"] if override else item["ingrediente"]
                 linhas.append({
                     "row_id": row_counter,
                     "key": f"{doenca_en}|{tipo}|{idx}",
                     "doenca": doenca_en,
                     "tipo": tipo,
                     "idx": idx,
-                    "ingrediente": override["ingrediente"] if override else item["ingrediente"],
+                    "ingrediente": ingrediente,
                     "classe": (override["classe"] if override else item["classe"]) or "",
                     "pode_subir": posicao > 0,
                     "pode_descer": posicao < n - 1,
-                    "culturas_registradas": [c for c in culturas_ativas if c not in culturas_bloqueadas],
+                    # Linha sem produto: nenhuma cultura marcada.
+                    "culturas_registradas": [c for c in culturas_ativas if c not in culturas_bloqueadas] if ingrediente else [],
                 })
                 row_counter += 1
             grupos.append({
@@ -5191,21 +5195,24 @@ def _agrofit_completar_lista(doenca, tipo, achados):
 
 def _agrofit_registros(doenca, achados):
     """Operacao "Registros": em cada quimico da doenca, marca as culturas
-    com registro pro fungo e desmarca as sem registro. Quimico cujo nome
-    nao existe no Agrofit (grafia muito diferente, produto banido) NAO e'
-    mexido -- vai listado no resumo pra conferir a mao. Cultura que o
-    Agrofit nao tem fica como esta."""
+    com registro pro fungo e desmarca as sem registro. Sem produto no
+    Agrofit (nome nao encontrado, ex.: banido) ou linha vazia: todas as
+    culturas desmarcadas (pedido do Alan) -- o nao encontrado vai listado
+    no resumo. Cultura que o Agrofit nao tem fica como esta."""
     bloqueios = models.get_all_fungicida_registro_bloqueado()
     equivalentes = {
         c: agrofit_dados.cultura_do_agrofit(c, achados["culturas"]) for c in models.get_culturas_ativas()
     }
     com_registro, sem_registro, nao_encontrados = 0, 0, []
+    todas = sorted(equivalentes)
     for idx, ingrediente in _ingredientes_da_biblioteca(doenca, "quimico"):
         if not ingrediente:
+            models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, todas)
             continue
         chave = agrofit_dados.chave_quimico(ingrediente)
         if not chave or any(a not in achados["conhecidos"] for a in chave.split(" + ")):
             nao_encontrados.append(ingrediente)
+            models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, todas)
             continue
         registradas = achados["quimico"].get(chave, set())
         bloqueadas = set()
@@ -5223,7 +5230,7 @@ def _agrofit_registros(doenca, achados):
     msg = (f"{com_registro} quimico(s) com registro (culturas marcadas), "
            f"{sem_registro} sem registro para esse fungo (desmarcados).")
     if nao_encontrados:
-        msg += " Nao encontrados no Agrofit (nao alterados, confira a mao): " + "; ".join(nao_encontrados) + "."
+        msg += " Sem produto no Agrofit (culturas desmarcadas): " + "; ".join(nao_encontrados) + "."
     return msg
 
 
