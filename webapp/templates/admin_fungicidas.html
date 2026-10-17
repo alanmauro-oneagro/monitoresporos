@@ -67,17 +67,11 @@
             <div class="row gx-2 align-items-center mb-2">
                 <input type="hidden" name="row_id" value="{{ linha.row_id }}">
                 <input type="hidden" name="key__{{ linha.row_id }}" value="{{ linha.key }}">
-                <div class="col-7 col-md-9">
+                <input type="hidden" name="classe__{{ linha.row_id }}" value="{{ linha.classe }}">
+                <div class="col-9 col-md-11">
                     <input type="text" name="ingrediente__{{ linha.row_id }}" class="form-control form-control-sm" value="{{ linha.ingrediente }}">
                 </div>
-                <div class="col-3 col-md-2">
-                    <select name="classe__{{ linha.row_id }}" class="form-select form-select-sm">
-                        {% for code, label in classes %}
-                        <option value="{{ code }}" {% if code == linha.classe %}selected{% endif %}>{{ code ~ ' -- ' if code else '' }}{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-2 col-md-1 d-flex gap-1">
+                <div class="col-3 col-md-1 d-flex gap-1 justify-content-end">
                     <button type="button" class="btn btn-sm btn-outline-secondary px-2 fungicida-mover-btn"
                             data-doenca="{{ linha.doenca }}" data-tipo="{{ linha.tipo }}" data-idx="{{ linha.idx }}" data-direction="up"
                             title="Mover para cima" {% if not linha.pode_subir %}disabled{% endif %}>▲</button>
