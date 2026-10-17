@@ -5091,9 +5091,8 @@ def admin_fungicidas():
             "pesquisa_fora_brasil": bool(paises_doenca) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises_doenca),
         })
 
-    classes = [("", "Sem classificacao")] + list(fungicida_data.CLASSE_LABEL.items())
     return render_template(
-        "admin_fungicidas.html", doencas_data=doencas_data, classes=classes, culturas_ativas=culturas_ativas,
+        "admin_fungicidas.html", doencas_data=doencas_data, culturas_ativas=culturas_ativas,
         agrofit=agrofit_dados.status(),
     )
 
