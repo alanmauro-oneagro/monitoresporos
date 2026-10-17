@@ -546,6 +546,19 @@ app.request_class.max_form_parts = 20_000
 # KB/poucos MB).
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
+
+class _Request(app.request_class):
+    # Excecao escopada: o arquivo do Agrofit (CSV de produtos formulados)
+    # passa bem de 25MB.
+    @property
+    def max_content_length(self):
+        if self.path == "/admin/fungicidas/agrofit-enviar":
+            return 400 * 1024 * 1024
+        return super().max_content_length
+
+
+app.request_class = _Request
+
 # Sem isso, arquivo estatico (logo, icones, rodovias_br.json) so' ganha
 # Cache-Control condicional (ETag/Last-Modified) -- ainda precisa de uma
 # ida-e-volta ao servidor toda vez pra confirmar que nao mudou. Com
@@ -5101,6 +5114,22 @@ def admin_fungicidas():
 @admin_required
 def agrofit_status():
     return jsonify(agrofit_dados.status())
+
+
+@app.route("/admin/fungicidas/agrofit-enviar", methods=["POST"])
+@admin_required
+def agrofit_enviar_arquivo():
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not arquivo.filename:
+        flash("Escolha o arquivo do Agrofit (.csv ou .zip).", "warning")
+        return redirect(url_for("admin_fungicidas"))
+    if agrofit_dados.status()["baixando"]:
+        flash("Ja' tem uma atualizacao da base em andamento -- aguarde terminar.", "warning")
+        return redirect(url_for("admin_fungicidas"))
+    destino = agrofit_dados.INDICE_PATH.with_suffix(".upload")
+    arquivo.save(destino)
+    agrofit_dados.importar_em_segundo_plano(destino)
+    return redirect(url_for("admin_fungicidas"))
 
 
 @app.route("/admin/fungicidas/agrofit-atualizar", methods=["POST"])

@@ -19,13 +19,27 @@
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
 <p class="small text-muted mb-3">
     Base Agrofit/MAPA (<a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit" target="_blank" rel="noopener">dados abertos</a>):
-    {% if agrofit.baixando %}<span id="agrofitProgresso">baixando agora...</span>{% elif agrofit.baixado_em %}atualizada em {{ agrofit.baixado_em }}, renova sozinha uma vez por mes.{% else %}ainda nao baixada -- baixa sozinha em instantes.{% endif %}
+    {% if agrofit.baixando %}<span id="agrofitProgresso">baixando agora...</span>{% elif agrofit.baixado_em and agrofit.enviado %}arquivo enviado em {{ agrofit.baixado_em }} -- envie de novo uma vez por mes.{% elif agrofit.baixado_em %}atualizada em {{ agrofit.baixado_em }}, renova sozinha uma vez por mes.{% else %}ainda nao baixada -- baixa sozinha em instantes.{% endif %}
     {% if agrofit.erro and not agrofit.baixando %}<span class="text-danger">Ultima tentativa falhou: {{ agrofit.erro }}</span>{% endif %}
     {% if not agrofit.baixando %}
     <button type="submit" form="agrofitAtualizarForm" class="btn btn-link btn-sm p-0 align-baseline">🔄 {{ 'Atualizar agora' if agrofit.baixado_em else 'Tentar agora' }}</button>
     {% endif %}
 </p>
 <form method="post" action="{{ url_for('agrofit_atualizar_agora') }}" id="agrofitAtualizarForm"></form>
+{% if not agrofit.baixando %}
+<details class="small mb-3" {% if agrofit.erro and not agrofit.baixado_em %}open{% endif %}>
+    <summary class="text-primary">📤 Enviar o arquivo do Agrofit manualmente</summary>
+    <div class="mt-2">
+        O portal do MAPA pode recusar o download feito pelo servidor. Nesse caso, abra
+        <a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit/resource/d30b30d7-e256-484e-9ab8-cd40974e1238" target="_blank" rel="noopener">Agrofit -- Produto Formulado</a>,
+        clique em <strong>Baixar</strong> e envie o arquivo aqui (.csv, ou .zip para ficar menor). Faca isso uma vez por mes.
+        <form method="post" action="{{ url_for('agrofit_enviar_arquivo') }}" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 mt-2">
+            <input type="file" name="arquivo" accept=".csv,.zip" class="form-control form-control-sm" style="max-width: 22rem;" required>
+            <button type="submit" class="btn btn-sm btn-primary">Enviar</button>
+        </form>
+    </div>
+</details>
+{% endif %}
 
 <form method="post" data-autosave>
 {% for d in doencas_data %}
