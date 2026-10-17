@@ -4,7 +4,12 @@
 <style>
 .fung-titulo { min-width: 0; }
 .fung-bandeiras { font-size: 1rem; letter-spacing: 0.15rem; }
+.fung-culturas { display: flex; flex-wrap: wrap; align-items: center; column-gap: 1rem; row-gap: 0.15rem; padding-left: 0.25rem; }
 @media (max-width: 575.98px) {
+    .fung-item { border: 1px solid #e3e6ea; border-radius: 0.5rem; padding: 0.45rem; background: #fafbfc; }
+    .fung-culturas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 0.4rem; padding-left: 0; }
+    .fung-culturas-rotulo { grid-column: 1 / -1; }
+    .fung-culturas .form-check-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
     .fung-titulo { font-size: 0.95rem; }
     .fung-bandeiras { padding: 0.2em 0.35em; }
     .fungicida-pesquisa-btn { padding-left: 0.4rem; padding-right: 0.4rem; }
@@ -64,26 +69,26 @@
             <div class="small text-muted fst-italic mb-2">Nenhum ingrediente {{ g.tipo }} encontrado nessa fonte.</div>
             {% endif %}
             {% for linha in g.linhas %}
-            <div class="row gx-2 align-items-center mb-2">
+            <div class="fung-item mb-2">
                 <input type="hidden" name="row_id" value="{{ linha.row_id }}">
                 <input type="hidden" name="key__{{ linha.row_id }}" value="{{ linha.key }}">
                 <input type="hidden" name="classe__{{ linha.row_id }}" value="{{ linha.classe }}">
-                <div class="col-9 col-md-11">
-                    <input type="text" name="ingrediente__{{ linha.row_id }}" class="form-control form-control-sm" value="{{ linha.ingrediente }}">
-                </div>
-                <div class="col-3 col-md-1 d-flex gap-1 justify-content-end">
+                <div class="d-flex align-items-center gap-2">
+                    <input type="text" name="ingrediente__{{ linha.row_id }}" class="form-control form-control-sm flex-grow-1" value="{{ linha.ingrediente }}">
+                    <div class="d-flex gap-1 flex-shrink-0">
                     <button type="button" class="btn btn-sm btn-outline-secondary px-2 fungicida-mover-btn"
                             data-doenca="{{ linha.doenca }}" data-tipo="{{ linha.tipo }}" data-idx="{{ linha.idx }}" data-direction="up"
                             title="Mover para cima" {% if not linha.pode_subir %}disabled{% endif %}>▲</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary px-2 fungicida-mover-btn"
                             data-doenca="{{ linha.doenca }}" data-tipo="{{ linha.tipo }}" data-idx="{{ linha.idx }}" data-direction="down"
                             title="Mover para baixo" {% if not linha.pode_descer %}disabled{% endif %}>▼</button>
+                    </div>
                 </div>
                 {% if linha.tipo == 'quimico' and culturas_ativas %}
-                <div class="col-12 ps-1 mt-1 d-flex flex-wrap align-items-center gap-2">
-                    <span class="small text-muted">Registrado para:</span>
+                <div class="fung-culturas mt-1">
+                    <span class="small text-muted fung-culturas-rotulo">Registrado para:</span>
                     {% for c in culturas_ativas %}
-                    <div class="form-check form-check-inline mb-0">
+                    <div class="form-check mb-0">
                         <input class="form-check-input" type="checkbox" name="cultura_ok__{{ linha.row_id }}" value="{{ c }}"
                                id="cultura_ok_{{ linha.row_id }}_{{ loop.index0 }}" {% if c in linha.culturas_registradas %}checked{% endif %}>
                         <label class="form-check-label small" for="cultura_ok_{{ linha.row_id }}_{{ loop.index0 }}">{{ c }}</label>
