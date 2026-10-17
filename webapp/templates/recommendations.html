@@ -271,6 +271,26 @@ html { font-size: 14px; }
         </div>
         {% endfor %}
 
+        {% if site_group.diseases %}
+        <div class="mt-3 pt-3 border-top">
+            <label class="form-label small fw-bold d-block mb-2">Anotações</label>
+            {# Uma caixa so' com uma linha por doenca (pedido do usuario,
+               economiza espaco) -- cada linha continua sendo a anotacao
+               daquela doenca (texto/PDF mostram por doenca). #}
+            <div class="anotacoes-box">
+                {% for row in site_group.diseases %}
+                <div class="anotacao-linha" data-autosave-group>
+                    <label class="anotacao-doenca" for="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}">{{ row.rotulo }}:</label>
+                    <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
+                    <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
+                    <textarea name="nota" form="notesForm" id="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="1" placeholder="produto, dose, epoca de aplicacao, observacoes...">{{ row.nota }}</textarea>
+                    <span class="autosave-status small"></span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         {% if site_group.riscos_sem_alerta or site_group.manuais_sem_germinacao %}
         {# Tabela compacta (pedido do usuario, 16/10/2026): uma linha por
            doenca, uma coluna por dia, celula colorida com Alto/Medio/Baixo. #}
@@ -327,24 +347,6 @@ html { font-size: 14px; }
             <div class="esporos-lista small text-muted">Carregando...</div>
         </div>
         {% endif %}
-
-        <div class="mt-3 pt-3 border-top">
-            <label class="form-label small fw-bold d-block mb-2">Anotações</label>
-            {# Uma caixa so' com uma linha por doenca (pedido do usuario,
-               economiza espaco) -- cada linha continua sendo a anotacao
-               daquela doenca (texto/PDF mostram por doenca). #}
-            <div class="anotacoes-box">
-                {% for row in site_group.diseases %}
-                <div class="anotacao-linha" data-autosave-group>
-                    <label class="anotacao-doenca" for="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}">{{ row.rotulo }}:</label>
-                    <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
-                    <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
-                    <textarea name="nota" form="notesForm" id="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="1" placeholder="produto, dose, epoca de aplicacao, observacoes...">{{ row.nota }}</textarea>
-                    <span class="autosave-status small"></span>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
 
         <div class="mt-3 pt-3 border-top">
             <form method="post" action="{{ url_for('save_produtos_folha') }}" data-autosave>
