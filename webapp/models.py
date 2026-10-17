@@ -273,6 +273,13 @@ def init_db():
             nota TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS fungicida_importado (
+            doenca TEXT NOT NULL,
+            idx INTEGER NOT NULL,
+            ingrediente TEXT NOT NULL,
+            PRIMARY KEY (doenca, idx)
+        );
+
         CREATE TABLE IF NOT EXISTS farm_produtos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             site_name TEXT NOT NULL,
@@ -1230,7 +1237,7 @@ def merge_duplicate_disease_translations(canonico_por_atual):
             for tabela, coluna in (
                 ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
                 ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
-        ("fungicida_nota_doenca", "doenca"),
+        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado", "doenca"),
             ):
                 # OR IGNORE: se a canonica ja tiver uma linha com a mesma
                 # chave (tipo/idx/etc), mantem a dela -- o DELETE logo
@@ -1299,7 +1306,7 @@ def delete_disease_translation(display_name_en):
     for tabela, coluna in (
         ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
         ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
-        ("fungicida_nota_doenca", "doenca"),
+        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado", "doenca"),
     ):
         conn.execute(f"DELETE FROM {tabela} WHERE {coluna} = ?", (display_name_en,))
     conn.execute("DELETE FROM disease_translations WHERE display_name_en = ?", (display_name_en,))
@@ -1496,6 +1503,29 @@ def set_fungicida_nota(doenca, nota):
     conn.close()
 
 
+def get_all_fungicidas_importados():
+    """doenca_en -> [ingrediente, ...] trazidos do Agrofit pra doenca que
+    nao tem nada no fungicida_data.py (ver `fungicida_data.get_recomendacao`)."""
+    conn = get_db()
+    rows = conn.execute("SELECT doenca, ingrediente FROM fungicida_importado ORDER BY doenca, idx").fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        result.setdefault(r["doenca"], []).append(r["ingrediente"])
+    return result
+
+
+def set_fungicidas_importados(doenca, ingredientes):
+    conn = get_db()
+    conn.execute("DELETE FROM fungicida_importado WHERE doenca = ?", (doenca,))
+    conn.executemany(
+        "INSERT INTO fungicida_importado (doenca, idx, ingrediente) VALUES (?, ?, ?)",
+        [(doenca, i, ing) for i, ing in enumerate(ingredientes)],
+    )
+    conn.commit()
+    conn.close()
+
+
 def bloquear_cultura_nova_em_todos_quimicos(cultura):
     """Quando uma cultura nova e' cadastrada (matriz Doencas x Culturas, aba Doencas), bloqueia
     ela de saida em TODO quimico ja existente na biblioteca de
@@ -1506,7 +1536,8 @@ def bloquear_cultura_nova_em_todos_quimicos(cultura):
     dessa cultura ser criada -- chamado uma vez, no momento do cadastro."""
     import fungicida_data
     conn = get_db()
-    for doenca_en, rec in fungicida_data.RECOMENDACOES.items():
+    for doenca_en in set(fungicida_data.RECOMENDACOES) | set(get_all_fungicidas_importados()):
+        rec = fungicida_data.get_recomendacao(doenca_en)
         for idx in range(len(rec["quimicos"]["itens"])):
             conn.execute(
                 "INSERT OR IGNORE INTO fungicida_registro_bloqueado (doenca, tipo, idx, cultura) VALUES (?, 'quimico', ?, ?)",

@@ -12,6 +12,11 @@
 }
 </style>
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
+<p class="small text-muted mb-3">
+    Base Agrofit/MAPA (<a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit" target="_blank" rel="noopener">dados abertos</a>):
+    {% if agrofit.baixado_em %}atualizada em {{ agrofit.baixado_em }}, renova sozinha uma vez por mes.{% elif agrofit.baixando %}baixando agora...{% else %}ainda nao baixada -- baixa sozinha em instantes.{% endif %}
+    {% if agrofit.erro %}<span class="text-danger">Ultima tentativa falhou: {{ agrofit.erro }}</span>{% endif %}
+</p>
 
 <form method="post" data-autosave>
 {% for d in doencas_data %}
@@ -26,14 +31,10 @@
                 <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum pais marcado na matriz Doencas x Pais -- se aplica a qualquer pais">🌎<span class="d-none d-sm-inline"> Todos os paises</span></span>
                 {% endif %}
             </h5>
-            {% if d.sem_dados %}
-            <span class="badge bg-secondary">Sem dados ainda</span>
-            {% else %}
             <button type="button" class="btn btn-sm btn-outline-primary text-nowrap fungicida-pesquisa-btn" data-doenca="{{ d.doenca }}"
-                    {% if d.pesquisa_fora_brasil %}disabled title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% else %}title="Confere o fungo pelo nome cientifico e marca as culturas com registro / desmarca as sem registro, so' nos quimicos desta doenca"{% endif %}>
+                    {% if d.pesquisa_fora_brasil %}disabled title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% else %}title="Busca no Agrofit/MAPA pelo nome cientifico do fungo e marca as culturas com registro / desmarca as sem registro, so' nos quimicos desta doenca"{% endif %}>
                 🔎 <span class="d-none d-sm-inline">Aplicar pesquisa </span>Agrofit<span class="d-none d-sm-inline">/MAPA</span>
             </button>
-            {% endif %}
         </div>
         <div class="mb-3" style="margin-top: -0.6rem;">
             <input type="hidden" name="cientifico_key" value="{{ d.doenca }}">
@@ -42,10 +43,9 @@
         </div>
         {% if d.sem_dados %}
         <p class="text-muted small mb-0">
-            Essa doenca ainda nao tem ingredientes ativos cadastrados na
-            biblioteca. Pesquise fontes confiaveis (Embrapa, Agrolink/Agrofit-MAPA,
-            extensao universitaria) e adicione uma entrada em
-            <code>fungicida_data.py</code>.
+            <span class="badge bg-secondary me-1">Sem dados ainda</span>
+            Confira o nome cientifico do fungo acima e clique em <strong>🔎 Agrofit</strong>
+            para trazer os ingredientes ativos registrados para ele no Agrofit/MAPA.
         </p>
         {% endif %}
         {% for g in d.grupos %}
@@ -130,9 +130,10 @@
     desmarcada em todo quimico ja existente (ninguem pesquisou registro
     pra ela ainda), exigindo confirmar uma a uma em vez de assumir que
     esta tudo certo. O botao <strong>🔎 Agrofit/MAPA</strong> de cada doenca aplica a
-    pesquisa de registro (26/08/2026) so' nos quimicos daquela doenca, desde que o nome
-    cientifico (abaixo do nome da doenca) seja o mesmo fungo pesquisado: marca as culturas
-    com registro e desmarca as sem registro confirmado (Soja, Algodao, Milho e Feijao).
+    busca na base aberta do Agrofit/MAPA (baixada pelo servidor uma vez por mes) pelo nome
+    cientifico do fungo (abaixo do nome da doenca) e, so' nos quimicos daquela doenca, marca
+    as culturas com registro e desmarca as sem registro (cultura que o Agrofit nao tem fica
+    como esta). Em doenca sem nenhum quimico, traz os ingredientes mais registrados para o fungo.
     A caixa <strong>Anotações</strong> de cada doenca aparece nas Recomendacoes, no texto e no
     PDF de toda fazenda que nao tiver anotacao propria dessa doenca.
 </p>
@@ -167,8 +168,10 @@ document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
                 nome_cientifico: document.querySelector('.fung-cientifico[data-doenca="' + CSS.escape(btn.dataset.doenca) + '"]').value,
             }),
         }).then(function (r) {
-            if (r.ok) { location.reload(); return; }
-            return r.json().then(function (j) { alert(j.erro); btn.disabled = false; });
+            return r.json().then(function (j) {
+                if (r.ok) { alert(j.mensagem); location.reload(); return; }
+                alert(j.erro); btn.disabled = false;
+            });
         });
     });
 });
