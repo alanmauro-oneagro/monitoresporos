@@ -5097,6 +5097,12 @@ def admin_fungicidas():
     )
 
 
+@app.route("/admin/fungicidas/agrofit-status")
+@admin_required
+def agrofit_status():
+    return jsonify(agrofit_dados.status())
+
+
 @app.route("/admin/fungicidas/agrofit-atualizar", methods=["POST"])
 @admin_required
 def agrofit_atualizar_agora():
