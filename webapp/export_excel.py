@@ -15,6 +15,7 @@ from openpyxl.styles import Font
 
 import countries
 import data_reader
+import agrofit_dados
 import fungicida_data
 import models
 
@@ -599,6 +600,11 @@ def _add_fungicidas_sheet(wb, culturas_ativas):
                 item = grupo["itens"][idx]
                 override = overrides.get((doenca_en, tipo, idx))
                 ingrediente = override["ingrediente"] if override else item["ingrediente"]
+                if ingrediente and (
+                    agrofit_dados.produto_sem_registro(ingrediente) if tipo == "quimico"
+                    else not agrofit_dados.eh_biologico(ingrediente)
+                ):
+                    continue
                 classe_raw = (override["classe"] if override else item["classe"]) or ""
                 classe = fungicida_data.CLASSE_LABEL.get(classe_raw, classe_raw)
                 if tipo == "quimico":

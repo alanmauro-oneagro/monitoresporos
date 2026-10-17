@@ -110,7 +110,14 @@ menos que seja pedido explicitamente paridade para outros admins.
   de nomes tolerante a grafia (`agrofit_dados.chave_quimico`/
   `chave_biologico`: benzovindiflupyr=benzovindiflupir, bixafem=bixafeno,
   "B. velezensis" expandido); sem produto no Agrofit
-  (ex.: carbendazim, banido) ou linha vazia = culturas desmarcadas. Toda doenca tem
+  (ex.: carbendazim, banido) ou linha vazia = culturas desmarcadas.
+  REGRA (Alan): produto banido/suspenso NUNCA aparece (Biblioteca,
+  Recomendacoes, texto, PDF, relatorio, Excel) -- `app._fungicida_proibido`:
+  quimico em `agrofit_dados.INGREDIENTES_BANIDOS` ou sem registro vigente
+  na base; linha fica vazia e o botao Quimicos pode preenche-la. Biologico
+  = so' microrganismo (`agrofit_dados.eh_biologico`, por genero); oleo
+  mineral/neem/azadiractina NAO sao biologicos (o Agrofit classifica neem
+  como "microbiologico" -- nao confiar na classe). Toda doenca tem
   sempre 10 quimicos e 4 biologicos (`fungicida_data.LINHAS_POR_TIPO`),
   mesmo padrao pra doenca do BioScout ou manual (sem nada no
   fungicida_data.py, a lista inteira vem da tabela

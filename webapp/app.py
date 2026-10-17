@@ -817,6 +817,17 @@ def _ordem_fungicida(doenca, tipo, n):
     return order + faltando
 
 
+def _fungicida_proibido(tipo, ingrediente):
+    """Produto que nunca aparece (Biblioteca, Recomendacoes, texto, PDF,
+    relatorios): quimico banido/sem registro vigente no Agrofit, ou
+    "biologico" que nao e' microrganismo (oleo mineral, neem...)."""
+    if not ingrediente:
+        return False
+    if tipo == "quimico":
+        return agrofit_dados.produto_sem_registro(ingrediente)
+    return not agrofit_dados.eh_biologico(ingrediente)
+
+
 def _apply_fungicida_overrides(doenca, tipo, itens, overrides, cultura=None, bloqueios=None):
     """Aplica edicoes feitas pelo admin (tela Fungicidas) sobre a lista
     padrao de ingredientes ativos daquela doenca -- itens sem edicao saem
@@ -847,9 +858,10 @@ def _apply_fungicida_overrides(doenca, tipo, itens, overrides, cultura=None, blo
         elif cultura and culturas_bloqueadas and cultura in culturas_bloqueadas:
             content.append(None)  # sem registro pra essa cultura -- nao recomenda
         elif override:
-            content.append({"ingrediente": override["ingrediente"], "classe": override["classe"]})
-        elif not item["ingrediente"]:
-            content.append(None)  # linha extra ainda vazia -- nao aparece na recomendacao
+            content.append(None if _fungicida_proibido(tipo, override["ingrediente"])
+                           else {"ingrediente": override["ingrediente"], "classe": override["classe"]})
+        elif not item["ingrediente"] or _fungicida_proibido(tipo, item["ingrediente"]):
+            content.append(None)  # linha vazia ou produto proibido -- nao aparece na recomendacao
         else:
             content.append(item)
     order = _ordem_fungicida(doenca, tipo, n)
@@ -4998,7 +5010,11 @@ def admin_fungicidas():
                 # continua acompanhando fungicida_data.py se ele mudar depois.
                 models.delete_fungicida_override(doenca, tipo, idx)
             elif not ingrediente:
-                if default_item is not None:
+                if default_item is not None and _fungicida_proibido(tipo, default_item["ingrediente"]):
+                    # Padrao proibido (aparece vazio na tela) -- nao vira "removido",
+                    # a linha continua livre pros botoes do Agrofit.
+                    models.delete_fungicida_override(doenca, tipo, idx)
+                elif default_item is not None:
                     # Item padrao apagado de proposito -- marca como
                     # removido (fica vazio de vez, ver `removido` em
                     # `_apply_fungicida_overrides`) em vez de simplesmente
@@ -5086,6 +5102,8 @@ def admin_fungicidas():
                 override = overrides.get((doenca_en, tipo, idx))
                 culturas_bloqueadas = registro_bloqueado.get((doenca_en, tipo, idx), set())
                 ingrediente = override["ingrediente"] if override else item["ingrediente"]
+                if _fungicida_proibido(tipo, ingrediente):
+                    ingrediente = ""  # banido/sem registro ou nao-biologico: linha vazia, pronta pra preencher
                 linhas.append({
                     "row_id": row_counter,
                     "key": f"{doenca_en}|{tipo}|{idx}",
@@ -5161,10 +5179,9 @@ def _ingredientes_da_biblioteca(doenca, tipo):
         override = overrides.get((doenca, tipo, idx))
         if override and override["removido"]:
             linhas.append((idx, None))
-        elif override:
-            linhas.append((idx, override["ingrediente"]))
         else:
-            linhas.append((idx, padrao[idx]["ingrediente"] if idx < len(padrao) else ""))
+            ingrediente = override["ingrediente"] if override else (padrao[idx]["ingrediente"] if idx < len(padrao) else "")
+            linhas.append((idx, "" if _fungicida_proibido(tipo, ingrediente) else ingrediente))
     return linhas
 
 
@@ -5704,6 +5721,8 @@ def admin_exportar():
             item = grupo["itens"][idx]
             override = overrides.get((doenca_en, "quimico", idx))
             ingrediente = override["ingrediente"] if override else item["ingrediente"]
+            if not ingrediente or _fungicida_proibido("quimico", ingrediente):
+                continue
             culturas_bloqueadas = registro_bloqueado.get((doenca_en, "quimico", idx), set())
             linhas_fungicidas.append({
                 "doenca": info["nome_pt"],
