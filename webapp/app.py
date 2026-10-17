@@ -5007,8 +5007,11 @@ def admin_fungicidas():
     doenca_paises = models.get_doenca_paises()
     translations = _load_translations()
     notas = models.get_all_fungicida_notas()
-    doencas_com_pesquisa = {doenca for doenca, _, _ in _PESQUISA_REGISTRO_2026_08_26}
     nome_brasil = countries.get_country("BR")["nome"]
+    bandeira_por_nome = {
+        _chave_alfabetica(info["nome"]): "".join(chr(0x1F1E6 + ord(letra) - ord("A")) for letra in codigo)
+        for codigo, info in countries.COUNTRIES.items()
+    }
 
     doencas_data = []
     row_counter = 0
@@ -5027,10 +5030,12 @@ def admin_fungicidas():
         # "nunca escondida por engano" da matriz), mostrado aqui vazio em
         # vez de listar todo pais registrado.
         paises_doenca = sorted(doenca_paises.get(doenca_en, set()))
+        bandeiras = [(bandeira_por_nome.get(_chave_alfabetica(nome)), nome) for nome in paises_doenca]
         rec = fungicida_data.get_recomendacao(doenca_en)
         if not rec:
             doencas_data.append({
                 "doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True, "paises": paises_doenca,
+                "bandeiras": bandeiras,
                 "nota": notas.get(doenca_en, ""),
             })
             continue
@@ -5066,11 +5071,11 @@ def admin_fungicidas():
             })
         doencas_data.append({
             "doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False, "paises": paises_doenca,
+            "bandeiras": bandeiras,
             "nota": notas.get(doenca_en, ""),
-            "tem_pesquisa": doenca_en in doencas_com_pesquisa,
             # Agrofit/MAPA e' o registro do Brasil -- doenca marcada so' pra
             # outro pais fica de fora (ver `aplicar_pesquisa_registro`).
-            "pesquisa_fora_brasil": bool(paises_doenca) and nome_brasil not in paises_doenca,
+            "pesquisa_fora_brasil": bool(paises_doenca) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises_doenca),
         })
 
     classes = [("", "Sem classificacao")] + list(fungicida_data.CLASSE_LABEL.items())
@@ -5152,11 +5157,15 @@ def aplicar_pesquisa_registro():
     fora (sem nenhum pais marcado = vale pra qualquer pais, entra)."""
     doenca = request.form.get("doenca", "")
     paises_da_doenca = models.get_doenca_paises().get(doenca)
-    if paises_da_doenca and countries.get_country("BR")["nome"] not in paises_da_doenca:
+    if paises_da_doenca and _chave_alfabetica(countries.get_country("BR")["nome"]) not in map(_chave_alfabetica, paises_da_doenca):
         return jsonify({"ok": False, "erro": "Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil."}), 400
     rec = fungicida_data.get_recomendacao(doenca)
     if not rec or not any(d == doenca for d, _, _ in _PESQUISA_REGISTRO_2026_08_26):
-        return jsonify({"ok": False, "erro": "Sem pesquisa de registro para essa doenca."}), 400
+        return jsonify({
+            "ok": False,
+            "erro": "Ainda nao ha' pesquisa de registro Agrofit/MAPA salva para essa doenca -- "
+                    "marque as culturas manualmente em \"Registrado para\".",
+        }), 400
     culturas_pesquisadas = {
         c for c in models.get_culturas_ativas() if _chave_alfabetica(c) in _CULTURAS_PESQUISA_REGISTRO
     }
