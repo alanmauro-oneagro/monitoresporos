@@ -5,12 +5,14 @@ fazenda) mais as datas de plantio e de pulverizacao (aba Fazendas), pra
 poder ser encaminhado por email ou impresso. Ver `recommendation_pdf` em
 `app.py`."""
 import io
+import os
 
 import models
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 import math
 
 from reportlab.graphics.shapes import Circle, Drawing, Line, Path, Polygon, Rect, String, Wedge
@@ -429,6 +431,20 @@ def _tabela_padrao(headers, rows, col_widths):
     return tbl
 
 
+_LOGO_ONEAGRO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "oneagro-logo.png")
+_LOGO_ALTURA = 0.6 * cm
+
+
+def _logo_rodape(canvas, doc):
+    """Logo da OneAgro no canto inferior direito de toda pagina."""
+    largura, altura = ImageReader(_LOGO_ONEAGRO).getSize()
+    w = _LOGO_ALTURA * largura / altura
+    canvas.drawImage(
+        _LOGO_ONEAGRO, A4[0] - doc.rightMargin - w, 0.7 * cm,
+        width=w, height=_LOGO_ALTURA, mask="auto",
+    )
+
+
 def build_recommendation_pdf(
     nome_fazenda, safra_label, diseases, weather=None, produtos=None,
     cultura=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
@@ -460,7 +476,7 @@ def build_recommendation_pdf(
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
-        leftMargin=1.8 * cm, rightMargin=1.8 * cm, topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+        leftMargin=1.8 * cm, rightMargin=1.8 * cm, topMargin=1.5 * cm, bottomMargin=1.9 * cm,
         title=f"Recomendacao - {nome_fazenda}",
     )
     story = []
@@ -615,6 +631,6 @@ def build_recommendation_pdf(
         _ESTILO_RODAPE,
     ))
 
-    doc.build(story)
+    doc.build(story, onFirstPage=_logo_rodape, onLaterPages=_logo_rodape)
     buffer.seek(0)
     return buffer
