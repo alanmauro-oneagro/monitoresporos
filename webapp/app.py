@@ -1314,10 +1314,8 @@ def _format_whatsapp_message(
     leitura ha muito tempo), pra nao sugerir que a fazenda foi checada e
     esta tudo bem quando na verdade nao foi checada. Esse caminho curto NAO repete
     Produtos (ao contrario do PDF, que sempre mostra essa secao), de proposito, pra' manter o aviso "esta tudo tranquilo"
-    curto. As caixas de Observacao
-    (por doenca) e Produtos Fazenda sempre aparecem, mesmo vazias --
-    nesse caso o valor e' so "*", pra manter o mesmo formato de relatorio
-    sempre (nao muda de estrutura conforme o que foi preenchido).
+    curto. Anotacoes das doencas vem num bloco so' ("Doenca: nota", so'
+    as preenchidas), igual a caixa unica da tela de Recomendacoes.
     `is_virtual` (fazenda virtual/estimada, ver `virtual_farms.py`) so
     muda o jeito de extrair o nome do site_name pro titulo
     (`_whatsapp_titulo`) -- a mensagem em si nao tem nenhum aviso de que
@@ -1325,10 +1323,10 @@ def _format_whatsapp_message(
     real. `cultura` (nome da cultura atual definida na aba Manejo, ou
     None/"" se ainda estiver "(vazio)") aparece em destaque (negrito,
     maiuscula), logo abaixo do titulo, antes do clima. Ordem do
-    relatorio: titulo -> Manejo/Cultura -> Clima agora -> separador ->
-    "Doencas em Atencao/Perigo" -> um bloco por doenca (nome, contagem,
-    risco, germinacao, recomendacao, sugestao) -> Produtos ja
-    disponiveis -> rodape. Datas de Plantio, Datas de Pulverizacao e o
+    relatorio (mesma da tela): titulo -> safra/cultura -> Clima agora ->
+    Previsao de chuva -> Doencas em Atencao/Perigo (um bloco por doenca:
+    nome, risco, recomendacao) -> Anotacoes -> Produtos disponiveis ->
+    rodape. Datas de Plantio, Datas de Pulverizacao e o
     Risco de infeccao pelo clima NAO entram no texto (pedido do usuario,
     16/10/2026 -- o PDF continua com eles); `plantio_linhas`,
     `aplicacoes_linhas` e `riscos_climaticos` sao aceitos e ignorados. Rodape
@@ -1340,86 +1338,62 @@ def _format_whatsapp_message(
     _AVISO_AGRONOMO = "Isso não substitui a avaliação de um agrônomo responsável."
 
     def _linhas_clima():
-        """"Clima agora"/"Previsao" -- extraido pra funcao porque o
-        caminho curto (sem doenca nenhuma em Atencao/Perigo, usado
-        sempre pelos pontos "so clima" da aba Alertas Clima, que nunca
-        tem doenca) tambem precisa mostrar isso -- sem essa funcao, esse
-        caminho pulava direto pro "esta tudo tranquilo" e nunca mostrava
-        clima nenhum, o que inutilizava o relatorio de um ponto so' de
-        clima."""
+        """Clima agora + previsao de chuva (sem min/max, igual a tela/PDF)
+        -- tambem usado no caminho curto (sem doenca em Atencao/Perigo,
+        sempre o caso dos pontos "so clima" da aba Alertas Clima)."""
         linhas = []
-        if not weather:
-            if anotacao:
-                linhas.append(f"📝 Anotação: {anotacao}")
-            return linhas
-        partes = []
-        if weather.get("temperatura_atual") is not None:
-            partes.append(f"🌡️ {weather['temperatura_atual']}°C")
-        if weather.get("umidade_atual") is not None:
-            partes.append(f"💧 {weather['umidade_atual']}%")
-        if weather.get("chuva_atual_mm") is not None:
-            partes.append(f"🌧️ {weather['chuva_atual_mm']} mm")
-        if weather.get("chuva_24h_mm") is not None:
-            partes.append(f"☔ {weather['chuva_24h_mm']} mm (24h)")
-        if partes:
-            linhas.append("🌤️ *Clima agora:* " + " · ".join(partes))
-        else:
+        if weather:
+            partes = []
+            if weather.get("temperatura_atual") is not None:
+                partes.append(f"🌡️ {weather['temperatura_atual']} °C")
+            if weather.get("umidade_atual") is not None:
+                partes.append(f"💧 {weather['umidade_atual']}%")
+            if weather.get("chuva_atual_mm") is not None:
+                partes.append(f"🌧️ {weather['chuva_atual_mm']} mm agora")
+            if weather.get("chuva_24h_mm") is not None:
+                partes.append(f"☔ {weather['chuva_24h_mm']} mm em 24h")
             linhas.append("🌤️ *Clima agora*")
+            if partes:
+                linhas.append(" · ".join(partes))
+            if weather.get("previsao_5_dias"):
+                linhas.append("")
+                linhas.append("🌧️ *Previsão de chuva*")
+                linhas.extend(
+                    f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" for d in weather["previsao_5_dias"]
+                )
         if leitura_bioscout:
-            linhas.append(f"📅 Leitura BioScout: {leitura_bioscout}")
+            linhas.append("")
+            linhas.append(f"_Última leitura BioScout: {leitura_bioscout}_")
         if anotacao:
-            linhas.append(f"📝 Anotação: {anotacao}")
-        if weather.get("previsao_5_dias"):
-            partes_prev = []
-            for i, d in enumerate(weather["previsao_5_dias"]):
-                # dd/mm, mesmo padrao de data do resto do relatorio (nao o
-                # AAAA-MM-DD cru que vem do forecast).
-                data_fmt = f"{d['data'][8:10]}/{d['data'][5:7]}"
-                # Temp. min/max so' nos 2 primeiros dias -- dias 3-5 sao
-                # os menos confiaveis da previsao (mais longe no tempo),
-                # deixa so' a chuva pra' nao poluir com numero pouco
-                # confiavel.
-                if i < 2:
-                    partes_prev.append(f"*{data_fmt}*: {d['chuva_mm']}mm ({d['temp_min']}-{d['temp_max']}°C)")
-                else:
-                    partes_prev.append(f"*{data_fmt}*: {d['chuva_mm']}mm")
-            linhas.append("Previsao: " + " | ".join(partes_prev))
+            linhas.append("")
+            linhas.append(f"📝 *Anotação:* {anotacao}")
         return linhas
 
+    cabecalho = [_whatsapp_titulo(site)]
+    subtitulo = " · ".join(
+        parte for parte in (
+            f"Recomendações {safra_label}" if safra_label else "",
+            f"Cultura: {cultura.upper()}" if cultura else "",
+        ) if parte
+    )
+    if subtitulo:
+        cabecalho.append(f"_{subtitulo}_")
+    cabecalho.append("")
+
     if not diseases:
-        partes = [_whatsapp_titulo(site), ""]
-        if safra_label:
-            partes.append(f"Recomendações: *{safra_label}*")
-        if cultura:
-            partes.append(f"Cultura: *{cultura.upper()}*")
-        if safra_label or cultura:
-            partes.append("")
-        partes.extend(_linhas_clima())
+        partes = cabecalho + _linhas_clima()
         if mostrar_secao_doencas:
-            partes.append("")
-            partes.append("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.")
-        partes.append("")
-        partes.append(_AVISO_AGRONOMO)
+            partes += ["", "✅ Nenhuma doença em atenção ou perigo nessa fazenda no momento."]
+        partes += ["", f"_{_AVISO_AGRONOMO}_"]
         return "\n".join(partes)
 
-    lines = [_whatsapp_titulo(site), ""]
-
-    if safra_label:
-        lines.append(f"Recomendações: *{safra_label}*")
-    if cultura:
-        lines.append(f"Cultura: *{cultura.upper()}*")
-    if safra_label or cultura:
-        lines.append("")
-
-    lines.extend(_linhas_clima())
-
-    lines.append(_WHATSAPP_SEPARADOR)
-    lines.append("*Doenças em Atenção / Perigo*")
+    lines = cabecalho + _linhas_clima()
+    lines += ["", _WHATSAPP_SEPARADOR, "⚠️ *DOENÇAS EM ATENÇÃO / PERIGO*", "_Recomendações das instituições de pesquisa_"]
 
     for d in diseases:
         lines.append("")
         emoji_status = _STATUS_EMOJI.get(d["status"], "")
-        cabecalho = f"{emoji_status} *{d['rotulo'].upper()}* - {_status_label(d['status'])}"
+        titulo = f"{emoji_status} *{d['rotulo']}* — {_status_label(d['status']).lower()}"
         previsao_risco = d.get("previsao_risco")
         if not previsao_risco:
             # Sem previsao (falha da Open-Meteo, ou doenca sem limite
@@ -1427,44 +1401,39 @@ def _format_whatsapp_message(
             # no horario ja observado (`_calc_risco_germinacao`).
             risco_label = _risco_label(d.get("risco"))
             if risco_label:
-                cabecalho += f" // Risco de infecção: {risco_label}"
-        lines.append(cabecalho)
+                titulo += f"\nRisco de infecção: {risco_label}"
+        lines.append(titulo)
         if previsao_risco:
-            dias_txt = " · ".join(
-                f"{_RISCO_EMOJI.get(p['risco'], '')} *{p['data_fmt']}*: {_risco_label(p['risco'])}"
-                for p in previsao_risco
-            )
-            lines.append(f"Risco de infecção: {dias_txt}")
+            lines.append("Risco de infecção: " + " · ".join(
+                f"{_RISCO_EMOJI.get(p['risco'], '')} {p['data_fmt']} {_risco_label(p['risco'])}" for p in previsao_risco
+            ))
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
         quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None
-        if biologicos_itens or quimicos_itens:
-            lines.append("")
-            lines.append("Recomendações das Instituições de Pesquisa")
-            if biologicos_itens:
-                ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens)
-                lines.append(f"🧪 *Biologicos:* {ativos}")
-            if quimicos_itens:
-                ativos = " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens)
-                lines.append(f"⚗️ *Quimicos:* {ativos}")
-        lines.append(_WHATSAPP_SEPARADOR)
-        lines.append(f"📝 Sugestão: {d.get('nota') or '*'}")
+        if biologicos_itens:
+            lines.append("🧪 Biológicos: " + " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens))
+        if quimicos_itens:
+            lines.append("⚗️ Químicos: " + " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens))
 
-    lines.append("")
-    lines.append(_WHATSAPP_SEPARADOR)
-    lines.append("📦 *Produtos ja disponiveis na fazenda*")
+    # Anotacoes das doencas num bloco so' (igual a caixa unica da tela),
+    # so' as preenchidas.
+    anotacoes = [(d["rotulo"], d.get("nota")) for d in diseases if (d.get("nota") or "").strip()]
+    if anotacoes:
+        lines += ["", _WHATSAPP_SEPARADOR, "📝 *ANOTAÇÕES*"]
+        lines += [f"• *{rotulo}:* {nota.strip()}" for rotulo, nota in anotacoes]
+
     produtos = produtos or {}
-    for tipo, titulo, emoji in (("biologico", "Biologicos", "🧪"), ("quimico", "Quimicos", "⚗️")):
-        itens = produtos.get(tipo) or []
-        partes = [
+    linhas_produtos = []
+    for tipo, titulo, emoji in (("biologico", "Biológicos", "🧪"), ("quimico", "Químicos", "⚗️")):
+        nomes = [
             f"{p['nome']} ({p['data_anotacao']})" if p.get("data_anotacao") else p["nome"]
-            for p in itens if p.get("nome")
+            for p in (produtos.get(tipo) or []) if p.get("nome")
         ]
-        lines.append(f"{emoji} *{titulo}:* {', '.join(partes) if partes else '*'}")
-    lines.append("")
+        if nomes:
+            linhas_produtos.append(f"{emoji} {titulo}: {', '.join(nomes)}")
+    lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DISPONÍVEIS NA FAZENDA*"]
+    lines += linhas_produtos or ["Nenhum produto cadastrado."]
 
-    lines.append(_WHATSAPP_SEPARADOR)
-    lines.append(_AVISO_AGRONOMO)
-
+    lines += ["", f"_{_AVISO_AGRONOMO}_"]
     return "\n".join(lines).strip()
 
 
