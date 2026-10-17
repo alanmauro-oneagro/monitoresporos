@@ -5098,6 +5098,13 @@ def admin_fungicidas():
     )
 
 
+@app.route("/admin/fungicidas/agrofit-atualizar", methods=["POST"])
+@admin_required
+def agrofit_atualizar_agora():
+    agrofit_dados.atualizar_em_segundo_plano(forcar=True)
+    return redirect(url_for("admin_fungicidas"))
+
+
 # Quantos ingredientes trazer do Agrofit pra doenca que nao tem nada na
 # Biblioteca (os mais registrados primeiro).
 AGROFIT_MAX_IMPORTADOS = 10
