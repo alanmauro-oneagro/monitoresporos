@@ -39,6 +39,8 @@ _PALAVRAS_IGNORADAS = {"spp", "sp", "and", "e", "var", "f", "complex", "complexo
 _lock = threading.Lock()
 _baixando = threading.Event()
 _cache = {"mtime": None, "dados": None}
+# Progresso do download em andamento (mostrado na Biblioteca de fungicidas).
+_progresso = {"etapa": None, "baixados": 0, "total": None, "linhas": 0}
 
 
 def _agora():
@@ -94,6 +96,7 @@ def montar_indice(arquivo):
         raise ValueError(f"Colunas nao reconhecidas no CSV do Agrofit: {cabecalho}")
     pragas, nomes, culturas = {}, {}, set()
     for linha in leitor:
+        _progresso["linhas"] += 1
         if len(linha) <= max(col_ingrediente, col_cultura, col_praga):
             continue
         chave = ativos(linha[col_ingrediente])
@@ -143,6 +146,7 @@ def status():
         "baixado_em": datetime.fromisoformat(baixado).strftime("%d/%m/%Y") if baixado else None,
         "baixando": _baixando.is_set(),
         "erro": meta.get("erro"),
+        "progresso": dict(_progresso) if _baixando.is_set() else None,
     }
 
 
@@ -159,6 +163,7 @@ def _url_do_arquivo():
 
 
 def _baixar():
+    _progresso.update(etapa="conectando", baixados=0, total=None, linhas=0)
     url = _url_do_arquivo()
     tmp = INDICE_PATH.with_suffix(".download")
     try:
@@ -166,12 +171,16 @@ def _baixar():
             resp = _abrir(url, 600)
         except Exception as exc:
             raise RuntimeError(f"{exc} ({url})") from exc
+        tamanho = resp.headers.get("Content-Length")
+        _progresso.update(etapa="baixando", total=int(tamanho) if tamanho and tamanho.isdigit() else None)
         with resp, open(tmp, "wb") as f:
             while True:
                 bloco = resp.read(1 << 20)
                 if not bloco:
                     break
                 f.write(bloco)
+                _progresso["baixados"] += len(bloco)
+        _progresso["etapa"] = "processando"
         with open(tmp, "rb") as f:
             return montar_indice(io.BufferedReader(f))
     finally:

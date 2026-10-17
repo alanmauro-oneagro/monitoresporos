@@ -14,8 +14,8 @@
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
 <p class="small text-muted mb-3">
     Base Agrofit/MAPA (<a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit" target="_blank" rel="noopener">dados abertos</a>):
-    {% if agrofit.baixado_em %}atualizada em {{ agrofit.baixado_em }}, renova sozinha uma vez por mes.{% elif agrofit.baixando %}baixando agora...{% else %}ainda nao baixada -- baixa sozinha em instantes.{% endif %}
-    {% if agrofit.erro %}<span class="text-danger">Ultima tentativa falhou: {{ agrofit.erro }}</span>{% endif %}
+    {% if agrofit.baixando %}<span id="agrofitProgresso">baixando agora...</span>{% elif agrofit.baixado_em %}atualizada em {{ agrofit.baixado_em }}, renova sozinha uma vez por mes.{% else %}ainda nao baixada -- baixa sozinha em instantes.{% endif %}
+    {% if agrofit.erro and not agrofit.baixando %}<span class="text-danger">Ultima tentativa falhou: {{ agrofit.erro }}</span>{% endif %}
     {% if not agrofit.baixando %}
     <button type="submit" form="agrofitAtualizarForm" class="btn btn-link btn-sm p-0 align-baseline">🔄 {{ 'Atualizar agora' if agrofit.baixado_em else 'Tentar agora' }}</button>
     {% endif %}
@@ -173,6 +173,26 @@ document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
         });
     });
 });
+(function () {
+    var alvo = document.getElementById('agrofitProgresso');
+    if (!alvo) return;
+    function mb(bytes) { return (bytes / 1048576).toFixed(1).replace('.', ',') + ' MB'; }
+    function atualizar() {
+        fetch("{{ url_for('agrofit_status') }}").then(function (r) { return r.json(); }).then(function (st) {
+            if (!st.baixando) { location.reload(); return; }
+            var p = st.progresso || {};
+            if (p.etapa === 'baixando') {
+                alvo.textContent = 'baixando: ' + mb(p.baixados) + (p.total ? ' de ' + mb(p.total) + ' (' + Math.round(100 * p.baixados / p.total) + '%)' : '');
+            } else if (p.etapa === 'processando') {
+                alvo.textContent = 'processando: ' + p.linhas.toLocaleString('pt-BR') + ' linhas lidas...';
+            } else {
+                alvo.textContent = 'conectando ao portal do MAPA...';
+            }
+            setTimeout(atualizar, 2000);
+        }).catch(function () { setTimeout(atualizar, 5000); });
+    }
+    atualizar();
+})();
 (function () {
     var saved = sessionStorage.getItem('fungicidas_scroll');
     if (saved !== null) {
