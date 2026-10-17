@@ -53,6 +53,20 @@ html { font-size: 14px; }
     .whatsapp-destinos[open] { flex-basis: 100%; }
     .whatsapp-destinos-painel { position: static; width: auto; }
 }
+/* Celular: cabecalho de cada fazenda em linhas alinhadas --
+   [PDF][Texto] (o que vai no envio) / WhatsApp na largura toda /
+   [Recomendacao (PDF)][Copiar] com a mesma largura. */
+@media (max-width: 575.98px) {
+    .farm-toggle { font-size: 1.15rem !important; }
+    .rec-acoes { display: grid !important; grid-template-columns: 1fr 1fr; gap: 0.4rem !important; width: 100%; margin-left: 0 !important; margin-top: 0.25rem; }
+    .rec-acoes .acao-chk-pdf { order: 1; }
+    .rec-acoes .acao-chk-texto { order: 2; }
+    .rec-acoes .acao-whats { order: 3; grid-column: 1 / -1; }
+    .rec-acoes .acao-whats > summary { display: block; width: 100%; text-align: center; }
+    .rec-acoes .acao-pdf { order: 4; }
+    .rec-acoes .acao-copiar { order: 5; }
+    .rec-acoes .acao-pdf, .rec-acoes .acao-copiar { width: 100%; white-space: nowrap; }
+}
 /* Tabela "Risco de infeccao pelo clima" -- compacta, celula colorida. */
 .risco-tabela { font-size: 0.8rem; width: auto; }
 .risco-tabela th, .risco-tabela td { padding: 0.15rem 0.45rem; white-space: nowrap; }
@@ -123,26 +137,26 @@ html { font-size: 14px; }
                 ⚠ ha {{ site_group.dias_desde_atualizacao }}d
             </span>
             {% endif %}
-            <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
+            <div class="ms-auto d-flex flex-wrap align-items-center gap-2 rec-acoes">
                 {% set whatsapp_form_id = "whatsapp_form_" ~ safra ~ "_" ~ outer_loop.index0 %}
-                <div class="form-check mb-0" title="Incluir o PDF no envio por WhatsApp">
+                <div class="form-check mb-0 acao-chk-pdf" title="Incluir o PDF no envio por WhatsApp">
                     <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}" id="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">
                     <label class="form-check-label small" for="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">PDF</label>
                 </div>
-                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
+                <a class="btn btn-sm btn-outline-primary acao-pdf" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
                    title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- PDF vem so' com o clima{% else %}Gerar PDF com clima, recomendacoes, produtos, datas de plantio e de pulverizacao -- pra encaminhar pra alguem{% endif %}">
-                    📄 Recomendacao (PDF)
+                    📄 <span class="d-none d-sm-inline">Recomendacao (PDF)</span><span class="d-sm-none">Abrir PDF</span>
                 </a>
-                <div class="form-check mb-0" title="Incluir o texto no envio por WhatsApp">
+                <div class="form-check mb-0 acao-chk-texto" title="Incluir o texto no envio por WhatsApp">
                     <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}" id="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">
                     <label class="form-check-label small" for="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">Texto</label>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn"
+                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn acao-copiar"
                         data-text="{{ site_group.whatsapp_text }}"
                         title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- copia so' o clima{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
-                    📋 Copiar recomendacao
+                    📋 <span class="d-none d-sm-inline">Copiar recomendacao</span><span class="d-sm-none">Copiar texto</span>
                 </button>
-<details class="whatsapp-destinos">
+                <details class="whatsapp-destinos acao-whats">
                     <summary class="btn btn-sm btn-outline-success"
                              title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- envia so' o clima{% else %}Escolher quem recebe e enviar os formatos marcados (texto/PDF){% endif %}">
                         📲 Enviar por WhatsApp{% if site_group.whatsapp_destinos %} ({{ site_group.whatsapp_destinos }}){% endif %} ▾
@@ -507,14 +521,14 @@ document.querySelectorAll('.auto-grow-textarea').forEach(function (el) {
 document.querySelectorAll('.copy-recomendacao-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
         var text = btn.dataset.text || '';
-        var original = btn.textContent;
+        var original = btn.innerHTML;
         function marcarCopiado() {
             btn.textContent = '✅ Copiado!';
-            setTimeout(function () { btn.textContent = original; }, 2000);
+            setTimeout(function () { btn.innerHTML = original; }, 2000);
         }
         function marcarFalha() {
             btn.textContent = '⚠️ Copie manualmente (Ctrl+C)';
-            setTimeout(function () { btn.textContent = original; }, 3000);
+            setTimeout(function () { btn.innerHTML = original; }, 3000);
         }
         function copiarComTextarea() {
             var ta = document.createElement('textarea');
