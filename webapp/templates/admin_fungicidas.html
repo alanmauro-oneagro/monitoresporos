@@ -3,25 +3,11 @@
 {% block content %}
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
 
-<form method="post" action="{{ url_for('aplicar_pesquisa_registro') }}" class="mb-3">
-    <button type="submit" class="btn btn-sm btn-outline-primary">
-        🔎 Aplicar pesquisa de registro Agrofit/MAPA -- Brasil (26/08/2026)
-    </button>
-    <span class="text-muted small ms-2">
-        Desmarca os quimicos sem registro confirmado por cultura, pesquisados no Agrofit/Agrolink.
-        So' se aplica a doenca marcada <strong>Brasil</strong> (ou sem nenhum pais marcado ainda) na
-        matriz Doencas x Pais -- doenca marcada so' pra outro pais fica de fora (Agrofit/MAPA e' o
-        registro brasileiro, nao vale pra outro pais). Pode clicar mais de uma vez sem problema -- so
-        precisa fazer isso uma vez em cada ambiente (local e o site publicado usam bancos de dados
-        separados).
-    </span>
-</form>
-
 <form method="post" data-autosave>
 {% for d in doencas_data %}
 <div class="card shadow-sm mb-3">
     <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
             <h5 class="mb-0">
                 {{ d.rotulo }}
                 {% if d.paises %}
@@ -32,6 +18,11 @@
             </h5>
             {% if d.sem_dados %}
             <span class="badge bg-secondary">Sem dados ainda</span>
+            {% elif d.tem_pesquisa %}
+            <button type="button" class="btn btn-sm btn-outline-primary text-nowrap fungicida-pesquisa-btn" data-doenca="{{ d.doenca }}"
+                    {% if d.pesquisa_fora_brasil %}disabled title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% else %}title="Marca as culturas com registro e desmarca as sem registro confirmado, so' nos quimicos desta doenca"{% endif %}>
+                🔎 <span class="d-none d-sm-inline">Aplicar pesquisa </span>Agrofit/MAPA
+            </button>
             {% endif %}
         </div>
         {% if d.sem_dados %}
@@ -91,6 +82,12 @@
             {% endfor %}
         </div>
         {% endfor %}
+        <div class="mt-2">
+            <label class="form-label small fw-bold mb-1" for="nota_doenca_{{ loop.index0 }}">Anotações</label>
+            <input type="hidden" name="nota_doenca_key" value="{{ d.doenca }}">
+            <textarea name="nota_doenca" id="nota_doenca_{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="2"
+                      placeholder="Vale para todas as fazendas sem anotacao propria dessa doenca na aba Recomendacoes...">{{ d.nota }}</textarea>
+        </div>
     </div>
 </div>
 {% endfor %}
@@ -117,7 +114,11 @@
     (aba Doencas) -- <strong>excecao</strong>: uma cultura recem-cadastrada la nasce
     desmarcada em todo quimico ja existente (ninguem pesquisou registro
     pra ela ainda), exigindo confirmar uma a uma em vez de assumir que
-    esta tudo certo.
+    esta tudo certo. O botao <strong>🔎 Agrofit/MAPA</strong> de cada doenca aplica a
+    pesquisa de registro (26/08/2026) so' nos quimicos daquela doenca: marca as culturas
+    com registro e desmarca as sem registro confirmado (Soja, Algodao, Milho e Feijao).
+    A caixa <strong>Anotações</strong> de cada doenca aparece nas Recomendacoes, no texto e no
+    PDF de toda fazenda que nao tiver anotacao propria dessa doenca.
 </p>
 <script>
 // Botoes simples (nao <form>) de proposito -- um <form> por linha ficaria
@@ -136,6 +137,16 @@ document.querySelectorAll('.fungicida-mover-btn').forEach(function (btn) {
                 doenca: btn.dataset.doenca, tipo: btn.dataset.tipo,
                 idx: btn.dataset.idx, direction: btn.dataset.direction,
             }),
+        }).then(function () { location.reload(); });
+    });
+});
+document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        sessionStorage.setItem('fungicidas_scroll', window.scrollY);
+        fetch("{{ url_for('aplicar_pesquisa_registro') }}", {
+            method: 'POST',
+            body: new URLSearchParams({ doenca: btn.dataset.doenca }),
         }).then(function () { location.reload(); });
     });
 });
