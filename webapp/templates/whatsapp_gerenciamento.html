@@ -50,6 +50,7 @@
                 <span class="autosave-status small ms-2"></span>
             </form>
 
+            {% if not site_group.so_clima %}
             <form method="post" action="{{ url_for('save_whatsapp_days_pdf') }}" data-autosave class="mt-2">
                 <input type="hidden" name="site_name" value="{{ site_group.site }}">
                 <label class="form-label small text-muted d-block mb-1">PDF -- nestes dias:</label>
@@ -71,6 +72,7 @@
                 </span>
                 <span class="autosave-status small ms-2"></span>
             </form>
+            {% endif %}
 
             <div class="mt-3 pt-3 border-top">
                 <label class="form-label small text-muted d-block mb-1">NDVI -- envio automatico:</label>
