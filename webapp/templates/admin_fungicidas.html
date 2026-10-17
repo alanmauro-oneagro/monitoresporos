@@ -1,27 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Fungicidas - OneAgro{% endblock %}
 {% block content %}
+<style>
+.fung-titulo { min-width: 0; }
+.fung-bandeiras { font-size: 1rem; letter-spacing: 0.15rem; }
+@media (max-width: 575.98px) {
+    .fung-titulo { font-size: 0.95rem; }
+    .fung-bandeiras { padding: 0.2em 0.35em; }
+    .fungicida-pesquisa-btn { padding-left: 0.4rem; padding-right: 0.4rem; }
+}
+</style>
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
 
 <form method="post" data-autosave>
 {% for d in doencas_data %}
 <div class="card shadow-sm mb-3">
-    <div class="card-body">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-            <h5 class="mb-0">
+    <div class="card-body px-2 px-sm-3">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+            <h5 class="mb-0 fung-titulo">
                 {{ d.rotulo }}
-                {% if d.paises %}
-                <span class="badge bg-light text-dark border fw-normal ms-1" title="Pais marcado na matriz Doencas x Pais (aba Doencas)">🌎 {{ d.paises | join(", ") }}</span>
+                {% if d.bandeiras %}
+                <span class="badge bg-light text-dark border fw-normal ms-1 fung-bandeiras" title="Pais marcado na matriz Doencas x Pais (aba Doencas): {{ d.paises | join(', ') }}">{% for bandeira, nome in d.bandeiras %}{% if bandeira %}<span aria-label="{{ nome }}">{{ bandeira }}</span>{% else %}<span class="small">{{ nome }}</span>{% endif %}{% endfor %}</span>
                 {% else %}
-                <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum pais marcado na matriz Doencas x Pais -- se aplica a qualquer pais">🌎 Todos os paises</span>
+                <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum pais marcado na matriz Doencas x Pais -- se aplica a qualquer pais">🌎<span class="d-none d-sm-inline"> Todos os paises</span></span>
                 {% endif %}
             </h5>
             {% if d.sem_dados %}
             <span class="badge bg-secondary">Sem dados ainda</span>
-            {% elif d.tem_pesquisa %}
+            {% else %}
             <button type="button" class="btn btn-sm btn-outline-primary text-nowrap fungicida-pesquisa-btn" data-doenca="{{ d.doenca }}"
                     {% if d.pesquisa_fora_brasil %}disabled title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% else %}title="Marca as culturas com registro e desmarca as sem registro confirmado, so' nos quimicos desta doenca"{% endif %}>
-                🔎 <span class="d-none d-sm-inline">Aplicar pesquisa </span>Agrofit/MAPA
+                🔎 <span class="d-none d-sm-inline">Aplicar pesquisa </span>Agrofit<span class="d-none d-sm-inline">/MAPA</span>
             </button>
             {% endif %}
         </div>
@@ -147,7 +156,10 @@ document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
         fetch("{{ url_for('aplicar_pesquisa_registro') }}", {
             method: 'POST',
             body: new URLSearchParams({ doenca: btn.dataset.doenca }),
-        }).then(function () { location.reload(); });
+        }).then(function (r) {
+            if (r.ok) { location.reload(); return; }
+            return r.json().then(function (j) { alert(j.erro); btn.disabled = false; });
+        });
     });
 });
 (function () {
