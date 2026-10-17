@@ -10,11 +10,17 @@ fazenda no padrao '"{nome}" - OneAgro', pra aparecer em toda tela sem
 ser confundida com uma fazenda de verdade (ver
 `models.virtual_farm_site_names`)."""
 import math
+from datetime import date
 
 import data_reader
 
 IDW_POTENCIA = 2  # expoente da distancia no IDW -- padrao da literatura
 DISTANCIA_MINIMA_KM = 0.05  # evita divisao por zero se o ponto cair em cima de uma estacao
+# Vizinha cuja ultima leitura de uma doenca e' mais velha que isso (em
+# relacao a leitura mais recente das vizinhas pra mesma doenca) fica fora
+# da media -- uma estacao parada ha meses (ex.: K&S, sem leitura desde
+# abril/2026) puxava o valor do ponto estimado pro numero de meses atras.
+JANELA_LEITURA_VIZINHA_DIAS = 3
 
 
 def _haversine_km(lat1, lon1, lat2, lon2):
@@ -85,14 +91,16 @@ def interpolar_cards(lat, lon, raio_km, cards_by_site_reais, coords_reais):
 
     cards = []
     for doenca_en, entradas in sorted(por_doenca.items()):
+        mais_recente = date.fromisoformat(max(c["data"] for _, c in entradas))
+        entradas = [
+            (d, c) for d, c in entradas
+            if (mais_recente - date.fromisoformat(c["data"])).days <= JANELA_LEITURA_VIZINHA_DIAS
+        ]
         pesos = [1 / (max(d, DISTANCIA_MINIMA_KM) ** IDW_POTENCIA) for d, _ in entradas]
         peso_total = sum(pesos)
         conc = sum(p * c["concentracao"] for p, (_, c) in zip(pesos, entradas)) / peso_total
         modelo = entradas[0][1]
-        # A mais recente, nao a mais antiga -- uma fazenda distante com
-        # leitura parada nao deve prender a data (e o bloqueio por dado
-        # velho) das outras fazendas que estao alimentando essa doenca.
-        data_mais_recente = max(c["data"] for _, c in entradas)
+        data_mais_recente = mais_recente.isoformat()
         cards.append({
             "doenca": modelo["doenca"],
             "doenca_en": doenca_en,
