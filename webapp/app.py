@@ -553,7 +553,7 @@ class _Request(app.request_class):
     @property
     def max_content_length(self):
         if self.path == "/admin/fungicidas/agrofit-enviar":
-            return 400 * 1024 * 1024
+            return 600 * 1024 * 1024
         return super().max_content_length
 
 

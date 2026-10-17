@@ -22,7 +22,12 @@ RESOURCE_PAGE = (
     "https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit/resource/" + RESOURCE_ID
 )
 _RESOURCE_SHOW = "https://dados.agricultura.gov.br/api/3/action/resource_show?id=" + RESOURCE_ID
-_DOWNLOAD_DIRETO = RESOURCE_PAGE + "/download/agrofitprodutosformulados.csv"
+# Link direto do arquivo (com o id do dataset) -- o mesmo que outros
+# projetos baixam todo mes; o link pelo nome do dataset responde 403.
+_DOWNLOAD_DIRETO = (
+    "https://dados.agricultura.gov.br/dataset/6c913699-e82e-4da3-a0a1-fb6c431e367f/resource/"
+    + RESOURCE_ID + "/download/agrofitprodutosformulados.csv"
+)
 # O portal recusa (403) o User-Agent padrao do Python.
 _CABECALHOS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -58,12 +63,21 @@ def normalizar(texto):
     return re.sub(r"\s+", " ", sem_acento.lower()).strip()
 
 
+def _sem_parenteses(texto):
+    """Tira tudo entre parenteses, inclusive aninhados --
+    "mancozebe (alquilenobis(ditiocarbamato)) (440 g/L)" -> "mancozebe"."""
+    texto = texto or ""
+    anterior = None
+    while anterior != texto:
+        anterior, texto = texto, re.sub(r"\([^()]*\)", " ", texto)
+    return texto.replace("(", " ").replace(")", " ")
+
+
 def ativos(ingrediente):
     """"Piraclostrobina (estrobilurina) (133 g/L) + Epoxiconazol (triazol)"
     -> ("epoxiconazol", "piraclostrobina") -- sem parenteses, sem acento,
     em ordem alfabetica, pra comparar com o texto da Biblioteca."""
-    sem_parenteses = re.sub(r"\([^)]*\)", " ", ingrediente or "")
-    partes = [normalizar(p).strip(" .;,") for p in re.split(r"\+|;", sem_parenteses)]
+    partes = [normalizar(p).strip(" .;,") for p in re.split(r"\+|;", _sem_parenteses(ingrediente))]
     return tuple(sorted({p for p in partes if p}))
 
 
@@ -100,6 +114,8 @@ def montar_indice(arquivo):
     primeira = texto.readline()
     delimitador = ";" if primeira.count(";") >= primeira.count(",") else ","
     cabecalho = next(csv.reader([primeira], delimiter=delimitador))
+    # Algumas celulas (EMPRESA_PAIS_TIPO) passam do limite padrao do csv.
+    csv.field_size_limit(50_000_000)
     leitor = csv.reader(texto, delimiter=delimitador)
     col_ingrediente = _coluna(cabecalho, "ingrediente")
     col_cultura = _coluna(cabecalho, "cultura")
@@ -122,8 +138,8 @@ def montar_indice(arquivo):
         if "microbiol" in classe or "biolog" in classe or any(g in texto_ativos for g in _GENEROS_BIOLOGICOS):
             biologicos.add(texto_ativos)
         nomes.setdefault(texto_ativos, " + ".join(
-            normalizar(re.sub(r"\([^)]*\)", " ", p)).strip(" .;,")
-            for p in re.split(r"\+|;", linha[col_ingrediente]) if p.strip()
+            normalizar(p).strip(" .;,")
+            for p in re.split(r"\+|;", _sem_parenteses(linha[col_ingrediente])) if p.strip()
         ))
         for praga in re.split(r"[;,/]", linha[col_praga]):
             praga = normalizar(praga)
@@ -172,23 +188,29 @@ def _abrir(url, timeout):
     return urllib.request.urlopen(urllib.request.Request(url, headers=_CABECALHOS), timeout=timeout)
 
 
-def _url_do_arquivo():
+def _urls_do_arquivo():
+    urls = [_DOWNLOAD_DIRETO]
     try:
         with _abrir(_RESOURCE_SHOW, 60) as resp:
-            return json.loads(resp.read().decode("utf-8"))["result"]["url"]
+            urls.append(json.loads(resp.read().decode("utf-8"))["result"]["url"])
     except Exception:
-        return _DOWNLOAD_DIRETO
+        pass
+    return urls
 
 
 def _baixar():
     _progresso.update(etapa="conectando", baixados=0, total=None, linhas=0)
-    url = _url_do_arquivo()
     tmp = INDICE_PATH.with_suffix(".download")
     try:
-        try:
-            resp = _abrir(url, 600)
-        except Exception as exc:
-            raise RuntimeError(f"{exc} ({url})") from exc
+        erros = []
+        for url in _urls_do_arquivo():
+            try:
+                resp = _abrir(url, 600)
+                break
+            except Exception as exc:
+                erros.append(f"{exc} ({url})")
+        else:
+            raise RuntimeError(" / ".join(erros))
         tamanho = resp.headers.get("Content-Length")
         _progresso.update(etapa="baixando", total=int(tamanho) if tamanho and tamanho.isdigit() else None)
         with resp, open(tmp, "wb") as f:
@@ -247,12 +269,13 @@ def _importar(caminho):
         except Exception as exc:
             dados = carregar() if INDICE_PATH.exists() else {}
             dados["meta"] = {**dados.get("meta", {}), "erro": f"Arquivo enviado nao reconhecido: {exc}"[:300]}
+        try:
+            tmp = INDICE_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(INDICE_PATH)
         finally:
             Path(caminho).unlink(missing_ok=True)
             _baixando.clear()
-        tmp = INDICE_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(INDICE_PATH)
 
 
 def importar_em_segundo_plano(caminho):

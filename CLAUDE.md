@@ -112,9 +112,13 @@ menos que seja pedido explicitamente paridade para outros admins.
   `fungicida_importado_item`, lida por `fungicida_data.get_recomendacao`).
   Na Biblioteca, doencas do Brasil (ou sem pais) vem antes das demais. A
   API AgroAPI da Embrapa foi descartada (nao gerava token). O portal do
-  MAPA respondeu 403 ao download pelo Railway (provavel bloqueio de IP fora
-  do Brasil) -- por isso existe o envio manual do arquivo na propria
-  Biblioteca (rota `agrofit_enviar_arquivo`, limite de upload de 400MB so'
+  MAPA respondeu 403 ao link pelo NOME do dataset; o link com o id
+  (`agrofit_dados._DOWNLOAD_DIRETO`, mesmo usado por
+  github.com/matheusacorsi/agrofit2, que baixa todo mes dos EUA) e' o
+  primeiro tentado. Ingrediente do Agrofit tem parenteses aninhados
+  ("mancozebe (alquilenobis(ditiocarbamato))") -- ver `_sem_parenteses`.
+  Mesmo assim existe o envio manual do arquivo na propria
+  Biblioteca (rota `agrofit_enviar_arquivo`, limite de upload de 600MB so'
   nessa rota). O ambiente de nuvem do Claude nao alcanca esse portal.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
