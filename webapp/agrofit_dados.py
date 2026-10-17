@@ -41,11 +41,21 @@ RETENTATIVA_APOS_FALHA = timedelta(hours=6)
 INDICE_PATH = Path(models.DB_PATH).parent / "agrofit_indice.json"
 _PALAVRAS_IGNORADAS = {"spp", "sp", "and", "e", "var", "f", "complex", "complexo"}
 # Ingrediente com um desses generos (microrganismo) conta como biologico.
-_GENEROS_BIOLOGICOS = (
+# Biologico = TODOS os ingredientes sao microrganismos destes generos. A
+# classe do Agrofit nao serve: produto de oleo de neem/azadiractina vem
+# como "Fungicida microbiologico" (pedido do Alan: nao e' biologico).
+_GENEROS_BIOLOGICOS = {
     "bacillus", "trichoderma", "pseudomonas", "streptomyces", "clonostachys", "saccharomyces",
     "aureobasidium", "gliocladium", "paenibacillus", "burkholderia", "coniothyrium", "ulocladium",
     "beauveria", "metarhizium", "isaria", "cordyceps", "purpureocillium", "pochonia", "azospirillum",
-)
+    "bradyrhizobium", "lysinibacillus", "brevibacillus", "chromobacterium", "pasteuria", "ampelomyces",
+    "lecanicillium", "verticillium", "hirsutella", "akanthomyces", "talaromyces", "penicillium",
+}
+# Cerevisane (parede celular de Saccharomyces cerevisiae) tambem conta.
+# Sem registro vigente no Brasil (banidos/suspensos) -- nunca aparecem,
+# mesmo sem a base do Agrofit carregada. Com a base carregada, qualquer
+# quimico que nao esteja nela tambem some (ver `produto_sem_registro`).
+INGREDIENTES_BANIDOS = ("carbendazim",)
 
 _lock = threading.Lock()
 _baixando = threading.Event()
@@ -152,13 +162,17 @@ def montar_indice(arquivo):
     col_ingrediente = _coluna(cabecalho, "ingrediente")
     col_cultura = _coluna(cabecalho, "cultura")
     col_praga = _coluna(cabecalho, "praga", "cientif")
-    col_classe = _coluna(cabecalho, "classe")
+    col_situacao = _coluna(cabecalho, "situacao")
     if None in (col_ingrediente, col_cultura, col_praga):
         raise ValueError(f"Colunas nao reconhecidas no CSV do Agrofit: {cabecalho}")
-    pragas, nomes, culturas, biologicos = {}, {}, set(), set()
+    pragas, nomes, culturas = {}, {}, set()
     for linha in leitor:
         _progresso["linhas"] += 1
         if len(linha) <= max(col_ingrediente, col_cultura, col_praga):
+            continue
+        if col_situacao is not None and col_situacao < len(linha) and normalizar(linha[col_situacao]) in (
+            "false", "0", "nao", "cancelado", "suspenso", "inativo",
+        ):
             continue
         chave = ativos(linha[col_ingrediente])
         cultura = linha[col_cultura].strip()
@@ -166,9 +180,6 @@ def montar_indice(arquivo):
             continue
         culturas.add(cultura)
         texto_ativos = " + ".join(chave)
-        classe = normalizar(linha[col_classe]) if col_classe is not None and col_classe < len(linha) else ""
-        if "microbiol" in classe or "biolog" in classe or any(g in texto_ativos for g in _GENEROS_BIOLOGICOS):
-            biologicos.add(texto_ativos)
         nomes.setdefault(texto_ativos, " + ".join(
             normalizar(p).strip(" .;,")
             for p in re.split(r"\+|;", _sem_parenteses(linha[col_ingrediente])) if p.strip()
@@ -181,7 +192,6 @@ def montar_indice(arquivo):
         "pragas": {p: sorted(map(list, v)) for p, v in pragas.items()},
         "nomes": nomes,
         "culturas": sorted(culturas),
-        "biologicos": sorted(biologicos),
     }
 
 
@@ -355,6 +365,13 @@ def pragas_do_nome_cientifico(nome_cientifico, pragas):
     return sorted(achadas)
 
 
+def eh_biologico(ingrediente):
+    chave = chave_biologico(ingrediente)
+    return bool(chave) and all(
+        p.split(" ")[0] in _GENEROS_BIOLOGICOS or p.split(" ")[0] == "cerevisane" for p in chave.split(" + ")
+    )
+
+
 def _ativos_conhecidos(dados):
     """Todos os ingredientes (quimicos, ja na chave de comparacao) que
     existem no Agrofit, pra separar "sem registro pra esse fungo" de "nome
@@ -375,12 +392,11 @@ def registros(nome_cientifico):
     "culturas": [...]} -- chaves de `chave_quimico`/`chave_biologico`."""
     dados = carregar()
     pragas = pragas_do_nome_cientifico(nome_cientifico, dados.get("pragas", {}))
-    biologicos = set(dados.get("biologicos", []))
     resultado = {"pragas": pragas, "quimico": {}, "biologico": {}, "nomes": {},
                  "conhecidos": _ativos_conhecidos(dados), "culturas": dados.get("culturas", [])}
     for praga in pragas:
         for texto_ativos, cultura in dados["pragas"][praga]:
-            tipo = "biologico" if texto_ativos in biologicos else "quimico"
+            tipo = "biologico" if eh_biologico(texto_ativos) else "quimico"
             chave = chave_biologico(texto_ativos) if tipo == "biologico" else chave_quimico(texto_ativos)
             resultado[tipo].setdefault(chave, set()).add(cultura)
             resultado["nomes"].setdefault(chave, dados["nomes"].get(texto_ativos, texto_ativos))
@@ -393,3 +409,25 @@ def cultura_do_agrofit(cultura, culturas_agrofit):
     Agrofit nao tem essa cultura (ai' o registro dela nao e' mexido)."""
     alvo = normalizar(cultura)
     return {c for c in culturas_agrofit if normalizar(c) == alvo or re.split(r"[\s-]", normalizar(c))[0] == alvo}
+
+
+def produto_sem_registro(ingrediente):
+    """Quimico que nao pode aparecer: banido/suspenso (`INGREDIENTES_BANIDOS`)
+    ou, com a base do Agrofit carregada, algum ingrediente que nao tem
+    registro vigente nela."""
+    chave = chave_quimico(ingrediente)
+    if not chave:
+        return False
+    partes = chave.split(" + ")
+    if any(chave_quimico(b) in partes for b in INGREDIENTES_BANIDOS):
+        return True
+    if not INDICE_PATH.exists():
+        return False
+    try:
+        dados = carregar()
+    except Exception:
+        return False
+    if not dados.get("pragas"):
+        return False
+    conhecidos = _ativos_conhecidos(dados)
+    return any(p not in conhecidos for p in partes)
