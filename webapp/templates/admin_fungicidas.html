@@ -8,6 +8,7 @@
     .fung-titulo { font-size: 0.95rem; }
     .fung-bandeiras { padding: 0.2em 0.35em; }
     .fungicida-pesquisa-btn { padding-left: 0.4rem; padding-right: 0.4rem; }
+    .fungicida-mover-btn { padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
 }
 </style>
 <h4 class="mb-2">Biblioteca de fungicidas</h4>
@@ -29,10 +30,15 @@
             <span class="badge bg-secondary">Sem dados ainda</span>
             {% else %}
             <button type="button" class="btn btn-sm btn-outline-primary text-nowrap fungicida-pesquisa-btn" data-doenca="{{ d.doenca }}"
-                    {% if d.pesquisa_fora_brasil %}disabled title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% else %}title="Marca as culturas com registro e desmarca as sem registro confirmado, so' nos quimicos desta doenca"{% endif %}>
+                    {% if d.pesquisa_fora_brasil %}disabled title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% else %}title="Confere o fungo pelo nome cientifico e marca as culturas com registro / desmarca as sem registro, so' nos quimicos desta doenca"{% endif %}>
                 🔎 <span class="d-none d-sm-inline">Aplicar pesquisa </span>Agrofit<span class="d-none d-sm-inline">/MAPA</span>
             </button>
             {% endif %}
+        </div>
+        <div class="mb-3" style="margin-top: -0.6rem;">
+            <input type="hidden" name="cientifico_key" value="{{ d.doenca }}">
+            <input type="text" name="cientifico" class="form-control form-control-sm fst-italic text-muted fung-cientifico" value="{{ d.cientifico }}"
+                   data-doenca="{{ d.doenca }}" placeholder="Nome cientifico do fungo (genero e especie)" aria-label="Nome cientifico de {{ d.rotulo }}">
         </div>
         {% if d.sem_dados %}
         <p class="text-muted small mb-0">
@@ -124,7 +130,8 @@
     desmarcada em todo quimico ja existente (ninguem pesquisou registro
     pra ela ainda), exigindo confirmar uma a uma em vez de assumir que
     esta tudo certo. O botao <strong>🔎 Agrofit/MAPA</strong> de cada doenca aplica a
-    pesquisa de registro (26/08/2026) so' nos quimicos daquela doenca: marca as culturas
+    pesquisa de registro (26/08/2026) so' nos quimicos daquela doenca, desde que o nome
+    cientifico (abaixo do nome da doenca) seja o mesmo fungo pesquisado: marca as culturas
     com registro e desmarca as sem registro confirmado (Soja, Algodao, Milho e Feijao).
     A caixa <strong>Anotações</strong> de cada doenca aparece nas Recomendacoes, no texto e no
     PDF de toda fazenda que nao tiver anotacao propria dessa doenca.
@@ -155,7 +162,10 @@ document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
         sessionStorage.setItem('fungicidas_scroll', window.scrollY);
         fetch("{{ url_for('aplicar_pesquisa_registro') }}", {
             method: 'POST',
-            body: new URLSearchParams({ doenca: btn.dataset.doenca }),
+            body: new URLSearchParams({
+                doenca: btn.dataset.doenca,
+                nome_cientifico: document.querySelector('.fung-cientifico[data-doenca="' + CSS.escape(btn.dataset.doenca) + '"]').value,
+            }),
         }).then(function (r) {
             if (r.ok) { location.reload(); return; }
             return r.json().then(function (j) { alert(j.erro); btn.disabled = false; });

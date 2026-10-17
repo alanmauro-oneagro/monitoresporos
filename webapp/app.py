@@ -4999,6 +4999,11 @@ def admin_fungicidas():
                 models.set_fungicida_registro_bloqueado(doenca, tipo, idx, bloqueadas)
         for doenca, nota in zip(request.form.getlist("nota_doenca_key"), request.form.getlist("nota_doenca")):
             models.set_fungicida_nota(doenca, nota.strip())
+        translations = _load_translations()
+        for doenca, cientifico in zip(request.form.getlist("cientifico_key"), request.form.getlist("cientifico")):
+            info = translations.get(doenca)
+            if info and cientifico.strip() != (info.get("nome_cientifico") or ""):
+                models.save_disease_translation(doenca, info["nome_pt"], cientifico.strip())
         return _save_response("Recomendacoes de fungicidas atualizadas.", "admin_fungicidas")
 
     overrides = models.get_all_fungicida_overrides()
@@ -5037,6 +5042,7 @@ def admin_fungicidas():
                 "doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True, "paises": paises_doenca,
                 "bandeiras": bandeiras,
                 "nota": notas.get(doenca_en, ""),
+                "cientifico": info.get("nome_cientifico") or "",
             })
             continue
         grupos = []
@@ -5073,6 +5079,7 @@ def admin_fungicidas():
             "doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False, "paises": paises_doenca,
             "bandeiras": bandeiras,
             "nota": notas.get(doenca_en, ""),
+            "cientifico": info.get("nome_cientifico") or "",
             # Agrofit/MAPA e' o registro do Brasil -- doenca marcada so' pra
             # outro pais fica de fora (ver `aplicar_pesquisa_registro`).
             "pesquisa_fora_brasil": bool(paises_doenca) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises_doenca),
@@ -5142,6 +5149,24 @@ _PESQUISA_REGISTRO_2026_08_26 = {
 }
 
 
+# Fungo (genero) pesquisado em cada doenca da pesquisa acima -- o botao
+# so' aplica se o nome cientifico da doenca bater com ele.
+_FUNGOS_PESQUISA_REGISTRO = {
+    "Target Spot": {"corynespora"},
+    "Powdery Mildew": {"erysiphe", "podosphaera", "microsphaera"},
+    "Septoria": {"septoria"},
+    "General Alternaria": {"alternaria"},
+    "Anthracnose": {"colletotrichum"},
+    "Dry rot": {"fusarium"},
+    "Moniliophthora spp. BETA": {"moniliophthora", "diaporthe", "phomopsis"},
+}
+
+
+def _generos_do_nome_cientifico(nome_cientifico):
+    texto = unicodedata.normalize("NFKD", nome_cientifico or "").encode("ascii", "ignore").decode().lower()
+    return set(re.findall(r"[a-z]+", texto)) - _PALAVRAS_IGNORADAS_CIENTIFICO
+
+
 # Culturas cobertas pela pesquisa acima -- nas demais (cultura cadastrada
 # depois), o registro continua como estiver.
 _CULTURAS_PESQUISA_REGISTRO = {"soja", "algodao", "milho", "feijao"}
@@ -5156,6 +5181,10 @@ def aplicar_pesquisa_registro():
     doenca marcada na matriz Doencas x Pais SO' pra outro pais fica de
     fora (sem nenhum pais marcado = vale pra qualquer pais, entra)."""
     doenca = request.form.get("doenca", "")
+    nome_cientifico = (request.form.get("nome_cientifico") or "").strip()
+    info = _load_translations().get(doenca)
+    if info and nome_cientifico != (info.get("nome_cientifico") or ""):
+        models.save_disease_translation(doenca, info["nome_pt"], nome_cientifico)
     paises_da_doenca = models.get_doenca_paises().get(doenca)
     if paises_da_doenca and _chave_alfabetica(countries.get_country("BR")["nome"]) not in map(_chave_alfabetica, paises_da_doenca):
         return jsonify({"ok": False, "erro": "Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil."}), 400
@@ -5165,6 +5194,14 @@ def aplicar_pesquisa_registro():
             "ok": False,
             "erro": "Ainda nao ha' pesquisa de registro Agrofit/MAPA salva para essa doenca -- "
                     "marque as culturas manualmente em \"Registrado para\".",
+        }), 400
+    fungos = _FUNGOS_PESQUISA_REGISTRO.get(doenca, set())
+    if not fungos & _generos_do_nome_cientifico(nome_cientifico):
+        return jsonify({
+            "ok": False,
+            "erro": f"A pesquisa salva e' para {' / '.join(sorted(f.capitalize() for f in fungos))} -- "
+                    f"o nome cientifico desta doenca ('{nome_cientifico or 'vazio'}') nao bate. "
+                    "Corrija o nome cientifico (genero e especie do fungo) e clique de novo.",
         }), 400
     culturas_pesquisadas = {
         c for c in models.get_culturas_ativas() if _chave_alfabetica(c) in _CULTURAS_PESQUISA_REGISTRO
