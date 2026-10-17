@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Fazendas ocultas - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-3">Fazendas ocultas</h4>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <h6 class="mb-1">Sem leitura há mais de {{ dias_bloqueio }} dias</h6>
+        <p class="small text-muted mb-2">Doenças escondidas e relatório só de clima (sem PDF). Reativar volta a mostrar doenças e recomendações até chegar leitura nova do BioScout.</p>
+        {% for f in sem_leitura %}
+        <div class="d-flex align-items-center justify-content-between gap-2 py-2 border-top">
+            <div>
+                <div class="fw-bold">{{ f.nome }}</div>
+                <div class="small text-muted">Última leitura {{ f.ultima_leitura }} ({{ f.dias }} dias){% if f.reativada %} · <span class="text-success">reativada</span>{% endif %}</div>
+            </div>
+            <form method="post" action="{{ url_for('reativar_fazenda_oculta') }}" class="mb-0 flex-shrink-0">
+                <input type="hidden" name="site_name" value="{{ f.site }}">
+                {% if f.reativada %}
+                <input type="hidden" name="motivo" value="bloquear">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Bloquear de novo</button>
+                {% else %}
+                <input type="hidden" name="motivo" value="sem_leitura">
+                <button type="submit" class="btn btn-sm btn-success">Reativar</button>
+                {% endif %}
+            </form>
+        </div>
+        {% else %}
+        <div class="small text-muted border-top pt-2">Nenhuma fazenda sem leitura recente.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <h6 class="mb-1">Desativadas</h6>
+        <p class="small text-muted mb-2">Somem de todas as telas. Reativar volta a mostrar a fazenda no site inteiro.</p>
+        {% for f in desativadas %}
+        <div class="d-flex align-items-center justify-content-between gap-2 py-2 border-top">
+            <div class="fw-bold">{{ f.nome }}</div>
+            <form method="post" action="{{ url_for('reativar_fazenda_oculta') }}" class="mb-0 flex-shrink-0">
+                <input type="hidden" name="site_name" value="{{ f.site }}">
+                <input type="hidden" name="motivo" value="desativada">
+                <button type="submit" class="btn btn-sm btn-success">Reativar</button>
+            </form>
+        </div>
+        {% else %}
+        <div class="small text-muted border-top pt-2">Nenhuma fazenda desativada.</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

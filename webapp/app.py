@@ -97,6 +97,36 @@ def _dias_sem_leitura(cards):
     return (datetime.now().date() - ultima).days
 
 
+_BLOQUEIO_LIBERADO_KEY = "bloqueio_liberado"
+
+
+def _bloqueios_liberados():
+    """{site: data da ultima leitura quando foi reativada} -- fazenda sem
+    leitura ha mais de DADOS_BLOQUEIO_DIAS que o Alan reativou na tela
+    Fazendas ocultas. Vale so' enquanto nao chegar leitura mais nova que
+    essa: com leitura nova a liberacao perde efeito (se ficar velha de
+    novo, volta a bloquear). Cache por requisicao."""
+    val = getattr(g, "_bloqueios_liberados", None)
+    if val is None:
+        try:
+            val = json.loads(models.get_setting(_BLOQUEIO_LIBERADO_KEY) or "{}")
+        except ValueError:
+            val = {}
+        g._bloqueios_liberados = val
+    return val
+
+
+def _nivel_dados_site(site, cards):
+    """`_nivel_dados_defasados` da fazenda, respeitando a reativacao manual
+    (ver `_bloqueios_liberados`): reativada vira so' 'atencao'."""
+    nivel = _nivel_dados_defasados(_dias_sem_leitura(cards))
+    if nivel == "bloqueado" and cards:
+        liberada_ate = _bloqueios_liberados().get(site)
+        if liberada_ate and max(c["data"] for c in cards) <= liberada_ate:
+            return "atencao"
+    return nivel
+
+
 def _nivel_dados_defasados(dias_sem_leitura):
     """None (ok), 'atencao' (mostra aviso) ou 'bloqueado' (dado de doenca
     velho demais pra confiar -- WhatsApp/PDF/copia da recomendacao caem
@@ -1695,7 +1725,13 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     vf = models.get_virtual_farm(site)
     is_virtual = vf is not None
     is_clima_point = is_virtual and vf.get("tipo") == "clima"
-    bloqueado = _nivel_dados_defasados(dias_sem_leitura) == "bloqueado"
+    bloqueado = _nivel_dados_site(site, raw_cards) == "bloqueado"
+    if (bloqueado or is_clima_point) and enviar_pdf:
+        # Fazenda sem leitura recente / ponto so' clima: sem PDF (pedido do
+        # Alan). PDF "ok" pro agendador nao tentar de novo a cada minuto.
+        enviar_pdf = False
+        if not enviar_texto:
+            return False, True, "Sem PDF para fazenda sem leitura recente ou ponto so' clima."
     # Sem secao de doenca no relatorio (texto/PDF) quando nao ha'
     # monitoramento de doenca de verdade acontecendo -- ponto "so clima"
     # (nunca monitora) ou fazenda real com estacao sem leitura ha muito
@@ -2594,7 +2630,7 @@ def dashboard():
         dias_sem_leitura = _dias_sem_leitura(cards)
         dados_status_by_site[site] = {
             "dias_sem_leitura": dias_sem_leitura,
-            "nivel_dados": _nivel_dados_defasados(dias_sem_leitura),
+            "nivel_dados": _nivel_dados_site(site, cards),
             "virtual": site in nomes_virtuais,
             "nome_exibicao": _nome_exibicao(site),
         }
@@ -3169,7 +3205,7 @@ def mapa():
         # nova ha mais de 15 dias entra como "inativa" no mapa: pino menor
         # e tooltip so' com o nome (ver mapa.html), pra nao passar uma falsa
         # impressao de leitura recente.
-        inativo = _nivel_dados_defasados(_dias_sem_leitura(cards)) == "bloqueado"
+        inativo = _nivel_dados_site(site, cards) == "bloqueado"
         sites_data.append({
             "site": site,
             "nome_exibicao": _nome_exibicao(site),
@@ -3242,7 +3278,7 @@ def mapa_interpolado():
             # Mesmo padrao de pino do Mapa normal (ver mapa.html/app.mapa):
             # sem leitura nova ha mais de 15 dias = pino menor e tooltip so
             # com o nome, ver _nivel_dados_defasados/DADOS_BLOQUEIO_DIAS.
-            "inativo": _nivel_dados_defasados(_dias_sem_leitura(cards)) == "bloqueado",
+            "inativo": _nivel_dados_site(site, cards) == "bloqueado",
         })
 
     site_countries = models.get_all_site_countries()
@@ -3280,7 +3316,7 @@ def mapa_interpolado():
                 "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
                 "raio_km": vf["raio_km"],
                 "estacoes_usadas": estacoes_usadas,
-                "inativo": _nivel_dados_defasados(_dias_sem_leitura(cards)) == "bloqueado",
+                "inativo": _nivel_dados_site(vf["site_name"], cards) == "bloqueado",
             })
 
     sites_data.sort(key=lambda s: s["site"])
@@ -3628,7 +3664,7 @@ def recommendations(safra):
         # mesmo com leitura fresca.
         leitura_data = max((c["data"] for c in cards if c.get("data")), default=None)
         dias_sem_leitura = _dias_sem_leitura(raw_cards_by_site.get(site, []))
-        nivel_dados = _nivel_dados_defasados(dias_sem_leitura)
+        nivel_dados = _nivel_dados_site(site, raw_cards_by_site.get(site, []))
         is_virtual = site in virtual_names
         # Estacao sem leitura ha muito tempo -- mesma regra de
         # `_send_site_whatsapp`: em vez de nao mostrar/enviar nada, o
@@ -3771,7 +3807,7 @@ def recommendation_pdf(site_name):
     raw_cards = _resolve_site_cards(site_name, translations)
     culturas_by_site = models.get_all_farm_culturas()
     cultura = _cultura_label(site_name, safra, culturas_by_site)
-    bloqueado = _nivel_dados_defasados(_dias_sem_leitura(raw_cards)) == "bloqueado"
+    bloqueado = _nivel_dados_site(site_name, raw_cards) == "bloqueado"
     coords = _weather_coords_all()
     weather = _get_weather_for_site(site_name, coords)
     riscos_climaticos = []
@@ -5662,6 +5698,58 @@ def _save_export_copy_local(conteudo, filename):
         return destino
     except OSError:
         return None
+
+
+@app.route("/admin/fazendas-ocultas")
+@alan_mauro_required
+def fazendas_ocultas():
+    """Fazendas que nao aparecem normalmente: desativadas (somem do site
+    inteiro, ver `save_site_ativo`) e sem leitura ha mais de
+    DADOS_BLOQUEIO_DIAS (doencas escondidas, relatorio so' de clima). Cada
+    uma com botao Reativar -- so' pro Alan."""
+    translations = _load_translations()
+    desativadas = models.get_deactivated_site_names()
+    virtual_clima = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
+    liberados = _bloqueios_liberados()
+    sem_leitura = []
+    for site in sorted((set(read_sites()) | models.virtual_farm_site_names()) - desativadas - virtual_clima):
+        cards = _resolve_site_cards(site, translations)
+        dias = _dias_sem_leitura(cards)
+        if _nivel_dados_defasados(dias) != "bloqueado":
+            continue
+        ultima = max(c["data"] for c in cards)
+        sem_leitura.append({
+            "site": site, "nome": _nome_exibicao(site), "dias": dias,
+            "ultima_leitura": models.fmt_data_br(ultima),
+            "reativada": bool(liberados.get(site)) and ultima <= liberados[site],
+        })
+    desativadas_lista = sorted(({"site": s, "nome": _nome_exibicao(s)} for s in desativadas), key=lambda d: _chave_alfabetica(d["nome"]))
+    sem_leitura.sort(key=lambda d: _chave_alfabetica(d["nome"]))
+    return render_template("fazendas_ocultas.html", desativadas=desativadas_lista, sem_leitura=sem_leitura,
+                           dias_bloqueio=DADOS_BLOQUEIO_DIAS)
+
+
+@app.route("/admin/fazendas-ocultas/reativar", methods=["POST"])
+@alan_mauro_required
+def reativar_fazenda_oculta():
+    site = request.form.get("site_name", "")
+    motivo = request.form.get("motivo")
+    if motivo == "desativada":
+        models.set_site_ativo(site, True)
+        flash(f"'{_nome_exibicao(site)}' reativada -- volta a aparecer em todas as telas.", "success")
+    elif motivo in ("sem_leitura", "bloquear"):
+        liberados = dict(_bloqueios_liberados())
+        if motivo == "sem_leitura":
+            cards = _resolve_site_cards(site, _load_translations())
+            if cards:
+                liberados[site] = max(c["data"] for c in cards)
+            flash(f"'{_nome_exibicao(site)}' reativada -- doencas e recomendacoes voltam a aparecer "
+                  "(ate' chegar leitura nova do BioScout).", "success")
+        else:
+            liberados.pop(site, None)
+            flash(f"'{_nome_exibicao(site)}' bloqueada de novo (so' clima, sem doencas).", "success")
+        models.set_setting(_BLOQUEIO_LIBERADO_KEY, json.dumps(liberados))
+    return redirect(url_for("fazendas_ocultas"))
 
 
 @app.route("/admin/exportar")
