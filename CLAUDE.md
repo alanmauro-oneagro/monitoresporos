@@ -95,6 +95,11 @@ menos que seja pedido explicitamente paridade para outros admins.
   + destinatarios por fazenda (inclusive pontos "so' clima"). Substituiu a
   agenda que antes ficava espalhada em Manejos/NDVI/Alertas Clima — ao
   mexer em agenda de envio, e' aqui que fica agora.
+- **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
+  `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
+  fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);
+  anotacao escrita na fazenda aparece so' la'. A pesquisa Agrofit/MAPA e'
+  aplicada por doenca (botao no card de cada doenca).
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois

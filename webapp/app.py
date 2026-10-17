@@ -898,6 +898,15 @@ def _fungicida_bloqueios_cached():
     return val
 
 
+def _fungicida_notas_cached():
+    """Cache por requisicao de `models.get_all_fungicida_notas()`."""
+    val = getattr(g, "_fungicida_notas", None)
+    if val is None:
+        val = models.get_all_fungicida_notas()
+        g._fungicida_notas = val
+    return val
+
+
 def _disease_info_cached():
     """Cache por requisicao (ver `_fungicida_ordem_all_cached`) de
     `models.get_all_disease_info()`."""
@@ -923,6 +932,7 @@ def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=N
         fungicida_overrides = _fungicida_overrides_cached()
     bloqueios = _fungicida_bloqueios_cached()
     disease_info = _disease_info_cached()
+    notas_padrao = _fungicida_notas_cached()
     diseases = []
     for card in cards:
         if card["status"] not in ("Perigo", "Atencao"):
@@ -951,7 +961,10 @@ def _build_site_diseases(site, cards, notes, fungicida_overrides=None, cultura=N
             "quimicos": quimicos,
             "biologicos": biologicos,
             "classe_label": fungicida_data.CLASSE_LABEL,
-            "nota": notes.get((site, card["doenca"]), "") or "",
+            # Sem anotacao propria da fazenda, vale a anotacao padrao da
+            # doenca na Biblioteca de fungicidas.
+            "nota": notes.get((site, card["doenca"]), "") or notas_padrao.get(doenca_en, ""),
+            "nota_padrao": notas_padrao.get(doenca_en, ""),
         })
     diseases.sort(key=lambda d: (0 if d["status"] == "Perigo" else 1, d["doenca"]))
     return diseases
@@ -4780,10 +4793,16 @@ def save_recommendations():
     sites = request.form.getlist("site")
     doencas = request.form.getlist("doenca")
     notas = request.form.getlist("nota")
-    for site, doenca, nota in zip(sites, doencas, notas):
+    notas_padrao = request.form.getlist("nota_padrao")
+    for i, (site, doenca, nota) in enumerate(zip(sites, doencas, notas)):
         if allowed_sites is not None and site not in allowed_sites:
             continue  # usuario nao tem permissao para essa fazenda -- ignora
-        models.save_recommendation_note(site, doenca, nota.strip())
+        nota = nota.strip()
+        if i < len(notas_padrao) and nota == notas_padrao[i].strip():
+            # Igual a anotacao padrao da Biblioteca (veio pre-preenchida) --
+            # nao vira anotacao propria, continua acompanhando a Biblioteca.
+            nota = ""
+        models.save_recommendation_note(site, doenca, nota)
     return _save_response("Anotacoes salvas.", "recommendations", safra=_safra_or_default(request.form))
 
 
@@ -4978,6 +4997,8 @@ def admin_fungicidas():
                 marcadas = set(request.form.getlist(f"cultura_ok__{row_id}"))
                 bloqueadas = [c for c in culturas_ativas if c not in marcadas]
                 models.set_fungicida_registro_bloqueado(doenca, tipo, idx, bloqueadas)
+        for doenca, nota in zip(request.form.getlist("nota_doenca_key"), request.form.getlist("nota_doenca")):
+            models.set_fungicida_nota(doenca, nota.strip())
         return _save_response("Recomendacoes de fungicidas atualizadas.", "admin_fungicidas")
 
     overrides = models.get_all_fungicida_overrides()
@@ -4985,6 +5006,9 @@ def admin_fungicidas():
     culturas_ativas = models.get_culturas_ativas()
     doenca_paises = models.get_doenca_paises()
     translations = _load_translations()
+    notas = models.get_all_fungicida_notas()
+    doencas_com_pesquisa = {doenca for doenca, _, _ in _PESQUISA_REGISTRO_2026_08_26}
+    nome_brasil = countries.get_country("BR")["nome"]
 
     doencas_data = []
     row_counter = 0
@@ -5007,6 +5031,7 @@ def admin_fungicidas():
         if not rec:
             doencas_data.append({
                 "doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True, "paises": paises_doenca,
+                "nota": notas.get(doenca_en, ""),
             })
             continue
         grupos = []
@@ -5041,6 +5066,11 @@ def admin_fungicidas():
             })
         doencas_data.append({
             "doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False, "paises": paises_doenca,
+            "nota": notas.get(doenca_en, ""),
+            "tem_pesquisa": doenca_en in doencas_com_pesquisa,
+            # Agrofit/MAPA e' o registro do Brasil -- doenca marcada so' pra
+            # outro pais fica de fora (ver `aplicar_pesquisa_registro`).
+            "pesquisa_fora_brasil": bool(paises_doenca) and nome_brasil not in paises_doenca,
         })
 
     classes = [("", "Sem classificacao")] + list(fungicida_data.CLASSE_LABEL.items())
@@ -5107,30 +5137,36 @@ _PESQUISA_REGISTRO_2026_08_26 = {
 }
 
 
+# Culturas cobertas pela pesquisa acima -- nas demais (cultura cadastrada
+# depois), o registro continua como estiver.
+_CULTURAS_PESQUISA_REGISTRO = {"soja", "algodao", "milho", "feijao"}
+
+
 @app.route("/admin/fungicidas/aplicar-pesquisa-registro", methods=["POST"])
 @admin_required
 def aplicar_pesquisa_registro():
-    # Agrofit/MAPA e' o registro de agrotoxicos do BRASIL -- essa
-    # pesquisa so' faz sentido pra doenca que realmente se aplica ao
-    # Brasil. Doenca marcada na matriz Doencas x Pais (aba Doencas) SO'
-    # pra outro pais (ex.: so' Chile) fica de fora -- Agrofit nao regula
-    # nada la, aplicar o bloqueio seria informacao errada. Doenca sem
-    # NENHUM pais marcado ainda entra normalmente (mesma regra "sem
-    # marcacao = se aplica a qualquer pais" da propria matriz).
-    doenca_paises = models.get_doenca_paises()
-    nome_brasil = countries.get_country("BR")["nome"]
-    aplicados, fora_do_escopo = 0, 0
-    for (doenca, tipo, idx), culturas in _PESQUISA_REGISTRO_2026_08_26.items():
-        paises_da_doenca = doenca_paises.get(doenca)
-        if paises_da_doenca and nome_brasil not in paises_da_doenca:
-            fora_do_escopo += 1
-            continue
-        models.set_fungicida_registro_bloqueado(doenca, tipo, idx, culturas)
-        aplicados += 1
-    mensagem = f"Pesquisa de registro aplicada -- {aplicados} item(ns) revisado(s)."
-    if fora_do_escopo:
-        mensagem += f" {fora_do_escopo} fora do escopo Brasil/Agrofit (doenca marcada so' pra outro pais)."
-    return _save_response(mensagem, "admin_fungicidas")
+    """Aplica a pesquisa Agrofit/MAPA so' na doenca do botao clicado
+    (`doenca`): em cada quimico dela, desmarca as culturas sem registro
+    confirmado e marca as que tem. Agrofit/MAPA e' o registro do BRASIL --
+    doenca marcada na matriz Doencas x Pais SO' pra outro pais fica de
+    fora (sem nenhum pais marcado = vale pra qualquer pais, entra)."""
+    doenca = request.form.get("doenca", "")
+    paises_da_doenca = models.get_doenca_paises().get(doenca)
+    if paises_da_doenca and countries.get_country("BR")["nome"] not in paises_da_doenca:
+        return jsonify({"ok": False, "erro": "Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil."}), 400
+    rec = fungicida_data.get_recomendacao(doenca)
+    if not rec or not any(d == doenca for d, _, _ in _PESQUISA_REGISTRO_2026_08_26):
+        return jsonify({"ok": False, "erro": "Sem pesquisa de registro para essa doenca."}), 400
+    culturas_pesquisadas = {
+        c for c in models.get_culturas_ativas() if _chave_alfabetica(c) in _CULTURAS_PESQUISA_REGISTRO
+    }
+    bloqueios = models.get_all_fungicida_registro_bloqueado()
+    for idx in range(len(rec["quimicos"]["itens"])):
+        sem_registro = {_chave_alfabetica(c) for c in _PESQUISA_REGISTRO_2026_08_26.get((doenca, "quimico", idx), [])}
+        bloqueadas = {c for c in bloqueios.get((doenca, "quimico", idx), set()) if c not in culturas_pesquisadas}
+        bloqueadas |= {c for c in culturas_pesquisadas if _chave_alfabetica(c) in sem_registro}
+        models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, sorted(bloqueadas))
+    return jsonify({"ok": True})
 
 
 # Condicoes de germinacao de esporos por NOME CIENTIFICO do fungo

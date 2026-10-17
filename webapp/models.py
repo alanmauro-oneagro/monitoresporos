@@ -268,6 +268,11 @@ def init_db():
             PRIMARY KEY (doenca, tipo, idx, cultura)
         );
 
+        CREATE TABLE IF NOT EXISTS fungicida_nota_doenca (
+            doenca TEXT PRIMARY KEY,
+            nota TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS farm_produtos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             site_name TEXT NOT NULL,
@@ -1225,6 +1230,7 @@ def merge_duplicate_disease_translations(canonico_por_atual):
             for tabela, coluna in (
                 ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
                 ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
+        ("fungicida_nota_doenca", "doenca"),
             ):
                 # OR IGNORE: se a canonica ja tiver uma linha com a mesma
                 # chave (tipo/idx/etc), mantem a dela -- o DELETE logo
@@ -1293,6 +1299,7 @@ def delete_disease_translation(display_name_en):
     for tabela, coluna in (
         ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
         ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
+        ("fungicida_nota_doenca", "doenca"),
     ):
         conn.execute(f"DELETE FROM {tabela} WHERE {coluna} = ?", (display_name_en,))
     conn.execute("DELETE FROM disease_translations WHERE display_name_en = ?", (display_name_en,))
@@ -1461,6 +1468,30 @@ def set_fungicida_registro_bloqueado(doenca, tipo, idx, culturas_bloqueadas):
             "INSERT INTO fungicida_registro_bloqueado (doenca, tipo, idx, cultura) VALUES (?, ?, ?, ?)",
             (doenca, tipo, idx, cultura),
         )
+    conn.commit()
+    conn.close()
+
+
+def get_all_fungicida_notas():
+    """doenca_en -> anotacao padrao da doenca (Biblioteca de fungicidas),
+    usada nas Recomendacoes/texto/PDF quando a fazenda nao tem anotacao
+    propria pra essa doenca."""
+    conn = get_db()
+    rows = conn.execute("SELECT doenca, nota FROM fungicida_nota_doenca").fetchall()
+    conn.close()
+    return {r["doenca"]: r["nota"] for r in rows}
+
+
+def set_fungicida_nota(doenca, nota):
+    conn = get_db()
+    if nota:
+        conn.execute(
+            "INSERT INTO fungicida_nota_doenca (doenca, nota) VALUES (?, ?) "
+            "ON CONFLICT(doenca) DO UPDATE SET nota = excluded.nota",
+            (doenca, nota),
+        )
+    else:
+        conn.execute("DELETE FROM fungicida_nota_doenca WHERE doenca = ?", (doenca,))
     conn.commit()
     conn.close()
 

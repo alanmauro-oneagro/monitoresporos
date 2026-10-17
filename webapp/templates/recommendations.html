@@ -297,6 +297,7 @@ html { font-size: 14px; }
                     <label class="anotacao-doenca" for="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}">{{ row.rotulo }}:</label>
                     <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
                     <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
+                    <input type="hidden" name="nota_padrao" value="{{ row.nota_padrao }}" form="notesForm">
                     <textarea name="nota" form="notesForm" id="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="1" placeholder="produto, dose, epoca de aplicacao, observacoes...">{{ row.nota }}</textarea>
                     <span class="autosave-status small"></span>
                 </div>
