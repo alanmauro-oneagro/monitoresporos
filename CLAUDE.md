@@ -107,8 +107,11 @@ menos que seja pedido explicitamente paridade para outros admins.
   NOME CIENTIFICO do fungo; marca/desmarca culturas dos quimicos e, em
   doenca sem quimicos, importa os mais registrados (tabela
   `fungicida_importado`, lida por `fungicida_data.get_recomendacao`). A
-  API AgroAPI da Embrapa foi descartada (nao gerava token). O ambiente
-  de nuvem do Claude nao alcanca esse portal -- so' o Railway.
+  API AgroAPI da Embrapa foi descartada (nao gerava token). O portal do
+  MAPA respondeu 403 ao download pelo Railway (provavel bloqueio de IP fora
+  do Brasil) -- por isso existe o envio manual do arquivo na propria
+  Biblioteca (rota `agrofit_enviar_arquivo`, limite de upload de 400MB so'
+  nessa rota). O ambiente de nuvem do Claude nao alcanca esse portal.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois

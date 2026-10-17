@@ -146,6 +146,7 @@ def status():
         "baixado_em": datetime.fromisoformat(baixado).strftime("%d/%m/%Y") if baixado else None,
         "baixando": _baixando.is_set(),
         "erro": meta.get("erro"),
+        "enviado": "arquivo enviado" in (meta.get("fonte") or ""),
         "progresso": dict(_progresso) if _baixando.is_set() else None,
     }
 
@@ -215,6 +216,33 @@ def _atualizar(forcar):
     tmp = INDICE_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
     tmp.replace(INDICE_PATH)
+
+
+def _importar(caminho):
+    with _lock:
+        _baixando.set()
+        _progresso.update(etapa="processando", baixados=0, total=None, linhas=0)
+        agora = _agora()
+        try:
+            with open(caminho, "rb") as f:
+                dados = montar_indice(io.BufferedReader(f))
+            dados["meta"] = {"baixado_em": agora.isoformat(), "fonte": "arquivo enviado pela Biblioteca de fungicidas"}
+        except Exception as exc:
+            dados = carregar() if INDICE_PATH.exists() else {}
+            dados["meta"] = {**dados.get("meta", {}), "erro": f"Arquivo enviado nao reconhecido: {exc}"[:300]}
+        finally:
+            Path(caminho).unlink(missing_ok=True)
+            _baixando.clear()
+        tmp = INDICE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(INDICE_PATH)
+
+
+def importar_em_segundo_plano(caminho):
+    """Arquivo do Agrofit baixado pelo navegador e enviado pela tela
+    (o portal do MAPA recusa o download direto pelo servidor -- 403)."""
+    _baixando.set()
+    threading.Thread(target=_importar, args=(caminho,), daemon=True).start()
 
 
 def atualizar_em_segundo_plano(forcar=False):
