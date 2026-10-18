@@ -81,6 +81,10 @@
             #mainNavMenu { gap: 0.05rem !important; flex-wrap: nowrap; }
             #mainNavMenu .nav-link { padding: 0.5rem 0.35rem; white-space: nowrap; }
         }
+        @media (min-width: 992px) and (max-width: 1199.98px) {
+            #mainNavMenu { flex-wrap: wrap; min-width: 0; }
+            #mainNavMenu .nav-link { padding: 0.3rem 0.35rem; }
+        }
         @media (max-width: 991.98px) {
             /* Sobrepoe o conteudo da pagina (nao empurra pra baixo) --
                posicionado relativo ao <nav> (que ganha position:relative
