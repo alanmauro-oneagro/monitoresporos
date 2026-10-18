@@ -2752,7 +2752,7 @@ def graficos():
     if permitidos is not None:
         uf_por_site = {s: uf for s, uf in uf_por_site.items() if s in permitidos}
     site_countries = models.get_all_site_countries()
-    estacoes_disponiveis = sorted(uf_por_site.keys(), key=str.lower)
+    estacoes_disponiveis = sorted(uf_por_site.keys(), key=_ordem_fazenda)
     # Pais (nao mais Estado -- generaliza melhor com fazenda fora do
     # Brasil, onde "Estado" nao faz sentido/nao existe): mesmo pais
     # registrado da fazenda (aba Fazendas) que ja decide qual provedor de
@@ -2803,7 +2803,7 @@ def graficos_dados():
     uf_por_site = _uf_por_site()
     if permitidos is not None:
         uf_por_site = {s: uf for s, uf in uf_por_site.items() if s in permitidos}
-    todos_sites = sorted(uf_por_site.keys(), key=str.lower)
+    todos_sites = sorted(uf_por_site.keys(), key=_ordem_fazenda)
     site_countries = models.get_all_site_countries()
 
     estacoes_sel = [s for s in request.args.getlist("estacao") if s]
@@ -3199,7 +3199,7 @@ def mapa():
             continue
         _plotar_site(vf["site_name"], vf["lat"], vf["lon"], [], tipo="clima")
 
-    sites_data.sort(key=lambda s: s["site"])
+    sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
     # Fronteira desenhada mesmo sem fazenda no pais, desde que o pais ja'
     # tenha integracao de estacao oficial de verdade funcionando (Chile
     # via DMC) -- pedido explicito ("aplicar somente se tiver estacao no
@@ -3283,8 +3283,8 @@ def mapa_interpolado():
                 "inativo": _nivel_dados_site(vf["site_name"], cards) == "bloqueado",
             })
 
-    sites_data.sort(key=lambda s: s["site"])
-    pontos_virtuais.sort(key=lambda p: p["nome"])
+    sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
+    pontos_virtuais.sort(key=lambda p: _chave_alfabetica(p["nome"]))
 
     # Todo pais ativo (com fazenda/ponto marcado) MAIS todo pais que ja'
     # tem integracao de estacao oficial (`paises_com_estacoes`) -- a tela
@@ -3324,7 +3324,7 @@ def solo():
             "virtual": site in virtual_names,
             "solo": site_solos.get(site),
         })
-    sites_data.sort(key=lambda s: s["site"])
+    sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
 
     return render_template(
         "solo.html", sites_data=sites_data,
@@ -3528,7 +3528,7 @@ def _pontos_clima():
                 site, [], weather=weather, is_virtual=True, mostrar_secao_doencas=False,
             ),
         })
-    pontos.sort(key=lambda p: p["nome"])
+    pontos.sort(key=lambda p: _chave_alfabetica(p["nome"]))
     return pontos
 
 
@@ -3679,7 +3679,7 @@ def recommendations(safra):
             "aplicacoes_linhas": aplicacoes_linhas,
             "vento_dia": _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]),
         })
-    sites_data.sort(key=lambda s: s["site"])
+    sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
     any_whatsapp_configured = any(s["whatsapp_destinos"] > 0 for s in sites_data)
     return render_template(
         "recommendations.html", sites_data=sites_data, no_access=False,
@@ -3707,7 +3707,12 @@ def _resumo_alertas(cards_by_site):
                 "site": site, "nome": _nome_exibicao(site), "perigo": perigo, "atencao": atencao,
                 "nivel_dados": nivel, "dias_sem_leitura": _dias_sem_leitura(cards),
             })
-    resumo.sort(key=lambda r: (not r["perigo"], not r["atencao"], _chave_alfabetica(r["nome"])))
+    # Fazendas com alerta em ordem alfabetica; as so' "sem leitura" pelo
+    # tempo sem enviar sinal (a que parou ha menos tempo primeiro).
+    resumo.sort(key=lambda r: (
+        (0, 0) if r["perigo"] or r["atencao"] else (1, r["dias_sem_leitura"] or 0),
+        _chave_alfabetica(r["nome"]),
+    ))
     return resumo
 
 
@@ -3880,9 +3885,9 @@ def fazendas():
     catalogo_produtos = models.get_all_catalogo_produtos()
     catalogo_variedades = models.get_all_catalogo_variedades()
     if current_user.is_admin:
-        sites = sorted((set(read_sites()) | virtual_names) - virtual_clima_names - desativadas)
+        sites = sorted((set(read_sites()) | virtual_names) - virtual_clima_names - desativadas, key=_ordem_fazenda)
     else:
-        sites = sorted(set(models.get_user_permitted_site_names(int(current_user.id))) - virtual_clima_names)
+        sites = sorted(set(models.get_user_permitted_site_names(int(current_user.id))) - virtual_clima_names, key=_ordem_fazenda)
         if not sites:
             return render_template(
                 "fazendas.html", sites_data=[], no_access=True,
@@ -4007,9 +4012,9 @@ def _get_ndvi_preview(site_name):
 def ndvi():
     virtual_names = models.virtual_farm_site_names()
     if current_user.is_admin:
-        sites = sorted((set(read_sites()) | virtual_names) - models.get_deactivated_site_names())
+        sites = sorted((set(read_sites()) | virtual_names) - models.get_deactivated_site_names(), key=_ordem_fazenda)
     else:
-        sites = sorted(models.get_user_permitted_site_names(int(current_user.id)))
+        sites = sorted(models.get_user_permitted_site_names(int(current_user.id)), key=_ordem_fazenda)
         if not sites:
             return render_template("ndvi.html", sites_data=[], no_access=True, credenciais_ok=True)
 
@@ -4097,8 +4102,8 @@ def whatsapp_gerenciamento():
         if not sites_set:
             return render_template("whatsapp_gerenciamento.html", sites_data=[], no_access=True)
 
-    sites_doenca = sorted(sites_set - virtual_clima_names, key=_nome_exibicao)
-    sites_clima = sorted(sites_set & virtual_clima_names, key=_nome_exibicao)
+    sites_doenca = sorted(sites_set - virtual_clima_names, key=_ordem_fazenda)
+    sites_clima = sorted(sites_set & virtual_clima_names, key=_ordem_fazenda)
     sites = sites_doenca + sites_clima
 
     gerenciamento = models.get_all_whatsapp_gerenciamento()
@@ -4828,6 +4833,13 @@ def save_recommendations():
             nota = ""
         models.save_recommendation_note(site, doenca, nota)
     return _save_response("Anotacoes salvas.", "recommendations", safra=_safra_or_default(request.form))
+
+
+def _ordem_fazenda(site):
+    """Chave de ordenacao de fazenda/estacao em toda tela: ordem
+    alfabetica do nome exibido, sem diferenca de acento (pedido do Alan,
+    18/10/2026)."""
+    return _chave_alfabetica(_nome_exibicao(site))
 
 
 def _chave_alfabetica(texto):
@@ -5827,7 +5839,7 @@ def fazendas_ocultas():
             "reativada": bool(liberados.get(site)) and ultima <= liberados[site],
         })
     desativadas_lista = sorted(({"site": s, "nome": _nome_exibicao(s)} for s in desativadas), key=lambda d: _chave_alfabetica(d["nome"]))
-    sem_leitura.sort(key=lambda d: _chave_alfabetica(d["nome"]))
+    sem_leitura.sort(key=lambda d: (d["dias"], _chave_alfabetica(d["nome"])))
     return render_template("fazendas_ocultas.html", desativadas=desativadas_lista, sem_leitura=sem_leitura,
                            dias_bloqueio=DADOS_BLOQUEIO_DIAS)
 
@@ -5869,7 +5881,7 @@ def admin_exportar():
     logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas, dias=7)
     for l in logs:
         l["site_nome"] = _nome_exibicao(l["site_name"])
-    sites = sorted((set(read_sites()) | models.virtual_farm_site_names()) - models.get_deactivated_site_names())
+    sites = sorted((set(read_sites()) | models.virtual_farm_site_names()) - models.get_deactivated_site_names(), key=_ordem_fazenda)
     nomes_exibicao = {s: _nome_exibicao(s) for s in sites}
     return render_template(
         "admin_exportar.html",
@@ -5891,7 +5903,7 @@ def admin_estacoes_diagnostico():
             estacoes_em_uso.setdefault(escolha["country_code"], escolha["codigo"])
     hoje = _hoje_cuiaba()
     verificacao = []
-    for site in sorted(_coords_all()):
+    for site in sorted(_coords_all(), key=_ordem_fazenda):
         escolha = models.get_all_weather_station_overrides().get(site)
         if not escolha or escolha["country_code"] not in ("BR", "CL", "AR"):
             continue
@@ -6000,7 +6012,7 @@ def admin_user_permissions(user_id):
         selected_ids = {int(v) for v in request.form.getlist("site_ids")}
         models.set_user_permissions(user_id, selected_ids)
         return _save_response(f"Permissoes de '{user_row['username']}' atualizadas.", "admin_users")
-    all_sites = models.get_all_sites()
+    all_sites = sorted(models.get_all_sites(), key=lambda s: _ordem_fazenda(s["site_name"]))
     permitted_ids = models.get_user_permitted_site_ids(user_id)
     return render_template(
         "admin_permissions.html", user=user_row, sites=all_sites, permitted_ids=permitted_ids
@@ -6019,7 +6031,7 @@ def admin_user_reports(user_id):
         return _save_response(
             f"Fazendas que '{user_row['username']}' recebe relatorio de WhatsApp foram atualizadas.", "admin_users"
         )
-    all_sites = models.get_all_sites()
+    all_sites = sorted(models.get_all_sites(), key=lambda s: _ordem_fazenda(s["site_name"]))
     report_ids = models.get_user_report_site_ids(user_id)
     return render_template(
         "admin_report_permissions.html", user=user_row, sites=all_sites, report_ids=report_ids
@@ -6074,7 +6086,7 @@ def admin_user_subordinados(user_id):
         return _save_response("Subordinados atualizados.", "admin_user_subordinados", user_id=user_id)
 
     owner_report_ids = models.get_user_report_site_ids(user_id)
-    all_sites = models.get_all_sites()
+    all_sites = sorted(models.get_all_sites(), key=lambda s: _ordem_fazenda(s["site_name"]))
     owner_sites = [s for s in all_sites if s["id"] in owner_report_ids]
     subordinados = models.get_owner_subordinados(user_id)
     for sub in subordinados:
