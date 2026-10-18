@@ -2581,64 +2581,15 @@ def dashboard_atualizar():
         )
     else:
         flash("Ja tem uma busca de dados em andamento -- aguarde ela terminar.", "success")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("recommendations_default"))
 
 
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
-    if current_user.is_admin:
-        permitted = _sites_ativos_para_admin()  # admin ve todas as fazendas ativas
-    else:
-        permitted = set(models.get_user_permitted_site_names(int(current_user.id)))
-        if not permitted:
-            return render_template("dashboard.html", cards_by_site={}, no_access=True)
-    cards_by_site = _cards_by_site_all(permitted, _load_translations())
-    # Painel mostra TODAS as caixas de doenca sempre -- o filtro de cultura
-    # so se aplica nas abas Recomendacoes (Safra / 2 Safra), nao aqui.
-    # Umidade/chuva vem SEMPRE da Open-Meteo (mesma fonte usada em
-    # Recomendacoes/Alertas Clima/WhatsApp) -- nao mais do clima que o
-    # BioScout mandava por device (modelo, nao sensor), que so' ficava tao fresco quanto a
-    # ultima sincronizacao daquele aparelho (podendo ficar velho bem na
-    # hora que a fazenda mais precisa de clima confiavel, ver
-    # DADOS_BLOQUEIO_DIAS) -- pedido explicito do usuario ("sempre
-    # atualizar a informacao de clima"). Mostrado uma vez so, ao lado do
-    # nome da fazenda, em vez de repetir em cada caixa de doenca.
-    weather_by_site = {}
-    dados_status_by_site = {}
-    nomes_virtuais = {vf["site_name"]: vf["nome"] for vf in models.get_all_virtual_farms()}
-    coords = _weather_coords_all()
-    mais_recente_by_site = {site: max(cards, key=lambda c: c["data"]) for site, cards in cards_by_site.items()}
-    _prefetch_weather(list(cards_by_site.keys()), coords)
-    for site, cards in cards_by_site.items():
-        mais_recente = mais_recente_by_site[site]
-        weather = _get_weather_for_site(site, coords)
-        weather_by_site[site] = {
-            "umidade": weather.get("umidade_atual") if weather else None,
-            "chuva": weather.get("chuva_atual_mm") if weather else None,
-            "chuva_24h": weather.get("chuva_24h_mm") if weather else None,
-            "data": mais_recente["data"],
-        }
-        dias_sem_leitura = _dias_sem_leitura(cards)
-        dados_status_by_site[site] = {
-            "dias_sem_leitura": dias_sem_leitura,
-            "nivel_dados": _nivel_dados_site(site, cards),
-            "virtual": site in nomes_virtuais,
-            "nome_exibicao": _nome_exibicao(site),
-        }
-
-    # Ordem do Painel: por data da leitura mais recente (weather_by_site
-    # ja' calculou isso por fazenda, real ou virtual), da mais nova pra
-    # mais velha.
-    sites_ordenados = sorted(cards_by_site, key=lambda s: weather_by_site[s]["data"], reverse=True)
-    cards_by_site = {s: cards_by_site[s] for s in sites_ordenados}
-
-    return render_template(
-        "dashboard.html", cards_by_site=cards_by_site, no_access=False,
-        weather_by_site=weather_by_site, dados_status_by_site=dados_status_by_site,
-        fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
-    )
+    """Antiga aba Alertas -- o resumo do que esta' em Perigo/Atencao agora
+    fica no topo da aba Recomendacoes (pedido do Alan, 18/10/2026)."""
+    return redirect(url_for("recommendations_default"))
 
 
 def _uf_por_site():
@@ -3517,16 +3468,16 @@ def _get_clima_virtual_farm_or_404(site_name):
 @app.route("/alertas-clima")
 @alan_mauro_required
 def alertas_clima():
-    """Tela dedicada aos pontos "so clima" (ver `mapa_interpolado`/
-    `create_virtual_farm`, tipo='clima') -- escolher a estacao oficial de
-    referencia e mandar/baixar o relatorio na hora, tudo num
-    lugar so'. A agenda de envio automatico (texto/PDF, dias da semana)
-    desses pontos e' configurada na aba Envios junto com todas as outras
-    fazendas (removida daqui pra nao duplicar -- ver
-    `whatsapp_gerenciamento`, que ja lista ponto 'so clima' tambem). So'
-    o usuario Alan Mauro ve essa aba (nao e' so' `is_admin`, ver
-    `alan_mauro_required`) -- pedido explicito, igual as outras telas de
-    Configuracoes restritas a ele."""
+    """Antiga aba Alertas Clima -- os pontos "so clima" agora ficam no fim
+    da aba Recomendacoes (pedido do Alan, 18/10/2026)."""
+    return redirect(url_for("recommendations_default") + "#pontos-clima")
+
+
+def _pontos_clima():
+    """Pontos "so clima" (ver `mapa_interpolado`/`create_virtual_farm`,
+    tipo='clima') no fim da aba Recomendacoes -- clima atual, estacao
+    oficial de referencia e envio manual. A agenda fica na aba Envios.
+    So' o usuario Alan Mauro ve (ver `recommendations`)."""
     site_countries = models.get_all_site_countries()
     weather_overrides = models.get_all_weather_station_overrides()
     whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
@@ -3557,7 +3508,7 @@ def alertas_clima():
             ),
         })
     pontos.sort(key=lambda p: p["nome"])
-    return render_template("alertas_clima.html", pontos=pontos, countries=countries.COUNTRIES)
+    return pontos
 
 
 @app.route("/alertas-clima/whatsapp/<path:site_name>", methods=["POST"])
@@ -3572,7 +3523,7 @@ def alertas_clima_whatsapp(site_name):
         flash(f"WhatsApp de '{nome_exibicao}' enviado para {message}.", "success")
     else:
         flash(f"Falha ao enviar WhatsApp de '{nome_exibicao}': {message}", "error")
-    return redirect(url_for("alertas_clima"))
+    return redirect(url_for("recommendations_default") + "#pontos-clima")
 
 
 @app.route("/alertas-clima/nota/save", methods=["POST"])
@@ -3581,7 +3532,7 @@ def save_site_climate_note():
     site_name = request.form.get("site_name")
     _get_clima_virtual_farm_or_404(site_name)
     models.set_site_climate_note(site_name, request.form.get("nota", ""))
-    return _save_response(f"Anotacao de '{_nome_exibicao(site_name)}' salva.", "alertas_clima")
+    return _save_response(f"Anotacao de '{_nome_exibicao(site_name)}' salva.", "recommendations_default")
 
 
 SAFRA_LABELS = dict(models.SAFRAS)
@@ -3720,9 +3671,32 @@ def recommendations(safra):
     return render_template(
         "recommendations.html", sites_data=sites_data, no_access=False,
         any_whatsapp_configured=any_whatsapp_configured,
+        resumo_alertas=_resumo_alertas(raw_cards_by_site),
+        pontos_clima=_pontos_clima() if current_user.username == ALAN_MAURO_USERNAME else [],
+        fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
         safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS, culturas_ativas=culturas_ativas,
         catalogo_produtos=catalogo_produtos,
     )
+
+
+def _resumo_alertas(cards_by_site):
+    """Topo da aba Recomendacoes (antiga aba Alertas): por fazenda, as
+    doencas em Perigo/Atencao agora -- todas, sem o filtro de cultura --
+    e o aviso de estacao sem leitura. Perigo primeiro."""
+    resumo = []
+    for site, cards in cards_by_site.items():
+        nivel = _nivel_dados_site(site, cards)
+        perigo, atencao = [], []
+        if nivel != "bloqueado":
+            perigo = sorted({c["doenca"] for c in cards if c["status"] == "Perigo"})
+            atencao = sorted({c["doenca"] for c in cards if c["status"] == "Atencao"} - set(perigo))
+        if perigo or atencao or nivel:
+            resumo.append({
+                "site": site, "nome": _nome_exibicao(site), "perigo": perigo, "atencao": atencao,
+                "nivel_dados": nivel, "dias_sem_leitura": _dias_sem_leitura(cards),
+            })
+    resumo.sort(key=lambda r: (not r["perigo"], not r["atencao"], _chave_alfabetica(r["nome"])))
+    return resumo
 
 
 def _safra_or_default(form):
@@ -3877,9 +3851,8 @@ def save_whatsapp_days_pdf():
 @login_required
 def fazendas():
     virtual_names = models.virtual_farm_site_names()
-    # So' esta pagina continua mostrando fazenda desativada (mesmo pro
-    # branch admin abaixo, que nao filtra por isso de proposito) -- e'
-    # aqui que o admin reativa (ver save_site_ativo).
+    # Fazenda desativada some daqui tambem -- reativar so' na tela
+    # Fazendas ocultas (pedido do Alan, 18/10/2026).
     desativadas = models.get_deactivated_site_names()
     # Ponto "so clima" (aba Alertas Clima) nao aparece aqui -- nao tem
     # doenca/produtos/plantio/aplicacoes pra anotar (o titulo da pagina e'
@@ -3895,10 +3868,7 @@ def fazendas():
     catalogo_produtos = models.get_all_catalogo_produtos()
     catalogo_variedades = models.get_all_catalogo_variedades()
     if current_user.is_admin:
-        sites = sorted((set(read_sites()) | virtual_names) - virtual_clima_names)
-        if current_user.username != ALAN_MAURO_USERNAME:
-            # Reativar e' so' do Alan -- pros outros, desativada some daqui tambem.
-            sites = [s for s in sites if s not in desativadas]
+        sites = sorted((set(read_sites()) | virtual_names) - virtual_clima_names - desativadas)
     else:
         sites = sorted(set(models.get_user_permitted_site_names(int(current_user.id))) - virtual_clima_names)
         if not sites:
@@ -3914,7 +3884,6 @@ def fazendas():
     coords = _coords_all()
     overrides = models.get_all_weather_station_overrides()
     site_countries = models.get_all_site_countries()
-    site_solos = models.get_all_site_solos()
     grades = [
         ("ts", "TS (Tratamento de Sementes)"),
         ("sulco", "Sulco (aplicacao no sulco de plantio)"),
@@ -3987,7 +3956,6 @@ def fazendas():
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "estacao_pais": escolha["country_code"] if escolha else "",
             "country_code": country_code,
-            "solo": site_solos.get(site),
             "ativo": site not in desativadas,
         })
 
@@ -4022,8 +3990,6 @@ def ndvi():
         sites = sorted(models.get_user_permitted_site_names(int(current_user.id)))
         if not sites:
             return render_template("ndvi.html", sites_data=[], no_access=True, credenciais_ok=True)
-    ocultas = models.get_ndvi_ocultas()
-    sites = [s for s in sites if s not in ocultas]
 
     cars_by_site = models.get_all_farm_ndvi_cars()
     coords = _coords_all()
@@ -4032,41 +3998,24 @@ def ndvi():
             "site": site,
             "nome_exibicao": _nome_exibicao(site),
             "cars": cars_by_site.get(site, []),
-            "ndvi_ativos": models.get_ndvi_ativos(site),
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
             "preview": _get_ndvi_preview(site),
-            "whatsapp_destinatarios": [
+            # Quem recebe o NDVI e' marcado na aba Envios (`toggle_ndvi_ativo`).
+            "ndvi_destinatarios": [
                 {"telefone": telefone, "rotulo": rotulo}
                 for telefone, rotulo in _site_whatsapp_destinations(site)
+                if telefone in ativos
             ],
         }
         for site in sites
+        for ativos in [models.get_ndvi_ativos(site)]
     ]
-    pode_excluir = current_user.username == ALAN_MAURO_USERNAME
     return render_template(
         "ndvi.html", sites_data=sites_data, no_access=False,
         credenciais_ok=ndvi_service.credenciais_configuradas(),
         hoje=datetime.now(timezone.utc).date().isoformat(),
-        pode_excluir=pode_excluir,
-        ocultas=sorted(({"site": s, "nome_exibicao": _nome_exibicao(s)} for s in ocultas), key=lambda o: o["nome_exibicao"])
-        if pode_excluir else [],
     )
-
-
-@app.route("/ndvi/ocultar", methods=["POST"])
-@alan_mauro_required
-def ocultar_fazenda_ndvi():
-    """Botao "Excluir da aba NDVI" (pedido do usuario, 16/10/2026): tira a
-    fazenda so' da aba NDVI, pra todo mundo -- configuracao geral do site,
-    por isso so' o Alan Mauro. Nao apaga a fazenda nem os dados dela;
-    "Restaurar" no fim da aba traz de volta."""
-    site_name = request.form.get("site_name") or ""
-    oculta = request.form.get("acao") != "restaurar"
-    models.set_ndvi_oculta(site_name, oculta)
-    nome = _nome_exibicao(site_name)
-    flash(f"'{nome}' {'excluida da' if oculta else 'restaurada na'} aba NDVI.", "success")
-    return redirect(url_for("ndvi"))
 
 
 def _checar_acesso_site(site_name):
@@ -4153,6 +4102,7 @@ def whatsapp_gerenciamento():
             "tem_car": bool(cars_by_site.get(site)),
             "destinatarios": dados["destinatarios"],
             "user_ids_recebendo": dados["user_ids_recebendo"],
+            "ndvi_ativos": models.get_ndvi_ativos(site) if cars_by_site.get(site) else set(),
         })
 
     return render_template(
@@ -4689,7 +4639,7 @@ def save_site_ativo():
     if ativo:
         msg = f"'{_nome_exibicao(site_name)}' reativada -- volta a aparecer em todas as telas."
     else:
-        msg = f"'{_nome_exibicao(site_name)}' desativada -- deixa de aparecer no Painel/Mapa/Graficos/Recomendacoes/NDVI/Envios/Alertas Clima (da pra reativar aqui a qualquer momento)."
+        msg = f"'{_nome_exibicao(site_name)}' oculta -- deixa de aparecer no site (Mapa, Graficos, Recomendacoes, NDVI, Envios). Pra reativar: Configuracoes > Fazendas ocultas."
     return _save_response(msg)
 
 
@@ -5886,60 +5836,23 @@ def reativar_fazenda_oculta():
 @app.route("/admin/exportar")
 @alan_mauro_required
 def admin_exportar():
-    """Pagina "Exportar" -- reune num lugar so' o download do Excel
-    completo (ver `admin_exportar_download`) e os 2 relatorios que antes
-    eram abas separadas no menu (Rel. WhatsApp/Rel. Fungicidas, pedido
-    explicito do usuario pra reduzir de 3 abas pra 1): historico de
-    envios de WhatsApp (com os mesmos filtros de fazenda/so-falhas de
-    antes) e a visao consolidada de fungicidas por cultura. So'
-    `ALAN_MAURO_USERNAME` tem acesso (aba escondida no menu pra qualquer
-    outra conta -- ver base.html)."""
+    """Pagina "Exportar" -- download do Excel completo (ver
+    `admin_exportar_download`) e o historico de envios de WhatsApp dos
+    ultimos 7 dias (filtros de fazenda/so-falhas). Quem recebe fica na aba
+    Envios e o registro de fungicidas por cultura na Biblioteca de
+    fungicidas (e no Excel) -- tirados daqui pra nao repetir. So'
+    `ALAN_MAURO_USERNAME` tem acesso."""
     site_name = request.args.get("site") or None
     apenas_falhas = request.args.get("falhas") == "1"
-    # So' os ultimos 7 dias aqui na tela (pedido explicito do usuario) --
-    # o Excel completo (admin_exportar_download) continua com o
-    # historico INTEIRO, sem esse corte.
     logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas, dias=7)
     for l in logs:
         l["site_nome"] = _nome_exibicao(l["site_name"])
     sites = sorted((set(read_sites()) | models.virtual_farm_site_names()) - models.get_deactivated_site_names())
     nomes_exibicao = {s: _nome_exibicao(s) for s in sites}
-    todos_destinos = models.get_all_sites_whatsapp_recipients()
-    cadastro = []
-    for site in ([site_name] if site_name else sites):
-        for r in todos_destinos.get(site, []):
-            cadastro.append({"site": site, "site_nome": _nome_exibicao(site), "destinatario": r["username"], "telefone": r["telefone"]})
-
-    overrides = models.get_all_fungicida_overrides()
-    registro_bloqueado = models.get_all_fungicida_registro_bloqueado()
-    culturas_ativas = models.get_culturas_ativas()
-    translations = _load_translations()
-    linhas_fungicidas = []
-    for doenca_en, info in sorted(translations.items(), key=lambda kv: kv[1]["nome_pt"]):
-        rec = fungicida_data.get_recomendacao(doenca_en)
-        if not rec:
-            continue
-        grupo = rec["quimicos"]
-        n = len(grupo["itens"])
-        ordem = models.get_fungicida_ordem(doenca_en, "quimico", n)
-        for idx in ordem:
-            item = grupo["itens"][idx]
-            override = overrides.get((doenca_en, "quimico", idx))
-            ingrediente = override["ingrediente"] if override else item["ingrediente"]
-            if not ingrediente or _fungicida_proibido("quimico", ingrediente):
-                continue
-            culturas_bloqueadas = registro_bloqueado.get((doenca_en, "quimico", idx), set())
-            linhas_fungicidas.append({
-                "doenca": info["nome_pt"],
-                "ingrediente": ingrediente,
-                "culturas": [(c, c not in culturas_bloqueadas) for c in culturas_ativas],
-            })
-
     return render_template(
         "admin_exportar.html",
-        logs=logs, sites=sites, nomes_exibicao=nomes_exibicao, cadastro=cadastro,
+        logs=logs, sites=sites, nomes_exibicao=nomes_exibicao,
         site_selecionado=site_name or "", apenas_falhas=apenas_falhas,
-        linhas_fungicidas=linhas_fungicidas, culturas_ativas=culturas_ativas,
     )
 
 
@@ -6008,22 +5921,7 @@ def admin_whatsapp():
     """Tela de pareamento do WhatsApp corporativo (QR code/codigo de
     pareamento, teste de envio, trocar numero) -- so' `ALAN_MAURO_USERNAME`
     tem acesso, ja que controla o remetente usado por TODAS as fazendas."""
-    return render_template(
-        "admin_whatsapp.html", status=whatsapp.get_status(), whatsapp_send_hour=models.get_whatsapp_send_hour()
-    )
-
-
-@app.route("/admin/whatsapp/send-hour", methods=["POST"])
-@alan_mauro_required
-def save_whatsapp_send_hour():
-    """Horario (0-23) em que o envio agendado roda -- relatorio (texto/
-    PDF) e NDVI agendado usam o mesmo horario (`_whatsapp_scheduler_loop`).
-    Era fixo em 7h no codigo; editavel aqui pra' quem quiser mandar mais
-    cedo/tarde."""
-    models.set_whatsapp_send_hour(request.form.get("hora"))
-    return _save_response(
-        f"Horario de envio automatico salvo: {models.get_whatsapp_send_hour():02d}h.", "admin_whatsapp"
-    )
+    return render_template("admin_whatsapp.html", status=whatsapp.get_status())
 
 
 @app.route("/admin/whatsapp/status")

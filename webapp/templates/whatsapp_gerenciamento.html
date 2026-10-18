@@ -97,11 +97,23 @@
                     <span class="autosave-status small ms-2"></span>
                 </form>
                 <p class="text-muted small mt-1 mb-0">
-                    Busca sozinho a cena mais recente (nuvens ate 3%) e manda pros
-                    destinatarios ativos pra NDVI (marcados na aba
-                    <a href="{{ url_for('ndvi') }}">NDVI</a>), no dia/horario acima.
+                    Busca sozinho a cena mais recente (nuvens ate 3%) e manda pra quem
+                    esta' marcado abaixo, no dia/horario acima.
                     {% if site_group.ndvi %}Proximo envio automatico: {{ site_group.ndvi.proxima_execucao | data_br }}, as {{ '%02d'|format(site_group.ndvi.hora) }}h.{% endif %}
                 </p>
+                {% if current_user.is_admin and site_group.destinatarios %}
+                <div class="mt-2">
+                    <span class="small text-muted me-1">Recebem o NDVI (automatico e envio pela aba NDVI):</span>
+                    {% for d in site_group.destinatarios %}
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input ndvi-ativo-check" type="checkbox" value="{{ d.telefone }}" data-site="{{ site_group.site }}"
+                               id="ndvi_dest_{{ farm_idx }}_{{ loop.index0 }}" {% if d.telefone in site_group.ndvi_ativos %}checked{% endif %}>
+                        <label class="form-check-label small" for="ndvi_dest_{{ farm_idx }}_{{ loop.index0 }}">{{ d.username }}</label>
+                    </div>
+                    {% endfor %}
+                    <span class="small ndvi-ativo-status"></span>
+                </div>
+                {% endif %}
                 {% else %}
                 <p class="text-muted small mb-0">
                     Anexe um CAR na aba <a href="{{ url_for('ndvi') }}">NDVI</a> pra habilitar o envio automatico.
@@ -149,8 +161,8 @@
 </div>
 {% endfor %}
 <p class="text-muted small mt-3 mb-0 d-none d-md-block">
-    Agenda de envio automatico (texto, PDF e NDVI) e quem recebe o relatorio de cada
-    fazenda, tudo num lugar so'.
+    Agenda de envio automatico (texto, PDF e NDVI) e quem recebe cada fazenda, tudo num
+    lugar so' -- e' o unico lugar onde se marca quem recebe.
 </p>
 <script>
 document.querySelectorAll('.farm-toggle').forEach(function (btn) {
@@ -160,6 +172,18 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
         var expanded = !body.classList.contains('d-none');
         body.classList.toggle('d-none');
         icon.textContent = expanded ? '▶' : '▼';
+    });
+});
+document.querySelectorAll('.ndvi-ativo-check').forEach(function (chk) {
+    chk.addEventListener('change', function () {
+        var status = chk.parentNode.parentNode.querySelector('.ndvi-ativo-status');
+        var fd = new FormData();
+        fd.append('site_name', chk.dataset.site);
+        fd.append('telefone', chk.value);
+        fd.append('ativo', chk.checked ? '1' : '0');
+        fetch('{{ url_for("toggle_ndvi_ativo") }}', { method: 'POST', body: fd })
+            .then(function (r) { status.className = 'small ndvi-ativo-status ' + (r.ok ? 'text-success' : 'text-danger'); status.textContent = r.ok ? 'salvo' : 'falhou'; })
+            .catch(function () { status.className = 'small ndvi-ativo-status text-danger'; status.textContent = 'falhou'; });
     });
 });
 </script>

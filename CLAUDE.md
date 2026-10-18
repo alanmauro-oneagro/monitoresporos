@@ -82,9 +82,20 @@ menos que seja pedido explicitamente paridade para outros admins.
 - **Fazenda ativa/desativada** (`sites.ativo`, `models.set_site_ativo`/
   `get_deactivated_site_names`): esconde fazenda (real ou virtual) de TODAS
   as telas sem apagar — existe por causa do ponto acima (delete nao
-  resolveria). Toggle em Manejos e em Mapa Interpolado > Pontos Criados
-  (rota `save_site_ativo`, redireciona pro `request.referrer`). Preferir
-  desativar a apagar quando o pedido for "sumir com uma fazenda".
+  resolveria). OCULTAR so' em Manejos (botao) e Mapa Interpolado > Pontos
+  Criados; REATIVAR so' em Fazendas ocultas (pedido do Alan, 18/10/2026 --
+  Manejos nao mostra mais desativada). Preferir desativar a apagar quando
+  o pedido for "sumir com uma fazenda".
+- **Menos redundancia (pedido do Alan, 18/10/2026)**: menu tem UMA aba
+  "Recomendações" com seletor de safra (lembra a ultima, `session`); no
+  topo dela o resumo "Alertas agora" (`_resumo_alertas`, substitui a aba
+  Alertas -- `/dashboard` so' redireciona) e, so' pro Alan, os pontos "so'
+  clima" (`_pontos_clima`, `_pontos_clima.html` -- substitui a aba Alertas
+  Clima, `/alertas-clima` redireciona). Quem recebe (relatorio E NDVI) so'
+  se marca na aba Envios; Usuarios mostra so' a contagem; NDVI so' mostra.
+  Horario de envio so' em Envios (o padrao `get_whatsapp_send_hour` ficou
+  so' interno). Exportar = Excel + historico de envios. Solo so' na aba
+  Mapa de Solos.
 - **Fazendas ocultas** (Configuracoes -> Fazendas ocultas, so' "Alan Mauro",
   rota `fazendas_ocultas`): lista as desativadas e as sem leitura ha mais
   de `DADOS_BLOQUEIO_DIAS`, com botao Reativar. Reativar uma sem leitura
@@ -100,7 +111,8 @@ menos que seja pedido explicitamente paridade para outros admins.
   filtro que precisa valer "sempre, admin ou nao" tem que tocar nos 3.
 - **Aba "Envios"** (Configuracoes -> Envios, admin-only, rota
   `whatsapp_gerenciamento`/`/whatsapp`): consolida agenda de texto/PDF/NDVI
-  + destinatarios por fazenda (inclusive pontos "so' clima"). Substituiu a
+  + destinatarios por fazenda (inclusive pontos "so' clima") + quem recebe
+  o NDVI (`toggle_ndvi_ativo`). Substituiu a
   agenda que antes ficava espalhada em Manejos/NDVI/Alertas Clima — ao
   mexer em agenda de envio, e' aqui que fica agora. Pontos "so' clima" NAO
   tem PDF nem anotacao (pedido do Alan): so' texto, manual ou agendado.

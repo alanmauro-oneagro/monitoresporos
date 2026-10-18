@@ -1,0 +1,102 @@
+{# Pontos "so clima" no fim da aba Recomendacoes (antiga aba Alertas Clima). #}
+<div class="card shadow-sm mb-3" id="pontos-clima">
+    <div class="card-body">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 text-start" id="pontosClimaToggle">
+            <span class="toggle-icon">▶</span> ☁️ Pontos só clima ({{ pontos_clima | length }})
+        </button>
+        <div class="d-none mt-3" id="pontosClimaCorpo">
+        {% for ponto in pontos_clima %}
+        {% set ponto_idx = loop.index0 %}
+        <div class="clima-card">
+            <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                <strong>{{ ponto.nome }}</strong>
+                <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
+                {% if ponto.weather %}
+                <span class="text-muted small">
+                    {% if ponto.weather.temperatura_atual is not none %}🌡️ {{ ponto.weather.temperatura_atual }}°C{% endif %}
+                    {% if ponto.weather.umidade_atual is not none %} · 💧 {{ ponto.weather.umidade_atual }}%{% endif %}
+                    {% if ponto.weather.chuva_24h_mm is not none %} · ☔ {{ ponto.weather.chuva_24h_mm }} mm (24h){% endif %}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="mb-2">
+                <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
+                    <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+                    <label class="form-label small text-muted d-block mb-1">Estacao meteorologica de referencia para a previsao (clima do ponto vem da Open-Meteo, na coordenada escolhida aqui):</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="estacao_codigo" value=""
+                            id="ac_est_{{ ponto_idx }}_ponto" {% if not ponto.estacao_selecionada %}checked{% endif %}>
+                        <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_ponto">Coordenada do proprio ponto (so' se tiver estacao meteorologica propria)</label>
+                    </div>
+                    {% if not ponto.estacoes_proximas %}
+                    <div class="small text-muted mt-1">Nenhuma estacao oficial perto o suficiente encontrada -- usando a coordenada do proprio ponto.</div>
+                    {% endif %}
+                    {% for estacao in ponto.estacoes_proximas %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="estacao_codigo" value="{{ estacao.country_code }}:{{ estacao.codigo }}"
+                            id="ac_est_{{ ponto_idx }}_{{ loop.index0 }}" {% if ponto.estacao_selecionada == estacao.codigo %}checked{% endif %}>
+                        <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_{{ loop.index0 }}">
+                            📡 {{ estacao.cidade }}/{{ estacao.uf }} ({{ estacao.codigo }}) -- {{ estacao.distancia_km }} km
+                        </label>
+                    </div>
+                    {% endfor %}
+                            {% set _codigos = ponto.estacoes_proximas | map(attribute='codigo') | list %}
+                            {% if ponto.estacao_selecionada and ponto.estacao_selecionada not in _codigos and not (ponto.estacao_selecionada == '__interp3__' and ponto.estacoes_proximas) %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="estacao_codigo"
+                                    value="{% if ponto.estacao_selecionada == '__interp3__' %}__interp3__{% else %}{{ ponto.estacao_pais or 'BR' }}:{{ ponto.estacao_selecionada }}{% endif %}"
+                                    id="ac_est_{{ ponto_idx }}_salva" checked>
+                                <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_salva">
+                                    {% if ponto.estacao_selecionada == '__interp3__' %}🔀 Interpolacao das 3 estacoes (escolha salva){% else %}📡 Estacao salva ({{ ponto.estacao_selecionada }}){% endif %}
+                                    <span class="text-muted">-- fora da lista agora (catalogo de estacoes indisponivel no momento); continua valendo</span>
+                                </label>
+                            </div>
+                            {% endif %}
+                    {% if ponto.estacoes_proximas %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="estacao_codigo" value="__interp3__"
+                            id="ac_est_{{ ponto_idx }}_interp3" {% if ponto.estacao_selecionada == '__interp3__' %}checked{% endif %}>
+                        <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_interp3">
+                            🔀 Interpolacao (media) das 3 estacoes oficiais mais proximas
+                        </label>
+                    </div>
+                    {% endif %}
+                    <span class="autosave-status small ms-2"></span>
+                </form>
+            </div>
+
+            <div class="d-flex align-items-center flex-wrap gap-2 pt-2 border-top">
+                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn" {% if not ponto.whatsapp_text %}disabled{% endif %}
+                        data-text="{{ ponto.whatsapp_text }}"
+                        title="Copiar o relatorio de clima pra colar manualmente no WhatsApp">
+                    📋 Copiar
+                </button>
+                <form method="post" action="{{ url_for('alertas_clima_whatsapp', site_name=ponto.site_name) }}" class="d-flex align-items-center gap-2 mb-0">
+                    <input type="hidden" name="enviar_texto" value="1">
+                    <button type="submit" class="btn btn-sm btn-outline-success" {% if not ponto.whatsapp_destinos %}disabled{% endif %}
+                            title="{% if ponto.whatsapp_destinos %}Enviar o texto para {{ ponto.whatsapp_destinos }} numero(s){% else %}Nenhum numero cadastrado pra esse ponto ainda (aba Envios){% endif %}">
+                        📲 Enviar agora{% if ponto.whatsapp_destinos %} ({{ ponto.whatsapp_destinos }}){% endif %}
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+            <p class="text-muted small mb-0">
+                Agenda de envio e quem recebe: aba <a href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a> (grupo "Só Clima").
+                Nome, coordenada e ocultar o ponto: <a href="{{ url_for('mapa_interpolado') }}">Mapa Interpolado</a>.
+            </p>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var btn = document.getElementById('pontosClimaToggle'), corpo = document.getElementById('pontosClimaCorpo');
+    function abrir(aberto) {
+        corpo.classList.toggle('d-none', !aberto);
+        btn.querySelector('.toggle-icon').textContent = aberto ? '▼' : '▶';
+    }
+    btn.addEventListener('click', function () { abrir(corpo.classList.contains('d-none')); });
+    if (location.hash === '#pontos-clima') abrir(true);
+})();
+</script>

@@ -81,6 +81,8 @@ html { font-size: 14px; }
 .risco-tabela .risco-vermelho { background-color: #f8d7da; color: #842029; font-weight: 600; }
 .risco-tabela .risco-amarelo { background-color: #fff3cd; color: #7a5a00; font-weight: 600; }
 .risco-tabela .risco-verde { background-color: #d1e7dd; color: #0f5132; }
+.card[data-site], #pontos-clima { scroll-margin-top: 80px; }
+.clima-card { border: 1px solid #d0ebff; border-radius: 0.5rem; padding: 0.9rem; margin-bottom: 0.9rem; background: #f4faff; }
 </style>
 {% endblock %}
 {% block content %}
@@ -93,12 +95,47 @@ html { font-size: 14px; }
     </div>
 </div>
 
+{% if resumo_alertas is defined %}
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-2 px-sm-3">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <strong>🚨 Alertas agora</strong>
+            <form method="post" action="{{ url_for('dashboard_atualizar') }}" class="mb-0">
+                <button type="submit" class="btn btn-sm btn-outline-success" title="Busca agora as leituras novas do BioScout">🔄 Atualizar dados</button>
+            </form>
+        </div>
+        {% if fetch_last_error %}
+        <div class="alert alert-warning small mt-2 mb-0">
+            ⚠ A ultima busca de dados do BioScout falhou (so' admin ve este aviso): <code>{{ fetch_last_error }}</code>
+        </div>
+        {% endif %}
+        {% if resumo_alertas %}
+        <ul class="list-unstyled mb-0 mt-1">
+            {% for r in resumo_alertas %}
+            <li class="d-flex flex-wrap align-items-center gap-1 py-1 border-top">
+                <a href="#" class="fw-semibold text-decoration-none me-1 resumo-fazenda" data-site="{{ r.site }}">{{ r.nome }}</a>
+                {% for d in r.perigo %}<span class="badge bg-danger fw-normal" title="Perigo">{{ d }}</span>{% endfor %}
+                {% for d in r.atencao %}<span class="badge bg-warning text-dark fw-normal" title="Atencao">{{ d }}</span>{% endfor %}
+                {% if r.nivel_dados %}
+                <span class="badge {{ 'bg-danger-subtle text-danger-emphasis' if r.nivel_dados == 'bloqueado' else 'bg-secondary-subtle text-secondary-emphasis' }} fw-normal"
+                      title="Estacao sem leitura nova ha {{ r.dias_sem_leitura }} dias{% if r.nivel_dados == 'bloqueado' %} -- doencas ocultas e WhatsApp/PDF so' com o clima{% endif %}">📡 sem leitura ha {{ r.dias_sem_leitura }}d</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <div class="small text-muted mt-1"><span class="badge bg-danger fw-normal">Perigo</span> <span class="badge bg-warning text-dark fw-normal">Atenção</span> -- toque na fazenda para abrir.</div>
+        {% else %}
+        <div class="small text-muted mt-1">Nenhuma fazenda em Perigo ou Atenção agora.</div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 {% if not no_access and not any_whatsapp_configured %}
 <div class="alert alert-warning small">
-    Nenhum numero de WhatsApp cadastrado ainda -- um admin precisa marcar,
-    na aba Usuarios, quais fazendas cada usuario deve receber relatorio
-    (coluna "Receber relatorios"), e cadastrar o telefone dessa pessoa
-    (tambem na aba Usuarios).
+    Nenhum numero de WhatsApp cadastrado ainda -- um admin precisa marcar, na
+    aba Envios, quem recebe cada fazenda, e cadastrar o telefone da pessoa na
+    aba Usuarios.
 </div>
 {% endif %}
 
@@ -433,6 +470,7 @@ html { font-size: 14px; }
     </div>
 </div>
 {% endfor %}
+{% if pontos_clima %}{% include "_pontos_clima.html" %}{% endif %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
 <script src="{{ url_for('static', filename='rosa_ventos.js', v=versao_estaticos) }}"></script>
 <script>
@@ -630,6 +668,17 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
     });
 });
 
+// Resumo "Alertas agora": abre e rola ate' a fazenda.
+document.querySelectorAll('.resumo-fazenda').forEach(function (link) {
+    link.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var btn = document.querySelector('.farm-toggle[data-site="' + CSS.escape(link.dataset.site) + '"]');
+        if (!btn) return;
+        if (document.getElementById(btn.dataset.target).classList.contains('d-none')) btn.click();
+        btn.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+});
+
 // Personalizacoes salvas na conta do usuario: fazendas abertas (por
 // safra) e Texto/PDF marcados no envio por WhatsApp (por fazenda).
 var SAFRA_ATUAL = {{ safra | tojson }};
@@ -645,7 +694,7 @@ var SAFRA_ATUAL = {{ safra | tojson }};
         return typeof f.texto === 'boolean' || typeof f.pdf === 'boolean' ? {} : f;  // formato antigo (igual pra todas)
     }
     ['texto', 'pdf'].forEach(function (tipo) {
-        document.querySelectorAll('input[name="enviar_' + tipo + '"]').forEach(function (c) {
+        document.querySelectorAll('.card[data-site] input[name="enviar_' + tipo + '"]').forEach(function (c) {
             var site = c.closest('.card[data-site]').dataset.site;
             var daFazenda = formatosSalvos()[site];
             if (daFazenda && typeof daFazenda[tipo] === 'boolean') c.checked = daFazenda[tipo];
