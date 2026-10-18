@@ -800,6 +800,26 @@ def _filter_cards_by_cultura(cards_by_site, culturas_by_site, doenca_culturas, s
     return filtered
 
 
+def _anotacoes_da_fazenda(site, culturas, translations, doenca_culturas, notes, notas_padrao):
+    """Anotacao por doenca na aba Manejos (antes so' na aba Recomendacoes):
+    as doencas das culturas das safras da fazenda, pela mesma regra de
+    `_filter_cards_by_cultura` (doenca sem cultura marcada sempre entra;
+    nenhuma cultura escolhida = nenhuma doenca). Mesma chave (fazenda,
+    nome da doenca) e mesma anotacao padrao da Biblioteca."""
+    culturas = {c for c in culturas if c}
+    if not culturas:
+        return []
+    linhas = []
+    for doenca_en, info in translations.items():
+        if CULTURA_TODOS in culturas or not doenca_culturas.get(doenca_en) or doenca_culturas[doenca_en] & culturas:
+            padrao = notas_padrao.get(doenca_en, "")
+            linhas.append({
+                "doenca": info["nome_pt"], "nota_padrao": padrao,
+                "nota": notes.get((site, info["nome_pt"]), "") or padrao,
+            })
+    return sorted(linhas, key=lambda l: _chave_alfabetica(l["doenca"]))
+
+
 def _cultura_label(site, safra, culturas_by_site):
     """Nome da cultura atual pra mostrar no relatorio (WhatsApp/"Copiar
     recomendacao"). Com `safra` definida, usa so a cultura daquela safra;
@@ -3503,6 +3523,7 @@ def _pontos_clima():
             "estacao_pais": escolha["country_code"] if escolha else "",
             "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
             "weather": weather,
+            "vento_dia": _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]),
             "whatsapp_text": _format_whatsapp_message(
                 site, [], weather=weather, is_virtual=True, mostrar_secao_doencas=False,
             ),
@@ -3564,7 +3585,6 @@ def recommendations(safra):
                 safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS,
             )
     culturas_by_site = models.get_all_farm_culturas()
-    culturas_ativas = models.get_culturas_ativas()
     raw_cards_by_site = _cards_by_site_all(permitted, _load_translations())
     cards_by_site = _filter_cards_by_cultura(
         raw_cards_by_site, culturas_by_site, models.get_doenca_culturas(), safra=safra
@@ -3577,8 +3597,6 @@ def recommendations(safra):
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
     virtual_names = models.virtual_farm_site_names()
     whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
-    catalogo_produtos = models.get_all_catalogo_produtos()
-
     sites_data = []
     for site, cards in cards_by_site.items():
         cultura_info = culturas_by_site.get((site, safra), {})
@@ -3589,16 +3607,11 @@ def recommendations(safra):
             d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
         thumbnails = sorted(cards, key=lambda c: c["doenca"])
         existentes = produtos_by_site.get(site, {})
-        produtos_folha = {}
-        for tipo in models.TIPOS_PRODUTO:
-            linhas = list(existentes.get((safra, "folha", tipo), []))
-            # Minimo de 2 linhas; sempre 1 linha em branco a mais que o
-            # preenchido -- o resto e' criado sozinho no navegador (mesma
-            # logica da aba Fazendas), sem limite fixo de linhas.
-            linhas_min = max(2, len(linhas) + 1)
-            while len(linhas) < linhas_min:
-                linhas.append({"data_anotacao": "", "nome": "", "ingrediente_ativo": ""})
-            produtos_folha[tipo] = linhas
+        # So' leitura -- a secao Folha e' editada na aba Manejos.
+        produtos_folha = {
+            tipo: [l for l in existentes.get((safra, "folha", tipo), []) if l.get("nome") or l.get("ingrediente_ativo")]
+            for tipo in models.TIPOS_PRODUTO
+        }
         dias_desde_atualizacao = None
         if cultura_info.get("updated_at"):
             try:
@@ -3674,8 +3687,7 @@ def recommendations(safra):
         resumo_alertas=_resumo_alertas(raw_cards_by_site),
         pontos_clima=_pontos_clima() if current_user.username == ALAN_MAURO_USERNAME else [],
         fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
-        safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS, culturas_ativas=culturas_ativas,
-        catalogo_produtos=catalogo_produtos,
+        safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS,
     )
 
 
@@ -3890,6 +3902,11 @@ def fazendas():
         ("folha", "Folha (aplicacao foliar)"),
     ]
     tipos = [("quimico", "Fungicidas quimicos"), ("biologico", "Biologicos")]
+    culturas_by_site = models.get_all_farm_culturas()
+    doenca_culturas = models.get_doenca_culturas()
+    translations = _load_translations()
+    notes = models.get_all_recommendation_notes()
+    notas_padrao = _fungicida_notas_cached()
 
     # Estacao mais proxima de TODAS as fazendas, calculada em LOTE (uma
     # unica busca de catalogo por pais, nao um pool de threads por
@@ -3939,6 +3956,7 @@ def fazendas():
 
             safras_data.append({
                 "safra": safra, "titulo": safra_label, "secoes": secoes,
+                "cultura": culturas_by_site.get((site, safra), {}).get("cultura") or "",
                 "plantio": plantio_linhas, "aplicacoes": aplicacoes_linhas,
                 "espacamento": espacamento_by_site.get((site, safra)) or "",
             })
@@ -3951,6 +3969,9 @@ def fazendas():
         escolha = overrides.get(site)
         sites_data.append({
             "site": site, "nome_exibicao": _nome_exibicao(site), "safras": safras_data,
+            "anotacoes": _anotacoes_da_fazenda(
+                site, {s["cultura"] for s in safras_data}, translations, doenca_culturas, notes, notas_padrao,
+            ),
             "virtual": site in virtual_names,
             "estacoes_proximas": estacoes_proximas,
             "estacao_selecionada": escolha["codigo"] if escolha else "",
@@ -3961,6 +3982,7 @@ def fazendas():
 
     return render_template(
         "fazendas.html", sites_data=sites_data, no_access=False,
+        culturas_ativas=models.get_culturas_ativas(),
         countries=countries.COUNTRIES,
         catalogo_produtos=catalogo_produtos, catalogo_variedades=catalogo_variedades,
     )

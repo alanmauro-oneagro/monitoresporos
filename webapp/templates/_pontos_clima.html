@@ -11,13 +11,40 @@
             <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
                 <strong>{{ ponto.nome }}</strong>
                 <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
-                {% if ponto.weather %}
-                <span class="text-muted small">
-                    {% if ponto.weather.temperatura_atual is not none %}🌡️ {{ ponto.weather.temperatura_atual }}°C{% endif %}
-                    {% if ponto.weather.umidade_atual is not none %} · 💧 {{ ponto.weather.umidade_atual }}%{% endif %}
-                    {% if ponto.weather.chuva_24h_mm is not none %} · ☔ {{ ponto.weather.chuva_24h_mm }} mm (24h){% endif %}
-                </span>
-                {% endif %}
+            </div>
+
+            {# Mesmo bloco de clima do card de fazenda (recommendations.html). #}
+            <div class="rec-topo mb-2">
+            <div class="rec-topo-esq">
+            {% if ponto.weather %}
+            {% set w = ponto.weather %}
+            {% set indicadores = [('Temperatura', w.temperatura_atual, ' °C'), ('Umidade', w.umidade_atual, '%'), ('Chuva agora', w.chuva_atual_mm, ' mm'), ('Chuva 24h', w.chuva_24h_mm, ' mm')] | selectattr(1, 'ne', none) | list %}
+            {% if indicadores %}
+            <div class="clima-titulo">Clima agora</div>
+            <div class="clima-indicadores">
+                {% for rotulo, valor, unidade in indicadores %}
+                <div class="clima-ind"><div class="clima-rotulo">{{ rotulo }}</div><div class="clima-valor">{{ valor }}{{ unidade }}</div></div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if w.previsao_5_dias %}
+            <div class="clima-titulo clima-previsao-titulo">Previsão de chuva</div>
+            <div class="clima-previsao">
+                {% for d in w.previsao_5_dias %}
+                <div class="clima-prev-dia"><div class="clima-rotulo">{{ d.data[8:10] }}/{{ d.data[5:7] }}</div><div class="clima-valor">{{ d.chuva_mm }} mm</div></div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="small text-muted">Clima indisponivel no momento.</div>
+            {% endif %}
+            </div>
+            {% if ponto.vento_dia %}
+            <div class="vento-dia" title="Direcao de onde o vento soprou hoje -- cada gomo e' a % das leituras vindas daquela direcao">
+                <div class="vento-texto"><strong>Vento predominante</strong> (hoje)<br>de {{ ponto.vento_dia.nome }}</div>
+                <div class="vento-rosa"><canvas data-percentuais="{{ ponto.vento_dia.percentuais | tojson | forceescape }}"></canvas></div>
+            </div>
+            {% endif %}
             </div>
 
             <div class="mb-2">
@@ -95,8 +122,14 @@
     function abrir(aberto) {
         corpo.classList.toggle('d-none', !aberto);
         btn.querySelector('.toggle-icon').textContent = aberto ? '▼' : '▶';
+        // Rosa dos ventos so' depois de visivel (Chart.js num container escondido fica 0x0).
+        if (aberto) corpo.querySelectorAll('.vento-rosa canvas').forEach(function (canvas) {
+            if (canvas.dataset.criada || typeof OneAgroRosa === 'undefined') return;
+            canvas.dataset.criada = '1';
+            OneAgroRosa.criar(canvas, JSON.parse(canvas.dataset.percentuais), true);
+        });
     }
     btn.addEventListener('click', function () { abrir(corpo.classList.contains('d-none')); });
-    if (location.hash === '#pontos-clima') abrir(true);
+    window.addEventListener('load', function () { if (location.hash === '#pontos-clima') abrir(true); });
 })();
 </script>
