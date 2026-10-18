@@ -30,6 +30,12 @@ menos que seja pedido explicitamente paridade para outros admins.
 - Flask + Jinja2 + Bootstrap + Leaflet 1.9.4, SQLite (`models.get_db()`, modo
   WAL), openpyxl para exportacao Excel, `data_reader.py` para dados de
   clima/esporos via CSV, `countries.py` para provedores de estacao por pais.
+- **Leituras do spore_counts.csv** (`data_reader._derivado_das_leituras`):
+  nomes de doenca, nomes cientificos, device ids e ultima leitura por
+  fazenda/doenca ficam em memoria ate' o CSV mudar -- antes cada troca de
+  aba varria as ~14 mil linhas varias vezes (Recomendações relia uma vez
+  por fazenda na rosa dos ventos). Menu tem `speculationrules` (prerender
+  "moderate" dos links, menos "Sair") pra trocar de aba mais rapido.
 - **Cache por requisicao via `flask.g`**: uma funcao wrapper checa
   `getattr(g, "_cache_key", None) is None` antes de chamar a funcao cara
   `models.get_all_*()`, guardando o resultado em `g` (reseta sozinho a cada
@@ -88,8 +94,8 @@ menos que seja pedido explicitamente paridade para outros admins.
   o pedido for "sumir com uma fazenda".
 - **Menos redundancia (pedido do Alan, 18/10/2026)**: menu tem UMA aba
   "Recomendações" com seletor de safra (lembra a ultima, `session`); no
-  topo dela o resumo "Alertas agora" (`_resumo_alertas`) e -- a aba
-  Alertas (`/dashboard`, dashboard.html) VOLTOU como era, a pedido do
+  topo dela (so' pro Alan) -- o resumo "Alertas agora" foi retirado e a
+  aba Alertas (`/dashboard`, dashboard.html) VOLTOU como era, a pedido do
   Alan, 18/10/2026 -- so' pro Alan, os pontos "so'
   clima" (`_pontos_clima`, `_pontos_clima.html` -- substitui a aba Alertas
   Clima, `/alertas-clima` redireciona). Quem recebe (relatorio E NDVI) so'

@@ -70,25 +70,6 @@ html { font-size: 14px; }
 .risco-tabela .risco-amarelo { background-color: #fff3cd; color: #7a5a00; font-weight: 600; }
 .risco-tabela .risco-verde { background-color: #d1e7dd; color: #0f5132; }
 .card[data-site], #pontos-clima { scroll-margin-top: 80px; }
-.alertas-agora { overflow: hidden; }
-.aa-dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; margin-right: 0.3rem; vertical-align: 0.05rem; }
-.aa-perigo { background: #dc3545; }
-.aa-atencao { background: #f0ad00; }
-.aa-linha { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.9rem 0.55rem 0.75rem; border-top: 1px solid #eef0f2;
-            border-left: 4px solid transparent; color: inherit; text-decoration: none; }
-.aa-linha:hover { background: #f8f9fa; color: inherit; }
-.aa-l-perigo { border-left-color: #dc3545; }
-.aa-l-atencao { border-left-color: #f0ad00; }
-.aa-texto { flex: 1; min-width: 0; }
-.aa-nome { font-weight: 600; color: #0a1f44; }
-.aa-doencas { font-size: 0.85rem; color: #495057; line-height: 1.35; }
-.aa-rotulo { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; margin-right: 0.15rem; }
-.aa-t-perigo { color: #b02a37; }
-.aa-t-atencao { color: #9a6b00; }
-.aa-seta { color: #adb5bd; font-size: 1.4rem; line-height: 1; }
-.aa-sem-leitura { font-size: 0.82rem; color: #495057; padding: 0.5rem 0.9rem; border-top: 1px solid #eef0f2; background: #f8f9fa; }
-.aa-sem-leitura a { color: #495057; }
-.aa-l-sem { border-left-color: #adb5bd; }
 .clima-card { border: 1px solid #d0ebff; border-radius: 0.5rem; padding: 0.9rem; margin-bottom: 0.9rem; background: #f4faff; }
 </style>
 {% endblock %}
@@ -101,49 +82,6 @@ html { font-size: 14px; }
         {% endfor %}
     </div>
 </div>
-
-{% if resumo_alertas is defined %}
-{% set n_perigo = resumo_alertas | selectattr('perigo') | list | length %}
-{% set n_atencao = (resumo_alertas | rejectattr('perigo') | selectattr('atencao') | list | length) %}
-<div class="card shadow-sm mb-3 alertas-agora">
-    <div class="card-body p-0">
-        <div class="d-flex align-items-center justify-content-between gap-2 px-3 py-2">
-            <div>
-                <div class="fw-bold">Alertas agora</div>
-                <div class="small text-muted">
-                    {% if n_perigo %}<span class="aa-dot aa-perigo"></span>{{ n_perigo }} em perigo{% endif %}{% if n_perigo and n_atencao %} · {% endif %}{% if n_atencao %}<span class="aa-dot aa-atencao"></span>{{ n_atencao }} em atenção{% endif %}{% if not n_perigo and not n_atencao %}Nenhuma fazenda em Perigo ou Atenção{% endif %}
-                </div>
-            </div>
-            <form method="post" action="{{ url_for('dashboard_atualizar') }}" class="mb-0">
-                <button type="submit" class="btn btn-sm btn-outline-success" title="Busca agora as leituras novas do BioScout">🔄<span class="d-none d-sm-inline"> Atualizar</span></button>
-            </form>
-        </div>
-        {% if fetch_last_error %}
-        <div class="alert alert-warning small mx-3 mb-2">
-            ⚠ A ultima busca de dados do BioScout falhou (so' admin ve este aviso): <code>{{ fetch_last_error }}</code>
-        </div>
-        {% endif %}
-        {% for r in resumo_alertas if r.perigo or r.atencao %}
-        <a href="#" class="aa-linha resumo-fazenda {{ 'aa-l-perigo' if r.perigo else 'aa-l-atencao' }}" data-site="{{ r.site }}">
-            <div class="aa-texto">
-                <div class="aa-nome">{{ r.nome }}</div>
-                {% if r.perigo %}<div class="aa-doencas"><span class="aa-rotulo aa-t-perigo">Perigo</span> {{ r.perigo | join(', ') }}</div>{% endif %}
-                {% if r.atencao %}<div class="aa-doencas"><span class="aa-rotulo aa-t-atencao">Atenção</span> {{ r.atencao | join(', ') }}</div>{% endif %}
-                {% if r.nivel_dados %}<div class="aa-doencas text-muted">📡 sem leitura há {{ r.dias_sem_leitura }} dias</div>{% endif %}
-            </div>
-            <span class="aa-seta">›</span>
-        </a>
-        {% endfor %}
-        {% set sem_leitura = resumo_alertas | rejectattr('perigo') | rejectattr('atencao') | list %}
-        {% if sem_leitura %}
-        <div class="aa-sem-leitura">
-            📡 <strong>Sem leitura:</strong>
-            {% for r in sem_leitura %}<a href="#" class="resumo-fazenda" data-site="{{ r.site }}">{{ r.nome }}</a> <span class="text-muted">({{ r.dias_sem_leitura }}d)</span>{% if not loop.last %}, {% endif %}{% endfor %}
-        </div>
-        {% endif %}
-    </div>
-</div>
-{% endif %}
 
 {% if not no_access and not any_whatsapp_configured %}
 <div class="alert alert-warning small">
@@ -573,17 +511,6 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
         if (!expanded) lista.push(btn.dataset.site);
         abertas[SAFRA_ATUAL] = lista;
         window.OneAgroPrefs.set('rec_abertas', abertas);
-    });
-});
-
-// Resumo "Alertas agora": abre e rola ate' a fazenda.
-document.querySelectorAll('.resumo-fazenda').forEach(function (link) {
-    link.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        var btn = document.querySelector('.farm-toggle[data-site="' + CSS.escape(link.dataset.site) + '"]');
-        if (!btn) return;
-        if (document.getElementById(btn.dataset.target).classList.contains('d-none')) btn.click();
-        btn.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 });
 

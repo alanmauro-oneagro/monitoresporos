@@ -61,29 +61,42 @@ def get_doenca(display_name, translations=None):
     return DOENCA_MAP.get(display_name, display_name)
 
 
+_derivados_cache = {}  # nome -> (lista do _csv_cache que gerou, resultado)
+
+
+def _derivado_das_leituras(nome, calcular):
+    """Resultado de `calcular(linhas do spore_counts.csv)` guardado ate' o
+    CSV mudar -- varrer as ~14 mil linhas a cada chamada pesava em toda
+    troca de aba (mesmo esquema de `read_site_coordinates`)."""
+    linhas = read_spore_counts()
+    cache = _derivados_cache.get(nome)
+    if cache is None or cache[0] is not linhas:
+        cache = _derivados_cache[nome] = (linhas, calcular(linhas))
+    return cache[1]
+
+
 def read_unique_display_names():
     """Nomes de doenca em ingles (displayName) que ja apareceram nos dados
     -- usado pela aba de admin para saber quais existem e podem ser
     traduzidas, incluindo doencas novas que ainda nao estao no DOENCA_MAP."""
-    names = set()
-    for row in read_spore_counts():
-        name = row.get("displayName")
-        if name:
-            names.add(name)
-    return sorted(names)
+    return list(_derivado_das_leituras(
+        "display_names", lambda linhas: sorted({row["displayName"] for row in linhas if row.get("displayName")}),
+    ))
 
 
 def read_scientific_names():
     """displayName (ingles) -> nome cientifico do fungo (scientificName), que
     o BioScout ja manda por leitura -- usado para pre-preencher a aba
     Doencas com o nome cientifico, sem precisar digitar na mao."""
-    names = {}
-    for row in read_spore_counts():
-        display_name = row.get("displayName")
-        scientific = row.get("scientificName")
-        if display_name and scientific and display_name not in names:
-            names[display_name] = scientific
-    return names
+    def calcular(linhas):
+        names = {}
+        for row in linhas:
+            display_name = row.get("displayName")
+            scientific = row.get("scientificName")
+            if display_name and scientific and display_name not in names:
+                names[display_name] = scientific
+        return names
+    return dict(_derivado_das_leituras("cientificos", calcular))
 
 
 def _to_float(value):
@@ -131,13 +144,15 @@ def read_site_device_ids():
     siteName) -- essa e' a ponte pra cruzar leitura de esporo (por
     siteName) com clima historico (por deviceUserFriendlyId), usada no
     grafico de risco de germinacao da aba Graficos."""
-    ids = {}
-    for row in read_spore_counts():
-        site = row.get("siteName")
-        device = row.get("deviceUserFriendlyId")
-        if site and device and site not in ids:
-            ids[site] = device
-    return ids
+    def calcular(linhas):
+        ids = {}
+        for row in linhas:
+            site = row.get("siteName")
+            device = row.get("deviceUserFriendlyId")
+            if site and device and site not in ids:
+                ids[site] = device
+        return ids
+    return dict(_derivado_das_leituras("device_ids", calcular))
 
 
 _csv_cache = {}  # path -> (mtime, linhas)
@@ -437,24 +452,22 @@ def compute_status(concentration, warning_threshold, danger_threshold):
 def get_dashboard_data(permitted_site_names=None, translations=None):
     """Por fazenda permitida, retorna a ultima leitura de cada doenca com
     status."""
-    spore_rows = read_spore_counts()
-
-    latest = {}
-    for row in spore_rows:
-        site = row.get("siteName")
-        if permitted_site_names is not None and site not in permitted_site_names:
-            continue
-        disease = row.get("displayName")
-        try:
-            dt = _parse_dt(row["samplingStartTime"])
-        except (KeyError, ValueError):
-            continue
-        key = (site, disease)
-        if key not in latest or dt > latest[key]["_dt"]:
-            latest[key] = {"_dt": dt, "row": row}
+    def ultimas(linhas):
+        latest = {}
+        for row in linhas:
+            try:
+                dt = _parse_dt(row["samplingStartTime"])
+            except (KeyError, ValueError):
+                continue
+            key = (row.get("siteName"), row.get("displayName"))
+            if key not in latest or dt > latest[key]["_dt"]:
+                latest[key] = {"_dt": dt, "row": row}
+        return latest
 
     cards_by_site = {}
-    for (site, disease), info in latest.items():
+    for (site, disease), info in _derivado_das_leituras("ultimas_leituras", ultimas).items():
+        if permitted_site_names is not None and site not in permitted_site_names:
+            continue
         row = info["row"]
         dt = info["_dt"]
         conc = _to_float(row.get("concentration"))

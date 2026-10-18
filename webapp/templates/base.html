@@ -414,5 +414,15 @@ window.OneAgroPrefs = (function () {
     {% block content %}{% endblock %}
 </div>
 {% block extra_scripts %}{% endblock %}
+{% if current_user.is_authenticated %}
+{# Troca de aba mais rapida (Chrome/Edge): a pagina do menu comeca a carregar
+   quando o dedo toca / o mouse para em cima do link. "Sair" fica de fora. #}
+<script type="speculationrules">
+{"prerender": [{"where": {"and": [
+    {"selector_matches": "#mainNavMenu a[href^='/']"},
+    {"not": {"href_matches": "{{ url_for('logout') }}"}}
+]}, "eagerness": "moderate"}]}
+</script>
+{% endif %}
 </body>
 </html>
