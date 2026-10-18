@@ -9,6 +9,22 @@
 .farm-toggle { font-size: 1rem; }
 [data-site].card { margin-bottom: 0.5rem !important; }
 [data-site] > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+/* Celular: cada linha das tabelas vira um bloco, com o nome do campo
+   acima de cada caixa (antes as ultimas colunas ficavam cortadas). */
+@media (max-width: 575.98px) {
+    table.produtos-table thead { display: none; }
+    table.produtos-table, table.produtos-table tbody { display: block; width: 100%; }
+    table.produtos-table tr {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 0.5rem;
+        border: 1px solid #e3e6ea; border-radius: 0.5rem; padding: 0.45rem 0.55rem;
+        margin-bottom: 0.5rem; background: #fafbfc;
+    }
+    table.produtos-table td { display: block; border: 0; padding: 0; min-width: 0; background: transparent; }
+    table.produtos-table td.campo-largo { grid-column: 1 / -1; }
+    table.produtos-table td::before {
+        content: attr(data-label); display: block; font-size: 0.72rem; color: #6c757d; margin-bottom: 0.1rem;
+    }
+}
 </style>
 {% endblock %}
 {% block content %}
@@ -66,9 +82,9 @@
                                         <tbody>
                                             {% for linha in grupo.linhas %}
                                             <tr>
-                                                <td><input type="text" name="data_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.data_anotacao }}"></td>
-                                                <td><input type="text" name="nome_{{ secao.momento }}_{{ grupo.tipo }}" list="catalogo-nomes-{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.nome }}"></td>
-                                                <td><input type="text" name="ia_{{ secao.momento }}_{{ grupo.tipo }}" list="catalogo-ia-{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.ingrediente_ativo }}"></td>
+                                                <td data-label="Data/Anotação"><input type="text" name="data_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.data_anotacao }}"></td>
+                                                <td data-label="Nome do produto"><input type="text" name="nome_{{ secao.momento }}_{{ grupo.tipo }}" list="catalogo-nomes-{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.nome }}"></td>
+                                                <td data-label="Ingrediente ativo" class="campo-largo"><input type="text" name="ia_{{ secao.momento }}_{{ grupo.tipo }}" list="catalogo-ia-{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.ingrediente_ativo }}"></td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>
@@ -106,10 +122,10 @@
                                 <tbody>
                                     {% for linha in safra_group.plantio %}
                                     <tr>
-                                        <td><input type="date" name="data_plantio" class="form-control form-control-sm" value="{{ linha.data_plantio }}"></td>
-                                        <td><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
-                                        <td><input type="text" name="variedade" list="catalogo-variedades" class="form-control form-control-sm" value="{{ linha.variedade }}"></td>
-                                        <td><input type="text" name="ciclo_dias" class="form-control form-control-sm" value="{{ linha.ciclo_dias }}"></td>
+                                        <td data-label="Data plantio"><input type="date" name="data_plantio" class="form-control form-control-sm" value="{{ linha.data_plantio }}"></td>
+                                        <td data-label="Talhão"><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
+                                        <td data-label="Variedade"><input type="text" name="variedade" list="catalogo-variedades" class="form-control form-control-sm" value="{{ linha.variedade }}"></td>
+                                        <td data-label="Ciclo (dias)"><input type="text" name="ciclo_dias" class="form-control form-control-sm" value="{{ linha.ciclo_dias }}"></td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -129,10 +145,10 @@
                                 <tbody>
                                     {% for linha in safra_group.aplicacoes %}
                                     <tr>
-                                        <td><input type="date" name="data_aplicacao" class="form-control form-control-sm" value="{{ linha.data_aplicacao }}"></td>
-                                        <td><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
-                                        <td><input type="text" name="fungicidas_quimicos" list="catalogo-nomes-quimico" class="form-control form-control-sm" value="{{ linha.fungicidas_quimicos }}"></td>
-                                        <td><input type="text" name="fungicidas_biologicos" list="catalogo-nomes-biologico" class="form-control form-control-sm" value="{{ linha.fungicidas_biologicos }}"></td>
+                                        <td data-label="Data aplicação"><input type="date" name="data_aplicacao" class="form-control form-control-sm" value="{{ linha.data_aplicacao }}"></td>
+                                        <td data-label="Talhão"><input type="text" name="talhao" class="form-control form-control-sm" value="{{ linha.talhao }}"></td>
+                                        <td data-label="Fungicidas químicos" class="campo-largo"><input type="text" name="fungicidas_quimicos" list="catalogo-nomes-quimico" class="form-control form-control-sm" value="{{ linha.fungicidas_quimicos }}"></td>
+                                        <td data-label="Fungicidas biológicos" class="campo-largo"><input type="text" name="fungicidas_biologicos" list="catalogo-nomes-biologico" class="form-control form-control-sm" value="{{ linha.fungicidas_biologicos }}"></td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
