@@ -36,10 +36,13 @@
     <div class="mt-2">
         O portal do MAPA pode recusar o download feito pelo servidor. Nesse caso, abra
         <a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit/resource/d30b30d7-e256-484e-9ab8-cd40974e1238" target="_blank" rel="noopener">Agrofit -- Produto Formulado</a>,
-        clique em <strong>Baixar</strong> e envie o arquivo aqui (.csv, ou .zip para ficar menor). Faca isso uma vez por mes.
-        <form method="post" action="{{ url_for('agrofit_enviar_arquivo') }}" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 mt-2">
-            <input type="file" name="arquivo" accept=".csv,.zip" class="form-control form-control-sm" style="max-width: 22rem;" required>
+        clique em <strong>Baixar</strong> e envie o arquivo .csv aqui. Faca isso uma vez por mes.
+        Antes de enviar, o proprio navegador separa so' os fungicidas e compacta o arquivo
+        (fica bem menor).
+        <form method="post" action="{{ url_for('agrofit_enviar_arquivo') }}" enctype="multipart/form-data" class="d-flex flex-wrap align-items-center gap-2 mt-2" id="agrofitEnvioForm">
+            <input type="file" name="arquivo" accept=".csv,.zip,.gz" class="form-control form-control-sm" style="max-width: 22rem;" required>
             <button type="submit" class="btn btn-sm btn-primary">Enviar</button>
+            <span class="small text-muted" id="agrofitEnvioStatus"></span>
         </form>
     </div>
 </details>
@@ -172,6 +175,94 @@
     PDF de toda fazenda que nao tiver anotacao propria dessa doenca.
 </p>
 <script>
+// Envio manual do CSV do Agrofit: o navegador le o arquivo em partes,
+// guarda so' o cabecalho e as linhas com "Fungicida" na coluna CLASSE e
+// manda compactado (gzip) -- o arquivo inteiro tem centenas de MB.
+(function () {
+    var form = document.getElementById('agrofitEnvioForm');
+    if (!form || !window.CompressionStream || !window.TextDecoderStream || !window.Blob.prototype.stream) return;
+    var status = document.getElementById('agrofitEnvioStatus');
+    function campos(registro, sep) {
+        var saida = [], atual = '', aspas = false;
+        for (var i = 0; i < registro.length; i++) {
+            var ch = registro[i];
+            if (ch === '"') { aspas = !aspas; }
+            else if (ch === sep && !aspas) { saida.push(atual); atual = ''; }
+            else { atual += ch; }
+        }
+        saida.push(atual);
+        return saida;
+    }
+    function semAcento(t) { return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+    async function filtrar(arquivo) {
+        var amostra = new Uint8Array(await arquivo.slice(0, 1 << 20).arrayBuffer());
+        var codificacao = 'utf-8';
+        try { new TextDecoder('utf-8', { fatal: true }).decode(amostra, { stream: true }); } catch (e) { codificacao = 'windows-1252'; }
+        var lidos = 0;
+        var contador = new TransformStream({ transform: function (bloco, ctl) { lidos += bloco.length; ctl.enqueue(bloco); } });
+        var leitor = arquivo.stream().pipeThrough(contador).pipeThrough(new TextDecoderStream(codificacao)).getReader();
+        var partes = [], pendente = '', aspas = false, cabecalho = null, sep = ';', colClasse = -1, mantidas = 0;
+        function registro(texto) {
+            texto = texto.replace(/\r$/, '');
+            if (cabecalho === null) {
+                cabecalho = texto.replace(/^\ufeff/, '');
+                sep = (cabecalho.split(';').length >= cabecalho.split(',').length) ? ';' : ',';
+                colClasse = campos(cabecalho, sep).map(semAcento).indexOf('classe');
+                partes.push(cabecalho + '\n');
+                return;
+            }
+            if (colClasse !== -1) {
+                if (texto.toLowerCase().indexOf('fungicida') === -1) return;
+                var valor = campos(texto, sep)[colClasse] || '';
+                if (semAcento(valor).indexOf('fungicida') === -1) return;
+            }
+            partes.push(texto + '\n');
+            mantidas++;
+        }
+        for (;;) {
+            var r = await leitor.read();
+            if (r.done) break;
+            var bloco = r.value, pos = 0;
+            for (;;) {
+                var nl = bloco.indexOf('\n', pos);
+                var fim = nl === -1 ? bloco.length : nl;
+                for (var q = bloco.indexOf('"', pos); q !== -1 && q < fim; q = bloco.indexOf('"', q + 1)) aspas = !aspas;
+                if (nl === -1) { pendente += bloco.slice(pos); break; }
+                if (aspas) { pendente += bloco.slice(pos, nl + 1); }
+                else { registro(pendente + bloco.slice(pos, nl)); pendente = ''; }
+                pos = nl + 1;
+            }
+            status.textContent = 'Separando os fungicidas... ' + Math.round(100 * lidos / arquivo.size) + '%';
+        }
+        if (pendente.trim()) registro(pendente);
+        if (colClasse === -1 || !mantidas) throw new Error('coluna CLASSE ou fungicidas nao encontrados');
+        var gz = new Blob(partes).stream().pipeThrough(new CompressionStream('gzip'));
+        return new Blob([await new Response(gz).arrayBuffer()]);
+    }
+    form.addEventListener('submit', function (ev) {
+        var arquivo = form.querySelector('input[type=file]').files[0];
+        if (!arquivo || !/\.csv$/i.test(arquivo.name)) return;
+        ev.preventDefault();
+        var botao = form.querySelector('button[type=submit]');
+        botao.disabled = true;
+        filtrar(arquivo).then(function (filtrado) {
+            var dados = new FormData();
+            dados.append('arquivo', filtrado, 'agrofit_fungicidas.csv.gz');
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', form.action);
+            xhr.upload.onprogress = function (e) {
+                if (e.lengthComputable) status.textContent = 'Enviando ' + (filtrado.size / 1048576).toFixed(1) + ' MB (era ' + (arquivo.size / 1048576).toFixed(0) + ' MB)... ' + Math.round(100 * e.loaded / e.total) + '%';
+            };
+            xhr.onload = function () { location.reload(); };
+            xhr.onerror = function () { status.textContent = 'Falha no envio -- tente de novo.'; botao.disabled = false; };
+            xhr.send(dados);
+        }).catch(function () {
+            status.textContent = 'Nao deu pra separar os fungicidas -- enviando o arquivo inteiro...';
+            form.submit();
+        });
+    });
+})();
+
 // Botoes simples (nao <form>) de proposito -- um <form> por linha ficaria
 // aninhado dentro do form grande de "Salvar recomendacoes" (autosave), e
 // HTML nao permite form dentro de form (o navegador fecha o form de fora

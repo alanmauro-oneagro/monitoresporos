@@ -155,7 +155,9 @@ menos que seja pedido explicitamente paridade para outros admins.
   ("mancozebe (alquilenobis(ditiocarbamato))") -- ver `_sem_parenteses`.
   Mesmo assim existe o envio manual do arquivo na propria
   Biblioteca (rota `agrofit_enviar_arquivo`, limite de upload de 600MB so'
-  nessa rota). O ambiente de nuvem do Claude nao alcanca esse portal.
+  nessa rota) -- o navegador filtra o CSV antes (so' linhas com
+  "Fungicida" na coluna CLASSE) e manda .csv.gz (~265MB -> ~2MB no teste);
+  `montar_indice` aceita .csv/.zip/.gz e tambem so' indexa fungicidas. O ambiente de nuvem do Claude nao alcanca esse portal.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois
