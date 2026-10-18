@@ -3899,6 +3899,9 @@ def fazendas():
     catalogo_variedades = models.get_all_catalogo_variedades()
     if current_user.is_admin:
         sites = sorted((set(read_sites()) | virtual_names) - virtual_clima_names)
+        if current_user.username != ALAN_MAURO_USERNAME:
+            # Reativar e' so' do Alan -- pros outros, desativada some daqui tambem.
+            sites = [s for s in sites if s not in desativadas]
     else:
         sites = sorted(set(models.get_user_permitted_site_names(int(current_user.id))) - virtual_clima_names)
         if not sites:
@@ -4619,7 +4622,7 @@ def save_farm_cultura():
 
 
 @app.route("/fazendas/estacao-clima/save", methods=["POST"])
-@login_required
+@alan_mauro_required
 def save_weather_station_override():
     site_name = request.form.get("site_name")
     if not current_user.is_admin:
@@ -4654,7 +4657,7 @@ def save_weather_station_override():
 
 
 @app.route("/fazendas/pais/save", methods=["POST"])
-@login_required
+@alan_mauro_required
 def save_site_country():
     site_name = request.form.get("site_name")
     if not current_user.is_admin:
@@ -4694,7 +4697,7 @@ def save_site_ativo():
 
 
 @app.route("/fazendas/nome/save", methods=["POST"])
-@login_required
+@alan_mauro_required
 def save_site_display_name():
     """Nome de exibicao de qualquer fazenda -- so' muda como ela aparece
     no site inteiro (Painel, Mapa, Manejo, WhatsApp, PDF, Graficos, ver
