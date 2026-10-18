@@ -9,7 +9,6 @@
 {% endblock %}
 {% block content %}
 <h4 class="mb-2">Envios</h4>
-<p class="small text-muted mb-3">Envios automaticos nao saem antes das 5:30 -- depois da leitura de clima das 5:00. Horario configurado antes disso vale como 5:30.</p>
 
 {% if no_access %}
 <div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
@@ -96,14 +95,12 @@
                     <label class="small text-muted mb-0" for="ndvi_ag_hora_{{ farm_idx }}">h</label>
                     <span class="autosave-status small ms-2"></span>
                 </form>
-                <p class="text-muted small mt-1 mb-0">
-                    Busca sozinho a cena mais recente (nuvens ate 3%) e manda pra quem
-                    esta' marcado abaixo, no dia/horario acima.
-                    {% if site_group.ndvi %}Proximo envio automatico: {{ site_group.ndvi.proxima_execucao | data_br }}, as {{ '%02d'|format(site_group.ndvi.hora) }}h.{% endif %}
-                </p>
+                {% if site_group.ndvi %}
+                <p class="text-muted small mt-1 mb-0">Proximo envio automatico: {{ site_group.ndvi.proxima_execucao | data_br }}, as {{ '%02d'|format(site_group.ndvi.hora) }}h.</p>
+                {% endif %}
                 {% if current_user.is_admin and site_group.destinatarios %}
                 <div class="mt-2">
-                    <span class="small text-muted me-1">Recebem o NDVI (automatico e envio pela aba NDVI):</span>
+                    <span class="small text-muted me-1">Recebem o NDVI:</span>
                     {% for d in site_group.destinatarios %}
                     <div class="form-check form-check-inline">
                         <input class="form-check-input ndvi-ativo-check" type="checkbox" value="{{ d.telefone }}" data-site="{{ site_group.site }}"
@@ -160,10 +157,6 @@
     </div>
 </div>
 {% endfor %}
-<p class="text-muted small mt-3 mb-0 d-none d-md-block">
-    Agenda de envio automatico (texto, PDF e NDVI) e quem recebe cada fazenda, tudo num
-    lugar so' -- e' o unico lugar onde se marca quem recebe.
-</p>
 <script>
 document.querySelectorAll('.farm-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {

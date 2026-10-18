@@ -22,7 +22,6 @@
             <h6 class="mb-0">Sem leitura há mais de {{ dias_bloqueio }} dias</h6>
             <span class="badge bg-secondary">{{ sem_leitura | length }}</span>
         </div>
-        <p class="text-muted mt-1 mb-2 small oculta-ajuda">Doenças escondidas e relatório só de clima (sem PDF). Reativar volta a mostrar doenças e recomendações até chegar leitura nova do BioScout.</p>
         {% for f in sem_leitura %}
         <div class="oculta-linha">
             <div class="oculta-info">

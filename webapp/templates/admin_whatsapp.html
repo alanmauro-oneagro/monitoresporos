@@ -40,10 +40,13 @@
         <div class="card shadow-sm mt-3">
             <div class="card-body">
                 <h6 class="mb-2">Ou gerar codigo de pareamento</h6>
-                <form id="pair-code-form" class="d-flex gap-2">
-                    <input type="text" id="pair-phone" class="form-control form-control-sm"
-                           placeholder="Numero com DDI (ex.: 5511999999999)" required>
-                    <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">Gerar codigo</button>
+                <form id="pair-code-form">
+                    <label class="form-label small mb-1">Telefone (DDD + numero, sem espacos)</label>
+                    <div class="d-flex gap-2">
+                        <input type="text" id="pair-ddi" class="form-control form-control-sm" style="max-width: 5.5rem;" value="55" inputmode="numeric" aria-label="Codigo do pais">
+                        <input type="text" id="pair-phone" class="form-control form-control-sm" placeholder="11999999999" inputmode="tel" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-primary mt-2">Gerar codigo</button>
                 </form>
                 <div id="pair-code-result" class="mt-2 small"></div>
                 <p class="text-muted small mt-2 mb-0">
@@ -58,12 +61,13 @@
         <div class="card shadow-sm">
             <div class="card-body">
                 <h6 class="mb-2">Enviar mensagem de teste</h6>
-                <form method="post" action="{{ url_for('admin_whatsapp_test') }}" class="d-flex gap-2">
-                    <input type="text" name="phone" class="form-control form-control-sm"
-                           placeholder="Numero com DDI (ex.: 5511999999999)" required>
-                    <button type="submit" class="btn btn-sm btn-outline-success text-nowrap" {% if not status.connected %}disabled{% endif %}>
-                        Enviar teste
-                    </button>
+                <form method="post" action="{{ url_for('admin_whatsapp_test') }}">
+                    <label class="form-label small mb-1">Telefone (DDD + numero, sem espacos)</label>
+                    <div class="d-flex gap-2">
+                        <input type="text" name="codigo_pais" class="form-control form-control-sm" style="max-width: 5.5rem;" value="55" inputmode="numeric" aria-label="Codigo do pais">
+                        <input type="text" name="numero_telefone" class="form-control form-control-sm" placeholder="11999999999" inputmode="tel" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-success mt-2" {% if not status.connected %}disabled{% endif %}>Enviar teste</button>
                 </form>
                 {% if not status.connected %}
                 <p class="text-muted small mt-2 mb-0">Conecte um numero primeiro pra poder testar.</p>
@@ -76,11 +80,6 @@
         <div class="card shadow-sm mt-3">
             <div class="card-body">
                 <h6 class="mb-2">Trocar numero</h6>
-                <p class="small text-muted">
-                    Desconecta o numero atual (os envios ficam parados ate
-                    conectar outro) e gera um QR code novo -- use pra trocar
-                    o WhatsApp corporativo.
-                </p>
                 <form method="post" action="{{ url_for('admin_whatsapp_reset') }}"
                       onsubmit="return confirm('Desconectar o WhatsApp atual? Os envios de todas as fazendas ficam parados ate conectar outro numero.');">
                     <button type="submit" class="btn btn-sm btn-outline-danger">🔌 Desconectar / Trocar numero</button>
@@ -91,14 +90,6 @@
     </div>
 </div>
 
-<p class="text-muted small d-none d-md-block mt-4 pt-3 border-top">
-    Os relatorios de todas as fazendas saem por este unico numero (servico
-    <code>whatsapp-bridge</code>, roda junto com o app). So precisa parear
-    uma vez -- a sessao fica salva e sobrevive a reinicios do app; use
-    "Trocar numero" se precisar conectar um WhatsApp diferente (ex.: numero
-    corporativo novo). Horario e quem recebe cada fazenda ficam na aba
-    Envios.
-</p>
 
 <script>
 (function () {
@@ -142,7 +133,7 @@
     if (pairForm) {
         pairForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            var phone = document.getElementById('pair-phone').value;
+            var phone = (document.getElementById('pair-ddi').value + document.getElementById('pair-phone').value).replace(/\D/g, '');
             var result = document.getElementById('pair-code-result');
             result.textContent = 'Gerando...';
             result.className = 'mt-2 small text-muted';

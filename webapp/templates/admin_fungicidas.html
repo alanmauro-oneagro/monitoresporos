@@ -141,39 +141,6 @@
 <span class="autosave-status small"></span>
 </form>
 
-<p class="text-muted small d-none d-md-block mt-4 pt-3 border-top">
-    Ingredientes ativos sugeridos por doenca (quimico e biologico), com a
-    fonte usada em cada grupo, para todas as doencas que ja apareceram na
-    aba <strong>Doencas</strong>. Use as setas ▲/▼ para mover um ingrediente
-    para cima ou para baixo -- so os 3 primeiros de cada grupo aparecem nas
-    abas Recomendações, entao mover o melhor tratamento da sua regiao para
-    o topo garante que ele apareca la. Edite o texto quando algo nao fizer
-    sentido para a sua realidade -- a mudanca vale para todas as fazendas
-    que tiverem aquela doenca em alerta. Doencas novas que ainda nao tem
-    nada pesquisado aparecem marcadas em "Sem dados ainda" -- pesquise
-    fontes (Embrapa, Agrolink/Agrofit-MAPA, universidades) e adicione no
-    <code>fungicida_data.py</code>. Em cada <strong>Quimico</strong>, marque
-    em "Registrado para" so as culturas que esse produto tem registro
-    (Agrofit/MAPA) -- desmarcar uma cultura tira esse item das
-    Recomendacoes/PDF/WhatsApp so' pra fazendas com aquela cultura atual;
-    sem nenhuma cultura desmarcada (padrao), continua aparecendo pra
-    todas. As colunas vem da lista de <strong>Culturas</strong>
-    (aba Doencas) -- <strong>excecao</strong>: uma cultura recem-cadastrada la nasce
-    desmarcada em todo quimico ja existente (ninguem pesquisou registro
-    pra ela ainda), exigindo confirmar uma a uma em vez de assumir que
-    esta tudo certo. Os botoes <strong>🔎 Agrofit</strong> de cada doenca buscam na base aberta do
-    Agrofit/MAPA (atualizada uma vez por mes) pelo nome cientifico do fungo, cada um com uma
-    operacao separada: <strong>Quimicos</strong> e <strong>Biologicos</strong> completam as linhas
-    vazias (sempre 10 quimicos e 4 biologicos) com os produtos mais registrados para o fungo, e
-    <strong>Registros</strong> marca as culturas com registro e desmarca as sem registro nos
-    quimicos (vale tambem mistura de tanque de produtos registrados; cultura que o Agrofit nao
-    tem fica como esta). Produto sem nenhuma cultura no Agrofit e' conferido de novo nas bulas da
-    ADAPAR; sem registro la' tambem, a linha fica vazia para o botao Quimicos preencher. Mesmo jeito para doencas do BioScout ou cadastradas a mao.
-    Ordem: doencas do BioScout do Brasil (ou sem pais marcado), depois as cadastradas a mao, e
-    por ultimo as de outros paises.
-    A caixa <strong>Anotações</strong> de cada doenca aparece nas Recomendacoes, no texto e no
-    PDF de toda fazenda que nao tiver anotacao propria dessa doenca.
-</p>
 <script>
 // Envio manual do CSV do Agrofit: o navegador le o arquivo em partes,
 // guarda so' o cabecalho e as linhas com "Fungicida" na coluna CLASSE e

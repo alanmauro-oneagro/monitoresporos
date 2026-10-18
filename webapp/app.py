@@ -5965,7 +5965,7 @@ def admin_whatsapp_pair_code():
 @app.route("/admin/whatsapp/test", methods=["POST"])
 @alan_mauro_required
 def admin_whatsapp_test():
-    phone = request.form.get("phone", "")
+    phone = _telefone_from_form(request.form)
     texto = (
         "Teste do OneAgro Monitor -- se voce recebeu essa mensagem, o envio "
         "de relatorios por WhatsApp esta funcionando corretamente."
