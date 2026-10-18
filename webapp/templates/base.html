@@ -142,10 +142,9 @@
         <button type="button" class="navbar-toggler" id="navToggleBtn" aria-label="Abrir menu">
             <span class="navbar-toggler-icon"></span>
         </button>
-        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'ndvi', 'alertas_clima', 'whatsapp_gerenciamento', 'admin_whatsapp', 'admin_exportar', 'admin_exportar_download', 'fazendas_ocultas'] %}
+        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'ndvi', 'whatsapp_gerenciamento', 'admin_whatsapp', 'admin_exportar', 'admin_exportar_download', 'fazendas_ocultas'] %}
         <div class="d-none d-lg-flex flex-column flex-lg-row gap-2 gap-lg-3 align-items-lg-center justify-content-lg-end w-100" id="mainNavMenu">
             <a class="nav-link text-white{% if request.endpoint == 'mapa' %} tab-ativa{% endif %}" href="{{ url_for('mapa') }}">Mapa</a>
-            <a class="nav-link text-white{% if request.endpoint == 'dashboard' %} tab-ativa{% endif %}" href="{{ url_for('dashboard') }}">Alertas</a>
             <a class="nav-link text-white{% if request.endpoint == 'graficos' %} tab-ativa{% endif %}" href="{{ url_for('graficos') }}">Graficos</a>
             <a class="nav-link text-white{% if request.endpoint == 'fazendas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas') }}">Manejos</a>
             <a class="nav-link text-white{% if request.endpoint == 'recommendations' %} tab-ativa{% endif %}" href="{{ url_for('recommendations_default') }}">Recomendações</a>
@@ -164,7 +163,6 @@
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'ndvi' %} tab-ativa{% endif %}" href="{{ url_for('ndvi') }}">NDVI</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'whatsapp_gerenciamento' %} tab-ativa{% endif %}" href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>
                     {% if current_user.username == 'Alan Mauro' %}
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'alertas_clima' %} tab-ativa{% endif %}" href="{{ url_for('alertas_clima') }}">Alertas Clima</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('admin_whatsapp') }}">Conexão WhatsApp</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_exportar' %} tab-ativa{% endif %}" href="{{ url_for('admin_exportar') }}">Exportar</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'fazendas_ocultas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas_ocultas') }}">Fazendas ocultas</a>

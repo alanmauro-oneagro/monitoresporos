@@ -29,14 +29,6 @@
                 {{ site_group.nome_exibicao }}
                 {% if site_group.coords %}- <span class="text-muted fw-normal small">{{ "%.5f"|format(site_group.coords[0]) }}, {{ "%.5f"|format(site_group.coords[1]) }}</span>{% endif %}
             </div>
-            {% if pode_excluir %}
-            <form method="post" action="{{ url_for('ocultar_fazenda_ndvi') }}" class="mb-0"
-                  data-msg="Excluir {{ site_group.nome_exibicao }} da aba NDVI? A fazenda e os dados dela continuam no site -- da pra restaurar no fim desta aba."
-                  onsubmit="return confirm(this.dataset.msg);">
-                <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger" title="Tira esta fazenda so' da aba NDVI (pra todos os usuarios)">🗑️ Excluir da aba NDVI</button>
-            </form>
-            {% endif %}
         </div>
         <div class="row g-3">
             <div class="col-12 col-lg-6">
@@ -74,7 +66,7 @@
                 <div class="mt-3 pt-3 border-top">
                     <p class="text-muted small mb-0">
                         Envio automatico de NDVI por WhatsApp -- configure o dia/horario na
-                        aba <a href="{{ url_for('whatsapp_gerenciamento') }}">WhatsApp</a>.
+                        aba <a href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>, junto com quem recebe.
                     </p>
                 </div>
                 {% endif %}
@@ -113,21 +105,13 @@
                     </div>
                 </div>
                 {% endif %}
-                {% if site_group.whatsapp_destinatarios %}
-                <div class="mb-2">
-                    <div class="small text-muted mb-1">Destinatarios ativos pra NDVI dessa fazenda (envio manual e agendamento automatico):</div>
-                    {% for destinatario in site_group.whatsapp_destinatarios %}
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input ndvi-ativo-check" type="checkbox" form="ndvi_whats_{{ site_idx }}"
-                               name="destino_telefones" value="{{ destinatario.telefone }}"
-                               data-site="{{ site_group.site }}"
-                               id="ndvi_dest_{{ site_idx }}_{{ loop.index0 }}"
-                               {% if destinatario.telefone in site_group.ndvi_ativos %}checked{% endif %}>
-                        <label class="form-check-label small" for="ndvi_dest_{{ site_idx }}_{{ loop.index0 }}">{{ destinatario.rotulo }}</label>
-                    </div>
-                    {% endfor %}
+                <div class="small text-muted mb-2">
+                    Recebem o NDVI:
+                    {% for destinatario in site_group.ndvi_destinatarios %}<strong>{{ destinatario.rotulo }}</strong>{% if not loop.last %}, {% endif %}
+                    <input type="hidden" form="ndvi_whats_{{ site_idx }}" name="destino_telefones" value="{{ destinatario.telefone }}">
+                    {% else %}ninguem marcado{% endfor %}
+                    -- muda em <a href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>.
                 </div>
-                {% endif %}
                 {% if site_group.historico %}
                 <form method="post" action="{{ url_for('enviar_ndvi_historico_whatsapp') }}" id="ndvi_whats_{{ site_idx }}">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
@@ -158,8 +142,8 @@
                     {% endfor %}
                 </div>
                 <button type="submit" form="ndvi_whats_{{ site_idx }}" class="btn btn-sm btn-outline-success mt-2"
-                        {% if not site_group.whatsapp_destinatarios %}disabled{% endif %}
-                        title="{% if site_group.whatsapp_destinatarios %}Enviar as imagens marcadas pros destinatarios marcados acima{% else %}Nenhum numero cadastrado pra receber relatorio dessa fazenda (aba Usuarios){% endif %}">
+                        {% if not site_group.ndvi_destinatarios %}disabled{% endif %}
+                        title="{% if site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Envios){% endif %}">
                     📲 Enviar selecionadas por WhatsApp
                 </button>
                 {% else %}
@@ -175,22 +159,6 @@
 {% endfor %}
 {% endif %}
 
-{% if ocultas %}
-<div class="card shadow-sm mb-3 border-secondary">
-    <div class="card-body">
-        <div class="small fw-bold mb-2">Fazendas excluidas da aba NDVI ({{ ocultas|length }})</div>
-        {% for o in ocultas %}
-        <form method="post" action="{{ url_for('ocultar_fazenda_ndvi') }}" class="d-flex align-items-center gap-2 mb-1">
-            <input type="hidden" name="site_name" value="{{ o.site }}">
-            <input type="hidden" name="acao" value="restaurar">
-            <span class="small flex-grow-1">{{ o.nome_exibicao }}</span>
-            <button type="submit" class="btn btn-sm btn-outline-secondary">↩ Restaurar</button>
-        </form>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
 <p class="text-muted small d-none d-md-block border-top pt-3 mt-2">
     Anexe o(s) CAR da fazenda (arquivo KML baixado do
     <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener">SICAR</a>) --
@@ -200,20 +168,4 @@
     antiga); clique numa miniatura pra abrir em outra aba do navegador e comparar datas,
     ou marque "Selecionar" em varias e mande todas de uma vez por WhatsApp.
 </p>
-<script>
-// Persiste marcar/desmarcar destinatario ativo pra NDVI (default
-// desmarcado, ver `site_group.ndvi_ativos`) -- independente do form de
-// envio manual (que continua lendo o mesmo checkbox via o atributo
-// form="ndvi_whats_..."), pra nao precisar de um botao "Salvar" a parte
-// e pro agendamento automatico sempre ver a escolha mais recente.
-document.querySelectorAll('.ndvi-ativo-check').forEach(function (chk) {
-    chk.addEventListener('change', function () {
-        var fd = new FormData();
-        fd.append('site_name', chk.dataset.site);
-        fd.append('telefone', chk.value);
-        fd.append('ativo', chk.checked ? '1' : '0');
-        fetch('{{ url_for("toggle_ndvi_ativo") }}', { method: 'POST', body: fd }).catch(function () {});
-    });
-});
-</script>
 {% endblock %}

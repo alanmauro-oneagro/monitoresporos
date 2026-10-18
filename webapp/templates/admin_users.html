@@ -25,12 +25,12 @@
                 {% endif %}
             </td>
             <td>
-                <a href="{{ url_for('admin_user_reports', user_id=u.id) }}">
-                    Localidades{% if report_counts.get(u.id) %} ({{ report_counts[u.id] }}){% endif %}
+                <a href="{{ url_for('whatsapp_gerenciamento') }}" class="text-decoration-none" title="Quem recebe cada fazenda e' marcado na aba Envios">
+                    {{ report_counts.get(u.id, 0) }} fazenda(s)
                 </a>
             </td>
             <td>
-                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp em TODAS as fazendas de uma vez, sem apagar as marcacoes de Localidades">
+                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp em TODAS as fazendas de uma vez, sem apagar quem recebe cada fazenda (aba Envios)">
                     <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-user-id="{{ u.id }}"
                         id="pausado_user_{{ u.id }}" {% if u.whatsapp_pausado %}checked{% endif %}>
                     <label class="form-check-label small" for="pausado_user_{{ u.id }}">Pausado</label>
@@ -116,9 +116,8 @@
             </div>
             <button type="submit" class="btn btn-success">Criar usuario</button>
             <p class="text-muted small d-none d-md-block mt-3 pt-3 border-top mb-0">
-                Esse telefone e' o que a pessoa vai usar depois em "📱 Meu
-                WhatsApp" (no menu) pra receber os relatorios direto no
-                proprio numero. A senha comeca sempre como
+                Esse telefone recebe os relatorios das fazendas marcadas pra
+                essa pessoa na aba Envios. A senha comeca sempre como
                 <strong>{{ default_password }}</strong> -- a pessoa troca
                 depois no botao "🔑 Trocar senha" (no menu) assim que entrar.
             </p>

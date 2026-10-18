@@ -195,20 +195,10 @@
 </form>
 
 <p class="text-muted small d-none d-md-block mt-3 pt-3 border-top">
-    Marque em quais paises cada doenca deve aparecer quando o filtro de
-    "Pais" estiver ativo (aba Graficos). Doenca sem nenhuma marcacao aqui
-    NUNCA e' escondida pelo filtro -- aparece sempre, pra nao sumir um
-    alerta novo/nao classificado por engano. Uma doenca pode valer para
-    mais de um pais. Tambem ajuda a organizar a busca de produtos com
-    registro por regiao. Edite o nome de um pais direto no cabecalho da
-    coluna -- vem preenchido com os 12 paises ja cadastrados na aba
-    Manejos/Mapa Interpolado, mas pode virar qualquer outro nome (util
-    se um dia a OneAgro vender pra um pais fora da America do Sul, ainda
-    sem fronteira/estacao meteorologica integrada aqui no site);
-    renomear um ja existente preserva a marcacao ja feita pra ele.
-    <strong>Atencao</strong>: renomear um dos 12 paises originais faz o
-    filtro de "Pais" da aba Graficos parar de reconhecer essa doenca por
-    aquele pais (o filtro usa o nome oficial do registro do site).
+    Paises em que cada doenca aparece no filtro "Pais" da aba Graficos (sem marcacao = aparece
+    sempre) e na ordem da Biblioteca de fungicidas. O nome do pais se edita no cabecalho da
+    coluna; <strong>atencao</strong>: renomear um dos 12 paises originais faz o filtro da aba
+    Graficos parar de reconhecer a doenca por aquele pais.
 </p>
 {% endif %}
 {% endblock %}
