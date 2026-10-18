@@ -220,9 +220,6 @@ html { font-size: 14px; }
                 <span class="badge ms-2 {{ 'bg-danger' if row.status == 'Perigo' else 'bg-warning text-dark' }}">
                     {{ 'Alta concentração de esporos' if row.status == 'Perigo' else 'Moderada concentração de esporos' }}
                 </span>
-                {% if row.cientifico %}
-                <span class="small text-muted fst-italic ms-2">({{ row.cientifico }})</span>
-                {% endif %}
             </div>
             {% if row.previsao_risco %}
             <div class="small mt-1">
@@ -291,9 +288,8 @@ html { font-size: 14px; }
                 <tbody>
                 {% for row in site_group.riscos_sem_alerta %}
                     <tr>
-                        <td class="risco-doenca" {% if row.cientifico %}title="{{ row.cientifico }}"{% endif %}>
+                        <td class="risco-doenca">
                             <span class="fw-bold text-uppercase">{{ row.rotulo }}{% if row.doenca_en.startswith('manual:') %} *{% endif %}</span>
-                            {% if row.cientifico %}<span class="text-muted fst-italic d-none d-md-inline ms-1">({{ row.cientifico }})</span>{% endif %}
                         </td>
                         {% if row.previsao_risco %}
                             {% for dt in ns.datas %}
