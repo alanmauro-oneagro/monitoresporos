@@ -104,6 +104,14 @@ menos que seja pedido explicitamente paridade para outros admins.
   agenda que antes ficava espalhada em Manejos/NDVI/Alertas Clima — ao
   mexer em agenda de envio, e' aqui que fica agora. Pontos "so' clima" NAO
   tem PDF nem anotacao (pedido do Alan): so' texto, manual ou agendado.
+- **Aba Doencas** (pedido do Alan, 18/10/2026): cadastro manual ja' pede
+  o nome cientifico -- germinacao vem de `_PESQUISA_GERMINACAO` e as
+  culturas de `agrofit_dados.culturas_do_fungo` (culturas com fungicida
+  registrado pro fungo); o botao "Buscar pelo nome cientifico" tambem
+  marca as culturas se a doenca nao tiver nenhuma. As culturas de cada
+  doenca ficam no proprio cartao (`culturas_card__<idx>`); a matriz
+  Doencas x Culturas foi retirada -- sobrou so' o editor dos 12 nomes
+  de cultura (form_id `matriz_culturas`).
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);

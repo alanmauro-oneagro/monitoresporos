@@ -2,7 +2,7 @@
 {% block title %}Doencas - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
-/* Cabecalho das matrizes Doencas x Culturas e Doencas x Pais -- 12
+/* Cabecalho da matriz Doencas x Pais -- 12
    caixas de nome bem estreitas cada, senao a tabela fica larga demais e
    nao cabe na tela do computador sem rolar (pedido explicito do
    usuario). */
@@ -20,11 +20,13 @@
         <div class="small fw-bold mb-1">Adicionar doenca manualmente</div>
         <div class="text-muted small mb-2">
             Para doencas que o BioScout nao identifica. Ela entra no relatorio (Recomendacoes, WhatsApp e PDF)
-            so' com o <strong>risco de infeccao pelo clima</strong>, nas fazendas da cultura e do pais marcados nas
-            matrizes abaixo. Depois de adicionar, preencha as condicoes de germinacao no cartao dela.
+            so' com o <strong>risco de infeccao pelo clima</strong>, nas fazendas das culturas e do pais marcados nela.
+            Com o nome cientifico, a germinacao vem da pesquisa e as culturas vem do Agrofit (onde ha fungicida
+            registrado pro fungo) -- confira no cartao dela.
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <input type="text" name="nome_pt" class="form-control form-control-sm" style="max-width: 320px;" placeholder="Ex.: Mancha-alvo" required>
+            <input type="text" name="nome_pt" class="form-control form-control-sm" style="max-width: 320px;" placeholder="Nome. Ex.: Mancha-alvo" required>
+            <input type="text" name="nome_cientifico" class="form-control form-control-sm fst-italic" style="max-width: 320px;" placeholder="Nome cientifico. Ex.: Corynespora cassiicola">
             <button type="submit" class="btn btn-sm btn-success">+ Adicionar doenca</button>
         </div>
     </div>
@@ -65,11 +67,23 @@
             </div>
         </div>
 
+        <div class="small fw-bold text-muted mt-3 mb-1">Culturas que a doenca ataca</div>
+        <div class="d-flex flex-wrap column-gap-3 row-gap-1 doenca-culturas">
+            {% set card_idx = loop.index0 %}
+            {% for c in culturas_ativas %}
+            <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" name="culturas_card__{{ card_idx }}" value="{{ c }}" id="cult-{{ card_idx }}-{{ loop.index0 }}" {% if c in d.culturas %}checked{% endif %}>
+                <label class="form-check-label small" for="cult-{{ card_idx }}-{{ loop.index0 }}">{{ c }}</label>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="small text-warning-emphasis mt-1 sem-cultura-aviso{% if d.culturas %} d-none{% endif %}">Nenhuma cultura marcada -- a doenca aparece em todas.</div>
+
         <hr class="my-3">
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
             <div class="small fw-bold text-muted">Condicoes para germinacao de esporos</div>
             <button type="button" class="btn btn-sm btn-outline-primary buscar-germinacao-btn" data-en="{{ d.en }}"
-                    title="Preenche so' esta doenca com a pesquisa de literatura, pelo nome cientifico (genero e especie, ou so' o genero)">
+                    title="Preenche so' esta doenca com a pesquisa de literatura, pelo nome cientifico (genero e especie, ou so' o genero); sem cultura marcada, marca as culturas pelo Agrofit">
                 🔎 Buscar pelo nome cientifico
             </button>
             <span class="buscar-germinacao-msg small"></span>
@@ -117,59 +131,27 @@
     realmente calcula).
 </p>
 
-<h4 class="mb-2 mt-4">Doencas x Culturas</h4>
-<style>
-    /* Doenca sem nenhuma cultura marcada: linha laranja (80% transparente). */
-    tr.sem-cultura > td { background-color: rgba(253, 126, 20, 0.2) !important; }
-</style>
-
-<form method="post" data-autosave>
+<h4 class="mb-2 mt-4">Culturas</h4>
+<form method="post" data-autosave data-autosave-reload class="card shadow-sm mb-2">
     <input type="hidden" name="form_id" value="matriz_culturas">
-    <div class="table-responsive">
-        <table class="table table-sm bg-white shadow-sm align-middle">
-            <thead>
-                <tr>
-                    <th>Doenca</th>
-                    <th>Nome cientifico</th>
-                    {% for slot in range(12) %}
-                    <th class="text-center">
-                        <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm text-center cultura-nome-input"
-                               value="{{ culturas[slot] }}" placeholder="--" title="{{ culturas[slot] }}">
-                    </th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-            {% for d in matriz %}
-                {% set doenca_loop = loop %}
-                <tr class="linha-matriz-cultura{% if not d.marcadas %} sem-cultura{% endif %}">
-                    <td>
-                        {{ d.pt }}
-                        <input type="hidden" name="doenca_en" value="{{ d.en }}">
-                    </td>
-                    <td><em class="text-muted">{{ d.cientifico }}</em></td>
-                    {% for slot in range(12) %}
-                    <td class="text-center">
-                        <input type="checkbox" class="form-check-input" name="culturas__{{ doenca_loop.index0 }}" value="{{ slot }}" {% if culturas[slot] in d.marcadas %}checked{% endif %} {% if not culturas[slot] %}disabled{% endif %}>
-                    </td>
-                    {% endfor %}
-                </tr>
+    <div class="card-body">
+        <div class="row g-2 row-cols-2 row-cols-sm-3 row-cols-lg-6">
+            {% for slot in range(12) %}
+            <div class="col">
+                <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm"
+                       value="{{ culturas[slot] }}" placeholder="(livre)" aria-label="Cultura {{ slot + 1 }}">
+            </div>
             {% endfor %}
-            </tbody>
-        </table>
+        </div>
+        <span class="autosave-status small"></span>
     </div>
-    <span class="autosave-status small ms-2"></span>
 </form>
 
 <p class="text-muted small d-none d-md-block mt-3 pt-3 border-top">
-    Marque em quais culturas cada doenca deve aparecer quando o filtro de
-    "Cultura atual" estiver ativo (aba Recomendações). Doenca sem nenhuma
-    marcacao aqui NUNCA e' escondida pelo filtro -- aparece sempre, pra nao
-    sumir um alerta novo/desconhecido por engano. Uma doenca pode valer
-    para mais de uma cultura. Edite o nome de uma cultura direto no
-    cabecalho da coluna -- uma coluna vazia fica disponivel pra cadastrar
-    uma cultura nova; renomear uma ja existente preserva as marcacoes e o
-    registro de fungicida ja feitos pra ela.
+    Ate' 12 culturas. Marque em cada doenca (acima) as culturas que ela ataca -- e' o que o filtro de
+    "Cultura atual" da aba Recomendações usa. Doenca sem nenhuma cultura marcada NUNCA e' escondida
+    pelo filtro. Renomear uma cultura aqui preserva as marcacoes e o registro de fungicida ja feitos
+    pra ela; uma caixa vazia fica livre pra cadastrar uma cultura nova.
 </p>
 
 <h4 class="mb-2 mt-4">Doencas x Pais</h4>
@@ -236,6 +218,9 @@
     var CHAVE = 'doencas_abertas';
     var abertas;
     try { abertas = JSON.parse(sessionStorage.getItem(CHAVE) || '[]'); } catch (e) { abertas = []; }
+    // Doenca recem-cadastrada (?abrir=<chave>) ja' abre.
+    var nova = new URLSearchParams(location.search).get('abrir');
+    if (nova && abertas.indexOf(nova) === -1) abertas.push(nova);
     function abrir(btn, aberto) {
         document.getElementById(btn.dataset.target).classList.toggle('d-none', !aberto);
         btn.querySelector('.toggle-icon').textContent = aberto ? '▼' : '▶';
@@ -271,6 +256,10 @@ document.querySelectorAll('.buscar-germinacao-btn').forEach(function (btn) {
             .then(function (res) {
                 msg.className = 'buscar-germinacao-msg small ' + (res.ok ? 'text-success' : 'text-danger');
                 msg.textContent = res.mensagem;
+                (res.culturas || []).forEach(function (c) {
+                    card.querySelectorAll('.doenca-culturas input').forEach(function (chk) { if (chk.value === c) chk.checked = true; });
+                });
+                if (res.culturas && res.culturas.length) card.querySelector('.sem-cultura-aviso').classList.add('d-none');
                 if (!res.ok) return;
                 var vazio = function (v) { return v === null || v === undefined ? '' : v; };
                 campo('germ_temp_min').value = vazio(res.temp_min);
@@ -321,14 +310,12 @@ document.querySelectorAll('.cultura-nome-input').forEach(function (input) {
     };
     input.addEventListener('input', atualizar);
 });
-// Matriz Doencas x Culturas: linha laranja enquanto nenhuma cultura
-// estiver marcada (atualiza ao marcar/desmarcar).
-document.querySelectorAll('tr.linha-matriz-cultura').forEach(function (linha) {
-    function atualizarLinha() {
-        linha.classList.toggle('sem-cultura', !linha.querySelector('input[type=checkbox]:checked'));
-    }
-    atualizarLinha();
-    linha.addEventListener('change', atualizarLinha);
+// Aviso "nenhuma cultura marcada" no cartao da doenca.
+document.querySelectorAll('.doenca-culturas').forEach(function (bloco) {
+    var aviso = bloco.parentNode.querySelector('.sem-cultura-aviso');
+    bloco.addEventListener('change', function () {
+        aviso.classList.toggle('d-none', !!bloco.querySelector('input:checked'));
+    });
 });
 </script>
 {% endblock %}
