@@ -2601,15 +2601,63 @@ def dashboard_atualizar():
         )
     else:
         flash("Ja tem uma busca de dados em andamento -- aguarde ela terminar.", "success")
-    return redirect(url_for("recommendations_default"))
+    return redirect(request.referrer or url_for("dashboard"))
 
 
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    """Antiga aba Alertas -- o resumo do que esta' em Perigo/Atencao agora
-    fica no topo da aba Recomendacoes (pedido do Alan, 18/10/2026)."""
-    return redirect(url_for("recommendations_default"))
+    _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
+    if current_user.is_admin:
+        permitted = _sites_ativos_para_admin()  # admin ve todas as fazendas ativas
+    else:
+        permitted = set(models.get_user_permitted_site_names(int(current_user.id)))
+        if not permitted:
+            return render_template("dashboard.html", cards_by_site={}, no_access=True)
+    cards_by_site = _cards_by_site_all(permitted, _load_translations())
+    # Painel mostra TODAS as caixas de doenca sempre -- o filtro de cultura
+    # so se aplica nas abas Recomendacoes (Safra / 2 Safra), nao aqui.
+    # Umidade/chuva vem SEMPRE da Open-Meteo (mesma fonte usada em
+    # Recomendacoes/Alertas Clima/WhatsApp) -- nao mais do clima que o
+    # BioScout mandava por device (modelo, nao sensor), que so' ficava tao fresco quanto a
+    # ultima sincronizacao daquele aparelho (podendo ficar velho bem na
+    # hora que a fazenda mais precisa de clima confiavel, ver
+    # DADOS_BLOQUEIO_DIAS) -- pedido explicito do usuario ("sempre
+    # atualizar a informacao de clima"). Mostrado uma vez so, ao lado do
+    # nome da fazenda, em vez de repetir em cada caixa de doenca.
+    weather_by_site = {}
+    dados_status_by_site = {}
+    nomes_virtuais = {vf["site_name"]: vf["nome"] for vf in models.get_all_virtual_farms()}
+    coords = _weather_coords_all()
+    mais_recente_by_site = {site: max(cards, key=lambda c: c["data"]) for site, cards in cards_by_site.items()}
+    _prefetch_weather(list(cards_by_site.keys()), coords)
+    for site, cards in cards_by_site.items():
+        mais_recente = mais_recente_by_site[site]
+        weather = _get_weather_for_site(site, coords)
+        weather_by_site[site] = {
+            "umidade": weather.get("umidade_atual") if weather else None,
+            "chuva": weather.get("chuva_atual_mm") if weather else None,
+            "chuva_24h": weather.get("chuva_24h_mm") if weather else None,
+            "data": mais_recente["data"],
+        }
+        dias_sem_leitura = _dias_sem_leitura(cards)
+        dados_status_by_site[site] = {
+            "dias_sem_leitura": dias_sem_leitura,
+            "nivel_dados": _nivel_dados_site(site, cards),
+            "virtual": site in nomes_virtuais,
+            "nome_exibicao": _nome_exibicao(site),
+        }
+
+    # Mesma ordem de todas as telas (`_ordem_fazenda`): pais (Brasil
+    # primeiro), nome, tempo sem sinal.
+    sites_ordenados = sorted(cards_by_site, key=lambda s: (_ordem_fazenda(s), dados_status_by_site[s]["dias_sem_leitura"] or 0))
+    cards_by_site = {s: cards_by_site[s] for s in sites_ordenados}
+
+    return render_template(
+        "dashboard.html", cards_by_site=cards_by_site, no_access=False,
+        weather_by_site=weather_by_site, dados_status_by_site=dados_status_by_site,
+        fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
+    )
 
 
 def _uf_por_site():
