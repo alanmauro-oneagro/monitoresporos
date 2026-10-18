@@ -59,7 +59,7 @@
         <div class="d-none mt-1 mb-2" id="fung-body-{{ loop.index0 }}">
         <div class="mb-3">
             <input type="hidden" name="cientifico_key" value="{{ d.doenca }}">
-            <input type="text" name="cientifico" class="form-control form-control-sm fst-italic text-muted fung-cientifico" value="{{ d.cientifico }}"
+            <input type="text" name="cientifico" class="form-control form-control-sm fst-italic fung-cientifico" value="{{ d.cientifico }}"
                    data-doenca="{{ d.doenca }}" placeholder="Nome cientifico do fungo (genero e especie)" aria-label="Nome cientifico de {{ d.rotulo }}">
             <div class="d-flex flex-wrap align-items-center gap-1 mt-2 fung-agrofit"
                  {% if d.pesquisa_fora_brasil %}title="Doenca marcada so' pra outro pais -- Agrofit/MAPA e' o registro do Brasil"{% endif %}>
