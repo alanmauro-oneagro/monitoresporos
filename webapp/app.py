@@ -3284,7 +3284,7 @@ def mapa_interpolado():
             })
 
     sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
-    pontos_virtuais.sort(key=lambda p: _chave_alfabetica(p["nome"]))
+    pontos_virtuais.sort(key=lambda p: _ordem_fazenda(p["site_name"]))
 
     # Todo pais ativo (com fazenda/ponto marcado) MAIS todo pais que ja'
     # tem integracao de estacao oficial (`paises_com_estacoes`) -- a tela
@@ -3528,7 +3528,7 @@ def _pontos_clima():
                 site, [], weather=weather, is_virtual=True, mostrar_secao_doencas=False,
             ),
         })
-    pontos.sort(key=lambda p: _chave_alfabetica(p["nome"]))
+    pontos.sort(key=lambda p: _ordem_fazenda(p["site_name"]))
     return pontos
 
 
@@ -3707,12 +3707,7 @@ def _resumo_alertas(cards_by_site):
                 "site": site, "nome": _nome_exibicao(site), "perigo": perigo, "atencao": atencao,
                 "nivel_dados": nivel, "dias_sem_leitura": _dias_sem_leitura(cards),
             })
-    # Fazendas com alerta em ordem alfabetica; as so' "sem leitura" pelo
-    # tempo sem enviar sinal (a que parou ha menos tempo primeiro).
-    resumo.sort(key=lambda r: (
-        (0, 0) if r["perigo"] or r["atencao"] else (1, r["dias_sem_leitura"] or 0),
-        _chave_alfabetica(r["nome"]),
-    ))
+    resumo.sort(key=lambda r: (_ordem_fazenda(r["site"]), r["dias_sem_leitura"] or 0))
     return resumo
 
 
@@ -4836,10 +4831,20 @@ def save_recommendations():
 
 
 def _ordem_fazenda(site):
-    """Chave de ordenacao de fazenda/estacao em toda tela: ordem
-    alfabetica do nome exibido, sem diferenca de acento (pedido do Alan,
-    18/10/2026)."""
-    return _chave_alfabetica(_nome_exibicao(site))
+    """Chave de ordenacao de fazenda/estacao em toda tela (pedido do Alan,
+    18/10/2026): 1) pais -- Brasil sempre primeiro, depois os outros em
+    ordem alfabetica; 2) nome exibido em ordem alfabetica, sem diferenca de
+    acento. (3, tempo sem sinal, entra so' onde ha' esse dado -- ver
+    `_resumo_alertas`/`fazendas_ocultas`.)"""
+    paises = getattr(g, "_ordem_paises", None)
+    if paises is None:
+        paises = g._ordem_paises = models.get_all_site_countries()
+    codigo = paises.get(site, countries.DEFAULT_COUNTRY)
+    return (
+        codigo != countries.DEFAULT_COUNTRY,
+        _chave_alfabetica(countries.get_country(codigo)["nome"]),
+        _chave_alfabetica(_nome_exibicao(site)),
+    )
 
 
 def _chave_alfabetica(texto):
@@ -5838,8 +5843,8 @@ def fazendas_ocultas():
             "ultima_leitura": models.fmt_data_br(ultima),
             "reativada": bool(liberados.get(site)) and ultima <= liberados[site],
         })
-    desativadas_lista = sorted(({"site": s, "nome": _nome_exibicao(s)} for s in desativadas), key=lambda d: _chave_alfabetica(d["nome"]))
-    sem_leitura.sort(key=lambda d: (d["dias"], _chave_alfabetica(d["nome"])))
+    desativadas_lista = sorted(({"site": s, "nome": _nome_exibicao(s)} for s in desativadas), key=lambda d: _ordem_fazenda(d["site"]))
+    sem_leitura.sort(key=lambda d: (_ordem_fazenda(d["site"]), d["dias"]))
     return render_template("fazendas_ocultas.html", desativadas=desativadas_lista, sem_leitura=sem_leitura,
                            dias_bloqueio=DADOS_BLOQUEIO_DIAS)
 
