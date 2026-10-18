@@ -449,6 +449,18 @@ def registros(nome_cientifico):
     return resultado
 
 
+def culturas_do_fungo(nome_cientifico):
+    """Culturas do Agrofit com fungicida registrado pro fungo -- onde ele
+    ataca (sugestao das culturas de uma doenca na aba Doencas)."""
+    if not INDICE_PATH.exists():
+        return set()
+    dados = carregar()
+    culturas = set()
+    for praga in pragas_do_nome_cientifico(nome_cientifico, dados.get("pragas", {})):
+        culturas.update(cultura for _, cultura in dados["pragas"][praga])
+    return culturas
+
+
 _SINONIMOS_CULTURA = {"citrus": "citros"}
 
 

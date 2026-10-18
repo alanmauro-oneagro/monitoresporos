@@ -4948,6 +4948,7 @@ def admin_doencas():
         ur_mins = request.form.getlist("germ_ur_min")
         molhamentos = request.form.getlist("germ_molhamento_horas")
         info_atual = models.get_all_disease_info()
+        culturas_ativas = set(models.get_culturas_ativas())
         for idx, (display_name_en, nome_pt, nome_cientifico) in enumerate(
             zip(display_names, nomes_pt, nomes_cientificos)
         ):
@@ -4955,6 +4956,9 @@ def admin_doencas():
             if not nome_pt:
                 continue
             models.save_disease_translation(display_name_en, nome_pt, nome_cientifico.strip())
+            models.set_doenca_culturas(
+                display_name_en, [c for c in request.form.getlist(f"culturas_card__{idx}") if c in culturas_ativas],
+            )
             # germ_agua_livre_inibe (chuva atrapalha, caso do oidio) nao tem
             # mais campo no formulario -- e' propriedade fixa do fungo, nao
             # algo pra editar aqui; preserva o valor ja salvo (aplicado pelo
@@ -4972,9 +4976,11 @@ def admin_doencas():
 
     _load_translations()  # garante linhas novas + nome cientifico pre-preenchido
     info = models.get_all_disease_info()
+    doenca_culturas = models.get_doenca_culturas()
     doencas = [
         {
             "en": en, "pt": data["nome_pt"], "cientifico": data["nome_cientifico"],
+            "culturas": doenca_culturas.get(en, set()),
             "germinacao": _formatar_condicoes_germinacao(data),
             "temp_min": data["germ_temp_min"], "temp_max": data["germ_temp_max"],
             "ur_min": data["germ_ur_min"], "molhamento_horas": data["germ_molhamento_horas"],
@@ -4985,7 +4991,6 @@ def admin_doencas():
     ]
     culturas_ativas = models.get_culturas_ativas()
     culturas = models.get_culturas()
-    doenca_culturas = models.get_doenca_culturas()
     # 12 nomes de pais editaveis direto no cabecalho da matriz Doencas x
     # Pais -- mesmo padrao de `culturas`/`culturas_ativas` acima. Nasce
     # com os paises de `countries.py` (ver seed em `models.init_db`),
@@ -4994,19 +4999,12 @@ def admin_doencas():
     # continente, sem precisar de fronteira/estacao cadastrada nele.
     paises = models.get_paises_doenca_slots()
     doenca_paises = models.get_doenca_paises()
-    matriz = [
-        {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_culturas.get(d["en"], set())}
-        for d in doencas
-    ]
-    # Doencas marcadas na 1a cultura (1a coluna) primeiro -- o resto mantem
-    # a ordem por nome cientifico (sort estavel). Pedido do usuario.
-    matriz.sort(key=lambda d: not (culturas[0] and culturas[0] in d["marcadas"]))
     matriz_paises = [
         {"en": d["en"], "pt": d["pt"], "cientifico": d["cientifico"], "marcadas": doenca_paises.get(d["en"], set())}
         for d in doencas
     ]
     return render_template(
-        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, culturas=culturas, matriz=matriz,
+        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, culturas=culturas,
         paises=paises, matriz_paises=matriz_paises,
     )
 
@@ -5453,8 +5451,40 @@ _PESQUISA_GERMINACAO = {
     "bipolaris maydis": _G(20, 32, 90, 6),
     "ramularia": _G(18, 30, 90, 12),               # mancha de ramularia (algodao)
     "ramularia areola": _G(18, 30, 90, 12),
+    "ramulariopsis": _G(18, 30, 90, 12),           # ramularia do algodao (nome atual)
+    "myrothecium": _G(20, 32, 90, 12),             # mancha de mirotecio (algodao, soja)
+    "myrothecium roridum": _G(20, 32, 90, 12),
+    "diaporthe": _G(20, 30, 90, 12),               # cancro da haste / seca da vagem (soja)
+    "phomopsis": _G(20, 30, 90, 12),
+    "pseudocercospora griseola": _G(16, 28, 90, 7),  # mancha angular do feijao
+    "uromyces": _G(17, 27, 95, 8),                 # ferrugem do feijao
+    "uromyces appendiculatus": _G(17, 27, 95, 8),
+    "stenocarpella": _G(25, 30, 90, 12),           # podridao/diplodia do milho
+    "phaeosphaeria": _G(14, 25, 90, 12),           # mancha branca do milho
+    "physopella": _G(22, 30, 95, 6),               # ferrugem tropical do milho
+    "physopella zeae": _G(22, 30, 95, 6),
+    "kabatiella": _G(10, 25, 90, 12),              # olho-de-ra do milho
+    "peronospora": _G(15, 25, 95, 6),              # mildio da soja
+    "peronospora manshurica": _G(15, 25, 95, 6),
+    "pyricularia": _G(20, 30, 90, 10),             # brusone
+    "magnaporthe": _G(20, 30, 90, 10),
+    "phyllosticta citricarpa": _G(15, 30, 90, 15),  # pinta preta dos citros
+    "guignardia": _G(15, 30, 90, 15),
+    "elsinoe": _G(15, 25, 90, 6),                  # verrugose
+    "hemileia": _G(15, 28, 95, 6),                 # ferrugem do cafe
+    "hemileia vastatrix": _G(15, 28, 95, 6),
 }
 _PALAVRAS_IGNORADAS_CIENTIFICO = {"spp", "sp", "and", "e", "var", "f", "complex", "complexo"}
+
+
+def _culturas_sugeridas_agrofit(nome_cientifico):
+    """Culturas do site em que o Agrofit tem fungicida registrado pro
+    fungo -- sugestao de onde a doenca ataca."""
+    try:
+        do_fungo = agrofit_dados.culturas_do_fungo(nome_cientifico)
+    except Exception:
+        return []
+    return [c for c in models.get_culturas_ativas() if agrofit_dados.cultura_do_agrofit(c, do_fungo)]
 
 
 def _pesquisa_germinacao_por_cientifico(nome_cientifico):
@@ -5486,15 +5516,23 @@ def buscar_germinacao_doenca():
     info = models.get_all_disease_info().get(display_name_en)
     if info is None:
         abort(404)
+    if nome_cientifico != (info.get("nome_cientifico") or ""):
+        models.save_disease_translation(display_name_en, info["nome_pt"], nome_cientifico)
+    # Doenca ainda sem cultura marcada: marca onde o Agrofit tem fungicida
+    # registrado pro fungo.
+    culturas = []
+    if not models.get_doenca_culturas().get(display_name_en):
+        culturas = _culturas_sugeridas_agrofit(nome_cientifico)
+        if culturas:
+            models.set_doenca_culturas(display_name_en, culturas)
+    aviso_culturas = f" Culturas marcadas pelo Agrofit: {', '.join(culturas)}." if culturas else ""
     chave, dados = _pesquisa_germinacao_por_cientifico(nome_cientifico)
     if not dados:
         return jsonify({
-            "ok": False,
-            "mensagem": f"Sem dados de pesquisa para '{nome_cientifico or '(vazio)'}' -- informe genero e especie do fungo "
-                        "(ex.: Corynespora cassiicola) ou preencha os campos a mao.",
+            "ok": False, "culturas": culturas,
+            "mensagem": f"Sem dados de germinacao para '{nome_cientifico or '(vazio)'}' -- preencha os campos a mao "
+                        "(confira genero e especie do fungo)." + aviso_culturas,
         })
-    if nome_cientifico != (info.get("nome_cientifico") or ""):
-        models.save_disease_translation(display_name_en, info["nome_pt"], nome_cientifico)
     models.save_disease_germ_limits(
         display_name_en, dados["temp_min"], dados["temp_max"], dados["ur_min"],
         dados["molhamento_horas"], dados["agua_livre_inibe"],
@@ -5502,7 +5540,8 @@ def buscar_germinacao_doenca():
     salvo = models.get_all_disease_info()[display_name_en]
     return jsonify({
         "ok": True,
-        "mensagem": f"Condicoes de germinacao preenchidas pela pesquisa de '{chave}'.",
+        "mensagem": f"Condicoes de germinacao preenchidas pela pesquisa de '{chave}'." + aviso_culturas,
+        "culturas": culturas,
         "temp_min": dados["temp_min"], "temp_max": dados["temp_max"], "ur_min": dados["ur_min"],
         "molhamento_horas": dados["molhamento_horas"], "germinacao": _formatar_condicoes_germinacao(salvo),
     })
@@ -5515,12 +5554,29 @@ def adicionar_doenca_manual():
     entrar no risco de infeccao pelo clima dos relatorios (pedido do
     usuario, 16/10/2026)."""
     nome = (request.form.get("nome_pt") or "").strip()
+    nome_cientifico = (request.form.get("nome_cientifico") or "").strip()
     if not nome:
         return _save_response("Informe o nome da doenca.", "admin_doencas")
-    models.add_manual_disease(nome)
-    return _save_response(
-        f"Doenca '{nome}' adicionada -- preencha abaixo a germinacao, as culturas e os paises dela.", "admin_doencas"
-    )
+    chave = models.add_manual_disease(nome)
+    if not nome_cientifico:
+        return _save_response(
+            f"Doenca '{nome}' adicionada -- preencha abaixo o nome cientifico, a germinacao e as culturas dela.",
+            "admin_doencas", abrir=chave,
+        )
+    models.save_disease_translation(chave, nome, nome_cientifico)
+    partes = []
+    _, germ = _pesquisa_germinacao_por_cientifico(nome_cientifico)
+    if germ:
+        models.save_disease_germ_limits(
+            chave, germ["temp_min"], germ["temp_max"], germ["ur_min"], germ["molhamento_horas"], germ["agua_livre_inibe"],
+        )
+        partes.append("germinacao preenchida pela pesquisa")
+    culturas = _culturas_sugeridas_agrofit(nome_cientifico)
+    if culturas:
+        models.set_doenca_culturas(chave, culturas)
+        partes.append("culturas marcadas pelo Agrofit (" + ", ".join(culturas) + ")")
+    resumo = "; ".join(partes) if partes else "sem dados de pesquisa nem registro no Agrofit pra esse fungo -- preencha a mao"
+    return _save_response(f"Doenca '{nome}' adicionada: {resumo}. Confira abaixo.", "admin_doencas", abrir=chave)
 
 
 @app.route("/admin/doencas/excluir", methods=["POST"])
