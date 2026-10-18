@@ -123,7 +123,9 @@ menos que seja pedido explicitamente paridade para outros admins.
   achada pela marca comercial do Agrofit, texto guardado em
   `adapar_bulas.json`); sem cultura la' tambem, a linha e' limpa pro
   botao Quimicos (pedido do Alan, 18/10/2026). ADAPAR fora do ar = nao
-  limpa nada. "Citrus" do site = "Citros" do Agrofit. Comparacao
+  limpa nada. "Citrus" do site = "Citros" do Agrofit. Botao Quimicos so'
+  traz fungicida quimico (`agrofit_dados.eh_fungicida_quimico`: classe
+  "Fungicida" no Agrofit, sem oleo/neem/azadiractina/extrato). Comparacao
   de nomes tolerante a grafia (`agrofit_dados.chave_quimico`/
   `chave_biologico`: benzovindiflupyr=benzovindiflupir, bixafem=bixafeno,
   "B. velezensis" expandido); sem produto no Agrofit

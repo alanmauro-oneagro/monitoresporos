@@ -56,6 +56,9 @@ _GENEROS_BIOLOGICOS = {
 # mesmo sem a base do Agrofit carregada. Com a base carregada, qualquer
 # quimico que nao esteja nela tambem some (ver `produto_sem_registro`).
 INGREDIENTES_BANIDOS = ("carbendazim",)
+# Nao sao fungicida quimico, mesmo com registro pro fungo (pedido do
+# Alan): oleos, neem/azadiractina, extratos de planta.
+_NAO_QUIMICOS = ("oleo", "azadiractina", "neem", "extrato")
 
 _lock = threading.Lock()
 _baixando = threading.Event()
@@ -164,9 +167,11 @@ def montar_indice(arquivo):
     col_praga = _coluna(cabecalho, "praga", "cientif")
     col_situacao = _coluna(cabecalho, "situacao")
     col_marca = _coluna(cabecalho, "marca")
+    # So' "CLASSE" -- "CLASSE_TOXICOLOGICA"/"CLASSE_AMBIENTAL" sao outra coisa.
+    col_classe = next((i for i, nome in enumerate(cabecalho) if normalizar(nome) == "classe"), None)
     if None in (col_ingrediente, col_cultura, col_praga):
         raise ValueError(f"Colunas nao reconhecidas no CSV do Agrofit: {cabecalho}")
-    pragas, nomes, culturas, marcas = {}, {}, set(), {}
+    pragas, nomes, culturas, marcas, classes = {}, {}, set(), {}, {}
     for linha in leitor:
         _progresso["linhas"] += 1
         if len(linha) <= max(col_ingrediente, col_cultura, col_praga):
@@ -181,6 +186,10 @@ def montar_indice(arquivo):
             continue
         culturas.add(cultura)
         texto_ativos = " + ".join(chave)
+        if col_classe is not None and col_classe < len(linha):
+            for classe in linha[col_classe].split("/"):
+                if normalizar(classe):
+                    classes.setdefault(texto_ativos, set()).add(normalizar(classe))
         if col_marca is not None and col_marca < len(linha):
             for marca in linha[col_marca].split(";"):
                 if marca.strip():
@@ -198,6 +207,7 @@ def montar_indice(arquivo):
         "nomes": nomes,
         "culturas": sorted(culturas),
         "marcas": {k: sorted(v) for k, v in marcas.items()},
+        "classes": {k: sorted(v) for k, v in classes.items()},
     }
 
 
@@ -345,9 +355,10 @@ def atualizar_se_necessario():
     outro thread) quando a base tem mais de 30 dias ou nunca foi baixada."""
     meta = _ler_meta()
     agora = _agora()
-    # Indice antigo, sem as marcas comerciais (usadas na conferencia da
-    # ADAPAR) -- baixa de novo sem esperar o mes.
-    sem_marcas = INDICE_PATH.exists() and "marcas" not in carregar()
+    # Indice antigo, sem as marcas comerciais (conferencia da ADAPAR) ou
+    # as classes (so' fungicida quimico no botao Quimicos) -- baixa de
+    # novo sem esperar o mes.
+    sem_marcas = INDICE_PATH.exists() and not {"marcas", "classes"} <= set(carregar())
     if not sem_marcas and meta.get("baixado_em") and agora - datetime.fromisoformat(meta["baixado_em"]) < INTERVALO_ATUALIZACAO:
         return
     if meta.get("tentativa_em") and agora - datetime.fromisoformat(meta["tentativa_em"]) < RETENTATIVA_APOS_FALHA:
@@ -372,6 +383,15 @@ def pragas_do_nome_cientifico(nome_cientifico, pragas):
                 continue
         achadas.update(do_genero)
     return sorted(achadas)
+
+
+def eh_fungicida_quimico(texto_ativos, classes):
+    """Produto que o botao Quimicos pode trazer: classe "Fungicida" no
+    Agrofit (nao "Fungicida microbiologico"; indice sem classes = nao
+    filtra) e nenhum ingrediente de `_NAO_QUIMICOS`."""
+    if any(n in texto_ativos for n in _NAO_QUIMICOS):
+        return False
+    return not classes or "fungicida" in classes.get(texto_ativos, ())
 
 
 def eh_biologico(ingrediente):
@@ -401,13 +421,15 @@ def registros(nome_cientifico):
     "culturas": [...]} -- chaves de `chave_quimico`/`chave_biologico`."""
     dados = carregar()
     pragas = pragas_do_nome_cientifico(nome_cientifico, dados.get("pragas", {}))
-    resultado = {"pragas": pragas, "quimico": {}, "biologico": {}, "nomes": {},
+    resultado = {"pragas": pragas, "quimico": {}, "biologico": {}, "nomes": {}, "fungicidas": set(),
                  "conhecidos": _ativos_conhecidos(dados), "culturas": dados.get("culturas", [])}
     for praga in pragas:
         for texto_ativos, cultura in dados["pragas"][praga]:
             tipo = "biologico" if eh_biologico(texto_ativos) else "quimico"
             chave = chave_biologico(texto_ativos) if tipo == "biologico" else chave_quimico(texto_ativos)
             resultado[tipo].setdefault(chave, set()).add(cultura)
+            if tipo == "quimico" and eh_fungicida_quimico(texto_ativos, dados.get("classes", {})):
+                resultado["fungicidas"].add(chave)
             resultado["nomes"].setdefault(chave, dados["nomes"].get(texto_ativos, texto_ativos))
     return resultado
 
