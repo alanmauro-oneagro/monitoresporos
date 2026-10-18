@@ -98,36 +98,6 @@
 <div id="rosaVentosContainer" class="d-none"></div>
 <div id="graficosContainer"></div>
 
-<p class="text-muted small border-top pt-3 mt-2 d-none d-md-block">
-    Direcao predominante do vento (botao acima dos graficos, oculto ate
-    clicar): frequencia de cada direcao de vento no periodo e nas
-    estacoes do filtro atual (passe o mouse numa fatia pra ver o
-    percentual exato).
-    <br>
-    Dois graficos por doenca, em sequencia: concentracao de esporos (uma
-    linha por fazenda, nunca passa do maximo cadastrado -- quando o valor
-    real excede, um triangulo vermelho marca o ponto; as faixas
-    verde/amarelo/vermelho seguem os mesmos limites Normal/Atencao/Perigo
-    do relatorio em PDF) e, logo abaixo, o risco de infeccao calculado a
-    partir dos parametros de "Condicoes para germinacao de esporos" da aba Doencas
-    (linha azul, escala 0-100% -- media entre as fazendas do filtro
-    atual, com faixas de fundo verde/amarelo/vermelho pros niveis Baixo/
-    Medio/Alto; passe o mouse na linha pra ver o percentual e a direcao
-    predominante do vento daquele dia). O trecho tracejado (ultimos 5
-    dias) e' previsao -- risco calculado com a previsao do tempo
-    (Open-Meteo) em vez do clima ja observado, so' aparece quando o
-    periodo do filtro vai ate perto de hoje. O checkbox "Ocultar Risco de
-    Infeccao" acima esconde so' os graficos de risco (o de esporos
-    continua aparecendo). Datas preenchidas na aba Anotações de Safra
-    (TS 🌰, Sulco 〰️, Folha 🍃) e em Dados de Plantio (🌱) aparecem nos
-    dois graficos como uma linha vertical tracejada com o icone do tipo
-    no topo -- passe o mouse na linha pra ver qual fazenda. Uma fazenda
-    virtual/estimada (aba Mapa Interpolado, nome entre aspas) tambem
-    aparece nos filtros e nos graficos -- a serie dela e' estimada por
-    interpolacao (IDW) a partir das fazendas reais dentro do raio
-    escolhido pra' ela, dia a dia, ja que ela nao tem estacao propria.
-    Os filtros acima aplicam sozinhos ao mudar.
-</p>
 
 <script>
 (function () {

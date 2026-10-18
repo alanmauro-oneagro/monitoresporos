@@ -18,12 +18,6 @@
 <form method="post" action="{{ url_for('adicionar_doenca_manual') }}" class="card shadow-sm mb-3">
     <div class="card-body">
         <div class="small fw-bold mb-1">Adicionar doenca manualmente</div>
-        <div class="text-muted small mb-2">
-            Para doencas que o BioScout nao identifica. Ela entra no relatorio (Recomendacoes, WhatsApp e PDF)
-            so' com o <strong>risco de infeccao pelo clima</strong>, nas fazendas das culturas e do pais marcados nela.
-            Com o nome cientifico, a germinacao vem da pesquisa e as culturas vem do Agrofit (onde ha fungicida
-            registrado pro fungo) -- confira no cartao dela.
-        </div>
         <div class="d-flex flex-wrap gap-2">
             <input type="text" name="nome_pt" class="form-control form-control-sm" style="max-width: 320px;" placeholder="Nome. Ex.: Mancha-alvo" required>
             <input type="text" name="nome_cientifico" class="form-control form-control-sm fst-italic" style="max-width: 320px;" placeholder="Nome cientifico. Ex.: Corynespora cassiicola">
@@ -114,22 +108,6 @@
     <span class="autosave-status small ms-2"></span>
 </form>
 
-<p class="text-muted small d-none d-md-block mt-3 pt-3 border-top">
-    O BioScout reporta os nomes em ingles. Aqui voce define como cada um
-    aparece no nosso site. Doencas novas que o BioScout passar a reportar
-    aparecem aqui automaticamente (com o nome em ingles como padrao) assim
-    que forem detectadas nos dados -- e' so vir aqui e traduzir. O nome
-    cientifico do fungo vem preenchido sozinho quando o BioScout ja manda
-    essa informacao nas leituras; edite se estiver faltando ou errado. Os
-    campos de <strong>Condicoes para germinacao de esporos</strong> -- temperatura,
-    umidade relativa e (opcional, so' informativo) o tempo de molhamento
-    foliar -- vem da literatura cientifica e sao os mesmos numeros que o
-    "Risco climatico" na aba Recomendações usa pra comparar com o clima atual
-    (Open-Meteo) da fazenda (o texto em itálico embaixo dos campos e'
-    gerado sozinho a partir desses numeros, so' pra conferencia -- nao e'
-    editavel separado, assim nunca fica descolado do que o risco
-    realmente calcula).
-</p>
 
 <h4 class="mb-2 mt-4">Culturas</h4>
 <form method="post" data-autosave data-autosave-reload class="card shadow-sm mb-2">
@@ -147,12 +125,6 @@
     </div>
 </form>
 
-<p class="text-muted small d-none d-md-block mt-3 pt-3 border-top">
-    Ate' 12 culturas. Marque em cada doenca (acima) as culturas que ela ataca -- e' o que o filtro de
-    "Cultura atual" da aba Recomendações usa. Doenca sem nenhuma cultura marcada NUNCA e' escondida
-    pelo filtro. Renomear uma cultura aqui preserva as marcacoes e o registro de fungicida ja feitos
-    pra ela; uma caixa vazia fica livre pra cadastrar uma cultura nova.
-</p>
 
 <h4 class="mb-2 mt-4">Doencas x Pais</h4>
 
@@ -194,12 +166,6 @@
     <span class="autosave-status small ms-2"></span>
 </form>
 
-<p class="text-muted small d-none d-md-block mt-3 pt-3 border-top">
-    Paises em que cada doenca aparece no filtro "Pais" da aba Graficos (sem marcacao = aparece
-    sempre) e na ordem da Biblioteca de fungicidas. O nome do pais se edita no cabecalho da
-    coluna; <strong>atencao</strong>: renomear um dos 12 paises originais faz o filtro da aba
-    Graficos parar de reconhecer a doenca por aquele pais.
-</p>
 {% endif %}
 {% endblock %}
 {% block extra_scripts %}

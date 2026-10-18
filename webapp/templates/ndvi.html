@@ -58,18 +58,6 @@
                     <textarea class="form-control form-control-sm mb-2" id="kml_texto_{{ site_idx }}" name="kml_texto" rows="4" placeholder="&lt;kml&gt;...&lt;/kml&gt;"></textarea>
                     <button type="submit" class="btn btn-sm btn-success">{{ 'Anexar mais um CAR' if site_group.cars else 'Anexar CAR' }}</button>
                 </form>
-                <div class="text-muted small mt-2">
-                    Pode anexar mais de um CAR pra mesma fazenda (ex.: propriedades vizinhas manejadas juntas) --
-                    o NDVI gerado combina a area de todos os CAR anexados numa imagem so'.
-                </div>
-                {% if site_group.cars %}
-                <div class="mt-3 pt-3 border-top">
-                    <p class="text-muted small mb-0">
-                        Envio automatico de NDVI por WhatsApp -- configure o dia/horario na
-                        aba <a href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>, junto com quem recebe.
-                    </p>
-                </div>
-                {% endif %}
             </div>
             <div class="col-12 col-lg-6">
                 {% if site_group.cars %}
@@ -159,13 +147,4 @@
 {% endfor %}
 {% endif %}
 
-<p class="text-muted small d-none d-md-block border-top pt-3 mt-2">
-    Anexe o(s) CAR da fazenda (arquivo KML baixado do
-    <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener">SICAR</a>) --
-    pode anexar mais de um CAR pra mesma fazenda -- e gere imagens NDVI pra essa area,
-    calculadas em cima de imagens Sentinel-2 (Copernicus) -- disponivel desde 06/2015.
-    Cada imagem gerada fica na galeria de miniaturas (ordenada da mais recente pra mais
-    antiga); clique numa miniatura pra abrir em outra aba do navegador e comparar datas,
-    ou marque "Selecionar" em varias e mande todas de uma vez por WhatsApp.
-</p>
 {% endblock %}

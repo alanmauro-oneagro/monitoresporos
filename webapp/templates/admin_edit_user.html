@@ -10,13 +10,10 @@
                 <label class="form-label">Email</label>
                 <input type="email" name="email" class="form-control" value="{{ email }}" required>
             </div>
-            <div class="mb-3 row g-2">
-                <div class="col-3 col-sm-2">
-                    <label class="form-label text-nowrap">DDI</label>
-                    <input type="text" name="codigo_pais" class="form-control" value="{{ codigo_pais }}" style="max-width: 5.5rem;">
-                </div>
-                <div class="col-9 col-sm-10">
-                    <label class="form-label">Telefone (DDD + numero, sem espacos)</label>
+            <div class="mb-3">
+                <label class="form-label">Telefone (DDD + numero, sem espacos)</label>
+                <div class="d-flex gap-2">
+                    <input type="text" name="codigo_pais" class="form-control" value="{{ codigo_pais }}" style="max-width: 5.5rem;" aria-label="Codigo do pais">
                     <input type="text" name="numero_telefone" class="form-control" value="{{ numero_telefone }}" placeholder="11999999999" required>
                 </div>
             </div>

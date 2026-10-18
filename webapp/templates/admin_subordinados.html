@@ -30,13 +30,12 @@
                 <label class="form-label small text-muted mb-1">Nome</label>
                 <input type="text" name="nome" class="form-control form-control-sm" value="{{ sub.nome }}" required>
             </div>
-            <div class="col-3 col-md-2">
-                <label class="form-label small text-muted mb-1">DDI</label>
-                <input type="text" name="codigo_pais__{{ sub.id }}" class="form-control form-control-sm" value="{{ sub.codigo_pais }}">
-            </div>
-            <div class="col-9 col-md-4">
-                <label class="form-label small text-muted mb-1">Telefone (DDD + numero)</label>
-                <input type="text" name="numero_telefone__{{ sub.id }}" class="form-control form-control-sm" value="{{ sub.numero_telefone }}" placeholder="11999999999" required>
+            <div class="col-md-6">
+                <label class="form-label small text-muted mb-1">Telefone (DDD + numero, sem espacos)</label>
+                <div class="d-flex gap-2">
+                    <input type="text" name="codigo_pais__{{ sub.id }}" class="form-control form-control-sm" style="max-width: 5.5rem;" value="{{ sub.codigo_pais }}" aria-label="Codigo do pais">
+                    <input type="text" name="numero_telefone__{{ sub.id }}" class="form-control form-control-sm" value="{{ sub.numero_telefone }}" placeholder="11999999999" required>
+                </div>
             </div>
             <div class="col-md-2 d-flex align-items-end">
                 <button type="submit" form="delete_form_{{ sub.id }}" class="btn btn-sm btn-outline-danger"
@@ -88,22 +87,10 @@
                 </div>
             </div>
             <button type="submit" class="btn btn-success">Adicionar</button>
-            <p class="text-muted small d-none d-md-block mt-3 pt-3 border-top mb-0">
-                Depois de adicionar, marque embaixo quais fazendas esse
-                subordinado deve receber (so' aparecem as fazendas que
-                "{{ user.username }}" ja recebe).
-            </p>
         </form>
     </div>
 </div>
 {% endif %}
 
-<p class="text-muted small border-top pt-3 mt-3">
-    Contatos leves (nome + telefone, sem login no site) que recebem
-    relatorio de WhatsApp de um subconjunto das fazendas que
-    "{{ user.username }}" ja recebe -- pra dividir uma equipe de campo
-    entre fazendas diferentes (parte da equipe recebe o relatorio de uma
-    fazenda, parte recebe o de outra).
-</p>
 <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Voltar</a>
 {% endblock %}
