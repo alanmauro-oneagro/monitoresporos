@@ -7,6 +7,9 @@
    nao cabe na tela do computador sem rolar (pedido explicito do
    usuario). */
 .cultura-nome-input { width: 62px; padding: 2px 4px; font-size: 0.72rem; }
+.doenca-toggle { font-size: 1rem; width: 100%; padding: 0.4rem 0 !important; }
+.doenca-card { margin-bottom: 0.5rem; }
+.doenca-card > .card-body { padding-top: 0.25rem; padding-bottom: 0.25rem; }
 </style>
 {% endblock %}
 {% block content %}
@@ -32,11 +35,16 @@
 {% else %}
 <form method="post" data-autosave>
 {% for d in doencas %}
-<div class="card shadow-sm mb-3">
-    <div class="card-body">
+<div class="card shadow-sm doenca-card" data-doenca="{{ d.en }}">
+    <div class="card-body px-2 px-sm-3">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start doenca-toggle" data-target="doenca-body-{{ loop.index0 }}">
+            <span class="toggle-icon">▶</span> {{ d.pt }}
+            {% if d.manual %}<span class="badge bg-info text-dark fw-normal ms-1" title="Cadastrada manualmente -- nao vem do BioScout">Manual</span>{% endif %}
+        </button>
+        <div class="d-none mt-1 mb-2" id="doenca-body-{{ loop.index0 }}">
         <div class="d-flex justify-content-between align-items-center mb-2">
             {% if d.manual %}
-            <span class="badge bg-info text-dark" title="Cadastrada manualmente -- nao vem do BioScout, entra so' no risco de infeccao pelo clima">Manual (sem leitura BioScout)</span>
+            <span class="text-muted small">Sem leitura BioScout -- entra so' no risco de infeccao pelo clima</span>
             {% else %}
             <span class="text-muted small fw-bold text-uppercase">{{ d.en }}</span>
             {% endif %}
@@ -85,6 +93,7 @@
             </div>
         </div>
         <div class="small text-muted fst-italic mt-2 germinacao-resumo{% if not d.germinacao %} d-none{% endif %}">→ {{ d.germinacao }}</div>
+        </div>
     </div>
 </div>
 {% endfor %}
@@ -223,6 +232,27 @@
 {% endblock %}
 {% block extra_scripts %}
 <script>
+(function () {
+    var CHAVE = 'doencas_abertas';
+    var abertas;
+    try { abertas = JSON.parse(sessionStorage.getItem(CHAVE) || '[]'); } catch (e) { abertas = []; }
+    function abrir(btn, aberto) {
+        document.getElementById(btn.dataset.target).classList.toggle('d-none', !aberto);
+        btn.querySelector('.toggle-icon').textContent = aberto ? '▼' : '▶';
+    }
+    document.querySelectorAll('.doenca-toggle').forEach(function (btn) {
+        var doenca = btn.closest('.doenca-card').dataset.doenca;
+        if (abertas.indexOf(doenca) !== -1) abrir(btn, true);
+        btn.addEventListener('click', function () {
+            var aberto = document.getElementById(btn.dataset.target).classList.contains('d-none');
+            abrir(btn, aberto);
+            abertas = abertas.filter(function (d) { return d !== doenca; });
+            if (aberto) abertas.push(doenca);
+            try { sessionStorage.setItem(CHAVE, JSON.stringify(abertas)); } catch (e) {}
+        });
+    });
+})();
+
 // Busca de germinacao de UM quadro (pelo nome cientifico digitado nele)
 // -- grava so' essa doenca e preenche os campos do proprio quadro.
 document.querySelectorAll('.buscar-germinacao-btn').forEach(function (btn) {
