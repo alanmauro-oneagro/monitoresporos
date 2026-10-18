@@ -84,7 +84,14 @@ html { font-size: 14px; }
 </style>
 {% endblock %}
 {% block content %}
-<h4 class="mb-2">Recomendações {{ safra_label }}</h4>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+    <h4 class="mb-0 me-1">Recomendações</h4>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Safra">
+        {% for safra_key, rotulo in safras %}
+        <a href="{{ url_for('recommendations', safra=safra_key) }}" class="btn {{ 'btn-success' if safra_key == safra else 'btn-outline-success' }}"{% if safra_key == safra %} aria-current="page"{% endif %}>{{ rotulo }}</a>
+        {% endfor %}
+    </div>
+</div>
 
 {% if not no_access and not any_whatsapp_configured %}
 <div class="alert alert-warning small">
