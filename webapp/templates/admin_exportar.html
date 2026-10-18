@@ -125,7 +125,23 @@
 {% else %}
 <div class="card shadow-sm">
     <div class="card-body">
-        <div class="table-responsive">
+        {# Celular: um bloco por quimico, culturas como etiquetas (a tabela,
+           uma coluna por cultura, nao cabe na largura). #}
+        <div class="d-sm-none">
+            {% for l in linhas_fungicidas %}
+            <div class="border rounded p-2 mb-2" style="background: #fafbfc;">
+                <div class="small text-muted">{{ l.doenca }}</div>
+                <div class="fw-bold mb-1" style="overflow-wrap: anywhere;">{{ l.ingrediente }}</div>
+                <div class="d-flex flex-wrap gap-1">
+                    {% for cultura, registrado in l.culturas %}
+                    <span class="badge rounded-pill fw-normal {{ 'bg-success-subtle text-success-emphasis' if registrado else 'bg-danger-subtle text-danger-emphasis' }}"
+                          title="{{ 'Registrado' if registrado else 'Sem registro confirmado' }} para {{ cultura }}">{{ '✅' if registrado else '⛔' }} {{ cultura }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="table-responsive d-none d-sm-block">
             <table class="table table-sm align-middle">
                 <thead>
                     <tr>
