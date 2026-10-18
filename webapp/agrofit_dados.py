@@ -163,9 +163,10 @@ def montar_indice(arquivo):
     col_cultura = _coluna(cabecalho, "cultura")
     col_praga = _coluna(cabecalho, "praga", "cientif")
     col_situacao = _coluna(cabecalho, "situacao")
+    col_marca = _coluna(cabecalho, "marca")
     if None in (col_ingrediente, col_cultura, col_praga):
         raise ValueError(f"Colunas nao reconhecidas no CSV do Agrofit: {cabecalho}")
-    pragas, nomes, culturas = {}, {}, set()
+    pragas, nomes, culturas, marcas = {}, {}, set(), {}
     for linha in leitor:
         _progresso["linhas"] += 1
         if len(linha) <= max(col_ingrediente, col_cultura, col_praga):
@@ -180,6 +181,10 @@ def montar_indice(arquivo):
             continue
         culturas.add(cultura)
         texto_ativos = " + ".join(chave)
+        if col_marca is not None and col_marca < len(linha):
+            for marca in linha[col_marca].split(";"):
+                if marca.strip():
+                    marcas.setdefault(texto_ativos, set()).add(marca.strip())
         nomes.setdefault(texto_ativos, " + ".join(
             normalizar(p).strip(" .;,")
             for p in re.split(r"\+|;", _sem_parenteses(linha[col_ingrediente])) if p.strip()
@@ -192,6 +197,7 @@ def montar_indice(arquivo):
         "pragas": {p: sorted(map(list, v)) for p, v in pragas.items()},
         "nomes": nomes,
         "culturas": sorted(culturas),
+        "marcas": {k: sorted(v) for k, v in marcas.items()},
     }
 
 
@@ -339,7 +345,10 @@ def atualizar_se_necessario():
     outro thread) quando a base tem mais de 30 dias ou nunca foi baixada."""
     meta = _ler_meta()
     agora = _agora()
-    if meta.get("baixado_em") and agora - datetime.fromisoformat(meta["baixado_em"]) < INTERVALO_ATUALIZACAO:
+    # Indice antigo, sem as marcas comerciais (usadas na conferencia da
+    # ADAPAR) -- baixa de novo sem esperar o mes.
+    sem_marcas = INDICE_PATH.exists() and "marcas" not in carregar()
+    if not sem_marcas and meta.get("baixado_em") and agora - datetime.fromisoformat(meta["baixado_em"]) < INTERVALO_ATUALIZACAO:
         return
     if meta.get("tentativa_em") and agora - datetime.fromisoformat(meta["tentativa_em"]) < RETENTATIVA_APOS_FALHA:
         return
@@ -403,12 +412,45 @@ def registros(nome_cientifico):
     return resultado
 
 
+_SINONIMOS_CULTURA = {"citrus": "citros"}
+
+
 def cultura_do_agrofit(cultura, culturas_agrofit):
     """Nome da cultura do site -> nome(s) equivalentes no Agrofit
-    ("Algodao" = "Algodão", "Cana" = "Cana-de-açúcar"); vazio se o
-    Agrofit nao tem essa cultura (ai' o registro dela nao e' mexido)."""
+    ("Algodao" = "Algodão", "Cana" = "Cana-de-açúcar", "Citrus" =
+    "Citros"); vazio se o Agrofit nao tem essa cultura (ai' o registro
+    dela nao e' mexido)."""
     alvo = normalizar(cultura)
+    alvo = _SINONIMOS_CULTURA.get(alvo, alvo)
     return {c for c in culturas_agrofit if normalizar(c) == alvo or re.split(r"[\s-]", normalizar(c))[0] == alvo}
+
+
+def culturas_cobertas(chave, culturas_por_chave):
+    """Culturas em que o item da Biblioteca tem registro: o proprio
+    produto registrado, ou uma mistura de tanque de produtos registrados
+    (cada um so' com ingredientes do item) que junta todos os
+    ingredientes -- ex.: "tebuconazol + metominostrobina" = um produto de
+    tebuconazol + um de metominostrobina, registrados na mesma cultura."""
+    alvo = set(chave.split(" + "))
+    juntos = {}
+    for outra, culturas in culturas_por_chave.items():
+        partes = set(outra.split(" + "))
+        if partes <= alvo:
+            for cultura in culturas:
+                juntos.setdefault(cultura, set()).update(partes)
+    return {cultura for cultura, partes in juntos.items() if partes == alvo}
+
+
+def marcas_por_chave():
+    """{chave_quimico: {marca comercial}} de todos os produtos da base
+    (vazio em indice antigo, sem marcas)."""
+    dados = carregar()
+    if _cache.get("marcas_mtime") != _cache["mtime"]:
+        resultado = {}
+        for texto_ativos, marcas in dados.get("marcas", {}).items():
+            resultado.setdefault(chave_quimico(texto_ativos), set()).update(marcas)
+        _cache["marcas"], _cache["marcas_mtime"] = resultado, _cache["mtime"]
+    return _cache["marcas"]
 
 
 def produto_sem_registro(ingrediente):

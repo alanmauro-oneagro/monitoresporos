@@ -35,6 +35,7 @@ from datetime import datetime, timedelta, timezone
 import models
 import fungicida_data
 import agrofit_dados
+import adapar
 import data_reader
 import bioscout_fetch
 import export_excel
@@ -5210,69 +5211,144 @@ def _ingredientes_da_biblioteca(doenca, tipo):
     return linhas
 
 
+def _culturas_equivalentes(achados):
+    return {c: agrofit_dados.cultura_do_agrofit(c, achados["culturas"]) for c in models.get_culturas_ativas()}
+
+
+def _gravar_culturas_registradas(doenca, idx, marcadas, equivalentes, bloqueios):
+    """Desmarca as culturas sem registro de um quimico; cultura que o
+    Agrofit nao tem fica como esta."""
+    bloqueadas = {
+        c for c, nomes in equivalentes.items()
+        if (c not in marcadas if nomes else c in bloqueios.get((doenca, "quimico", idx), set()))
+    }
+    models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, sorted(bloqueadas))
+
+
+def _marcar_registros_novos(doenca, idxs, achados):
+    """Quimicos que o botao acabou de trazer: ja' saem com as culturas
+    registradas marcadas."""
+    equivalentes = _culturas_equivalentes(achados)
+    bloqueios = models.get_all_fungicida_registro_bloqueado()
+    linhas = dict(_ingredientes_da_biblioteca(doenca, "quimico"))
+    for idx in idxs:
+        chave = agrofit_dados.chave_quimico(linhas.get(idx) or "")
+        registradas = agrofit_dados.culturas_cobertas(chave, achados["quimico"]) if chave else set()
+        marcadas = {c for c, nomes in equivalentes.items() if nomes & registradas}
+        _gravar_culturas_registradas(doenca, idx, marcadas, equivalentes, bloqueios)
+
+
 def _agrofit_completar_lista(doenca, tipo, achados):
     """Operacao "Quimicos"/"Biologicos" do botao Agrofit: completa as
-    linhas vazias da doenca com os produtos mais registrados pro fungo (os
-    que ja estao na lista ficam). Doenca sem nada no fungicida_data.py
-    (manual ou do BioScout ainda nao pesquisada) tem a lista daquele tipo
-    inteira vinda do Agrofit."""
+    linhas vazias da doenca (inclusive as apagadas na mao ou limpas pelo
+    botao Registros) com os produtos mais registrados pro fungo (os que
+    ja estao na lista ficam). Doenca sem nada no fungicida_data.py
+    (manual ou do BioScout ainda nao pesquisada) e ainda sem nenhum
+    produto daquele tipo tem a lista inteira vinda do Agrofit."""
     chave = agrofit_dados.chave_biologico if tipo == "biologico" else agrofit_dados.chave_quimico
-    candidatos = sorted(achados[tipo], key=lambda c: (-len(achados[tipo][c]), c))
-    if fungicida_data.RECOMENDACOES.get(doenca) is None:
+    candidatos = sorted(
+        (c for c in achados[tipo] if not _fungicida_proibido(tipo, achados["nomes"][c])),
+        key=lambda c: (-len(achados[tipo][c]), c),
+    )
+    rec = fungicida_data.get_recomendacao(doenca)
+    if fungicida_data.RECOMENDACOES.get(doenca) is None and not (rec and rec[tipo + "s"]["itens"]):
         itens = [achados["nomes"][c] for c in candidatos[: fungicida_data.LINHAS_POR_TIPO[tipo]]]
         models.set_fungicidas_importados(doenca, tipo, itens)
         fungicida_data.limpar_cache_importados()
+        if tipo == "quimico":
+            _marcar_registros_novos(doenca, range(len(itens)), achados)
         return f"{len(itens)} {'biologico(s)' if tipo == 'biologico' else 'quimico(s)'} trazido(s) do Agrofit."
     linhas = _ingredientes_da_biblioteca(doenca, tipo)
     existentes = {chave(ing) for _, ing in linhas if ing}
-    vazias = [idx for idx, ing in linhas if ing == ""]
+    vazias = [idx for idx, ing in linhas if not ing]
     novos = [c for c in candidatos if c not in existentes]
     for idx, c in zip(vazias, novos):
         models.save_fungicida_override(doenca, tipo, idx, achados["nomes"][c], "", False)
+    if tipo == "quimico":
+        _marcar_registros_novos(doenca, vazias[:len(novos)], achados)
     n = min(len(vazias), len(novos))
     if not vazias:
         return "Lista ja completa -- nenhuma linha vazia para preencher."
     return f"{n} produto(s) novo(s) nas {len(vazias)} linha(s) vazia(s)."
 
 
+# Tempo maximo do botao Registros lendo bulas da ADAPAR (o gunicorn
+# corta a requisicao em 60s).
+_ADAPAR_PRAZO_S = 40
+
+
 def _agrofit_registros(doenca, achados):
     """Operacao "Registros": em cada quimico da doenca, marca as culturas
-    com registro pro fungo e desmarca as sem registro. Sem produto no
-    Agrofit (nome nao encontrado, ex.: banido) ou linha vazia: todas as
-    culturas desmarcadas (pedido do Alan) -- o nao encontrado vai listado
-    no resumo. Cultura que o Agrofit nao tem fica como esta."""
+    com registro pro fungo (produto registrado, ou mistura de tanque de
+    produtos registrados -- `agrofit_dados.culturas_cobertas`) e desmarca
+    as sem registro. Produto sem nenhuma cultura no Agrofit passa por uma
+    segunda conferencia nas bulas da ADAPAR (`adapar`); sem nenhuma
+    cultura la' tambem, a linha fica vazia pra uma nova busca no botao
+    Quimicos (pedido do Alan, 18/10/2026). ADAPAR fora do ar: o produto
+    fica, com as culturas desmarcadas. Linha vazia: tudo desmarcado.
+    Cultura que o Agrofit nao tem fica como esta."""
     bloqueios = models.get_all_fungicida_registro_bloqueado()
-    equivalentes = {
-        c: agrofit_dados.cultura_do_agrofit(c, achados["culturas"]) for c in models.get_culturas_ativas()
-    }
-    com_registro, sem_registro, nao_encontrados = 0, 0, []
+    equivalentes = _culturas_equivalentes(achados)
     todas = sorted(equivalentes)
+    linhas, sem_agrofit = [], []
     for idx, ingrediente in _ingredientes_da_biblioteca(doenca, "quimico"):
-        if not ingrediente:
-            models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, todas)
-            continue
-        chave = agrofit_dados.chave_quimico(ingrediente)
-        if not chave or any(a not in achados["conhecidos"] for a in chave.split(" + ")):
-            nao_encontrados.append(ingrediente)
-            models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, todas)
-            continue
-        registradas = achados["quimico"].get(chave, set())
-        bloqueadas = set()
-        for cultura, nomes_agrofit in equivalentes.items():
-            if not nomes_agrofit:
-                if cultura in bloqueios.get((doenca, "quimico", idx), set()):
-                    bloqueadas.add(cultura)
-            elif not nomes_agrofit & registradas:
-                bloqueadas.add(cultura)
-        models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, sorted(bloqueadas))
-        if registradas:
-            com_registro += 1
+        chave = agrofit_dados.chave_quimico(ingrediente) if ingrediente else ""
+        registradas = agrofit_dados.culturas_cobertas(chave, achados["quimico"]) if chave else set()
+        marcadas = {c for c, nomes in equivalentes.items() if nomes & registradas}
+        linhas.append((idx, ingrediente, chave, marcadas))
+        if chave and not marcadas:
+            sem_agrofit.append(chave)
+
+    adapar_culturas, adapar_erro = {}, None
+    if sem_agrofit:
+        marcas = agrofit_dados.marcas_por_chave()
+        partes = {p for chave in sem_agrofit for p in chave.split(" + ")}
+        # Bulas do proprio produto primeiro; depois as de cada ingrediente
+        # (mistura de tanque).
+        alvo_marcas = dict(sorted(
+            ((k, m) for k, m in marcas.items() if set(k.split(" + ")) <= partes),
+            key=lambda km: (km[0] not in sem_agrofit, -len(km[0].split(" + ")), km[0]),
+        ))
+        nomes_culturas = {
+            c: {agrofit_dados.normalizar(c)} | {agrofit_dados.normalizar(n) for n in nomes}
+            for c, nomes in equivalentes.items()
+        }
+        if not marcas:
+            adapar_erro = "base do Agrofit sem as marcas comerciais -- atualize a base"
         else:
-            sem_registro += 1
-    msg = (f"{com_registro} quimico(s) com registro (culturas marcadas), "
-           f"{sem_registro} sem registro para esse fungo (desmarcados).")
-    if nao_encontrados:
-        msg += " Sem produto no Agrofit (culturas desmarcadas): " + "; ".join(nao_encontrados) + "."
+            try:
+                adapar_culturas = adapar.culturas_registradas(
+                    alvo_marcas, achados["pragas"], nomes_culturas, time.monotonic() + _ADAPAR_PRAZO_S,
+                )
+            except adapar.Indisponivel as exc:
+                adapar_erro = str(exc)
+
+    com_registro, pela_adapar, limpos, sem_conferir = 0, [], [], []
+    for idx, ingrediente, chave, marcadas in linhas:
+        if chave and not marcadas and adapar_erro is None:
+            marcadas = agrofit_dados.culturas_cobertas(chave, adapar_culturas)
+            if marcadas:
+                pela_adapar.append(ingrediente)
+            else:
+                models.save_fungicida_override(doenca, "quimico", idx, "", "", True)
+                limpos.append(ingrediente)
+        elif chave and not marcadas:
+            sem_conferir.append(ingrediente)
+        elif chave:
+            com_registro += 1
+        if not chave or not marcadas:
+            models.set_fungicida_registro_bloqueado(doenca, "quimico", idx, todas)
+        else:
+            _gravar_culturas_registradas(doenca, idx, marcadas, equivalentes, bloqueios)
+    msg = f"{com_registro} quimico(s) com registro no Agrofit (culturas marcadas)."
+    if pela_adapar:
+        msg += " Registro confirmado na ADAPAR: " + "; ".join(pela_adapar) + "."
+    if limpos:
+        msg += (" Sem registro no Agrofit nem na ADAPAR (linha limpa -- use o botao Quimicos): "
+                + "; ".join(limpos) + ".")
+    if sem_conferir:
+        msg += (f" Nao deu pra conferir na ADAPAR ({adapar_erro}) -- culturas desmarcadas: "
+                + "; ".join(sem_conferir) + ".")
     return msg
 
 
