@@ -88,8 +88,9 @@ menos que seja pedido explicitamente paridade para outros admins.
   o pedido for "sumir com uma fazenda".
 - **Menos redundancia (pedido do Alan, 18/10/2026)**: menu tem UMA aba
   "Recomendações" com seletor de safra (lembra a ultima, `session`); no
-  topo dela o resumo "Alertas agora" (`_resumo_alertas`, substitui a aba
-  Alertas -- `/dashboard` so' redireciona) e, so' pro Alan, os pontos "so'
+  topo dela o resumo "Alertas agora" (`_resumo_alertas`) e -- a aba
+  Alertas (`/dashboard`, dashboard.html) VOLTOU como era, a pedido do
+  Alan, 18/10/2026 -- so' pro Alan, os pontos "so'
   clima" (`_pontos_clima`, `_pontos_clima.html` -- substitui a aba Alertas
   Clima, `/alertas-clima` redireciona). Quem recebe (relatorio E NDVI) so'
   se marca na aba Envios; Usuarios mostra so' a contagem; NDVI so' mostra.
