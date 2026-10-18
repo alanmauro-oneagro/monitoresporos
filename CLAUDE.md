@@ -95,7 +95,11 @@ menos que seja pedido explicitamente paridade para outros admins.
   se marca na aba Envios; Usuarios mostra so' a contagem; NDVI so' mostra.
   Horario de envio so' em Envios (o padrao `get_whatsapp_send_hour` ficou
   so' interno). Exportar = Excel + historico de envios. Solo so' na aba
-  Mapa de Solos.
+  Mapa de Solos. Tudo que se EDITA da safra fica na aba Manejos (cultura
+  por safra, TS/Sulco/Folha, plantio, aplicacoes e "Anotações por doença"
+  -- `_anotacoes_da_fazenda`, mesmas rotas `save_farm_cultura`/
+  `save_recommendations`); Recomendações so' mostra e envia. Pontos "so'
+  clima" tem o mesmo bloco de clima agora/previsao/vento das fazendas.
 - **Fazendas ocultas** (Configuracoes -> Fazendas ocultas, so' "Alan Mauro",
   rota `fazendas_ocultas`): lista as desativadas e as sem leitura ha mais
   de `DADOS_BLOQUEIO_DIAS`, com botao Reativar. Reativar uma sem leitura

@@ -61,6 +61,20 @@
             </div>
             {% for safra_group in site_group.safras %}
             <div class="{% if not loop.first %}d-none{% endif %}" id="safra-body-{{ farm_idx }}-{{ safra_group.safra }}">
+                <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center flex-wrap gap-2 mb-3" data-autosave>
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <input type="hidden" name="safra" value="{{ safra_group.safra }}">
+                    <label class="fw-bold mb-0" for="cultura_{{ farm_idx }}_{{ safra_group.safra }}">Cultura:</label>
+                    <select name="cultura" id="cultura_{{ farm_idx }}_{{ safra_group.safra }}" class="form-select form-select-sm" style="width: auto;"
+                            title="(vazio) = nao mostra nenhuma doenca ainda; Todos = mostra toda doenca cadastrada; cultura especifica = so as doencas marcadas pra ela na aba Doencas">
+                        <option value="" {% if not safra_group.cultura %}selected{% endif %}>(vazio)</option>
+                        <option value="Todos" {% if safra_group.cultura == "Todos" %}selected{% endif %}>Todos</option>
+                        {% for c in culturas_ativas %}
+                        <option value="{{ c }}" {% if c == safra_group.cultura %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="autosave-status small"></span>
+                </form>
                 <form method="post" action="{{ url_for('save_farm_produtos') }}" data-autosave data-autosave-por-grupo>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <input type="hidden" name="safra" value="{{ safra_group.safra }}">
@@ -157,6 +171,28 @@
 
             </div>
             {% endfor %}
+
+            <div class="mt-3 pt-3 border-top">
+                <div class="fw-bold mb-1">Anotações por doença</div>
+                {% if site_group.anotacoes %}
+                <div class="text-muted small mb-2">Aparecem nas Recomendações, no texto e no PDF quando a doença estiver em Atenção ou Perigo.</div>
+                <form method="post" action="{{ url_for('save_recommendations') }}" data-autosave data-autosave-por-grupo>
+                    {% for a in site_group.anotacoes %}
+                    <div class="anotacao-linha mb-2" data-autosave-group>
+                        <label class="small fw-bold text-uppercase mb-1" for="nota_{{ farm_idx }}_{{ loop.index0 }}">{{ a.doenca }}</label>
+                        <input type="hidden" name="site" value="{{ site_group.site }}">
+                        <input type="hidden" name="doenca" value="{{ a.doenca }}">
+                        <input type="hidden" name="nota_padrao" value="{{ a.nota_padrao }}">
+                        <textarea name="nota" id="nota_{{ farm_idx }}_{{ loop.index0 }}" class="form-control form-control-sm" rows="2"
+                                  placeholder="produto, dose, epoca de aplicacao, observacoes...">{{ a.nota }}</textarea>
+                        <span class="autosave-status small"></span>
+                    </div>
+                    {% endfor %}
+                </form>
+                {% else %}
+                <div class="text-muted small">Escolha a cultura de uma safra acima para anotar por doença.</div>
+                {% endif %}
+            </div>
 
             {# Configuracoes da fazenda -- so' o Alan (pedido dele). #}
             {% if current_user.username == 'Alan Mauro' %}

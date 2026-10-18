@@ -2,18 +2,6 @@
 {% block title %}Recomendações {{ safra_label }} - OneAgro{% endblock %}
 {% block extra_head %}
 <style>
-.anotacoes-box { border: 1px solid #dee2e6; border-radius: 0.4rem; padding: 0.35rem 0.6rem; }
-.anotacao-linha { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.25rem 0; }
-.anotacao-linha + .anotacao-linha { border-top: 1px solid #f1f3f5; }
-.anotacao-doenca { flex: 0 0 11rem; font-size: 0.8rem; font-weight: 700; padding-top: 0.3rem; margin: 0; }
-.anotacao-linha textarea { flex: 1; min-width: 0; border-color: transparent; background: #f8f9fa; }
-.anotacao-linha textarea:focus { background: #fff; }
-.anotacao-linha .autosave-status { flex: 0 0 auto; padding-top: 0.3rem; }
-.anotacao-linha .autosave-status:empty { display: none; }
-@media (max-width: 575.98px) {
-    .anotacao-linha { flex-wrap: wrap; gap: 0.15rem; }
-    .anotacao-doenca { flex-basis: 100%; padding-top: 0; }
-}
 .rec-topo { display: flex; align-items: center; gap: 1.5rem; }
 .rec-topo-esq { flex: 0 1 34rem; min-width: 0; }
 .vento-dia { display: flex; flex-direction: column; align-items: center; margin-bottom: 0.5rem; }
@@ -144,17 +132,6 @@ html { font-size: 14px; }
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda encontrada.</div>
 {% else %}
-<!-- Catalogo de autocompletar (mesmo de templates/fazendas.html) --
-     renderizado UMA VEZ so', compartilhado entre todas as fazendas da
-     pagina. -->
-<datalist id="catalogo-nomes-quimico">{% for nome in catalogo_produtos.quimico | map(attribute='nome') | unique %}<option value="{{ nome }}">{% endfor %}</datalist>
-<datalist id="catalogo-ia-quimico">{% for p in catalogo_produtos.quimico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
-<datalist id="catalogo-nomes-biologico">{% for nome in catalogo_produtos.biologico | map(attribute='nome') | unique %}<option value="{{ nome }}">{% endfor %}</datalist>
-<datalist id="catalogo-ia-biologico">{% for p in catalogo_produtos.biologico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
-<form method="post" action="{{ url_for('save_recommendations') }}" id="notesForm" data-autosave data-autosave-por-grupo>
-    <input type="hidden" name="safra" value="{{ safra }}">
-</form>
-
 {% for site_group in sites_data %}
 {% set outer_loop = loop %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
@@ -163,19 +140,8 @@ html { font-size: 14px; }
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}" data-site="{{ site_group.site }}">
                 <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
             </button>
-            <form method="post" action="{{ url_for('save_farm_cultura') }}" class="d-flex align-items-center gap-1 mb-0" data-autosave data-autosave-reload>
-                <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                <input type="hidden" name="safra" value="{{ safra }}">
-                <select name="cultura" class="form-select form-select-sm" style="width: auto;"
-                        title="(vazio) = nao mostra nenhuma doenca ainda; Todos = mostra toda doenca cadastrada, sem filtro; cultura especifica = so as doencas marcadas pra ela na aba Doencas">
-                    <option value="" {% if not site_group.cultura %}selected{% endif %}>(vazio)</option>
-                    <option value="Todos" {% if site_group.cultura == "Todos" %}selected{% endif %}>Todos</option>
-                    {% for c in culturas_ativas %}
-                    <option value="{{ c }}" {% if c == site_group.cultura %}selected{% endif %}>{{ c }}</option>
-                    {% endfor %}
-                </select>
-                <span class="autosave-status small"></span>
-            </form>
+            <a href="{{ url_for('fazendas') }}" class="badge rounded-pill text-decoration-none {{ 'bg-success-subtle text-success-emphasis' if site_group.cultura else 'bg-secondary-subtle text-secondary-emphasis' }} fw-normal"
+               title="Cultura da safra -- muda na aba Manejos">{{ site_group.cultura or 'sem cultura' }}</a>
             {% if site_group.dias_desde_atualizacao is not none and site_group.dias_desde_atualizacao > 120 %}
             <span class="badge bg-warning text-dark" title="Cultura definida ha {{ site_group.dias_desde_atualizacao }} dias -- confirme se ainda esta certa">
                 ⚠ ha {{ site_group.dias_desde_atualizacao }}d
@@ -329,22 +295,13 @@ html { font-size: 14px; }
         </div>
         {% endfor %}
 
-        {% if site_group.diseases %}
+        {% set notas = site_group.diseases | selectattr('nota') | list %}
+        {% if notas %}
         <div class="mt-3 pt-3 border-top">
-            <label class="form-label small fw-bold d-block mb-2">Anotações</label>
-            {# Uma caixa so' com uma linha por doenca (pedido do usuario,
-               economiza espaco) -- cada linha continua sendo a anotacao
-               daquela doenca (texto/PDF mostram por doenca). #}
-            <div class="anotacoes-box">
-                {% for row in site_group.diseases %}
-                <div class="anotacao-linha" data-autosave-group>
-                    <label class="anotacao-doenca" for="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}">{{ row.rotulo }}:</label>
-                    <input type="hidden" name="site" value="{{ site_group.site }}" form="notesForm">
-                    <input type="hidden" name="doenca" value="{{ row.doenca }}" form="notesForm">
-                    <input type="hidden" name="nota_padrao" value="{{ row.nota_padrao }}" form="notesForm">
-                    <textarea name="nota" form="notesForm" id="nota-{{ safra }}-{{ outer_loop.index0 }}-{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="1" placeholder="produto, dose, epoca de aplicacao, observacoes...">{{ row.nota }}</textarea>
-                    <span class="autosave-status small"></span>
-                </div>
+            <label class="form-label small fw-bold d-block mb-1">Anotações <a href="{{ url_for('fazendas') }}" class="fw-normal text-muted small">(editar em Manejos)</a></label>
+            <div class="small">
+                {% for row in notas %}
+                <div><strong class="text-uppercase">{{ row.rotulo }}:</strong> {{ row.nota }}</div>
                 {% endfor %}
             </div>
         </div>
@@ -408,37 +365,18 @@ html { font-size: 14px; }
         </div>
         {% endif %}
 
+        {% if site_group.produtos_folha.quimico or site_group.produtos_folha.biologico %}
         <div class="mt-3 pt-3 border-top">
-            <form method="post" action="{{ url_for('save_produtos_folha') }}" data-autosave>
-                <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                <input type="hidden" name="safra" value="{{ safra }}">
-                <label class="form-label small fw-bold d-block mb-2">Folha (aplicação foliar)</label>
-                <div class="row gx-4">
-                    {% for tipo, titulo in [('quimico', 'Fungicidas quimicos'), ('biologico', 'Biológicos')] %}
-                    <div class="col-12 col-lg-6 mb-2">
-                        <div class="small text-muted mb-1">{{ titulo }}</div>
-                        <div class="table-responsive">
-                            <table class="table table-sm mb-0 produtos-table">
-                                <thead>
-                                    <tr><th>Data/Anotacao</th><th>Nome do produto</th><th>Ingrediente ativo</th></tr>
-                                </thead>
-                                <tbody>
-                                {% for item in site_group.produtos_folha[tipo] %}
-                                <tr>
-                                    <td><input type="text" name="data_{{ tipo }}" class="form-control form-control-sm" value="{{ item.data_anotacao }}"></td>
-                                    <td><input type="text" name="nome_{{ tipo }}" list="catalogo-nomes-{{ tipo }}" class="form-control form-control-sm" value="{{ item.nome }}"></td>
-                                    <td><input type="text" name="ia_{{ tipo }}" list="catalogo-ia-{{ tipo }}" class="form-control form-control-sm" value="{{ item.ingrediente_ativo }}"></td>
-                                </tr>
-                                {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                <span class="autosave-status small ms-2"></span>
-            </form>
+            <label class="form-label small fw-bold d-block mb-1">Folha (aplicação foliar) <a href="{{ url_for('fazendas') }}" class="fw-normal text-muted small">(editar em Manejos)</a></label>
+            <div class="small">
+                {% for tipo, titulo in [('quimico', 'Químicos'), ('biologico', 'Biológicos')] %}
+                {% for item in site_group.produtos_folha[tipo] %}
+                <div>{% if item.data_anotacao %}{{ item.data_anotacao }} — {% endif %}<strong>{{ item.nome }}</strong>{% if item.ingrediente_ativo %} ({{ item.ingrediente_ativo }}){% endif %} <span class="text-muted">· {{ titulo }}</span></div>
+                {% endfor %}
+                {% endfor %}
+            </div>
         </div>
+        {% endif %}
 
         {% if site_group.plantio_linhas %}
         <div class="mt-3 pt-3 border-top">
@@ -557,14 +495,6 @@ function carregarGraficosEsporos(box) {
         })
         .catch(function () { lista.textContent = 'Não foi possível carregar o gráfico agora.'; });
 }
-function autoGrowTextarea(el) {
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-}
-document.querySelectorAll('.auto-grow-textarea').forEach(function (el) {
-    autoGrowTextarea(el);
-    el.addEventListener('input', function () { autoGrowTextarea(el); });
-});
 document.querySelectorAll('.copy-recomendacao-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
         var text = btn.dataset.text || '';
@@ -597,52 +527,6 @@ document.querySelectorAll('.copy-recomendacao-btn').forEach(function (btn) {
         }
     });
 });
-document.querySelectorAll('table.produtos-table tbody').forEach(function (tbody) {
-    tbody.addEventListener('input', function (e) {
-        var row = e.target.closest('tr');
-        if (!row || row !== tbody.lastElementChild || row.dataset.grown) return;
-        row.dataset.grown = '1';
-        var clone = row.cloneNode(true);
-        delete clone.dataset.grown;
-        clone.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
-        tbody.appendChild(clone);
-    });
-});
-
-// Autopreenchimento bidirecional Produto <-> Ingrediente ativo (mesmo
-// catalogo/logica de templates/fazendas.html) -- delegado no document
-// pra' funcionar tambem nas linhas que o "grow" acima clona depois do
-// carregamento da pagina.
-var CATALOGO_PRODUTOS = {{ catalogo_produtos | tojson }};
-function _catalogoTipoDoNome(nomeAtributo) {
-    if (nomeAtributo.endsWith('_quimico')) return 'quimico';
-    if (nomeAtributo.endsWith('_biologico')) return 'biologico';
-    return null;
-}
-document.addEventListener('change', function (e) {
-    var field = e.target;
-    var row = field.closest('tr');
-    if (!row || !field.name) return;
-    if (field.name.indexOf('nome_') === 0) {
-        var tipo = _catalogoTipoDoNome(field.name);
-        var ia = row.querySelector('input[name^="ia_"]');
-        if (!tipo || !ia || ia.value.trim()) return;
-        var par = (CATALOGO_PRODUTOS[tipo] || []).find(function (p) { return p.nome === field.value.trim(); });
-        if (par && par.ingrediente_ativo) {
-            ia.value = par.ingrediente_ativo;
-            ia.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    } else if (field.name.indexOf('ia_') === 0) {
-        var tipo = _catalogoTipoDoNome(field.name);
-        var nome = row.querySelector('input[name^="nome_"]');
-        if (!tipo || !nome || nome.value.trim()) return;
-        var par = (CATALOGO_PRODUTOS[tipo] || []).find(function (p) { return p.ingrediente_ativo === field.value.trim(); });
-        if (par && par.nome) {
-            nome.value = par.nome;
-            nome.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    }
-});
 document.querySelectorAll('.farm-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {
         var body = document.getElementById(btn.dataset.target);
@@ -651,8 +535,6 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
         body.classList.toggle('d-none');
         icon.textContent = expanded ? '▶' : '▼';
         if (!expanded) body.querySelectorAll('.esporos-graficos').forEach(carregarGraficosEsporos);
-        // Caixa de texto escondida (fazenda fechada) mede altura 0 -- ajusta ao abrir.
-        if (!expanded) body.querySelectorAll('.auto-grow-textarea').forEach(autoGrowTextarea);
         // Rosa so' depois de visivel (Chart.js num container escondido fica 0x0).
         if (!expanded) body.querySelectorAll('.vento-rosa canvas').forEach(function (canvas) {
             if (canvas.dataset.criada) return;
