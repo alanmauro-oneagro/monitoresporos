@@ -3732,31 +3732,9 @@ def recommendations(safra):
     return render_template(
         "recommendations.html", sites_data=sites_data, no_access=False,
         any_whatsapp_configured=any_whatsapp_configured,
-        resumo_alertas=_resumo_alertas(raw_cards_by_site),
         pontos_clima=_pontos_clima() if current_user.username == ALAN_MAURO_USERNAME else [],
-        fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
         safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS,
     )
-
-
-def _resumo_alertas(cards_by_site):
-    """Topo da aba Recomendacoes (antiga aba Alertas): por fazenda, as
-    doencas em Perigo/Atencao agora -- todas, sem o filtro de cultura --
-    e o aviso de estacao sem leitura. Perigo primeiro."""
-    resumo = []
-    for site, cards in cards_by_site.items():
-        nivel = _nivel_dados_site(site, cards)
-        perigo, atencao = [], []
-        if nivel != "bloqueado":
-            perigo = sorted({c["doenca"] for c in cards if c["status"] == "Perigo"})
-            atencao = sorted({c["doenca"] for c in cards if c["status"] == "Atencao"} - set(perigo))
-        if perigo or atencao or nivel:
-            resumo.append({
-                "site": site, "nome": _nome_exibicao(site), "perigo": perigo, "atencao": atencao,
-                "nivel_dados": nivel, "dias_sem_leitura": _dias_sem_leitura(cards),
-            })
-    resumo.sort(key=lambda r: (_ordem_fazenda(r["site"]), r["dias_sem_leitura"] or 0))
-    return resumo
 
 
 def _safra_or_default(form):
@@ -4883,7 +4861,7 @@ def _ordem_fazenda(site):
     18/10/2026): 1) pais -- Brasil sempre primeiro, depois os outros em
     ordem alfabetica; 2) nome exibido em ordem alfabetica, sem diferenca de
     acento. (3, tempo sem sinal, entra so' onde ha' esse dado -- ver
-    `_resumo_alertas`/`fazendas_ocultas`.)"""
+    `dashboard`/`fazendas_ocultas`.)"""
     paises = getattr(g, "_ordem_paises", None)
     if paises is None:
         paises = g._ordem_paises = models.get_all_site_countries()
