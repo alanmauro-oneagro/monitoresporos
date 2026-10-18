@@ -5247,8 +5247,7 @@ def _agrofit_completar_lista(doenca, tipo, achados):
     produto daquele tipo tem a lista inteira vinda do Agrofit."""
     chave = agrofit_dados.chave_biologico if tipo == "biologico" else agrofit_dados.chave_quimico
     candidatos = sorted(
-        (c for c in achados[tipo] if not _fungicida_proibido(tipo, achados["nomes"][c])
-         and (tipo == "biologico" or c in achados["fungicidas"])),
+        (c for c in achados[tipo] if not _fungicida_proibido(tipo, achados["nomes"][c])),
         key=lambda c: (-len(achados[tipo][c]), c),
     )
     rec = fungicida_data.get_recomendacao(doenca)

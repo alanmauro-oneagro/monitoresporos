@@ -125,7 +125,11 @@ menos que seja pedido explicitamente paridade para outros admins.
   botao Quimicos (pedido do Alan, 18/10/2026). ADAPAR fora do ar = nao
   limpa nada. "Citrus" do site = "Citros" do Agrofit. Botao Quimicos so'
   traz fungicida quimico (`agrofit_dados.eh_fungicida_quimico`: classe
-  "Fungicida" no Agrofit, sem oleo/neem/azadiractina/extrato). Comparacao
+  "Fungicida" no Agrofit, sem oleo/neem/azadiractina/extrato); quimico que
+  nao e' fungicida tambem nao conta em Registros/ADAPAR e some da
+  Biblioteca (o Agrofit lista inseticida acetamiprido + bifentrina contra
+  Septoria glycines). Indice sem classes/marcas = aviso "formato antigo"
+  na Biblioteca (o filtro de classe nao funciona). Comparacao
   de nomes tolerante a grafia (`agrofit_dados.chave_quimico`/
   `chave_biologico`: benzovindiflupyr=benzovindiflupir, bixafem=bixafeno,
   "B. velezensis" expandido); sem produto no Agrofit

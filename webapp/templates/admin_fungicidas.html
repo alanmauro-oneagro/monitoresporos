@@ -23,6 +23,7 @@
 <p class="small text-muted mb-3">
     Base Agrofit/MAPA (<a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit" target="_blank" rel="noopener">dados abertos</a>):
     {% if agrofit.baixando %}<span id="agrofitProgresso">baixando agora...</span>{% elif agrofit.baixado_em and agrofit.enviado %}arquivo enviado em {{ agrofit.baixado_em }} -- envie de novo uma vez por mes.{% elif agrofit.baixado_em %}atualizada em {{ agrofit.baixado_em }}, renova sozinha uma vez por mes.{% else %}ainda nao baixada -- baixa sozinha em instantes.{% endif %}
+    {% if agrofit.formato_antigo and not agrofit.baixando %}<span class="text-danger">Base no formato antigo -- ainda sem o filtro de so' fungicidas (pode trazer inseticida) e sem a conferencia da ADAPAR. Clique em Atualizar agora ou envie o arquivo de novo.</span>{% endif %}
     {% if agrofit.erro and not agrofit.baixando %}<span class="text-danger">Ultima tentativa falhou: {{ agrofit.erro }}</span>{% endif %}
     {% if not agrofit.baixando %}
     <button type="submit" form="agrofitAtualizarForm" class="btn btn-link btn-sm p-0 align-baseline">🔄 {{ 'Atualizar agora' if agrofit.baixado_em else 'Tentar agora' }}</button>
