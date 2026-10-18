@@ -626,14 +626,6 @@ def _no_cache(response):
     return response
 
 
-@app.context_processor
-def _inject_nav_safras():
-    """`models.SAFRAS` disponivel em toda pagina que estende base.html --
-    o menu (link "Manejo {safra}" por safra) precisa disso sem cada rota
-    ter que passar explicitamente."""
-    return {"nav_safras": models.SAFRAS}
-
-
 # Personalizacoes de tela salvas na conta (pedido do usuario, 16/10/2026)
 # -- antes ficavam so' no navegador (localStorage), sem acompanhar a pessoa
 # em outro aparelho e misturando quem usa o mesmo computador.
@@ -3598,7 +3590,10 @@ SAFRA_LABELS = dict(models.SAFRAS)
 @app.route("/recommendations")
 @login_required
 def recommendations_default():
-    return redirect(url_for("recommendations", safra="safra1"))
+    """Aba unica "Recomendacoes" do menu (antes uma por safra): abre na
+    ultima safra vista nessa sessao."""
+    safra = session.get("safra_recomendacoes")
+    return redirect(url_for("recommendations", safra=safra if safra in SAFRA_LABELS else "safra1"))
 
 
 @app.route("/recommendations/<safra>")
@@ -3606,6 +3601,7 @@ def recommendations_default():
 def recommendations(safra):
     if safra not in SAFRA_LABELS:
         abort(404)
+    session["safra_recomendacoes"] = safra
     _maybe_auto_refresh()  # silencioso -- nao avisa mais no topo da pagina, so acontece
     if current_user.is_admin:
         permitted = _sites_ativos_para_admin()  # admin ve todas as fazendas ativas
