@@ -2,7 +2,9 @@
 {% block title %}Fungicidas - OneAgro{% endblock %}
 {% block content %}
 <style>
-.fung-titulo { min-width: 0; }
+.fung-toggle { font-size: 1rem; }
+.fung-card { margin-bottom: 0.5rem; }
+.fung-card > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
 .fung-bandeiras { font-size: 1rem; letter-spacing: 0.15rem; }
 .fung-culturas { display: flex; flex-wrap: wrap; align-items: center; column-gap: 1rem; row-gap: 0.15rem; padding-left: 0.25rem; }
 @media (max-width: 575.98px) {
@@ -10,7 +12,6 @@
     .fung-culturas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 0.4rem; padding-left: 0; }
     .fung-culturas-rotulo { grid-column: 1 / -1; }
     .fung-culturas .form-check-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-    .fung-titulo { font-size: 0.95rem; }
     .fung-bandeiras { padding: 0.2em 0.35em; }
     .fung-agrofit { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .fung-agrofit > span { grid-column: 1 / -1; }
@@ -45,19 +46,18 @@
 
 <form method="post" data-autosave>
 {% for d in doencas_data %}
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm fung-card" data-doenca="{{ d.doenca }}">
     <div class="card-body px-2 px-sm-3">
-        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
-            <h5 class="mb-0 fung-titulo">
-                {{ d.rotulo }}
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start fung-toggle" data-target="fung-body-{{ loop.index0 }}">
+            <span class="toggle-icon">▶</span> {{ d.rotulo }}
                 {% if d.bandeiras %}
                 <span class="badge bg-light text-dark border fw-normal ms-1 fung-bandeiras" title="Pais marcado na matriz Doencas x Pais (aba Doencas): {{ d.paises | join(', ') }}">{% for bandeira, nome in d.bandeiras %}{% if bandeira %}<span aria-label="{{ nome }}">{{ bandeira }}</span>{% else %}<span class="small">{{ nome }}</span>{% endif %}{% endfor %}</span>
                 {% else %}
                 <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum pais marcado na matriz Doencas x Pais -- se aplica a qualquer pais">🌎<span class="d-none d-sm-inline"> Todos os paises</span></span>
                 {% endif %}
-            </h5>
-        </div>
-        <div class="mb-3" style="margin-top: -0.6rem;">
+        </button>
+        <div class="d-none mt-3" id="fung-body-{{ loop.index0 }}">
+        <div class="mb-3">
             <input type="hidden" name="cientifico_key" value="{{ d.doenca }}">
             <input type="text" name="cientifico" class="form-control form-control-sm fst-italic text-muted fung-cientifico" value="{{ d.cientifico }}"
                    data-doenca="{{ d.doenca }}" placeholder="Nome cientifico do fungo (genero e especie)" aria-label="Nome cientifico de {{ d.rotulo }}">
@@ -129,6 +129,7 @@
             <input type="hidden" name="nota_doenca_key" value="{{ d.doenca }}">
             <textarea name="nota_doenca" id="nota_doenca_{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="2"
                       placeholder="Vale para todas as fazendas sem anotacao propria dessa doenca na aba Recomendacoes...">{{ d.nota }}</textarea>
+        </div>
         </div>
     </div>
 </div>
@@ -226,6 +227,28 @@ document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
         }).catch(function () { setTimeout(atualizar, 5000); });
     }
     atualizar();
+})();
+// Cada doenca recolhida (igual a aba Anotacoes de Safra); as abertas
+// continuam abertas depois de recarregar (botoes Agrofit, mover ▲▼).
+(function () {
+    var CHAVE = 'fungicidas_abertas';
+    var abertas;
+    try { abertas = JSON.parse(sessionStorage.getItem(CHAVE) || '[]'); } catch (e) { abertas = []; }
+    function abrir(btn, aberto) {
+        document.getElementById(btn.dataset.target).classList.toggle('d-none', !aberto);
+        btn.querySelector('.toggle-icon').textContent = aberto ? '▼' : '▶';
+    }
+    document.querySelectorAll('.fung-toggle').forEach(function (btn) {
+        var doenca = btn.closest('.fung-card').dataset.doenca;
+        if (abertas.indexOf(doenca) !== -1) abrir(btn, true);
+        btn.addEventListener('click', function () {
+            var aberto = document.getElementById(btn.dataset.target).classList.contains('d-none');
+            abrir(btn, aberto);
+            abertas = abertas.filter(function (d) { return d !== doenca; });
+            if (aberto) abertas.push(doenca);
+            try { sessionStorage.setItem(CHAVE, JSON.stringify(abertas)); } catch (e) {}
+        });
+    });
 })();
 (function () {
     var saved = sessionStorage.getItem('fungicidas_scroll');
