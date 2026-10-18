@@ -7,6 +7,8 @@
    nao cabe na tela do computador sem rolar (pedido explicito do
    usuario). */
 .cultura-nome-input { width: 62px; padding: 2px 4px; font-size: 0.72rem; }
+/* Doenca sem nenhum pais marcado: linha laranja (80% transparente). */
+tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 .doenca-toggle { font-size: 1rem; width: 100%; padding: 0.4rem 0 !important; }
 .doenca-card { margin-bottom: 0.5rem; }
 .doenca-card > .card-body { padding-top: 0.25rem; padding-bottom: 0.25rem; }
@@ -147,7 +149,7 @@
             <tbody>
             {% for d in matriz_paises %}
                 {% set doenca_loop = loop %}
-                <tr>
+                <tr class="linha-matriz-pais{% if not d.marcadas %} sem-pais{% endif %}">
                     <td>
                         {{ d.pt }}
                         <input type="hidden" name="doenca_en" value="{{ d.en }}">
@@ -266,6 +268,14 @@ document.querySelectorAll('.cultura-nome-input').forEach(function (input) {
     };
     input.addEventListener('input', atualizar);
 });
+// Matriz Doencas x Pais: linha laranja enquanto nenhum pais estiver
+// marcado (atualiza ao marcar/desmarcar).
+document.querySelectorAll('tr.linha-matriz-pais').forEach(function (linha) {
+    linha.addEventListener('change', function () {
+        linha.classList.toggle('sem-pais', !linha.querySelector('input[type=checkbox]:checked'));
+    });
+});
+
 // Aviso "nenhuma cultura marcada" no cartao da doenca.
 document.querySelectorAll('.doenca-culturas').forEach(function (bloco) {
     var aviso = bloco.parentNode.querySelector('.sem-cultura-aviso');
