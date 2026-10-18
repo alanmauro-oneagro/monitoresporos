@@ -114,8 +114,16 @@ menos que seja pedido explicitamente paridade para outros admins.
   servidor UMA VEZ POR MES (`agrofit_dados.atualizar_se_necessario` no
   scheduler; indice em `agrofit_indice.json` ao lado do banco). Busca pelo
   NOME CIENTIFICO do fungo, em 3 operacoes SEPARADAS (pedido do Alan):
-  "Quimicos" e "Biologicos" completam as linhas vazias com os mais
-  registrados; "Registros" marca/desmarca culturas dos quimicos. Comparacao
+  "Quimicos" e "Biologicos" completam as linhas vazias (inclusive as
+  apagadas na mao) com os mais registrados, ja' marcando as culturas;
+  "Registros" marca/desmarca culturas dos quimicos (mistura de tanque de
+  produtos registrados tambem conta -- `agrofit_dados.culturas_cobertas`).
+  Produto sem NENHUMA cultura no Agrofit passa por 2a conferencia nas
+  bulas da ADAPAR (`adapar.py`: pagina de fungicidas lida 1x/mes, bula
+  achada pela marca comercial do Agrofit, texto guardado em
+  `adapar_bulas.json`); sem cultura la' tambem, a linha e' limpa pro
+  botao Quimicos (pedido do Alan, 18/10/2026). ADAPAR fora do ar = nao
+  limpa nada. "Citrus" do site = "Citros" do Agrofit. Comparacao
   de nomes tolerante a grafia (`agrofit_dados.chave_quimico`/
   `chave_biologico`: benzovindiflupyr=benzovindiflupir, bixafem=bixafeno,
   "B. velezensis" expandido); sem produto no Agrofit
