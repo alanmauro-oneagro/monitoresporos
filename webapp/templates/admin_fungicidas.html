@@ -2,9 +2,9 @@
 {% block title %}Fungicidas - OneAgro{% endblock %}
 {% block content %}
 <style>
-.fung-toggle { font-size: 1rem; }
+.fung-toggle { font-size: 1rem; width: 100%; padding: 0.4rem 0 !important; }
 .fung-card { margin-bottom: 0.5rem; }
-.fung-card > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+.fung-card > .card-body { padding-top: 0.25rem; padding-bottom: 0.25rem; }
 .fung-bandeiras { font-size: 1rem; letter-spacing: 0.15rem; }
 .fung-culturas { display: flex; flex-wrap: wrap; align-items: center; column-gap: 1rem; row-gap: 0.15rem; padding-left: 0.25rem; }
 @media (max-width: 575.98px) {
@@ -56,7 +56,7 @@
                 <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum pais marcado na matriz Doencas x Pais -- se aplica a qualquer pais">🌎<span class="d-none d-sm-inline"> Todos os paises</span></span>
                 {% endif %}
         </button>
-        <div class="d-none mt-3" id="fung-body-{{ loop.index0 }}">
+        <div class="d-none mt-1 mb-2" id="fung-body-{{ loop.index0 }}">
         <div class="mb-3">
             <input type="hidden" name="cientifico_key" value="{{ d.doenca }}">
             <input type="text" name="cientifico" class="form-control form-control-sm fst-italic text-muted fung-cientifico" value="{{ d.cientifico }}"
