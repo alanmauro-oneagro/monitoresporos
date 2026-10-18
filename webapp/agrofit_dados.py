@@ -5,6 +5,7 @@ scheduler) e guardada como um indice compacto em JSON ao lado do banco
 (mesmo volume persistente). Usada pelo botao "Agrofit" de cada doenca da
 Biblioteca de fungicidas: a busca e' pelo nome cientifico do fungo."""
 import csv
+import gzip
 import io
 import json
 import re
@@ -141,12 +142,14 @@ def _coluna(cabecalho, *palavras):
 
 
 def montar_indice(arquivo):
-    """Arquivo binario do CSV (ou .zip com o CSV), lido em streaming ->
+    """Arquivo binario do CSV (ou .zip/.gz com o CSV), lido em streaming ->
     {"pragas": {praga: [[ativos, cultura], ...]}, "nomes": {ativos: texto
     exibido}, "culturas": [...]}."""
     inicio = arquivo.read(4)
     arquivo.seek(0)
-    if inicio[:2] == b"PK":
+    if inicio[:2] == b"\x1f\x8b":
+        arquivo = io.BufferedReader(gzip.GzipFile(fileobj=arquivo))
+    elif inicio[:2] == b"PK":
         z = zipfile.ZipFile(arquivo)
         arquivo = z.open(next(n for n in z.namelist() if n.lower().endswith(".csv")))
     amostra = arquivo.peek(1 << 20)[: 1 << 20] if hasattr(arquivo, "peek") else b""
@@ -179,6 +182,10 @@ def montar_indice(arquivo):
         if col_situacao is not None and col_situacao < len(linha) and normalizar(linha[col_situacao]) in (
             "false", "0", "nao", "cancelado", "suspenso", "inativo",
         ):
+            continue
+        # So' fungicidas (inclusive microbiologicos) -- o resto da base
+        # (inseticida, herbicida...) nunca e' usado e so' pesaria o indice.
+        if col_classe is not None and "fungicida" not in normalizar(linha[col_classe] if col_classe < len(linha) else ""):
             continue
         chave = ativos(linha[col_ingrediente])
         cultura = linha[col_cultura].strip()
