@@ -150,12 +150,17 @@ menos que seja pedido explicitamente paridade para outros admins.
   apagadas na mao) com os mais registrados, ja' marcando as culturas;
   "Registros" marca/desmarca culturas dos quimicos (mistura de tanque de
   produtos registrados tambem conta -- `agrofit_dados.culturas_cobertas`).
-  Produto sem NENHUMA cultura no Agrofit passa por 2a conferencia nas
-  bulas da ADAPAR (`adapar.py`: pagina de fungicidas lida 1x/mes, bula
+  Toda cultura do site que o Agrofit NAO marcou passa por 2a conferencia
+  nas bulas da ADAPAR (`adapar.py`: pagina de fungicidas lida 1x/mes, bula
   achada pela marca comercial do Agrofit, texto guardado em
-  `adapar_bulas.json`); sem cultura la' tambem, a linha e' limpa pro
-  botao Quimicos (pedido do Alan, 18/10/2026). ADAPAR fora do ar = nao
-  limpa nada. "Citrus" do site = "Citros" do Agrofit. Botao Quimicos so'
+  `adapar_bulas.json`) -- ex.: soja pra Alternaria. Todas as culturas do
+  Agrofit entram como referencia na bula (a Alternaria na linha do Tomate
+  nao marca a Soja da linha de cima). Produto sem cultura no Agrofit nem
+  na ADAPAR: a linha e' limpa pro botao Quimicos (pedidos do Alan,
+  18/10/2026). ADAPAR fora do ar = fica so' o Agrofit, nao limpa nada.
+  A base aberta do servidor liga cultura x alvo de verdade (a copia do
+  parquet do agrofit2 usada nos testes cruza TODAS as culturas com TODOS
+  os alvos de cada produto -- nao tirar conclusao de registro dela). "Citrus" do site = "Citros" do Agrofit. Botao Quimicos so'
   traz fungicida quimico (`agrofit_dados.eh_fungicida_quimico`: classe
   "Fungicida" no Agrofit, sem oleo/neem/azadiractina/extrato); quimico que
   nao e' fungicida tambem nao conta em Registros/ADAPAR e some da
