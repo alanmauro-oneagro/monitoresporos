@@ -18,7 +18,7 @@ import math
 
 from reportlab.graphics.shapes import Circle, Drawing, Line, Path, Polygon, Rect, String, Wedge
 from reportlab.platypus import (
-    KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+    Flowable, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
 AZUL_MARCA = colors.HexColor("#0a1f44")
@@ -396,20 +396,20 @@ def _caixa(conteudo, fundo=None):
     return caixa
 
 
-def _caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, classe_label):
+def _caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, classe_label, estilo=_ESTILO_NORMAL):
     """Caixa (sem preenchimento -- so a borda) com os ingredientes
     recomendados pelas instituicoes de pesquisa (biblioteca da aba
     Fungicidas), pra deixar claro que essa parte NAO e' uma anotacao da
     fazenda (essa sim, com fundo cinza -- ver `_caixa`)."""
     linhas = [Paragraph("Recomendações das Instituições de Pesquisa", ParagraphStyle(
-        "RecInst", parent=_ESTILO_NORMAL, fontName="Helvetica-Bold", spaceAfter=2,
+        "RecInst", parent=estilo, fontName="Helvetica-Bold", spaceAfter=2,
     ))]
     if biologicos_itens:
         ativos = " // ".join(_fmt_ingrediente(p, classe_label) for p in biologicos_itens)
-        linhas.append(Paragraph(f"<b>Biologicos:</b> {ativos}", _ESTILO_NORMAL))
+        linhas.append(Paragraph(f"<b>Biologicos:</b> {ativos}", estilo))
     if quimicos_itens:
         ativos = " // ".join(_fmt_ingrediente(p, classe_label) for p in quimicos_itens)
-        linhas.append(Paragraph(f"<b>Quimicos:</b> {ativos}", _ESTILO_NORMAL))
+        linhas.append(Paragraph(f"<b>Quimicos:</b> {ativos}", estilo))
     return _caixa(linhas, fundo=None)
 
 
@@ -451,6 +451,44 @@ def _rodape_pagina(extraido_em):
     return desenhar
 
 
+# Blocos (clima e cada doenca) por pagina: a 1a pagina leva o clima + 2
+# doencas, as outras 3 doencas. Nao cabendo, fonte e grafico diminuem
+# (`_ESCALAS`) ate' caber -- bloco nunca e' cortado entre paginas (pedido
+# do Alan, 18/10/2026).
+BLOCOS_POR_PAGINA = 3
+_ESCALAS = [1 - i * 0.05 for i in range(8)]
+
+
+def _escalar(estilo, fator):
+    return ParagraphStyle(
+        f"{estilo.name}_{fator:.2f}", parent=estilo, fontSize=estilo.fontSize * fator, leading=estilo.leading * fator,
+        spaceBefore=estilo.spaceBefore * fator, spaceAfter=estilo.spaceAfter * fator,
+    )
+
+
+class _Marca(Flowable):
+    """Marcador invisivel: anota em `paginas` a pagina onde foi desenhado."""
+
+    def __init__(self, paginas, chave):
+        super().__init__()
+        self.paginas, self.chave = paginas, chave
+
+    def wrap(self, *args):
+        return 0, 0
+
+    def draw(self):
+        self.paginas[self.chave] = self.canv.getPageNumber()
+
+
+def _blocos_ok(paginas, n_blocos):
+    """(nenhum bloco cortado, toda pagina antes da ultima com bloco tem
+    pelo menos `BLOCOS_POR_PAGINA`)."""
+    inteiros = all(paginas.get(("ini", i)) == paginas.get(("fim", i)) for i in range(n_blocos))
+    por_pagina = [paginas.get(("ini", i)) for i in range(n_blocos)]
+    cheias = all(por_pagina.count(p) >= BLOCOS_POR_PAGINA for p in set(por_pagina) if p != por_pagina[-1])
+    return inteiros, inteiros and cheias
+
+
 def build_recommendation_pdf(
     nome_fazenda, safra_label, diseases, weather=None, produtos=None,
     cultura=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
@@ -479,159 +517,179 @@ def build_recommendation_pdf(
     monitorada nessa fazenda. Retorna
     um `io.BytesIO` com o PDF
     pronto."""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=A4,
-        leftMargin=1.8 * cm, rightMargin=1.8 * cm, topMargin=1.5 * cm, bottomMargin=1.9 * cm,
-        title=f"Recomendacao - {nome_fazenda}",
-    )
-    story = []
+    def _montar(escala, paginas):
+        # Fonte diminui menos que o grafico (escala 0.65 -> fonte 82%).
+        fonte = 0.5 + escala / 2
+        normal = _escalar(_ESTILO_NORMAL, fonte)
+        bloco = [0]
 
-    story.append(Paragraph(f"{nome_fazenda} - OneAgro", _ESTILO_TITULO))
-    subtitulo = f"Recomendações {safra_label} - {cultura.upper()}" if cultura else f"Recomendações {safra_label}"
-    story.append(Paragraph(subtitulo, _ESTILO_SUBTITULO))
+        def em_bloco(flowables):
+            i = bloco[0]
+            bloco[0] += 1
+            return KeepTogether([_Marca(paginas, ("ini", i)), *flowables, _Marca(paginas, ("fim", i))])
 
-    if weather:
-        story.append(_cabecalho_clima(weather, leitura_bioscout))
-        story.append(Spacer(1, 6))
+        story = []
+        subtitulo = f"Recomendações {safra_label} - {cultura.upper()}" if cultura else f"Recomendações {safra_label}"
 
-    if mostrar_secao_doencas:
-        story.append(Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO))
-    fontes_pesquisadas = []
-    if not diseases:
-        if mostrar_secao_doencas:
-            story.append(Paragraph("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.", _ESTILO_NORMAL))
-    else:
-        for d in diseases:
-            cabecalho = []
-            cor_hex = "#ff6b6b" if d["status"] == "Perigo" else "#e6ac00"
-            cabecalho.append(Paragraph(
-                f'<font color="{cor_hex}">●</font> <b>{d["rotulo"].upper()}</b> — '
-                f'{_STATUS_LABELS.get(d["status"], d["status"])}',
-                _ESTILO_DOENCA,
-            ))
-            previsao_risco = d.get("previsao_risco")
-            risco_label = _RISCO_LABELS.get(d.get("risco"))
-            if previsao_risco:
-                dias_txt = " &nbsp;·&nbsp; ".join(
-                    f'<font color="{_RISCO_CORES.get(p["risco"], "#666666")}">●</font> '
-                    f'<b>{p["data_fmt"]}</b>: {_RISCO_LABELS.get(p["risco"], "")}'
-                    for p in previsao_risco
-                )
-                cabecalho.append(Paragraph(f"Risco de infecção: {dias_txt}", _ESTILO_PREVISAO_RISCO))
-            elif risco_label:
-                cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
+        topo = [Paragraph(f"{nome_fazenda} - OneAgro", _ESTILO_TITULO), Paragraph(subtitulo, _ESTILO_SUBTITULO)]
+        if weather:
+            story += [em_bloco(topo + [_cabecalho_clima(weather, leitura_bioscout)]), Spacer(1, 6)]
+        else:
+            story += topo
+
+        secao = [Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO)] if mostrar_secao_doencas else []
+        fontes_pesquisadas = []
+        if not diseases:
+            if secao:
+                story += secao + [Paragraph("Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.", _ESTILO_NORMAL)]
+        else:
+            for d in diseases:
+                cabecalho, secao = secao, []
+                cor_hex = "#ff6b6b" if d["status"] == "Perigo" else "#e6ac00"
                 cabecalho.append(Paragraph(
-                    f'<font color="{cor_risco}">●</font> Risco de infecção: <b>{risco_label}</b>',
-                    _ESTILO_RISCO_CLIMATICO,
+                    f'<font color="{cor_hex}">●</font> <b>{d["rotulo"].upper()}</b> — '
+                    f'{_STATUS_LABELS.get(d["status"], d["status"])}',
+                    _escalar(_ESTILO_DOENCA, fonte),
                 ))
-            elif d.get("cientifico"):
-                cabecalho.append(Paragraph(d["cientifico"], _ESTILO_GERMINACAO))
-            grafico = _build_spore_chart(d.get("historico") or [])
-            if grafico:
-                cabecalho.append(Spacer(1, 2))
-                cabecalho.append(grafico)
-            story.append(KeepTogether(cabecalho))
-            biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
-            quimicos_itens = d["quimicos"]["itens"][:3] if d.get("quimicos") else None
-            if biologicos_itens or quimicos_itens:
-                story.append(Spacer(1, 3))
-                story.append(_caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, d["classe_label"]))
-                story.append(Spacer(1, 3))
-                for grupo in (d.get("biologicos"), d.get("quimicos")):
-                    if grupo and grupo.get("fonte"):
-                        fontes_pesquisadas.append(grupo["fonte"].split(" -- ")[0])
+                previsao_risco = d.get("previsao_risco")
+                risco_label = _RISCO_LABELS.get(d.get("risco"))
+                if previsao_risco:
+                    dias_txt = " &nbsp;·&nbsp; ".join(
+                        f'<font color="{_RISCO_CORES.get(p["risco"], "#666666")}">●</font> '
+                        f'<b>{p["data_fmt"]}</b>: {_RISCO_LABELS.get(p["risco"], "")}'
+                        for p in previsao_risco
+                    )
+                    cabecalho.append(Paragraph(f"Risco de infecção: {dias_txt}", _escalar(_ESTILO_PREVISAO_RISCO, fonte)))
+                elif risco_label:
+                    cor_risco = _RISCO_CORES.get(d.get("risco"), "#666666")
+                    cabecalho.append(Paragraph(
+                        f'<font color="{cor_risco}">●</font> Risco de infecção: <b>{risco_label}</b>',
+                        _escalar(_ESTILO_RISCO_CLIMATICO, fonte),
+                    ))
+                elif d.get("cientifico"):
+                    cabecalho.append(Paragraph(d["cientifico"], _escalar(_ESTILO_GERMINACAO, fonte)))
+                grafico = _build_spore_chart(d.get("historico") or [], altura=3.6 * cm * escala)
+                if grafico:
+                    cabecalho.append(Spacer(1, 2))
+                    cabecalho.append(grafico)
+                biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
+                quimicos_itens = d["quimicos"]["itens"][:3] if d.get("quimicos") else None
+                if biologicos_itens or quimicos_itens:
+                    cabecalho += [Spacer(1, 3), _caixa_recomendacao_instituicoes(biologicos_itens, quimicos_itens, d["classe_label"], normal)]
+                    for grupo in (d.get("biologicos"), d.get("quimicos")):
+                        if grupo and grupo.get("fonte"):
+                            fontes_pesquisadas.append(grupo["fonte"].split(" -- ")[0])
+                story += [em_bloco(cabecalho), Spacer(1, 3)]
 
-    # Anotacoes das doencas numa caixa so' (igual a tela e ao texto do
-    # WhatsApp), so' as preenchidas -- logo abaixo da ultima caixa de
-    # recomendacoes das doencas.
-    linhas_anotacao = [Paragraph(anotacao, _ESTILO_NORMAL)] if anotacao else []
-    linhas_anotacao += [
-        Paragraph(f"<b>{escape(d['rotulo'])}:</b> {escape(d['nota'].strip())}".replace("\n", "<br/>"), _ESTILO_NORMAL)
-        for d in diseases if (d.get("nota") or "").strip()
-    ]
-    if linhas_anotacao:
-        # Mesma caixa cinza das outras secoes de anotacao livre (Produtos/
-        # Plantio/Pulverizacao).
-        story.append(Paragraph("Anotações", _ESTILO_SECAO))
-        story.append(_caixa(linhas_anotacao, fundo=CINZA_CLARO))
-        story.append(Spacer(1, 2))
-
-    if riscos_climaticos:
-        # Bloco a parte de "Doencas em Atencao/Perigo" -- so' clima
-        # comparado com a germinacao, sem status/concentracao
-        # confirmados (ver docstring). Aparece mesmo com
-        # mostrar_secao_doencas=False, de proposito.
-        story.append(KeepTogether([
-            Paragraph("Favorabilidade climática para doenças na lavoura", _ESTILO_SECAO),
-            Paragraph(
-                "Condições climáticas previstas para os próximos 5 dias e seu potencial para favorecer o "
-                "desenvolvimento das principais doenças, independentemente da presença de esporos no ar.",
-                _ESTILO_SUBTITULO_RISCO,
-            ),
-            Spacer(1, 4),
-            *_tabela_riscos_climaticos(riscos_climaticos),
-        ]))
-        story.append(Spacer(1, 4))
-
-    produtos = produtos or {}
-    # Secao vazia (sem produto/plantio/pulverizacao cadastrado) nao entra
-    # no relatorio.
-    conteudo = []
-    for tipo, titulo in (("biologico", "Biologicos"), ("quimico", "Quimicos")):
-        partes = [
-            f"{p['nome']} ({p['data_anotacao']})" if p.get("data_anotacao") else p["nome"]
-            for p in (produtos.get(tipo) or []) if p.get("nome")
+        # Anotacoes das doencas numa caixa so' (igual a tela e ao texto do
+        # WhatsApp), so' as preenchidas -- logo abaixo da ultima caixa de
+        # recomendacoes das doencas. Bloco a parte: pode ir inteiro pra
+        # pagina seguinte, antes da Favorabilidade.
+        linhas_anotacao = [Paragraph(anotacao, _ESTILO_NORMAL)] if anotacao else []
+        linhas_anotacao += [
+            Paragraph(f"<b>{escape(d['rotulo'])}:</b> {escape(d['nota'].strip())}".replace("\n", "<br/>"), _ESTILO_NORMAL)
+            for d in diseases if (d.get("nota") or "").strip()
         ]
-        if partes:
-            conteudo.append(Paragraph(f"<b>{titulo}:</b> {', '.join(partes)}", _ESTILO_NORMAL))
-    if conteudo:
-        story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
-        story.append(_caixa(conteudo, fundo=CINZA_CLARO))
+        if linhas_anotacao:
+            # Mesma caixa cinza das outras secoes de anotacao livre (Produtos/
+            # Plantio/Pulverizacao).
+            story.append(KeepTogether([Paragraph("Anotações", _ESTILO_SECAO), _caixa(linhas_anotacao, fundo=CINZA_CLARO)]))
+            story.append(Spacer(1, 2))
 
-    plantio_linhas = [l for l in (plantio_linhas or []) if any(l.values())]
-    if plantio_linhas:
-        rows = [
-            [models.fmt_data_br(l["data_plantio"]) or "-", l["talhao"] or "-", l["variedade"] or "-", l["ciclo_dias"] or "-"]
-            for l in plantio_linhas
-        ]
-        story.append(Paragraph("Datas de Plantio", _ESTILO_SECAO))
-        story.append(_tabela_padrao(
-            ["Data", "Talhao", "Variedade", "Ciclo (dias)"], rows,
-            [3.2 * cm, 4.5 * cm, 6 * cm, 3.2 * cm],
-        ))
+        if riscos_climaticos:
+            # Bloco a parte de "Doencas em Atencao/Perigo" -- so' clima
+            # comparado com a germinacao, sem status/concentracao
+            # confirmados (ver docstring). Aparece mesmo com
+            # mostrar_secao_doencas=False, de proposito.
+            story.append(KeepTogether([
+                Paragraph("Favorabilidade climática para doenças na lavoura", _ESTILO_SECAO),
+                Paragraph(
+                    "Condições climáticas previstas para os próximos 5 dias e seu potencial para favorecer o "
+                    "desenvolvimento das principais doenças, independentemente da presença de esporos no ar.",
+                    _ESTILO_SUBTITULO_RISCO,
+                ),
+                Spacer(1, 4),
+                *_tabela_riscos_climaticos(riscos_climaticos),
+            ]))
+            story.append(Spacer(1, 4))
 
-    aplicacoes_linhas = [l for l in (aplicacoes_linhas or []) if any(l.values())]
-    if aplicacoes_linhas:
-        rows = [
-            [models.fmt_data_br(l["data_aplicacao"]) or "-", l["talhao"] or "-", l["fungicidas_quimicos"] or "-", l["fungicidas_biologicos"] or "-"]
-            for l in aplicacoes_linhas
-        ]
-        story.append(Paragraph("Datas de Pulverizacao", _ESTILO_SECAO))
-        story.append(_tabela_padrao(
-            ["Data", "Talhao", "Fungicidas quimicos", "Fungicidas biologicos"], rows,
-            [3.2 * cm, 3.2 * cm, 5.2 * cm, 5.3 * cm],
-        ))
+        produtos_fazenda = produtos or {}
+        # Secao vazia (sem produto/plantio/pulverizacao cadastrado) nao entra
+        # no relatorio.
+        conteudo = []
+        for tipo, titulo in (("biologico", "Biologicos"), ("quimico", "Quimicos")):
+            partes = [
+                f"{p['nome']} ({p['data_anotacao']})" if p.get("data_anotacao") else p["nome"]
+                for p in (produtos_fazenda.get(tipo) or []) if p.get("nome")
+            ]
+            if partes:
+                conteudo.append(Paragraph(f"<b>{titulo}:</b> {', '.join(partes)}", _ESTILO_NORMAL))
+        if conteudo:
+            story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
+            story.append(_caixa(conteudo, fundo=CINZA_CLARO))
 
-    story.append(Spacer(1, 10))
-    if weather and weather.get("fonte"):
-        story.append(Paragraph(f"Fonte do clima: {weather['fonte']}", _ESTILO_RODAPE))
-    if fontes_pesquisadas:
-        fontes_unicas = sorted(set(fontes_pesquisadas))
+        plantio = [l for l in (plantio_linhas or []) if any(l.values())]
+        if plantio:
+            rows = [
+                [models.fmt_data_br(l["data_plantio"]) or "-", l["talhao"] or "-", l["variedade"] or "-", l["ciclo_dias"] or "-"]
+                for l in plantio
+            ]
+            story.append(Paragraph("Datas de Plantio", _ESTILO_SECAO))
+            story.append(_tabela_padrao(
+                ["Data", "Talhao", "Variedade", "Ciclo (dias)"], rows,
+                [3.2 * cm, 4.5 * cm, 6 * cm, 3.2 * cm],
+            ))
+
+        aplicacoes = [l for l in (aplicacoes_linhas or []) if any(l.values())]
+        if aplicacoes:
+            rows = [
+                [models.fmt_data_br(l["data_aplicacao"]) or "-", l["talhao"] or "-", l["fungicidas_quimicos"] or "-", l["fungicidas_biologicos"] or "-"]
+                for l in aplicacoes
+            ]
+            story.append(Paragraph("Datas de Pulverizacao", _ESTILO_SECAO))
+            story.append(_tabela_padrao(
+                ["Data", "Talhao", "Fungicidas quimicos", "Fungicidas biologicos"], rows,
+                [3.2 * cm, 3.2 * cm, 5.2 * cm, 5.3 * cm],
+            ))
+
+        story.append(Spacer(1, 10))
+        if weather and weather.get("fonte"):
+            story.append(Paragraph(f"Fonte do clima: {weather['fonte']}", _ESTILO_RODAPE))
+        if fontes_pesquisadas:
+            fontes_unicas = sorted(set(fontes_pesquisadas))
+            story.append(Paragraph(
+                f"Instituicoes de pesquisa consultadas para as recomendacoes acima: {' · '.join(fontes_unicas)}.",
+                _ESTILO_RODAPE,
+            ))
         story.append(Paragraph(
-            f"Instituicoes de pesquisa consultadas para as recomendacoes acima: {' · '.join(fontes_unicas)}.",
+            "Isso nao substitui a avaliacao de um agronomo responsavel.",
             _ESTILO_RODAPE,
         ))
-    story.append(Paragraph(
-        "Isso nao substitui a avaliacao de um agronomo responsavel.",
-        _ESTILO_RODAPE,
-    ))
-    story.append(Paragraph(
-        "Powered by BioScout",
-        _ESTILO_RODAPE,
-    ))
+        story.append(Paragraph(
+            "Powered by BioScout",
+            _ESTILO_RODAPE,
+        ))
+
+        return story
 
     rodape_pagina = _rodape_pagina(rodape_data)
-    doc.build(story, onFirstPage=rodape_pagina, onLaterPages=rodape_pagina)
+    n_blocos = (1 if weather else 0) + len(diseases or [])
+    reserva = None
+    for escala in _ESCALAS:
+        paginas = {}
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=A4,
+            leftMargin=1.8 * cm, rightMargin=1.8 * cm, topMargin=1.5 * cm, bottomMargin=1.9 * cm,
+            title=f"Recomendacao - {nome_fazenda}",
+        )
+        doc.build(_montar(escala, paginas), onFirstPage=rodape_pagina, onLaterPages=rodape_pagina)
+        inteiros, ok = _blocos_ok(paginas, n_blocos)
+        if ok or n_blocos == 0:
+            break
+        if inteiros and reserva is None:
+            reserva = buffer
+    else:
+        buffer = reserva or buffer
     buffer.seek(0)
     return buffer
