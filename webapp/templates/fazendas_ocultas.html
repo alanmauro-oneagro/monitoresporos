@@ -1,23 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Fazendas ocultas - OneAgro{% endblock %}
 {% block content %}
+<style>
+.oculta-linha { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-top: 1px solid #e9ecef; }
+.oculta-linha .oculta-info { flex: 1 1 auto; min-width: 0; }
+.oculta-linha .oculta-nome { font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.oculta-linha .oculta-detalhe { font-size: 0.8rem; color: #6c757d; }
+.oculta-linha form { flex: 0 0 auto; margin: 0; }
+.oculta-linha .btn { min-width: 6.5rem; }
+@media (max-width: 575.98px) {
+    .oculta-card .card-body { padding: 0.85rem; }
+    .oculta-card .oculta-ajuda { font-size: 0.78rem; }
+    .oculta-linha .btn { min-width: 0; padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+}
+</style>
 <h4 class="mb-3">Fazendas ocultas</h4>
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 oculta-card">
     <div class="card-body">
-        <h6 class="mb-1">Sem leitura há mais de {{ dias_bloqueio }} dias</h6>
-        <p class="small text-muted mb-2">Doenças escondidas e relatório só de clima (sem PDF). Reativar volta a mostrar doenças e recomendações até chegar leitura nova do BioScout.</p>
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <h6 class="mb-0">Sem leitura há mais de {{ dias_bloqueio }} dias</h6>
+            <span class="badge bg-secondary">{{ sem_leitura | length }}</span>
+        </div>
+        <p class="text-muted mt-1 mb-2 small oculta-ajuda">Doenças escondidas e relatório só de clima (sem PDF). Reativar volta a mostrar doenças e recomendações até chegar leitura nova do BioScout.</p>
         {% for f in sem_leitura %}
-        <div class="d-flex align-items-center justify-content-between gap-2 py-2 border-top">
-            <div>
-                <div class="fw-bold">{{ f.nome }}</div>
-                <div class="small text-muted">Última leitura {{ f.ultima_leitura }} ({{ f.dias }} dias){% if f.reativada %} · <span class="text-success">reativada</span>{% endif %}</div>
+        <div class="oculta-linha">
+            <div class="oculta-info">
+                <div class="oculta-nome">{{ f.nome }}</div>
+                <div class="oculta-detalhe">
+                    <span class="text-nowrap"><span class="d-none d-sm-inline">Última leitura </span>{{ f.ultima_leitura }}</span> ·
+                    <span class="text-nowrap">{{ f.dias }} dias</span>
+                    {% if f.reativada %} · <span class="text-success text-nowrap">reativada</span>{% endif %}
+                </div>
             </div>
-            <form method="post" action="{{ url_for('reativar_fazenda_oculta') }}" class="mb-0 flex-shrink-0">
+            <form method="post" action="{{ url_for('reativar_fazenda_oculta') }}">
                 <input type="hidden" name="site_name" value="{{ f.site }}">
                 {% if f.reativada %}
                 <input type="hidden" name="motivo" value="bloquear">
-                <button type="submit" class="btn btn-sm btn-outline-secondary">Bloquear de novo</button>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Bloquear</button>
                 {% else %}
                 <input type="hidden" name="motivo" value="sem_leitura">
                 <button type="submit" class="btn btn-sm btn-success">Reativar</button>
@@ -30,14 +50,17 @@
     </div>
 </div>
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 oculta-card">
     <div class="card-body">
-        <h6 class="mb-1">Desativadas</h6>
-        <p class="small text-muted mb-2">Somem de todas as telas. Reativar volta a mostrar a fazenda no site inteiro.</p>
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <h6 class="mb-0">Desativadas</h6>
+            <span class="badge bg-secondary">{{ desativadas | length }}</span>
+        </div>
+        <p class="text-muted mt-1 mb-2 small oculta-ajuda">Somem de todas as telas. Reativar volta a mostrar a fazenda no site inteiro.</p>
         {% for f in desativadas %}
-        <div class="d-flex align-items-center justify-content-between gap-2 py-2 border-top">
-            <div class="fw-bold">{{ f.nome }}</div>
-            <form method="post" action="{{ url_for('reativar_fazenda_oculta') }}" class="mb-0 flex-shrink-0">
+        <div class="oculta-linha">
+            <div class="oculta-info"><div class="oculta-nome">{{ f.nome }}</div></div>
+            <form method="post" action="{{ url_for('reativar_fazenda_oculta') }}">
                 <input type="hidden" name="site_name" value="{{ f.site }}">
                 <input type="hidden" name="motivo" value="desativada">
                 <button type="submit" class="btn btn-sm btn-success">Reativar</button>
