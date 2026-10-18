@@ -239,6 +239,9 @@ def status():
         "erro": meta.get("erro"),
         "enviado": "arquivo enviado" in (meta.get("fonte") or ""),
         "progresso": dict(_progresso) if _baixando.is_set() else None,
+        # Indice no formato antigo: sem o filtro de so' fungicida nem a
+        # conferencia da ADAPAR ate' baixar/enviar de novo.
+        "formato_antigo": bool(baixado) and not {"marcas", "classes"} <= set(carregar()),
     }
 
 
@@ -402,34 +405,39 @@ def eh_biologico(ingrediente):
 
 
 def _ativos_conhecidos(dados):
-    """Todos os ingredientes (quimicos, ja na chave de comparacao) que
-    existem no Agrofit, pra separar "sem registro pra esse fungo" de "nome
-    nao encontrado" (grafia muito diferente ou produto fora do Agrofit)."""
+    """Todos os ingredientes (quimicos, ja na chave de comparacao) de
+    fungicidas do Agrofit (`eh_fungicida_quimico`) -- quimico com algum
+    ingrediente fora daqui some da Biblioteca (`produto_sem_registro`):
+    banido, nome nao encontrado ou nao e' fungicida (ex.: inseticida
+    acetamiprido + bifentrina, que o Agrofit lista contra Septoria)."""
     if _cache.get("conhecidos_mtime") != _cache["mtime"]:
         conhecidos = set()
+        classes = dados.get("classes", {})
         for itens in dados.get("pragas", {}).values():
             for texto_ativos, _ in itens:
-                conhecidos.update(chave_quimico(texto_ativos).split(" + "))
+                if eh_fungicida_quimico(texto_ativos, classes) or eh_biologico(texto_ativos):
+                    conhecidos.update(chave_quimico(texto_ativos).split(" + "))
         _cache["conhecidos"], _cache["conhecidos_mtime"] = conhecidos, _cache["mtime"]
     return _cache["conhecidos"]
 
 
 def registros(nome_cientifico):
-    """Produtos registrados no Agrofit pro fungo do nome cientifico:
+    """Produtos registrados no Agrofit pro fungo do nome cientifico (quimico
+    so' se for fungicida -- `eh_fungicida_quimico`):
     {"pragas": [...], "quimico": {chave: set(culturas)}, "biologico": {chave:
     set(culturas)}, "nomes": {chave: texto exibido}, "conhecidos": set,
     "culturas": [...]} -- chaves de `chave_quimico`/`chave_biologico`."""
     dados = carregar()
     pragas = pragas_do_nome_cientifico(nome_cientifico, dados.get("pragas", {}))
-    resultado = {"pragas": pragas, "quimico": {}, "biologico": {}, "nomes": {}, "fungicidas": set(),
+    resultado = {"pragas": pragas, "quimico": {}, "biologico": {}, "nomes": {},
                  "conhecidos": _ativos_conhecidos(dados), "culturas": dados.get("culturas", [])}
     for praga in pragas:
         for texto_ativos, cultura in dados["pragas"][praga]:
             tipo = "biologico" if eh_biologico(texto_ativos) else "quimico"
+            if tipo == "quimico" and not eh_fungicida_quimico(texto_ativos, dados.get("classes", {})):
+                continue
             chave = chave_biologico(texto_ativos) if tipo == "biologico" else chave_quimico(texto_ativos)
             resultado[tipo].setdefault(chave, set()).add(cultura)
-            if tipo == "quimico" and eh_fungicida_quimico(texto_ativos, dados.get("classes", {})):
-                resultado["fungicidas"].add(chave)
             resultado["nomes"].setdefault(chave, dados["nomes"].get(texto_ativos, texto_ativos))
     return resultado
 
@@ -470,6 +478,8 @@ def marcas_por_chave():
     if _cache.get("marcas_mtime") != _cache["mtime"]:
         resultado = {}
         for texto_ativos, marcas in dados.get("marcas", {}).items():
+            if not eh_fungicida_quimico(texto_ativos, dados.get("classes", {})):
+                continue
             resultado.setdefault(chave_quimico(texto_ativos), set()).update(marcas)
         _cache["marcas"], _cache["marcas_mtime"] = resultado, _cache["mtime"]
     return _cache["marcas"]
