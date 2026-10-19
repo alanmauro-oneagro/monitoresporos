@@ -6,7 +6,7 @@
 <div class="table-responsive">
 <table class="table table-sm bg-white shadow-sm" style="font-size: 0.85rem;">
     <thead>
-        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Acesso</th><th>Permissoes</th><th>Receber relatorios</th><th>WhatsApp</th><th>Contatos WhatsApp</th><th></th></tr>
+        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Acesso</th><th>Permissoes</th><th>Receber relatorios</th><th>WhatsApp</th><th>Subordinados</th><th></th></tr>
     </thead>
     <tbody>
     {% for u in users %}
@@ -38,12 +38,12 @@
             </td>
             <td>
                 {% if subordinado_counts.get(u.id) %}
-                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none sub-toggle" data-owner="{{ u.id }}" title="Mostrar/ocultar contatos WhatsApp">
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none sub-toggle" data-owner="{{ u.id }}" title="Mostrar/ocultar subordinados">
                     <span class="toggle-icon">▶</span>
                 </button>
                 {% endif %}
                 <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}">
-                    Contatos WhatsApp{% if subordinado_counts.get(u.id) %} ({{ subordinado_counts[u.id] }}){% endif %}
+                    Subordinados{% if subordinado_counts.get(u.id) %} ({{ subordinado_counts[u.id] }}){% endif %}
                 </a>
             </td>
             <td class="d-flex gap-2">
@@ -69,7 +69,7 @@
                 {{ sub.fazendas or '-' }}
             </td>
             <td>
-                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp desse contato em TODAS as fazendas de uma vez, sem apagar as marcacoes dele">
+                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp desse subordinado em TODAS as fazendas de uma vez, sem apagar as marcacoes dele">
                     <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-subordinado-id="{{ sub.id }}"
                         id="pausado_sub_{{ sub.id }}" {% if sub.whatsapp_pausado %}checked{% endif %}>
                     <label class="form-check-label small" for="pausado_sub_{{ sub.id }}">Pausado</label>
@@ -111,7 +111,7 @@
                 <label class="form-label" for="nivel">Acesso</label>
                 <select name="nivel" id="nivel" class="form-select">
                     <option value="usuario">Usuário -- so as fazendas liberadas</option>
-                    <option value="subordinado">Subordinado -- todas as fazendas e telas de administracao</option>
+                    <option value="admin">Administrador -- todas as fazendas e a aba Configuracoes</option>
                     {% if current_user.username == 'Alan Mauro' %}
                     <option value="master">Master -- tudo, inclusive configuracoes gerais</option>
                     {% endif %}

@@ -560,7 +560,7 @@ def init_db():
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
         # Niveis de acesso (pedido do Alan, 19/10/2026): Usuario (is_admin=0),
-        # Subordinado (is_admin=1) e Master (is_master=1, sempre com
+        # Administrador (is_admin=1) e Master (is_master=1, sempre com
         # is_admin=1). So' o Alan designa Master; ele e' sempre Master.
         conn.execute("ALTER TABLE users ADD COLUMN is_master INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -2817,7 +2817,7 @@ def get_user_by_id(user_id):
 
 
 def get_all_users():
-    """Master primeiro, depois Subordinado, depois Usuario (cada grupo em
+    """Master primeiro, depois Administrador, depois Usuario (cada grupo em
     ordem alfabetica) -- pedido explicito do usuario, pra quem administra
     o site aparecer sempre no topo da aba Usuarios."""
     conn = get_db()

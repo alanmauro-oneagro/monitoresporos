@@ -1,18 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Contatos WhatsApp - OneAgro{% endblock %}
+{% block title %}Subordinados - OneAgro{% endblock %}
 {% block content %}
-<h4 class="mb-2">Contatos WhatsApp de "{{ user.username }}"</h4>
+<h4 class="mb-2">Subordinados de "{{ user.username }}"</h4>
 
 {% if not owner_sites %}
 <div class="alert alert-info">
     "{{ user.username }}" ainda nao recebe nenhuma fazenda -- marque na aba
     <a href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a> primeiro, so' entao da pra escolher quais dessas
-    fazendas cada contato recebe.
+    fazendas cada subordinado recebe.
 </div>
 {% else %}
 
 {% if not subordinados %}
-<div class="alert alert-info">Nenhum contato cadastrado ainda pra "{{ user.username }}".</div>
+<div class="alert alert-info">Nenhum subordinado cadastrado ainda pra "{{ user.username }}".</div>
 {% else %}
 {% for sub in subordinados %}
 <form method="post" action="{{ url_for('admin_user_subordinados', user_id=user.id) }}" id="delete_form_{{ sub.id }}" class="d-none">
@@ -39,7 +39,7 @@
             </div>
             <div class="col-md-2 d-flex align-items-end">
                 <button type="submit" form="delete_form_{{ sub.id }}" class="btn btn-sm btn-outline-danger"
-                        onclick="return confirm('Excluir o contato {{ sub.nome }}?');">
+                        onclick="return confirm('Excluir o subordinado {{ sub.nome }}?');">
                     Excluir
                 </button>
             </div>
@@ -70,7 +70,7 @@
 
 <div class="card shadow-sm mt-4">
     <div class="card-body p-4 form-compact">
-        <h5 class="mb-3">Novo contato</h5>
+        <h5 class="mb-3">Novo subordinado</h5>
         <form method="post" action="{{ url_for('admin_user_subordinados', user_id=user.id) }}">
             <input type="hidden" name="form_id" value="add">
             <div class="mb-3 row g-2">
