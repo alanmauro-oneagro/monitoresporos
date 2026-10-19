@@ -2332,18 +2332,18 @@ def admin_required(view):
     return wrapped
 
 
-# Niveis de acesso: Usuario (so' as fazendas liberadas), Subordinado
-# (antigo Administrador) e Master (configuracoes gerais: "Editar
+# Niveis de acesso: Usuario (so' as fazendas liberadas), Administrador
+# e Master (configuracoes gerais: "Editar
 # cadastro", Exportar, Conexao WhatsApp, Fazendas ocultas...). So' o
 # ALAN_MAURO_USERNAME designa quem e' Master, e ele e' sempre Master.
 ALAN_MAURO_USERNAME = models.MASTER_PRINCIPAL
-NIVEIS_ACESSO = {"usuario": "Usuário", "subordinado": "Subordinado", "master": "Master"}
+NIVEIS_ACESSO = {"usuario": "Usuário", "admin": "Administrador", "master": "Master"}
 
 
 def _nivel_acesso(row):
     if row["is_master"]:
         return "master"
-    return "subordinado" if row["is_admin"] else "usuario"
+    return "admin" if row["is_admin"] else "usuario"
 
 
 def master_required(view):
@@ -5727,7 +5727,7 @@ def admin_create_user():
     telefone = _telefone_from_form(request.form)
     nivel = request.form.get("nivel", "usuario")
     if nivel == "master" and current_user.username != ALAN_MAURO_USERNAME:
-        nivel = "subordinado"
+        nivel = "admin"
     if not username:
         flash("Usuario e obrigatorio.", "error")
     elif not _is_valid_email(email):
@@ -6140,16 +6140,16 @@ def admin_user_subordinados(user_id):
             numero = re.sub(r"\D", "", request.form.get("numero_telefone", ""))
             codigo = re.sub(r"\D", "", request.form.get("codigo_pais", "")) or "55"
             if not nome or not numero:
-                flash("Nome e telefone sao obrigatorios pra adicionar um contato.", "error")
+                flash("Nome e telefone sao obrigatorios pra adicionar um subordinado.", "error")
             else:
                 models.create_subordinado(user_id, nome, codigo + numero)
-                flash(f"Contato '{nome}' adicionado.", "success")
+                flash(f"Subordinado '{nome}' adicionado.", "success")
             return redirect(url_for("admin_user_subordinados", user_id=user_id))
 
         if form_id == "delete":
             sub_id = int(request.form.get("subordinado_id"))
             models.delete_subordinado(sub_id)
-            return _save_response("Contato excluido.", "admin_user_subordinados", user_id=user_id)
+            return _save_response("Subordinado excluido.", "admin_user_subordinados", user_id=user_id)
 
         # form_id == "save" (padrao) -- salva nome/telefone/fazendas de
         # todos os subordinados listados na tela de uma vez (autosave).
@@ -6166,7 +6166,7 @@ def admin_user_subordinados(user_id):
             site_ids = {int(v) for v in request.form.getlist(f"site_ids__{sub_id}")}
             models.set_subordinado_report_sites(sub_id, site_ids)
             models.set_subordinado_whatsapp_pausado(sub_id, request.form.get(f"whatsapp_pausado__{sub_id}") == "1")
-        return _save_response("Contatos WhatsApp atualizados.", "admin_user_subordinados", user_id=user_id)
+        return _save_response("Subordinados atualizados.", "admin_user_subordinados", user_id=user_id)
 
     owner_report_ids = models.get_user_report_site_ids(user_id)
     all_sites = sorted(models.get_all_sites(), key=lambda s: _ordem_fazenda(s["site_name"]))

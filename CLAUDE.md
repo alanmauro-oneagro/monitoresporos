@@ -15,10 +15,11 @@ Mantido por: Alan Mauro (OneAgro, alan.mauro@outlook.com), unico responsavel pel
 
 ## Regra de negocio permanente (nao mudar sem confirmar com o Alan)
 
-**Niveis de acesso (pedido do Alan, 19/10/2026): Usuario, Subordinado e
-Master.** Usuario (`is_admin=0`) ve so' as fazendas liberadas; Subordinado
-(`is_admin=1`, antigo "Administrador") ve todas as fazendas e as telas de
-administracao; Master (`users.is_master=1`, sempre com `is_admin=1`) ajusta
+**Niveis de acesso (pedido do Alan, 19/10/2026): Usuario, Administrador
+e Master.** Usuario (`is_admin=0`) ve so' as fazendas liberadas, sem a aba
+Configuracoes; Administrador (`is_admin=1`) segue como sempre foi (aba
+Configuracoes: Usuarios, Mapa Interpolado etc.); Master
+(`users.is_master=1`, sempre com `is_admin=1`) tem acesso a tudo, inclusive
 as configuracoes gerais do site -- painel/conexao do WhatsApp, Exportar,
 Fazendas ocultas, "Editar cadastro", pontos so' clima, configuracoes da
 fazenda em Manejos (`@master_required` / `current_user.is_master` em
@@ -27,9 +28,9 @@ fazenda em Manejos (`@master_required` / `current_user.is_master` em
 Master**, e ele e' sempre Master (`init_db` garante). Master so' pode ser
 excluido ou ter a senha redefinida pelo Alan. Ao criar novas rotas/
 relatorios/configuracoes gerais do site, usar `@master_required`, a menos
-que seja pedido explicitamente paridade para Subordinados. Os antigos
-"Subordinados" da aba Usuarios (contatos leves de WhatsApp, tabela
-`subordinados`) aparecem na tela como "Contatos WhatsApp".
+que seja pedido explicitamente paridade para Administradores.
+"Subordinados" na aba Usuarios continuam sendo os contatos leves de
+WhatsApp de cada usuario (tabela `subordinados`), nao um nivel de acesso.
 
 ## Arquitetura / conceitos tecnicos principais
 
