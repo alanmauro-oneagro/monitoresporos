@@ -559,6 +559,14 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
+        # Niveis de acesso (pedido do Alan, 19/10/2026): Usuario (is_admin=0),
+        # Subordinado (is_admin=1) e Master (is_master=1, sempre com
+        # is_admin=1). So' o Alan designa Master; ele e' sempre Master.
+        conn.execute("ALTER TABLE users ADD COLUMN is_master INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
+    conn.execute("UPDATE users SET is_master = 1, is_admin = 1 WHERE username = ?", (MASTER_PRINCIPAL,))
+    try:
         # Fazenda desativada (real ou virtual) para de aparecer em
         # qualquer tela (Painel, Mapa, Graficos, Recomendacoes, NDVI,
         # Envios) sem apagar nada -- so' continua visivel em Manejos
@@ -2809,26 +2817,30 @@ def get_user_by_id(user_id):
 
 
 def get_all_users():
-    """Admin primeiro (entre eles, ordem alfabetica), depois os demais
-    (tambem em ordem alfabetica) -- pedido explicito do usuario, pra
-    quem administra o site aparecer sempre no topo da aba Usuarios."""
+    """Master primeiro, depois Subordinado, depois Usuario (cada grupo em
+    ordem alfabetica) -- pedido explicito do usuario, pra quem administra
+    o site aparecer sempre no topo da aba Usuarios."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, username, is_admin, email, telefone, whatsapp_pausado FROM users ORDER BY is_admin DESC, username COLLATE NOCASE"
+        "SELECT id, username, is_admin, is_master, email, telefone, whatsapp_pausado FROM users"
+        " ORDER BY is_master DESC, is_admin DESC, username COLLATE NOCASE"
     ).fetchall()
     conn.close()
     return rows
 
 
+MASTER_PRINCIPAL = "Alan Mauro"  # sempre Master; unico que designa quem mais e' Master
+
 DEFAULT_PASSWORD = "Oneagro01!"  # senha de todo usuario novo, e pra onde o botao "Redefinir senha" volta
 
 
-def create_user(username, password, is_admin=False, email="", telefone=""):
+def create_user(username, password, is_admin=False, email="", telefone="", is_master=False):
+    is_master = is_master or username == MASTER_PRINCIPAL
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO users (username, password_hash, is_admin, email, telefone) VALUES (?, ?, ?, ?, ?)",
-            (username, generate_password_hash(password), 1 if is_admin else 0, email, telefone),
+            "INSERT INTO users (username, password_hash, is_admin, is_master, email, telefone) VALUES (?, ?, ?, ?, ?, ?)",
+            (username, generate_password_hash(password), 1 if (is_admin or is_master) else 0, 1 if is_master else 0, email, telefone),
         )
         conn.commit()
     finally:
@@ -3039,8 +3051,8 @@ def clear_user_temp_password(user_id):
     conn.close()
 
 
-def set_user_contato(user_id, email, telefone, is_admin=None):
-    """Edita email/telefone (e opcionalmente o status de admin) de um
+def set_user_contato(user_id, email, telefone, is_admin=None, is_master=False):
+    """Edita email/telefone (e opcionalmente o nivel de acesso) de um
     usuario ja existente -- usuarios criados antes desse campo existir
     (ou com dado errado) ficam sem jeito de corrigir sem isso."""
     conn = get_db()
@@ -3051,8 +3063,8 @@ def set_user_contato(user_id, email, telefone, is_admin=None):
         )
     else:
         conn.execute(
-            "UPDATE users SET email = ?, telefone = ?, is_admin = ? WHERE id = ?",
-            (email, telefone, 1 if is_admin else 0, user_id),
+            "UPDATE users SET email = ?, telefone = ?, is_admin = ?, is_master = ? WHERE id = ?",
+            (email, telefone, 1 if (is_admin or is_master) else 0, 1 if is_master else 0, user_id),
         )
     conn.commit()
     conn.close()

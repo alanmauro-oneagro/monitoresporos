@@ -163,7 +163,7 @@
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'solo' %} tab-ativa{% endif %}" href="{{ url_for('solo') }}">Mapa de Solos</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'ndvi' %} tab-ativa{% endif %}" href="{{ url_for('ndvi') }}">NDVI</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'whatsapp_gerenciamento' %} tab-ativa{% endif %}" href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>
-                    {% if current_user.username == 'Alan Mauro' %}
+                    {% if current_user.is_master %}
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('admin_whatsapp') }}">Conexão WhatsApp</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_exportar' %} tab-ativa{% endif %}" href="{{ url_for('admin_exportar') }}">Exportar</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'fazendas_ocultas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas_ocultas') }}">Fazendas ocultas</a>

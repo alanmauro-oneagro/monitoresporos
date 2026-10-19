@@ -2314,6 +2314,7 @@ class User(UserMixin):
         self.id = str(row["id"])
         self.username = row["username"]
         self.is_admin = bool(row["is_admin"])
+        self.is_master = bool(row["is_master"])
 
 
 @login_manager.user_loader
@@ -2331,13 +2332,24 @@ def admin_required(view):
     return wrapped
 
 
-ALAN_MAURO_USERNAME = "Alan Mauro"  # unico usuario com acesso a "Editar cadastro", exportacao Excel, Configuracoes > WhatsApp e os Relatorios (WhatsApp/Fungicidas)
+# Niveis de acesso: Usuario (so' as fazendas liberadas), Subordinado
+# (antigo Administrador) e Master (configuracoes gerais: "Editar
+# cadastro", Exportar, Conexao WhatsApp, Fazendas ocultas...). So' o
+# ALAN_MAURO_USERNAME designa quem e' Master, e ele e' sempre Master.
+ALAN_MAURO_USERNAME = models.MASTER_PRINCIPAL
+NIVEIS_ACESSO = {"usuario": "Usuário", "subordinado": "Subordinado", "master": "Master"}
 
 
-def alan_mauro_required(view):
+def _nivel_acesso(row):
+    if row["is_master"]:
+        return "master"
+    return "subordinado" if row["is_admin"] else "usuario"
+
+
+def master_required(view):
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.username != ALAN_MAURO_USERNAME:
+        if not current_user.is_authenticated or not current_user.is_master:
             abort(403)
         return view(*args, **kwargs)
     return wrapped
@@ -3544,7 +3556,7 @@ def _get_clima_virtual_farm_or_404(site_name):
 
 
 @app.route("/alertas-clima")
-@alan_mauro_required
+@master_required
 def alertas_clima():
     """Antiga aba Alertas Clima -- os pontos "so clima" agora ficam no fim
     da aba Recomendacoes (pedido do Alan, 18/10/2026)."""
@@ -3555,7 +3567,7 @@ def _pontos_clima():
     """Pontos "so clima" (ver `mapa_interpolado`/`create_virtual_farm`,
     tipo='clima') no fim da aba Recomendacoes -- clima atual, estacao
     oficial de referencia e envio manual. A agenda fica na aba Envios.
-    So' o usuario Alan Mauro ve (ver `recommendations`)."""
+    So' usuario Master ve (ver `recommendations`)."""
     site_countries = models.get_all_site_countries()
     weather_overrides = models.get_all_weather_station_overrides()
     whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
@@ -3593,7 +3605,7 @@ def _pontos_clima():
 
 
 @app.route("/alertas-clima/whatsapp/<path:site_name>", methods=["POST"])
-@alan_mauro_required
+@master_required
 def alertas_clima_whatsapp(site_name):
     _get_clima_virtual_farm_or_404(site_name)
     enviar_texto = bool(request.form.get("enviar_texto"))
@@ -3608,7 +3620,7 @@ def alertas_clima_whatsapp(site_name):
 
 
 @app.route("/alertas-clima/nota/save", methods=["POST"])
-@alan_mauro_required
+@master_required
 def save_site_climate_note():
     site_name = request.form.get("site_name")
     _get_clima_virtual_farm_or_404(site_name)
@@ -3744,7 +3756,7 @@ def recommendations(safra):
     return render_template(
         "recommendations.html", sites_data=sites_data, no_access=False,
         any_whatsapp_configured=any_whatsapp_configured,
-        pontos_clima=_pontos_clima() if current_user.username == ALAN_MAURO_USERNAME else [],
+        pontos_clima=_pontos_clima() if current_user.is_master else [],
         safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS,
     )
 
@@ -4629,7 +4641,7 @@ def save_farm_cultura():
 
 
 @app.route("/fazendas/estacao-clima/save", methods=["POST"])
-@alan_mauro_required
+@master_required
 def save_weather_station_override():
     site_name = request.form.get("site_name")
     if not current_user.is_admin:
@@ -4664,7 +4676,7 @@ def save_weather_station_override():
 
 
 @app.route("/fazendas/pais/save", methods=["POST"])
-@alan_mauro_required
+@master_required
 def save_site_country():
     site_name = request.form.get("site_name")
     if not current_user.is_admin:
@@ -4704,7 +4716,7 @@ def save_site_ativo():
 
 
 @app.route("/fazendas/nome/save", methods=["POST"])
-@alan_mauro_required
+@master_required
 def save_site_display_name():
     """Nome de exibicao de qualquer fazenda -- so' muda como ela aparece
     no site inteiro (Painel, Mapa, Manejo, WhatsApp, PDF, Graficos, ver
@@ -5660,6 +5672,7 @@ def admin_users():
     subordinado_counts = {uid: len(subs) for uid, subs in subordinados_by_owner.items() if subs}
     return render_template(
         "admin_users.html", users=users, default_password=models.DEFAULT_PASSWORD,
+        niveis=NIVEIS_ACESSO, nivel_acesso=_nivel_acesso,
         report_counts=report_counts, permission_counts=permission_counts,
         subordinado_counts=subordinado_counts, subordinados_by_owner=subordinados_by_owner,
     )
@@ -5712,7 +5725,9 @@ def admin_create_user():
     username = request.form.get("username", "").strip()
     email = request.form.get("email", "").strip()
     telefone = _telefone_from_form(request.form)
-    is_admin = request.form.get("is_admin") == "on"
+    nivel = request.form.get("nivel", "usuario")
+    if nivel == "master" and current_user.username != ALAN_MAURO_USERNAME:
+        nivel = "subordinado"
     if not username:
         flash("Usuario e obrigatorio.", "error")
     elif not _is_valid_email(email):
@@ -5722,7 +5737,10 @@ def admin_create_user():
     elif models.get_user_by_username(username):
         flash("Ja existe um usuario com esse nome.", "error")
     else:
-        models.create_user(username, models.DEFAULT_PASSWORD, is_admin, email=email, telefone=telefone)
+        models.create_user(
+            username, models.DEFAULT_PASSWORD, nivel != "usuario", email=email, telefone=telefone,
+            is_master=nivel == "master",
+        )
         flash(
             f"Usuario '{username}' criado com a senha padrao '{models.DEFAULT_PASSWORD}' -- "
             "avise a pessoa pra trocar assim que entrar (botao 'Trocar senha' no menu). "
@@ -5734,7 +5752,7 @@ def admin_create_user():
 
 
 @app.route("/admin/users/<int:user_id>/editar", methods=["GET", "POST"])
-@alan_mauro_required
+@master_required
 def admin_edit_user(user_id):
     user_row = models.get_user_by_id(user_id)
     if not user_row:
@@ -5743,10 +5761,14 @@ def admin_edit_user(user_id):
         action = request.form.get("action")
         email = request.form.get("email", "").strip()
         telefone = _telefone_from_form(request.form)
-        is_admin = request.form.get("is_admin") == "on"
+        nivel = request.form.get("nivel", _nivel_acesso(user_row))
+        if current_user.username != ALAN_MAURO_USERNAME and (nivel == "master") != bool(user_row["is_master"]):
+            nivel = _nivel_acesso(user_row)  # so' o Alan da' ou tira o Master
+        if user_row["username"] == ALAN_MAURO_USERNAME:
+            nivel = "master"
         error = None
-        if str(user_id) == current_user.id and not is_admin:
-            error = "Voce nao pode remover seu proprio acesso de administrador."
+        if str(user_id) == current_user.id and nivel != _nivel_acesso(user_row):
+            error = "Voce nao pode mudar o seu proprio nivel de acesso."
         elif not _is_valid_email(email):
             error = "Informe um email valido."
         elif not _is_valid_phone(telefone):
@@ -5758,9 +5780,10 @@ def admin_edit_user(user_id):
             codigo_pais, numero_telefone = _split_phone(telefone)
             return render_template(
                 "admin_edit_user.html", user=user_row, email=email,
-                codigo_pais=codigo_pais, numero_telefone=numero_telefone, is_admin=is_admin,
+                codigo_pais=codigo_pais, numero_telefone=numero_telefone, nivel=nivel,
+                niveis=NIVEIS_ACESSO,
             )
-        models.set_user_contato(user_id, email, telefone, is_admin=is_admin)
+        models.set_user_contato(user_id, email, telefone, is_admin=nivel != "usuario", is_master=nivel == "master")
         if action == "test":
             ok, message = whatsapp.send_whatsapp(
                 telefone, "OneAgro: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
@@ -5775,7 +5798,8 @@ def admin_edit_user(user_id):
     codigo_pais, numero_telefone = _split_phone(user_row["telefone"] or "")
     return render_template(
         "admin_edit_user.html", user=user_row, email=user_row["email"] or "",
-        codigo_pais=codigo_pais, numero_telefone=numero_telefone, is_admin=bool(user_row["is_admin"]),
+        codigo_pais=codigo_pais, numero_telefone=numero_telefone, nivel=_nivel_acesso(user_row),
+        niveis=NIVEIS_ACESSO,
     )
 
 
@@ -5785,6 +5809,9 @@ def admin_reset_password(user_id):
     user_row = models.get_user_by_id(user_id)
     if not user_row:
         abort(404)
+    if user_row["is_master"] and current_user.username != ALAN_MAURO_USERNAME:
+        flash("So' o Alan Mauro pode redefinir a senha de um usuario Master.", "error")
+        return redirect(url_for("admin_users"))
     models.set_user_password(user_id, models.DEFAULT_PASSWORD)
     flash(f"Senha de '{user_row['username']}' redefinida para '{models.DEFAULT_PASSWORD}'.", "success")
     return redirect(url_for("admin_users"))
@@ -5838,8 +5865,11 @@ def admin_subordinado_whatsapp_pausado(subordinado_id):
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
 @admin_required
 def admin_delete_user(user_id):
+    user_row = models.get_user_by_id(user_id)
     if str(user_id) == current_user.id:
         flash("Voce nao pode excluir o proprio usuario logado.", "error")
+    elif user_row and user_row["is_master"] and current_user.username != ALAN_MAURO_USERNAME:
+        flash("So' o Alan Mauro pode excluir um usuario Master.", "error")
     else:
         models.delete_user(user_id)
         flash("Usuario excluido.", "success")
@@ -5869,7 +5899,7 @@ def _save_export_copy_local(conteudo, filename):
 
 
 @app.route("/admin/fazendas-ocultas")
-@alan_mauro_required
+@master_required
 def fazendas_ocultas():
     """Fazendas que nao aparecem normalmente: desativadas (somem do site
     inteiro, ver `save_site_ativo`) e sem leitura ha mais de
@@ -5898,7 +5928,7 @@ def fazendas_ocultas():
 
 
 @app.route("/admin/fazendas-ocultas/reativar", methods=["POST"])
-@alan_mauro_required
+@master_required
 def reativar_fazenda_oculta():
     site = request.form.get("site_name", "")
     motivo = request.form.get("motivo")
@@ -5921,14 +5951,14 @@ def reativar_fazenda_oculta():
 
 
 @app.route("/admin/exportar")
-@alan_mauro_required
+@master_required
 def admin_exportar():
     """Pagina "Exportar" -- download do Excel completo (ver
     `admin_exportar_download`) e o historico de envios de WhatsApp dos
     ultimos 7 dias (filtros de fazenda/so-falhas). Quem recebe fica na aba
     Envios e o registro de fungicidas por cultura na Biblioteca de
     fungicidas (e no Excel) -- tirados daqui pra nao repetir. So'
-    `ALAN_MAURO_USERNAME` tem acesso."""
+    usuario Master tem acesso."""
     site_name = request.args.get("site") or None
     apenas_falhas = request.args.get("falhas") == "1"
     logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas, dias=7)
@@ -5944,7 +5974,7 @@ def admin_exportar():
 
 
 @app.route("/admin/estacoes-diagnostico")
-@alan_mauro_required
+@master_required
 def admin_estacoes_diagnostico():
     """Amostras reais das APIs de DADOS das estacoes oficiais (INMET, DMC,
     SMN) -- so' leitura, credenciais ocultas. Existe pra' fechar o formato
@@ -5981,7 +6011,7 @@ def admin_estacoes_diagnostico():
 
 
 @app.route("/admin/exportar/download")
-@alan_mauro_required
+@master_required
 def admin_exportar_download():
     """Relatorio Excel com o maximo de informacao possivel do site --
     usuarios/subordinados, cadastro de fazendas (pais/estacao/nome de
@@ -6003,16 +6033,16 @@ def admin_exportar_download():
 
 
 @app.route("/admin/whatsapp")
-@alan_mauro_required
+@master_required
 def admin_whatsapp():
     """Tela de pareamento do WhatsApp corporativo (QR code/codigo de
-    pareamento, teste de envio, trocar numero) -- so' `ALAN_MAURO_USERNAME`
+    pareamento, teste de envio, trocar numero) -- so' Master
     tem acesso, ja que controla o remetente usado por TODAS as fazendas."""
     return render_template("admin_whatsapp.html", status=whatsapp.get_status())
 
 
 @app.route("/admin/whatsapp/status")
-@alan_mauro_required
+@master_required
 def admin_whatsapp_status():
     """JSON puro pra tela atualizar sozinha (QR code/status de conexao)
     sem precisar recarregar a pagina inteira."""
@@ -6020,7 +6050,7 @@ def admin_whatsapp_status():
 
 
 @app.route("/admin/whatsapp/pair-code", methods=["POST"])
-@alan_mauro_required
+@master_required
 def admin_whatsapp_pair_code():
     phone = request.form.get("phone", "")
     ok, resultado = whatsapp.request_pairing_code(phone)
@@ -6028,7 +6058,7 @@ def admin_whatsapp_pair_code():
 
 
 @app.route("/admin/whatsapp/test", methods=["POST"])
-@alan_mauro_required
+@master_required
 def admin_whatsapp_test():
     phone = _telefone_from_form(request.form)
     texto = (
@@ -6043,7 +6073,7 @@ def admin_whatsapp_test():
 
 
 @app.route("/admin/whatsapp/reset", methods=["POST"])
-@alan_mauro_required
+@master_required
 def admin_whatsapp_reset():
     """Desconecta o numero atual pra poder conectar outro (ex.: trocar o
     WhatsApp corporativo) -- limpa a sessao salva no whatsapp-bridge e
@@ -6110,16 +6140,16 @@ def admin_user_subordinados(user_id):
             numero = re.sub(r"\D", "", request.form.get("numero_telefone", ""))
             codigo = re.sub(r"\D", "", request.form.get("codigo_pais", "")) or "55"
             if not nome or not numero:
-                flash("Nome e telefone sao obrigatorios pra adicionar um subordinado.", "error")
+                flash("Nome e telefone sao obrigatorios pra adicionar um contato.", "error")
             else:
                 models.create_subordinado(user_id, nome, codigo + numero)
-                flash(f"Subordinado '{nome}' adicionado.", "success")
+                flash(f"Contato '{nome}' adicionado.", "success")
             return redirect(url_for("admin_user_subordinados", user_id=user_id))
 
         if form_id == "delete":
             sub_id = int(request.form.get("subordinado_id"))
             models.delete_subordinado(sub_id)
-            return _save_response("Subordinado excluido.", "admin_user_subordinados", user_id=user_id)
+            return _save_response("Contato excluido.", "admin_user_subordinados", user_id=user_id)
 
         # form_id == "save" (padrao) -- salva nome/telefone/fazendas de
         # todos os subordinados listados na tela de uma vez (autosave).
@@ -6136,7 +6166,7 @@ def admin_user_subordinados(user_id):
             site_ids = {int(v) for v in request.form.getlist(f"site_ids__{sub_id}")}
             models.set_subordinado_report_sites(sub_id, site_ids)
             models.set_subordinado_whatsapp_pausado(sub_id, request.form.get(f"whatsapp_pausado__{sub_id}") == "1")
-        return _save_response("Subordinados atualizados.", "admin_user_subordinados", user_id=user_id)
+        return _save_response("Contatos WhatsApp atualizados.", "admin_user_subordinados", user_id=user_id)
 
     owner_report_ids = models.get_user_report_site_ids(user_id)
     all_sites = sorted(models.get_all_sites(), key=lambda s: _ordem_fazenda(s["site_name"]))

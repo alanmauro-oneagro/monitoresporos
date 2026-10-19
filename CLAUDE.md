@@ -15,15 +15,21 @@ Mantido por: Alan Mauro (OneAgro, alan.mauro@outlook.com), unico responsavel pel
 
 ## Regra de negocio permanente (nao mudar sem confirmar com o Alan)
 
-**Somente o usuario com username exato "Alan Mauro" pode ajustar configuracoes
-gerais do site.** Varias rotas/relatorios admin sao propositalmente restritos
-a `current_user.username == 'Alan Mauro'`, NAO apenas `current_user.is_admin`
-— ex.: painel admin do WhatsApp, relatorio de envios do WhatsApp, relatorio de
-fungicidas (dropdown de configuracoes em `webapp/templates/base.html` e rotas
-correspondentes em `webapp/app.py`). E' deliberado: outros usuarios marcados
-como admin nao devem ver essas telas. Ao criar novas rotas/relatorios/
-configuracoes gerais do site, seguir o mesmo padrao de gate por username, a
-menos que seja pedido explicitamente paridade para outros admins.
+**Niveis de acesso (pedido do Alan, 19/10/2026): Usuario, Subordinado e
+Master.** Usuario (`is_admin=0`) ve so' as fazendas liberadas; Subordinado
+(`is_admin=1`, antigo "Administrador") ve todas as fazendas e as telas de
+administracao; Master (`users.is_master=1`, sempre com `is_admin=1`) ajusta
+as configuracoes gerais do site -- painel/conexao do WhatsApp, Exportar,
+Fazendas ocultas, "Editar cadastro", pontos so' clima, configuracoes da
+fazenda em Manejos (`@master_required` / `current_user.is_master` em
+`webapp/app.py` e nos templates). **So' o usuario "Alan Mauro"
+(`models.MASTER_PRINCIPAL` / `ALAN_MAURO_USERNAME`) designa ou retira
+Master**, e ele e' sempre Master (`init_db` garante). Master so' pode ser
+excluido ou ter a senha redefinida pelo Alan. Ao criar novas rotas/
+relatorios/configuracoes gerais do site, usar `@master_required`, a menos
+que seja pedido explicitamente paridade para Subordinados. Os antigos
+"Subordinados" da aba Usuarios (contatos leves de WhatsApp, tabela
+`subordinados`) aparecem na tela como "Contatos WhatsApp".
 
 ## Arquitetura / conceitos tecnicos principais
 

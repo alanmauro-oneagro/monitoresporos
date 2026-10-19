@@ -6,7 +6,7 @@
 <div class="table-responsive">
 <table class="table table-sm bg-white shadow-sm" style="font-size: 0.85rem;">
     <thead>
-        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Admin</th><th>Permissoes</th><th>Receber relatorios</th><th>WhatsApp</th><th>Subordinados</th><th></th></tr>
+        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Acesso</th><th>Permissoes</th><th>Receber relatorios</th><th>WhatsApp</th><th>Contatos WhatsApp</th><th></th></tr>
     </thead>
     <tbody>
     {% for u in users %}
@@ -14,10 +14,10 @@
             <td>{{ u.username }}</td>
             <td>{{ u.email or '-' }}</td>
             <td>{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
-            <td>{{ 'Sim' if u.is_admin else 'Nao' }}</td>
+            <td>{{ niveis[nivel_acesso(u)] }}</td>
             <td>
                 {% if u.is_admin %}
-                    <span class="text-muted">Todas (admin)</span>
+                    <span class="text-muted">Todas ({{ niveis[nivel_acesso(u)] }})</span>
                 {% else %}
                     <a href="{{ url_for('admin_user_permissions', user_id=u.id) }}">
                         Editar fazendas{% if permission_counts.get(u.id) %} ({{ permission_counts[u.id] }}){% endif %}
@@ -38,16 +38,16 @@
             </td>
             <td>
                 {% if subordinado_counts.get(u.id) %}
-                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none sub-toggle" data-owner="{{ u.id }}" title="Mostrar/ocultar subordinados">
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none sub-toggle" data-owner="{{ u.id }}" title="Mostrar/ocultar contatos WhatsApp">
                     <span class="toggle-icon">▶</span>
                 </button>
                 {% endif %}
                 <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}">
-                    Subordinados{% if subordinado_counts.get(u.id) %} ({{ subordinado_counts[u.id] }}){% endif %}
+                    Contatos WhatsApp{% if subordinado_counts.get(u.id) %} ({{ subordinado_counts[u.id] }}){% endif %}
                 </a>
             </td>
             <td class="d-flex gap-2">
-                {% if current_user.username == 'Alan Mauro' %}
+                {% if current_user.is_master %}
                 <a href="{{ url_for('admin_edit_user', user_id=u.id) }}" class="btn btn-sm btn-outline-primary">Editar cadastro</a>
                 {% endif %}
                 <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" onsubmit="return confirm('Redefinir a senha de {{ u.username }} para a senha padrao?');">
@@ -69,7 +69,7 @@
                 {{ sub.fazendas or '-' }}
             </td>
             <td>
-                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp desse subordinado em TODAS as fazendas de uma vez, sem apagar as marcacoes dele">
+                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp desse contato em TODAS as fazendas de uma vez, sem apagar as marcacoes dele">
                     <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-subordinado-id="{{ sub.id }}"
                         id="pausado_sub_{{ sub.id }}" {% if sub.whatsapp_pausado %}checked{% endif %}>
                     <label class="form-check-label small" for="pausado_sub_{{ sub.id }}">Pausado</label>
@@ -107,12 +107,15 @@
                     </div>
                 </div>
             </div>
-            <div class="form-check mb-3">
-                <input class="form-check-input border-2" type="checkbox" name="is_admin" id="is_admin">
-                <label class="form-check-label" for="is_admin">
-                    <strong>Marcado</strong> = Administrador<br>
-                    <strong>Desmarcado</strong> = Usuario -- acesso so as fazendas liberadas
-                </label>
+            <div class="mb-3" style="max-width: 420px;">
+                <label class="form-label" for="nivel">Acesso</label>
+                <select name="nivel" id="nivel" class="form-select">
+                    <option value="usuario">Usuário -- so as fazendas liberadas</option>
+                    <option value="subordinado">Subordinado -- todas as fazendas e telas de administracao</option>
+                    {% if current_user.username == 'Alan Mauro' %}
+                    <option value="master">Master -- tudo, inclusive configuracoes gerais</option>
+                    {% endif %}
+                </select>
             </div>
             <button type="submit" class="btn btn-success">Criar usuario</button>
         </form>
