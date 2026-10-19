@@ -1365,6 +1365,7 @@ def _format_whatsapp_message(
     site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None,
     safra_label=None, plantio_linhas=None, aplicacoes_linhas=None, leitura_bioscout=None,
     mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
+    vento_dia=None, ponto_clima=False,
 ):
     """Monta o relatorio inteiro de uma fazenda numa unica mensagem de
     texto -- MESMO conteudo e ordem do PDF (`export_pdf.build_recommendation_pdf`),
@@ -1416,7 +1417,11 @@ def _format_whatsapp_message(
     usuario pra' tirar fonte do clima/atualizado em/instituicoes
     consultadas/"Powered by BioScout" do relatorio de TEXTO, mantendo so'
     o aviso de responsabilidade; o PDF continua com essa info completa,
-    ver `_build_site_pdf`/`export_pdf.build_recommendation_pdf`)."""
+    ver `_build_site_pdf`/`export_pdf.build_recommendation_pdf`).
+    `vento_dia` (retorno de `_rosa_ventos` do dia, ou None) entra no
+    Clima agora como direcao predominante do vento. `ponto_clima=True`
+    (pontos "so clima") tira o aviso de agronomo (pedido do Alan,
+    19/10/2026)."""
     _AVISO_AGRONOMO = "Isso não substitui a avaliação de um agrônomo responsável."
 
     def _linhas_clima():
@@ -1437,6 +1442,8 @@ def _format_whatsapp_message(
             linhas.append("🌤️ *Clima agora*")
             if partes:
                 linhas.append(" · ".join(partes))
+            if vento_dia:
+                linhas.append(f"🧭 Vento predominante (hoje): de {vento_dia['nome']}")
             if weather.get("previsao_5_dias"):
                 linhas.append("")
                 linhas.append("🌧️ *Previsão de chuva*")
@@ -1466,7 +1473,8 @@ def _format_whatsapp_message(
         partes = cabecalho + _linhas_clima()
         if mostrar_secao_doencas:
             partes += ["", "✅ Nenhuma doença em atenção ou perigo nessa fazenda no momento."]
-        partes += ["", f"_{_AVISO_AGRONOMO}_"]
+        if not ponto_clima:
+            partes += ["", f"_{_AVISO_AGRONOMO}_"]
         return "\n".join(partes)
 
     lines = cabecalho + _linhas_clima()
@@ -1798,6 +1806,8 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
             safra_label=safra_label, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
             leitura_bioscout=leitura_bioscout, mostrar_secao_doencas=mostrar_secao_doencas,
             riscos_climaticos=riscos_climaticos,
+            vento_dia=_rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]) if is_clima_point else None,
+            ponto_clima=is_clima_point,
         )
 
     # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
@@ -3560,6 +3570,7 @@ def _pontos_clima():
         if site in desativadas:
             continue
         weather = _get_weather_for_site(site, coords)
+        vento_dia = _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()])
         escolha = weather_overrides.get(site)
         _pais_code_clima = site_countries.get(site, countries.DEFAULT_COUNTRY)
         pontos.append({
@@ -3571,9 +3582,10 @@ def _pontos_clima():
             "estacao_pais": escolha["country_code"] if escolha else "",
             "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
             "weather": weather,
-            "vento_dia": _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]),
+            "vento_dia": vento_dia,
             "whatsapp_text": _format_whatsapp_message(
                 site, [], weather=weather, is_virtual=True, mostrar_secao_doencas=False,
+                vento_dia=vento_dia, ponto_clima=True,
             ),
         })
     pontos.sort(key=lambda p: _ordem_fazenda(p["site_name"]))
