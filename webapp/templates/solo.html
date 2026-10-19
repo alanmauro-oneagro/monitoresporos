@@ -33,7 +33,7 @@
         });
     }
 
-    var map = L.map('solo-map').setView([-14.5, -55], 4);
+    var map = L.map('solo-map', { zoomSnap: 0.25 }).setView([-14.5, -55], 4);
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Imagens &copy; Esri -- Source: Esri, Maxar, Earthstar Geographics',
         maxZoom: 19,
@@ -131,13 +131,11 @@
     // ter o tamanho final no exato instante em que o Leaflet inicializa
     // (troca de aba, layout ainda assentando), e sem isso o mapa fica
     // preso no zoom minimo (mundo inteiro) pra sempre, mesmo depois do
-    // container ganhar o tamanho certo.
+    // container ganhar o tamanho certo. Abre sempre enquadrado no Brasil
+    // (pedido do Alan, 19/10/2026), mesmo com ponto fora do pais.
     function ajustarZoom() {
         map.invalidateSize();
-        if (sites.length) {
-            var bounds = L.latLngBounds(sites.map(function (s) { return [s.lat, s.lon]; }));
-            map.fitBounds(bounds.pad(0.3));
-        }
+        map.fitBounds([[-33.8, -74.0], [5.3, -34.8]]);
     }
     ajustarZoom();
     setTimeout(ajustarZoom, 300);
