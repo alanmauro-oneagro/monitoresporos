@@ -16,9 +16,15 @@ Mantido por: Alan Mauro (OneAgro, alan.mauro@outlook.com), unico responsavel pel
 ## Regra de negocio permanente (nao mudar sem confirmar com o Alan)
 
 **Niveis de acesso (pedido do Alan, 19/10/2026): Usuario, Administrador
-e Master.** Usuario (`is_admin=0`) ve so' as fazendas liberadas, sem a aba
-Configuracoes; Administrador (`is_admin=1`) segue como sempre foi (aba
-Configuracoes: Usuarios, Mapa Interpolado etc.); Master
+e Master.** Usuario (`is_admin=0`) ve so' as fazendas liberadas; Administrador
+(`is_admin=1`) ve todas as fazendas. Quais abas do menu Configuracoes
+(Usuarios, Doencas, Fungicidas, Mapa Interpolado, Mapa de Solos, NDVI,
+Envios) cada um desses dois niveis abre e' o Master que decide na aba
+**Acessos** (`/admin/acessos`, `ABAS_CONFIG`, setting `acessos_por_nivel`;
+padrao: Administrador = Usuarios + Mapa Interpolado, Usuario = nenhuma).
+Rotas dessas abas usam `@aba_required("<chave>")`; aba nova do menu
+Configuracoes deve entrar em `ABAS_CONFIG`. Ninguem cria, exclui ou
+redefine senha de usuario com nivel acima do proprio. Master
 (`users.is_master=1`, sempre com `is_admin=1`) tem acesso a tudo, inclusive
 as configuracoes gerais do site -- painel/conexao do WhatsApp, Exportar,
 Fazendas ocultas, "Editar cadastro", pontos so' clima, configuracoes da

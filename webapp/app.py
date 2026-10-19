@@ -2355,6 +2355,72 @@ def master_required(view):
     return wrapped
 
 
+# Abas do menu Configuracoes que o Master libera por nivel na aba Acessos
+# (pedido do Alan, 19/10/2026) -- (chave, rotulo, endpoint da aba). As
+# demais (Conexao WhatsApp, Exportar, Fazendas ocultas, Acessos) sao
+# sempre so' Master.
+ABAS_CONFIG = [
+    ("usuarios", "Usuários", "admin_users"),
+    ("doencas", "Doenças", "admin_doencas"),
+    ("fungicidas", "Fungicidas", "admin_fungicidas"),
+    ("mapa_interpolado", "Mapa Interpolado", "mapa_interpolado"),
+    ("solo", "Mapa de Solos", "solo"),
+    ("ndvi", "NDVI", "ndvi"),
+    ("envios", "Envios", "whatsapp_gerenciamento"),
+]
+_ACESSOS_KEY = "acessos_por_nivel"
+ACESSOS_PADRAO = {"admin": ["usuarios", "mapa_interpolado"], "usuario": []}
+_RANK_NIVEL = {"usuario": 0, "admin": 1, "master": 2}
+
+
+def _acessos_por_nivel():
+    acessos = getattr(g, "_acessos_por_nivel", None)
+    if acessos is None:
+        try:
+            salvo = json.loads(models.get_setting(_ACESSOS_KEY) or "null") or {}
+        except ValueError:
+            salvo = {}
+        acessos = g._acessos_por_nivel = {
+            nivel: set(salvo.get(nivel, padrao)) for nivel, padrao in ACESSOS_PADRAO.items()
+        }
+    return acessos
+
+
+def pode_acessar_aba(chave):
+    if not current_user.is_authenticated:
+        return False
+    if current_user.is_master:
+        return True
+    return chave in _acessos_por_nivel()["admin" if current_user.is_admin else "usuario"]
+
+
+def aba_required(chave):
+    def decorator(view):
+        @functools.wraps(view)
+        def wrapped(*args, **kwargs):
+            if not pode_acessar_aba(chave):
+                abort(403)
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
+
+
+def _rank_atual():
+    if current_user.is_master:
+        return _RANK_NIVEL["master"]
+    return _RANK_NIVEL["admin" if current_user.is_admin else "usuario"]
+
+
+@app.context_processor
+def _inject_abas_config():
+    if not current_user.is_authenticated:
+        return {"abas_config_permitidas": []}
+    return {
+        "pode_aba": pode_acessar_aba,
+        "abas_config_permitidas": [c for c, _r, _e in ABAS_CONFIG if pode_acessar_aba(c)],
+    }
+
+
 @app.before_request
 def _ensure_sites_synced():
     if request.endpoint in ("static", "service_worker"):
@@ -3284,7 +3350,7 @@ def mapa():
 
 
 @app.route("/mapa-interpolado")
-@admin_required
+@aba_required("mapa_interpolado")
 def mapa_interpolado():
     """Versao "duplicada" do Mapa pra admin criar pontos estimados (sem
     estacao fisica) -- a concentracao de cada doenca nesses pontos e'
@@ -3372,7 +3438,7 @@ def mapa_interpolado():
 
 
 @app.route("/solo")
-@admin_required
+@aba_required("solo")
 def solo():
     """Tipo de solo de cada fazenda (real ou virtual/estimada) + mapa com
     as zonas de solo do Brasil coloridas por cima -- mesmo esqueleto do
@@ -3404,7 +3470,7 @@ def solo():
 
 
 @app.route("/mapa-interpolado/detectar-pais")
-@admin_required
+@aba_required("mapa_interpolado")
 def detectar_pais_ponto_virtual():
     """Pais de uma coordenada (contorno oficial completo de TODO pais
     cadastrado, nao so' os ativos -- ver `countries.detectar_pais_por_coordenada`)
@@ -3467,7 +3533,7 @@ def chuva_grade():
 
 
 @app.route("/mapa-interpolado/adicionar", methods=["POST"])
-@admin_required
+@aba_required("mapa_interpolado")
 def adicionar_ponto_virtual():
     nome = request.form.get("nome", "").strip()
     try:
@@ -3498,7 +3564,7 @@ def adicionar_ponto_virtual():
 
 
 @app.route("/mapa-interpolado/editar", methods=["POST"])
-@admin_required
+@aba_required("mapa_interpolado")
 def editar_ponto_virtual():
     site_name = request.form.get("site_name", "")
     if not models.get_virtual_farm(site_name):
@@ -3534,7 +3600,7 @@ def editar_ponto_virtual():
 
 
 @app.route("/mapa-interpolado/remover", methods=["POST"])
-@admin_required
+@aba_required("mapa_interpolado")
 def remover_ponto_virtual():
     site_name = request.form.get("site_name", "")
     if not models.get_virtual_farm(site_name):
@@ -4053,7 +4119,7 @@ def _get_ndvi_preview(site_name):
 
 
 @app.route("/ndvi")
-@admin_required
+@aba_required("ndvi")
 def ndvi():
     virtual_names = models.virtual_farm_site_names()
     if current_user.is_admin:
@@ -4098,7 +4164,7 @@ def _checar_acesso_site(site_name):
 
 
 @app.route("/ndvi/agendamento/save", methods=["POST"])
-@admin_required
+@aba_required("envios")
 def save_ndvi_agendamento():
     """Ativa/desativa o envio automatico de NDVI dessa fazenda (data de
     inicio + frequencia semanal/quinzenal/mensal -- ver
@@ -4124,7 +4190,7 @@ def save_ndvi_agendamento():
 
 
 @app.route("/whatsapp")
-@login_required
+@aba_required("envios")
 def whatsapp_gerenciamento():
     """Pagina central de envios por WhatsApp -- agenda de texto, PDF e
     NDVI, mais quem recebe cada fazenda, tudo num lugar so' (antes
@@ -4186,7 +4252,7 @@ def whatsapp_gerenciamento():
 
 
 @app.route("/whatsapp/destinatarios/save", methods=["POST"])
-@admin_required
+@aba_required("envios")
 def save_whatsapp_site_recipients():
     """So' admin edita quem recebe (mesmo nivel de acesso de
     `admin_report_permissions`/`admin_user_subordinados` hoje) -- so'
@@ -4200,7 +4266,7 @@ def save_whatsapp_site_recipients():
 
 
 @app.route("/ndvi/destinatario/toggle", methods=["POST"])
-@admin_required
+@aba_required("envios")
 def toggle_ndvi_ativo():
     """Marca/desmarca um destinatario como "ativo" pra NDVI dessa
     fazenda -- persistido (`models.set_ndvi_ativo`), usado tanto pra
@@ -4218,7 +4284,7 @@ def toggle_ndvi_ativo():
 
 
 @app.route("/ndvi/car/save", methods=["POST"])
-@admin_required
+@aba_required("ndvi")
 def save_ndvi_car():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4247,7 +4313,7 @@ def save_ndvi_car():
 
 
 @app.route("/ndvi/car/delete", methods=["POST"])
-@admin_required
+@aba_required("ndvi")
 def delete_ndvi_car():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4376,7 +4442,7 @@ def _chuva_vento_ultimos_30_dias(site_name, data_final):
 
 
 @app.route("/ndvi/pre_visualizar", methods=["POST"])
-@admin_required
+@aba_required("ndvi")
 def pre_visualizar_ndvi():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4420,7 +4486,7 @@ def pre_visualizar_ndvi():
 
 
 @app.route("/ndvi/pre_visualizar/imagem/<path:site_name>")
-@admin_required
+@aba_required("ndvi")
 def imagem_ndvi_preview(site_name):
     _checar_acesso_site(site_name)
     preview = _get_ndvi_preview(site_name)
@@ -4430,7 +4496,7 @@ def imagem_ndvi_preview(site_name):
 
 
 @app.route("/ndvi/pre_visualizar/confirmar", methods=["POST"])
-@admin_required
+@aba_required("ndvi")
 def confirmar_ndvi_preview():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4447,7 +4513,7 @@ def confirmar_ndvi_preview():
 
 
 @app.route("/ndvi/pre_visualizar/descartar", methods=["POST"])
-@admin_required
+@aba_required("ndvi")
 def descartar_ndvi_preview():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4456,7 +4522,7 @@ def descartar_ndvi_preview():
 
 
 @app.route("/ndvi/imagem/<path:site_name>")
-@admin_required
+@aba_required("ndvi")
 def imagem_ndvi(site_name):
     _checar_acesso_site(site_name)
     imagem = models.get_farm_ndvi_image(site_name)
@@ -4466,7 +4532,7 @@ def imagem_ndvi(site_name):
 
 
 @app.route("/ndvi/imagem_historico/<int:historico_id>/<path:site_name>")
-@admin_required
+@aba_required("ndvi")
 def imagem_ndvi_historico(historico_id, site_name):
     """Imagem de um item do historico -- unico por historico_id e nunca
     muda depois de salva, entao pode ficar em cache local por muito tempo
@@ -4481,7 +4547,7 @@ def imagem_ndvi_historico(historico_id, site_name):
 
 
 @app.route("/ndvi/imagem_historico_thumb/<int:historico_id>/<path:site_name>")
-@admin_required
+@aba_required("ndvi")
 def imagem_ndvi_historico_thumb(historico_id, site_name):
     """Miniatura (ver `ndvi_service.gerar_thumbnail`) usada na galeria --
     bem mais leve que a imagem completa (que so' e' baixada quando o
@@ -4496,7 +4562,7 @@ def imagem_ndvi_historico_thumb(historico_id, site_name):
 
 
 @app.route("/ndvi/ver/<int:historico_id>/<path:site_name>")
-@admin_required
+@aba_required("ndvi")
 def ver_ndvi_historico(historico_id, site_name):
     _checar_acesso_site(site_name)
     item = models.get_farm_ndvi_historico_item(historico_id, site_name)
@@ -4508,7 +4574,7 @@ def ver_ndvi_historico(historico_id, site_name):
 
 
 @app.route("/ndvi/historico/delete", methods=["POST"])
-@admin_required
+@aba_required("ndvi")
 def delete_ndvi_historico():
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
@@ -4520,7 +4586,7 @@ def delete_ndvi_historico():
 
 
 @app.route("/ndvi/historico/enviar-whatsapp", methods=["POST"])
-@admin_required
+@aba_required("ndvi")
 def enviar_ndvi_historico_whatsapp():
     """Manda, por WhatsApp, uma ou mais imagens marcadas na galeria da
     aba NDVI -- cada imagem selecionada vira uma mensagem separada (o
@@ -4585,7 +4651,7 @@ def enviar_ndvi_historico_whatsapp():
 
 
 @app.route("/ndvi/debug/<path:site_name>")
-@admin_required
+@aba_required("ndvi")
 def debug_ndvi(site_name):
     """Diagnostico temporario -- a Copernicus rejeita poligono
     auto-intersectante sem dizer quais vertices sao o problema, entao essa
@@ -4919,7 +4985,7 @@ def _parse_float_or_none(valor):
 
 
 @app.route("/admin/doencas", methods=["GET", "POST"])
-@admin_required
+@aba_required("doencas")
 def admin_doencas():
     if request.method == "POST":
         if request.form.get("form_id") == "matriz_culturas":
@@ -5045,7 +5111,7 @@ def admin_doencas():
 
 
 @app.route("/admin/fungicidas", methods=["GET", "POST"])
-@admin_required
+@aba_required("fungicidas")
 def admin_fungicidas():
     if request.method == "POST":
         culturas_ativas = models.get_culturas_ativas()
@@ -5198,13 +5264,13 @@ def admin_fungicidas():
 
 
 @app.route("/admin/fungicidas/agrofit-status")
-@admin_required
+@aba_required("fungicidas")
 def agrofit_status():
     return jsonify(agrofit_dados.status())
 
 
 @app.route("/admin/fungicidas/agrofit-enviar", methods=["POST"])
-@admin_required
+@aba_required("fungicidas")
 def agrofit_enviar_arquivo():
     arquivo = request.files.get("arquivo")
     if not arquivo or not arquivo.filename:
@@ -5220,7 +5286,7 @@ def agrofit_enviar_arquivo():
 
 
 @app.route("/admin/fungicidas/agrofit-atualizar", methods=["POST"])
-@admin_required
+@aba_required("fungicidas")
 def agrofit_atualizar_agora():
     agrofit_dados.atualizar_em_segundo_plano(forcar=True)
     return redirect(url_for("admin_fungicidas"))
@@ -5399,7 +5465,7 @@ _OPERACOES_AGROFIT = ("quimicos", "biologicos", "registros")
 
 
 @app.route("/admin/fungicidas/aplicar-pesquisa-registro", methods=["POST"])
-@admin_required
+@aba_required("fungicidas")
 def aplicar_pesquisa_registro():
     """Botoes "Agrofit" de UMA doenca da Biblioteca de fungicidas, cada um
     com uma operacao separada (`operacao`): "quimicos" e "biologicos"
@@ -5549,7 +5615,7 @@ def _pesquisa_germinacao_por_cientifico(nome_cientifico):
 
 
 @app.route("/admin/doencas/buscar-germinacao", methods=["POST"])
-@admin_required
+@aba_required("doencas")
 def buscar_germinacao_doenca():
     """Botao "Buscar pelo nome cientifico" de UM quadro da aba Doencas --
     so' grava a germinacao daquela doenca (pedido do usuario: uma busca
@@ -5593,7 +5659,7 @@ def buscar_germinacao_doenca():
 
 
 @app.route("/admin/doencas/manual", methods=["POST"])
-@admin_required
+@aba_required("doencas")
 def adicionar_doenca_manual():
     """Doenca que o BioScout nao identifica, cadastrada a mao so' pra'
     entrar no risco de infeccao pelo clima dos relatorios (pedido do
@@ -5625,7 +5691,7 @@ def adicionar_doenca_manual():
 
 
 @app.route("/admin/doencas/excluir", methods=["POST"])
-@admin_required
+@aba_required("doencas")
 def excluir_doenca():
     """Exclusao manual de uma doenca duplicada (mesmo fungo, nome de
     exibicao diferente -- o merge automatico so' junta grafias
@@ -5640,7 +5706,7 @@ def excluir_doenca():
 
 
 @app.route("/admin/fungicidas/mover", methods=["POST"])
-@admin_required
+@aba_required("fungicidas")
 def mover_fungicida_item():
     doenca = request.form.get("doenca")
     tipo = request.form.get("tipo")
@@ -5655,7 +5721,7 @@ def mover_fungicida_item():
 
 
 @app.route("/admin/users")
-@admin_required
+@aba_required("usuarios")
 def admin_users():
     users = models.get_all_users()
     report_counts = {u["id"]: len(models.get_user_report_site_ids(u["id"])) for u in users}
@@ -5720,7 +5786,7 @@ def _split_phone(telefone):
 
 
 @app.route("/admin/users/create", methods=["POST"])
-@admin_required
+@aba_required("usuarios")
 def admin_create_user():
     username = request.form.get("username", "").strip()
     email = request.form.get("email", "").strip()
@@ -5728,6 +5794,8 @@ def admin_create_user():
     nivel = request.form.get("nivel", "usuario")
     if nivel == "master" and current_user.username != ALAN_MAURO_USERNAME:
         nivel = "admin"
+    if _RANK_NIVEL.get(nivel, 0) > _rank_atual():
+        nivel = "usuario"
     if not username:
         flash("Usuario e obrigatorio.", "error")
     elif not _is_valid_email(email):
@@ -5804,13 +5872,16 @@ def admin_edit_user(user_id):
 
 
 @app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
-@admin_required
+@aba_required("usuarios")
 def admin_reset_password(user_id):
     user_row = models.get_user_by_id(user_id)
     if not user_row:
         abort(404)
     if user_row["is_master"] and current_user.username != ALAN_MAURO_USERNAME:
         flash("So' o Alan Mauro pode redefinir a senha de um usuario Master.", "error")
+        return redirect(url_for("admin_users"))
+    if _RANK_NIVEL[_nivel_acesso(user_row)] > _rank_atual():
+        flash("Voce nao pode redefinir a senha de um usuario com nivel acima do seu.", "error")
         return redirect(url_for("admin_users"))
     models.set_user_password(user_id, models.DEFAULT_PASSWORD)
     flash(f"Senha de '{user_row['username']}' redefinida para '{models.DEFAULT_PASSWORD}'.", "success")
@@ -5839,7 +5910,7 @@ def change_password():
 
 
 @app.route("/admin/users/<int:user_id>/whatsapp-pausado", methods=["POST"])
-@admin_required
+@aba_required("usuarios")
 def admin_user_whatsapp_pausado(user_id):
     """Pausa/retoma o recebimento de WhatsApp desse usuario em TODAS as
     fazendas de uma vez (ver `models.set_user_whatsapp_pausado`) --
@@ -5852,7 +5923,7 @@ def admin_user_whatsapp_pausado(user_id):
 
 
 @app.route("/admin/subordinados/<int:subordinado_id>/whatsapp-pausado", methods=["POST"])
-@admin_required
+@aba_required("usuarios")
 def admin_subordinado_whatsapp_pausado(subordinado_id):
     """Mesmo padrao de `admin_user_whatsapp_pausado`, pra' subordinado --
     checkbox direto na linha da aba Usuarios (sem precisar abrir a tela
@@ -5863,13 +5934,15 @@ def admin_subordinado_whatsapp_pausado(subordinado_id):
 
 
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
-@admin_required
+@aba_required("usuarios")
 def admin_delete_user(user_id):
     user_row = models.get_user_by_id(user_id)
     if str(user_id) == current_user.id:
         flash("Voce nao pode excluir o proprio usuario logado.", "error")
     elif user_row and user_row["is_master"] and current_user.username != ALAN_MAURO_USERNAME:
         flash("So' o Alan Mauro pode excluir um usuario Master.", "error")
+    elif user_row and _RANK_NIVEL[_nivel_acesso(user_row)] > _rank_atual():
+        flash("Voce nao pode excluir um usuario com nivel acima do seu.", "error")
     else:
         models.delete_user(user_id)
         flash("Usuario excluido.", "success")
@@ -5896,6 +5969,26 @@ def _save_export_copy_local(conteudo, filename):
         return destino
     except OSError:
         return None
+
+
+@app.route("/admin/acessos", methods=["GET", "POST"])
+@master_required
+def admin_acessos():
+    """Aba Acessos (so' Master): quais abas do menu Configuracoes cada
+    nivel (Administrador / Usuario) ve -- ver `ABAS_CONFIG`."""
+    if request.method == "POST":
+        validas = {c for c, _r, _e in ABAS_CONFIG}
+        novo = {
+            nivel: sorted(c for c in request.form.getlist(f"abas_{nivel}") if c in validas)
+            for nivel in ACESSOS_PADRAO
+        }
+        models.set_setting(_ACESSOS_KEY, json.dumps(novo))
+        g._acessos_por_nivel = None
+        return _save_response("Acessos atualizados.", "admin_acessos")
+    return render_template(
+        "admin_acessos.html", abas=ABAS_CONFIG, acessos=_acessos_por_nivel(),
+        niveis=[("admin", NIVEIS_ACESSO["admin"]), ("usuario", NIVEIS_ACESSO["usuario"])],
+    )
 
 
 @app.route("/admin/fazendas-ocultas")
@@ -6086,7 +6179,7 @@ def admin_whatsapp_reset():
 
 
 @app.route("/admin/users/<int:user_id>/permissions", methods=["GET", "POST"])
-@admin_required
+@aba_required("usuarios")
 def admin_user_permissions(user_id):
     user_row = models.get_user_by_id(user_id)
     if not user_row:
@@ -6103,7 +6196,7 @@ def admin_user_permissions(user_id):
 
 
 @app.route("/admin/users/<int:user_id>/relatorios", methods=["GET", "POST"])
-@admin_required
+@aba_required("usuarios")
 def admin_user_reports(user_id):
     user_row = models.get_user_by_id(user_id)
     if not user_row:
@@ -6122,7 +6215,7 @@ def admin_user_reports(user_id):
 
 
 @app.route("/admin/users/<int:user_id>/subordinados", methods=["GET", "POST"])
-@admin_required
+@aba_required("usuarios")
 def admin_user_subordinados(user_id):
     """Subordinados (aba Usuarios) -- contatos leves (nome + telefone, sem
     login) ligados a um usuario "dono", cada um recebendo relatorio de
