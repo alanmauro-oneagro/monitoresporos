@@ -17,12 +17,18 @@
                     <input type="text" name="numero_telefone" class="form-control" value="{{ numero_telefone }}" placeholder="11999999999" required>
                 </div>
             </div>
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" name="is_admin" id="edit_is_admin" {% if is_admin %}checked{% endif %}>
-                <label class="form-check-label" for="edit_is_admin">
-                    Administrador -- marcado = <strong>Adm</strong> (acesso a tudo);
-                    desmarcado = <strong>Usuario</strong> (so as fazendas liberadas)
-                </label>
+            <div class="mb-3">
+                <label class="form-label" for="edit_nivel">Acesso</label>
+                {% set pode_master = current_user.username == 'Alan Mauro' %}
+                {% set travado = user.username == 'Alan Mauro' or (nivel == 'master' and not pode_master) or user.id|string == current_user.id %}
+                <select name="nivel" id="edit_nivel" class="form-select" {% if travado %}disabled{% endif %}>
+                    <option value="usuario" {% if nivel == 'usuario' %}selected{% endif %}>Usuário -- so as fazendas liberadas</option>
+                    <option value="subordinado" {% if nivel == 'subordinado' %}selected{% endif %}>Subordinado -- todas as fazendas e telas de administracao</option>
+                    {% if pode_master or nivel == 'master' %}
+                    <option value="master" {% if nivel == 'master' %}selected{% endif %}>Master -- tudo, inclusive configuracoes gerais</option>
+                    {% endif %}
+                </select>
+                {% if travado %}<input type="hidden" name="nivel" value="{{ nivel }}">{% endif %}
             </div>
             <button type="submit" name="action" value="test" class="btn btn-success">Enviar teste por WhatsApp</button>
             <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Voltar</a>

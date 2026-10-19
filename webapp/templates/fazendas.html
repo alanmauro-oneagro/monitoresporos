@@ -193,8 +193,8 @@
                 {% endif %}
             </div>
 
-            {# Configuracoes da fazenda -- so' o Alan (pedido dele). #}
-            {% if current_user.username == 'Alan Mauro' %}
+            {# Configuracoes da fazenda -- so' Master (pedido do Alan). #}
+            {% if current_user.is_master %}
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_site_display_name') }}" class="d-flex align-items-center gap-2" data-autosave data-autosave-reload>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
