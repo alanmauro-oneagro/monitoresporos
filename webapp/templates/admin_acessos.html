@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Acessos - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Acessos</h4>
+<p class="text-muted small mb-3">
+    Marque quais abas do menu Configurações cada nível pode abrir. Master sempre vê tudo;
+    Acessos, Conexão WhatsApp, Exportar e Fazendas ocultas são sempre só do Master.
+</p>
+
+<div class="card shadow-sm" style="max-width: 520px;">
+    <div class="card-body">
+        <form method="post" data-autosave>
+            <table class="table table-sm align-middle mb-2">
+                <thead>
+                    <tr>
+                        <th>Aba</th>
+                        {% for nivel, rotulo in niveis %}<th class="text-center">{{ rotulo }}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                {% for chave, rotulo, _endpoint in abas %}
+                    <tr>
+                        <td>{{ rotulo }}</td>
+                        {% for nivel, rotulo_nivel in niveis %}
+                        <td class="text-center">
+                            <input class="form-check-input" type="checkbox" name="abas_{{ nivel }}" value="{{ chave }}"
+                                id="aba_{{ nivel }}_{{ chave }}" aria-label="{{ rotulo }} -- {{ rotulo_nivel }}"
+                                {% if chave in acessos[nivel] %}checked{% endif %}>
+                        </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <span class="autosave-status small"></span>
+        </form>
+    </div>
+</div>
+{% endblock %}
