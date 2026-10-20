@@ -450,6 +450,7 @@
             .addTo(map)
             .bindTooltip(buildTooltipHtml(site), { direction: 'top', sticky: true, opacity: 0.95 })
             .on('click', function () {
+                if (site.virtual) { abrirEdicaoDoPonto(site.site); return; }
                 if (!marcador.isTooltipOpen()) {
                     if (ultimoTooltipAberto && ultimoTooltipAberto !== marcador) {
                         ultimoTooltipAberto.closeTooltip();
@@ -461,10 +462,10 @@
                 window.location.href = FAZENDAS_URL + '?site=' + encodeURIComponent(site.site);
             });
         if (site.virtual) { layersPorSite[site.site] = { marcador: marcador, circulo: circulo }; }
-        // Botao direito (ou toque longo no celular) num ponto "so clima"
-        // abre o painel Editar dele, com o pino arrastavel pra mover
-        // (pedido do Alan, 20/10/2026).
-        if (site.virtual && site.tipo === 'clima') {
+        // Ponto criado (so clima ou doenca): clique ou botao direito
+        // abre a edicao dele (nome + pino arrastavel), nunca leva pra
+        // Manejos -- esta aba e' so' de ajuste (pedidos do Alan, 20/10/2026).
+        if (site.virtual) {
             marcador.on('contextmenu', function (ev) {
                 if (ev.originalEvent) L.DomEvent.preventDefault(ev.originalEvent);
                 abrirEdicaoDoPonto(site.site);
@@ -1033,17 +1034,29 @@
         if (!estado) return;
         // A pagina fica no mapa (o formulario fica bem abaixo dele) -- o
         // proprio pino arrastavel traz Salvar/Cancelar.
+        if (estado.marcador.getPopup()) { estado.marcador.openPopup(); return; }
+        var form = painel.querySelector('form');
+        var nomeForm = form.querySelector('input[name="nome"]');
         var caixa = document.createElement('div');
-        caixa.innerHTML = '<div class="small mb-2">Arraste o pino para mover.</div>'
+        caixa.innerHTML = '<label class="form-label small text-muted mb-1">Nome</label>'
+            + '<input type="text" class="form-control form-control-sm mb-2" data-campo="nome">'
+            + '<div class="small mb-2">Arraste o pino para mover.</div>'
             + '<div class="d-flex gap-1">'
             + '<button type="button" class="btn btn-sm btn-primary" data-acao="salvar">Salvar</button>'
             + '<button type="button" class="btn btn-sm btn-outline-secondary" data-acao="cancelar">Cancelar</button>'
             + '<button type="button" class="btn btn-sm btn-outline-secondary" data-acao="detalhes">Editar dados</button>'
             + '</div>';
+        var nomeCaixa = caixa.querySelector('[data-campo="nome"]');
+        nomeCaixa.value = nomeForm.value;
+        nomeCaixa.addEventListener('input', function () { nomeForm.value = nomeCaixa.value; });
+        nomeCaixa.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); form.requestSubmit(); }
+        });
+        L.DomEvent.disableClickPropagation(caixa);
         caixa.addEventListener('click', function (e) {
             var acao = e.target.dataset && e.target.dataset.acao;
             if (acao === 'salvar') {
-                painel.querySelector('form').requestSubmit();
+                form.requestSubmit();
             } else if (acao === 'cancelar') {
                 btn.click();
             } else if (acao === 'detalhes') {
