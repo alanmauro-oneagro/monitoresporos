@@ -377,27 +377,6 @@
     var activeCountries = { BR: true };
     {{ active_country_codes_interpolado | tojson }}.forEach(function (code) { activeCountries[code] = true; });
 
-    // Rodovias federais (BR-163/364/070/158) -- lidas de um arquivo
-    // estatico proprio (webapp/static/rodovias_br.json), NAO mais buscadas
-    // ao vivo no Overpass a cada carregamento da pagina. O Overpass publico
-    // se mostrou instavel demais pra depender dele em tempo real (mesma
-    // consulta ora funcionava, ora dava 502/504/timeout, inclusive em mais
-    // de um servidor espelho) -- os dados foram baixados uma unica vez e
-    // salvos localmente, entao a pagina sempre mostra as rodovias na hora,
-    // sem depender de nenhum servico externo estar de pe.
-    function buscarRodovias() {
-        fetch('{{ url_for("static", filename="rodovias_br.json") }}')
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (dados) {
-                if (!dados || !dados.trechos) return;
-                dados.trechos.forEach(function (trecho) {
-                    L.polyline(trecho.pontos, { color: '#ff8c00', weight: 3, opacity: 0.9, interactive: false }).addTo(map);
-                });
-            })
-            .catch(function () { /* arquivo estatico local -- so' falha se o proprio site estiver fora do ar */ });
-    }
-    buscarRodovias();
-
     // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
     // (leve, um pedido so) e municipios (pesado -- so busca dos estados
     // onde ha fazenda ou ponto estimado; nao usa as estacoes aqui porque
