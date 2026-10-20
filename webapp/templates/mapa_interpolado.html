@@ -132,7 +132,7 @@
         {% endif %}
         <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
         <div class="ms-auto d-flex gap-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}">✏️ Editar</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}" data-site="{{ ponto.site_name }}">✏️ Editar</button>
             {% if ponto.ativo %}
             <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0">
                 <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
@@ -461,6 +461,15 @@
                 window.location.href = FAZENDAS_URL + '?site=' + encodeURIComponent(site.site);
             });
         if (site.virtual) { layersPorSite[site.site] = { marcador: marcador, circulo: circulo }; }
+        // Botao direito (ou toque longo no celular) num ponto "so clima"
+        // abre o painel Editar dele, com o pino arrastavel pra mover
+        // (pedido do Alan, 20/10/2026).
+        if (site.virtual && site.tipo === 'clima') {
+            marcador.on('contextmenu', function (ev) {
+                if (ev.originalEvent) L.DomEvent.preventDefault(ev.originalEvent);
+                abrirEdicaoDoPonto(site.site);
+            });
+        }
     });
 
     // Camada opcional de previsao de chuva acumulada (24h) cobrindo o
@@ -1011,6 +1020,38 @@
             if (layers.marcador && !map.hasLayer(layers.marcador)) layers.marcador.addTo(map);
             if (layers.circulo && !map.hasLayer(layers.circulo)) layers.circulo.addTo(map);
         }
+    }
+
+    function abrirEdicaoDoPonto(siteName) {
+        var btn = Array.prototype.find.call(
+            document.querySelectorAll('.editar-ponto-toggle'), function (b) { return b.dataset.site === siteName; }
+        );
+        if (!btn) return;
+        var painel = document.getElementById(btn.dataset.target);
+        if (painel.classList.contains('d-none')) btn.click();
+        var estado = editEstadoPorAlvo[painel.id];
+        if (!estado) return;
+        // A pagina fica no mapa (o formulario fica bem abaixo dele) -- o
+        // proprio pino arrastavel traz Salvar/Cancelar.
+        var caixa = document.createElement('div');
+        caixa.innerHTML = '<div class="small mb-2">Arraste o pino para mover.</div>'
+            + '<div class="d-flex gap-1">'
+            + '<button type="button" class="btn btn-sm btn-primary" data-acao="salvar">Salvar</button>'
+            + '<button type="button" class="btn btn-sm btn-outline-secondary" data-acao="cancelar">Cancelar</button>'
+            + '<button type="button" class="btn btn-sm btn-outline-secondary" data-acao="detalhes">Editar dados</button>'
+            + '</div>';
+        caixa.addEventListener('click', function (e) {
+            var acao = e.target.dataset && e.target.dataset.acao;
+            if (acao === 'salvar') {
+                painel.querySelector('form').requestSubmit();
+            } else if (acao === 'cancelar') {
+                btn.click();
+            } else if (acao === 'detalhes') {
+                painel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+        estado.marcador.bindPopup(caixa, { closeButton: false, autoClose: false, closeOnClick: false }).openPopup();
+        estado.marcador.on('dragend', function () { estado.marcador.openPopup(); });
     }
 
     document.querySelectorAll('.editar-ponto-toggle').forEach(function (btn) {
