@@ -1,0 +1,18 @@
+{
+  "appId": "br.com.oneagro.monitor",
+  "appName": "OneAgro Monitor",
+  "webDir": "www",
+  "appendUserAgent": "OneAgroApp",
+  "backgroundColor": "#f4f6f4",
+  "server": {
+    "url": "https://monitoresporos-production.up.railway.app/app",
+    "errorPath": "offline.html",
+    "allowNavigation": ["monitoresporos-production.up.railway.app"]
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "never"
+  }
+}

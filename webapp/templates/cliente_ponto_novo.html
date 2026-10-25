@@ -1,0 +1,50 @@
+{% extends "cliente_base.html" %}
+{% block title %}Nova lavoura - OneAgro Monitor{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>#mapaPonto { height: 52vh; border-radius: 0.5rem; }</style>
+{% endblock %}
+{% block content %}
+<h1 class="titulo">Nova lavoura</h1>
+<form method="post" id="formPonto">
+    <input class="form-control mb-2" name="nome" placeholder="Nome (ex.: Talhão Sede)" maxlength="60" required>
+    <select class="form-select mb-2" name="cultura" aria-label="Cultura">
+        <option value="">Todas as culturas</option>
+        {% for c in culturas %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+    </select>
+    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" id="btnMinhaLocalizacao">📍 Usar minha localização</button>
+    <div id="mapaPonto" class="mb-2"></div>
+    <p class="small text-muted mb-2" id="ajudaMapa">Toque no mapa para marcar a lavoura.</p>
+    <input type="hidden" name="lat" id="lat"><input type="hidden" name="lon" id="lon">
+    <button class="btn btn-success w-100" type="submit">Salvar lavoura</button>
+</form>
+{% endblock %}
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+    var mapa = L.map('mapaPonto').setView([-14.5, -54.5], 4);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 18, attribution: 'Esri'
+    }).addTo(mapa);
+    var marcador = null;
+    function marcar(lat, lon) {
+        document.getElementById('lat').value = lat.toFixed(6);
+        document.getElementById('lon').value = lon.toFixed(6);
+        if (marcador) { marcador.setLatLng([lat, lon]); } else { marcador = L.marker([lat, lon]).addTo(mapa); }
+        document.getElementById('ajudaMapa').textContent = 'Local marcado: ' + lat.toFixed(4) + ', ' + lon.toFixed(4);
+    }
+    mapa.on('click', function (e) { marcar(e.latlng.lat, e.latlng.lng); });
+    document.getElementById('btnMinhaLocalizacao').addEventListener('click', function () {
+        if (!navigator.geolocation) { return; }
+        navigator.geolocation.getCurrentPosition(function (pos) {
+            marcar(pos.coords.latitude, pos.coords.longitude);
+            mapa.setView([pos.coords.latitude, pos.coords.longitude], 14);
+        }, function () { alert('Não foi possível obter a localização. Marque no mapa.'); }, { enableHighAccuracy: true, timeout: 15000 });
+    });
+    document.getElementById('formPonto').addEventListener('submit', function (e) {
+        if (!document.getElementById('lat').value) { e.preventDefault(); alert('Marque o local da lavoura no mapa.'); }
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "cliente_base.html" %}
+{% block title %}Minhas lavouras - OneAgro Monitor{% endblock %}
+{% block content %}
+<h1 class="titulo">Minhas lavouras</h1>
+{% if not pontos %}
+<div class="card shadow-sm mb-3"><div class="card-body">
+    <p class="mb-0">Marque no mapa onde fica a sua lavoura para ver o clima e o risco de doenças da região.</p>
+</div></div>
+{% endif %}
+{% for p in pontos %}
+{% set r = resumos[p.id] %}
+<a href="{{ url_for('cliente_ponto', ponto_id=p.id) }}" class="card shadow-sm mb-2 text-decoration-none text-dark">
+    <div class="card-body d-flex justify-content-between align-items-center py-3">
+        <div>
+            <div class="fw-semibold">{{ p.nome }}</div>
+            <div class="small text-muted">{{ p.cultura or 'Todas as culturas' }}</div>
+        </div>
+        {% if r %}
+        <div class="text-end small">
+            {% if r.perigo %}<span class="badge card-perigo">{{ r.perigo }} alta</span>{% endif %}
+            {% if r.atencao %}<span class="badge card-atencao">{{ r.atencao }} moderada</span>{% endif %}
+            {% if not r.perigo and not r.atencao %}<span class="badge {{ 'card-normal' if r.total else 'bg-secondary' }}">{{ 'Sem alerta' if r.total else 'Sem estação perto' }}</span>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+</a>
+{% endfor %}
+{% if pontos | length < plano.max_pontos %}
+<a class="btn btn-success w-100 mt-2" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar lavoura</a>
+{% endif %}
+<p class="small text-muted mt-3">Plano {{ plano.nome }}: até {{ plano.max_pontos }} lavoura{{ 's' if plano.max_pontos > 1 }}.</p>
+{% endblock %}

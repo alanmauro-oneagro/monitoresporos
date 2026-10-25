@@ -38,6 +38,18 @@ que seja pedido explicitamente paridade para Administradores.
 "Subordinados" na aba Usuarios continuam sendo os contatos leves de
 WhatsApp de cada usuario (tabela `subordinados`), nao um nivel de acesso.
 
+**Cliente do app (pedido do Alan, 25/10/2026)**: 4o tipo de conta,
+`users.is_cliente=1` (nunca admin), criado sozinho em `/cadastro` e
+pago no Asaas (`webapp/asaas.py`, env `ASAAS_API_KEY`/`ASAAS_AMBIENTE`/
+`ASAAS_WEBHOOK_TOKEN`, webhook `/webhooks/asaas`). So' enxerga `/app/*`
+(`_restringir_cliente`); marca lavouras no mapa (`cliente_pontos`) e ve
+esporos ESTIMADOS por IDW das fazendas reais (nunca nome/leitura de
+fazenda real), clima, risco e fungicidas conforme o plano. Planos,
+precos e cortesia: Configuracoes -> Planos e clientes (`/admin/planos`,
+Master). Clientes nao aparecem na aba Usuarios. App Android/iOS em
+`mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
+app nao aparece preco nem link de pagamento (regra das lojas).
+
 ## Arquitetura / conceitos tecnicos principais
 
 - Flask + Jinja2 + Bootstrap + Leaflet 1.9.4, SQLite (`models.get_db()`, modo
