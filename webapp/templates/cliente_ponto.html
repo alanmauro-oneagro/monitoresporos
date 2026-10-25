@@ -1,0 +1,112 @@
+{% extends "cliente_base.html" %}
+{% block title %}{{ ponto.nome }} - OneAgro Monitor{% endblock %}
+{% block content %}
+{% set rec = dados.recursos %}
+{% set rot_risco = {'vermelho': 'Alto', 'amarelo': 'Médio', 'verde': 'Baixo'} %}
+{% macro bloqueado(texto) %}<div class="bloqueado mb-3">🔒 {{ texto }} não faz parte do seu plano.{% if not no_app_loja %} <a href="{{ url_for('planos_publico') }}">Ver planos</a>{% endif %}</div>{% endmacro %}
+<div class="d-flex justify-content-between align-items-center">
+    <h1 class="titulo mb-0">{{ ponto.nome }}</h1>
+    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="document.getElementById('editarPonto').classList.toggle('d-none')">Editar</button>
+</div>
+<div class="small text-muted mb-3">{{ ponto.cultura or 'Todas as culturas' }} · {{ '%.4f' | format(ponto.lat) }}, {{ '%.4f' | format(ponto.lon) }}</div>
+
+<div id="editarPonto" class="d-none card shadow-sm mb-3"><div class="card-body">
+    <form method="post" action="{{ url_for('cliente_ponto_editar', ponto_id=ponto.id) }}">
+        <input class="form-control mb-2" name="nome" value="{{ ponto.nome }}" maxlength="60" required aria-label="Nome">
+        <select class="form-select mb-2" name="cultura" aria-label="Cultura">
+            <option value="">Todas as culturas</option>
+            {% for c in culturas %}<option value="{{ c }}" {% if c == ponto.cultura %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-success btn-sm w-100" type="submit">Salvar</button>
+    </form>
+    <form method="post" action="{{ url_for('cliente_ponto_excluir', ponto_id=ponto.id) }}" class="mt-2" onsubmit="return confirm('Excluir esta lavoura?');">
+        <button class="btn btn-outline-danger btn-sm w-100" type="submit">Excluir lavoura</button>
+    </form>
+</div></div>
+
+<h6>Clima</h6>
+{% if 'clima' in rec %}
+    {% set w = dados.weather %}
+    {% if w %}
+    <div class="card shadow-sm mb-3"><div class="card-body">
+        <div class="d-flex justify-content-around text-center mb-2">
+            <div><div class="fs-4 fw-bold">{{ w.temperatura_atual | round(1) if w.temperatura_atual is not none else '—' }}°C</div><div class="small text-muted">Temperatura</div></div>
+            <div><div class="fs-4 fw-bold">{{ w.umidade_atual | round | int if w.umidade_atual is not none else '—' }}%</div><div class="small text-muted">Umidade</div></div>
+            <div><div class="fs-4 fw-bold">{{ w.chuva_24h_mm | round(1) if w.chuva_24h_mm is not none else '—' }} mm</div><div class="small text-muted">Chuva 24h</div></div>
+        </div>
+        {% if w.previsao_5_dias %}
+        <table class="table table-sm small mb-1 text-center">
+            <thead><tr><th>Dia</th><th>Mín</th><th>Máx</th><th>Chuva</th></tr></thead>
+            <tbody>
+            {% for d in w.previsao_5_dias %}
+            <tr><td>{{ d.data[8:10] }}/{{ d.data[5:7] }}</td><td>{{ d.temp_min | round | int if d.temp_min is not none else '—' }}°</td><td>{{ d.temp_max | round | int if d.temp_max is not none else '—' }}°</td><td>{{ d.chuva_mm if d.chuva_mm is not none else '—' }} mm</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        <div class="small text-muted">Fonte: {{ w.fonte or 'Open-Meteo' }}{% if w.cidade %} · Referência: {{ w.cidade }}{% if w.uf %}/{{ w.uf }}{% endif %}{% endif %}</div>
+    </div></div>
+    {% else %}
+    <div class="alert alert-secondary small">Clima indisponível no momento. Tente novamente em alguns minutos.</div>
+    {% endif %}
+{% else %}{{ bloqueado('Clima e previsão') }}{% endif %}
+
+<h6>Risco de infecção pelo clima</h6>
+{% if 'risco' in rec %}
+    {% if dados.riscos %}
+    <div class="card shadow-sm mb-3"><div class="card-body p-2">
+        <table class="table table-sm small mb-0 align-middle">
+            <thead><tr><th>Doença</th><th class="text-center">Agora</th>{% for p in dados.riscos[0].previsao_risco %}<th class="text-center">{{ p.data_fmt }}</th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for d in dados.riscos %}
+            <tr>
+                <td>{{ d.doenca }}{% if d.cientifico %}<div class="fst-italic text-muted" style="font-size: 0.7rem;">{{ d.cientifico }}</div>{% endif %}</td>
+                <td class="text-center"><span class="risco risco-{{ d.risco }}">{{ rot_risco[d.risco] }}</span></td>
+                {% for p in d.previsao_risco %}<td class="text-center"><span class="risco risco-{{ p.risco }}">{{ rot_risco[p.risco] }}</span></td>{% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div></div>
+    {% else %}
+    <div class="alert alert-secondary small">Sem cálculo de risco disponível agora (clima indisponível ou nenhuma doença cadastrada para essa cultura).</div>
+    {% endif %}
+{% else %}{{ bloqueado('Risco de infecção') }}{% endif %}
+
+<h6>Esporos na região</h6>
+{% if 'esporos' in rec %}
+    {% if dados.cards %}
+    <div class="row g-2 mb-1">
+        {% for c in dados.cards %}
+        <div class="col-6">
+            <div class="rounded p-2 h-100 card-{{ 'perigo' if c.status == 'Perigo' else ('atencao' if c.status == 'Atencao' else 'normal') }}">
+                <div class="fw-bold small">{{ c.doenca }}</div>
+                <div class="fs-5 fw-bold">{{ c.concentracao }}</div>
+                <div style="font-size: 0.7rem;">{{ {'Perigo': 'Alta concentração', 'Atencao': 'Moderada'}.get(c.status, 'Normal') }} · {{ c.data | data_br }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <p class="small text-muted mb-3">Estimativa a partir de {{ dados.n_estacoes }} estação(ões) da rede OneAgro num raio de {{ plano.raio_km | round | int }} km.</p>
+    {% else %}
+    <div class="alert alert-secondary small">Nenhuma estação com leitura recente num raio de {{ plano.raio_km | round | int }} km desta lavoura.</div>
+    {% endif %}
+{% else %}{{ bloqueado('A estimativa de esporos') }}{% endif %}
+
+<h6>Recomendação de fungicidas</h6>
+{% if 'fungicidas' in rec %}
+    {% if dados.diseases %}
+    {% for d in dados.diseases %}
+    <div class="card shadow-sm mb-2"><div class="card-body py-2 small">
+        <div class="fw-semibold">{{ d.doenca }} <span class="badge card-{{ 'perigo' if d.status == 'Perigo' else 'atencao' }}">{{ 'Alta' if d.status == 'Perigo' else 'Moderada' }}</span></div>
+        {% if d.quimicos and d.quimicos.itens %}<div><strong>Químicos:</strong> {% for p in d.quimicos.itens[:3] %}{{ p.ingrediente }}{% if p.classe %} ({{ d.classe_label.get(p.classe, p.classe) }}){% endif %}{% if not loop.last %} // {% endif %}{% endfor %}</div>{% endif %}
+        {% if d.biologicos and d.biologicos.itens %}<div><strong>Biológicos:</strong> {% for p in d.biologicos.itens[:3] %}{{ p.ingrediente }}{% if not loop.last %} // {% endif %}{% endfor %}</div>{% endif %}
+        {% if d.nota %}<div class="text-muted mt-1">{{ d.nota }}</div>{% endif %}
+    </div></div>
+    {% endfor %}
+    <p class="small text-muted">Consulte sempre um engenheiro agrônomo e a bula do produto antes de aplicar.</p>
+    {% else %}
+    <div class="alert alert-success small">Nenhuma doença em alerta na região agora.</div>
+    {% endif %}
+{% else %}{{ bloqueado('A recomendação de fungicidas') }}{% endif %}
+{% endblock %}

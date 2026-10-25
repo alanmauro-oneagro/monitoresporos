@@ -36,6 +36,7 @@ import models
 import fungicida_data
 import agrofit_dados
 import adapar
+import asaas
 import data_reader
 import bioscout_fetch
 import export_excel
@@ -2315,6 +2316,7 @@ class User(UserMixin):
         self.username = row["username"]
         self.is_admin = bool(row["is_admin"])
         self.is_master = bool(row["is_master"])
+        self.is_cliente = bool(row["is_cliente"])
 
 
 @login_manager.user_loader
@@ -2539,7 +2541,7 @@ def service_worker():
 @app.route("/")
 def index():
     if current_user.is_authenticated:
-        return redirect(url_for("mapa"))
+        return redirect(url_for("cliente_home" if current_user.is_cliente else "mapa"))
     return redirect(url_for("login"))
 
 
@@ -2559,7 +2561,7 @@ def login():
         row = models.get_user_by_username(username)
         if row and check_password_hash(row["password_hash"], password):
             login_user(User(row), remember=lembrar)
-            return redirect(url_for("mapa"))
+            return redirect(url_for("cliente_home" if row["is_cliente"] else "mapa"))
         if row and row["temp_password_hash"] and _senha_temporaria_valida(row) \
                 and check_password_hash(row["temp_password_hash"], password):
             # Senha de "esqueci a senha" -- uso unico, apaga na hora (nao
@@ -6270,6 +6272,547 @@ def admin_user_subordinados(user_id):
     return render_template(
         "admin_subordinados.html", user=user_row, owner_sites=owner_sites, subordinados=subordinados,
     )
+
+
+# --- App de celular: clientes pagantes (planos/assinatura) ------------------
+# Cliente (`users.is_cliente=1`) se cadastra sozinho em /cadastro, paga a
+# assinatura no Asaas (ver asaas.py) e so' enxerga a area /app: marca suas
+# lavouras no mapa e ve, por ponto, o que o plano dele libera -- esporos
+# ESTIMADOS por interpolacao das fazendas reais no raio do plano (nunca o
+# nome nem o dado bruto de uma fazenda real), clima, risco de infeccao e
+# recomendacao de fungicida. Planos e precos sao do Master (/admin/planos).
+# O app Android/iOS (pasta mobile/, Capacitor) abre este mesmo site com
+# "OneAgroApp" no user-agent: dentro dele nao aparece preco nem link de
+# pagamento (regra das lojas -- assinatura vendida fora da loja).
+
+_ENDPOINTS_LIVRES_CLIENTE = {
+    "static", "service_worker", "index", "login", "logout", "esqueci_senha",
+    "definir_nova_senha", "planos_publico", "cadastro", "asaas_webhook",
+}
+_CPF_CNPJ_RE = re.compile(r"\D")
+
+
+def _no_app_loja():
+    return "OneAgroApp" in (request.user_agent.string or "")
+
+
+@app.context_processor
+def _inject_no_app_loja():
+    return {"no_app_loja": _no_app_loja() if request else False}
+
+
+@app.before_request
+def _restringir_cliente():
+    if not current_user.is_authenticated or not current_user.is_cliente:
+        return
+    endpoint = request.endpoint or ""
+    if not endpoint.startswith("cliente_") and endpoint not in _ENDPOINTS_LIVRES_CLIENTE:
+        return redirect(url_for("cliente_home"))
+
+
+def _cpf_cnpj_valido(numero):
+    """Digitos verificadores de CPF (11) ou CNPJ (14) -- o Asaas recusa
+    documento invalido, melhor avisar ja' no formulario."""
+    if len(numero) not in (11, 14) or len(set(numero)) == 1:
+        return False
+    digitos = [int(c) for c in numero]
+    if len(numero) == 11:
+        for n in (9, 10):
+            soma = sum(d * p for d, p in zip(digitos[:n], range(n + 1, 1, -1)))
+            if (soma * 10 % 11) % 10 != digitos[n]:
+                return False
+        return True
+    for n, pesos in ((12, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]), (13, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])):
+        resto = sum(d * p for d, p in zip(digitos[:n], pesos)) % 11
+        if (0 if resto < 2 else 11 - resto) != digitos[n]:
+            return False
+    return True
+
+
+def _cliente_contexto():
+    """(assinatura, plano, liberada) do cliente logado."""
+    assinatura = models.get_assinatura(int(current_user.id))
+    plano = models.get_plano(assinatura["plano_id"]) if assinatura and assinatura["plano_id"] else None
+    return assinatura, plano, models.assinatura_liberada(assinatura)
+
+
+def cliente_required(view):
+    """Rota da area /app que exige assinatura em dia -- sem ela, vai pra
+    tela da assinatura."""
+    @functools.wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if not current_user.is_cliente:
+            abort(403)
+        assinatura, plano, liberada = _cliente_contexto()
+        if not liberada or not plano:
+            return redirect(url_for("cliente_assinatura"))
+        g.cliente_plano = plano
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def _iniciar_cobranca(user_id, plano):
+    """Cria cliente + assinatura no Asaas (1o vencimento hoje) e devolve
+    o link da 1a fatura (ou None). Levanta asaas.AsaasErro."""
+    user = models.get_user_by_id(user_id)
+    assinatura = models.get_assinatura(user_id)
+    referencia = f"cliente:{user_id}"
+    customer_id = assinatura.get("asaas_customer_id")
+    if not customer_id:
+        customer_id = asaas.criar_cliente(
+            user["username"], assinatura["cpf_cnpj"], user["email"], user["telefone"], referencia,
+        )
+        models.atualizar_assinatura(user_id, asaas_customer_id=customer_id)
+    subscription_id = asaas.criar_assinatura(
+        customer_id, plano["valor"], plano["ciclo"], f"OneAgro Monitor - plano {plano['nome']}",
+        _hoje_cuiaba().isoformat(), referencia,
+    )
+    models.atualizar_assinatura(user_id, asaas_subscription_id=subscription_id, plano_id=plano["id"], status="pendente")
+    link = None
+    for pagamento in asaas.pagamentos_da_assinatura(subscription_id):
+        models.registrar_pagamento(
+            user_id, pagamento["id"], pagamento.get("value"), pagamento.get("status"),
+            pagamento.get("dueDate"), pagamento.get("invoiceUrl"),
+        )
+        link = link or pagamento.get("invoiceUrl")
+    return link
+
+
+@app.route("/planos")
+def planos_publico():
+    return render_template("cliente_planos.html", planos=models.get_planos(apenas_ativos=True), recursos=models.RECURSOS_PLANO)
+
+
+@app.route("/cadastro", methods=["GET", "POST"])
+def cadastro():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    planos = models.get_planos(apenas_ativos=True)
+    if _no_app_loja():
+        return render_template("cliente_planos.html", planos=[], recursos=models.RECURSOS_PLANO)
+    form = request.form
+    if request.method == "POST":
+        username = form.get("username", "").strip()
+        email = form.get("email", "").strip()
+        telefone = _telefone_from_form(form)
+        cpf_cnpj = _CPF_CNPJ_RE.sub("", form.get("cpf_cnpj", ""))
+        senha = form.get("senha", "")
+        plano = next((p for p in planos if str(p["id"]) == form.get("plano_id")), None)
+        erro = None
+        if len(username) < 3:
+            erro = "Informe seu nome (pelo menos 3 letras) -- ele também é o seu usuário de acesso."
+        elif models.get_user_by_username(username):
+            erro = "Já existe uma conta com esse nome. Use outro (ex.: nome + sobrenome)."
+        elif not _is_valid_email(email):
+            erro = "E-mail inválido."
+        elif not _is_valid_phone(telefone):
+            erro = "Celular inválido -- informe DDD + número."
+        elif not _cpf_cnpj_valido(cpf_cnpj):
+            erro = "CPF/CNPJ inválido."
+        elif len(senha) < 6:
+            erro = "A senha precisa ter pelo menos 6 caracteres."
+        elif senha != form.get("senha_confirmar", ""):
+            erro = "A confirmação não bate com a senha."
+        elif not plano:
+            erro = "Escolha um plano."
+        elif not form.get("aceite"):
+            erro = "É preciso aceitar os termos de uso para continuar."
+        if erro:
+            flash(erro, "error")
+        else:
+            try:
+                user_id = models.criar_cliente(username, senha, email, telefone, cpf_cnpj, plano["id"])
+            except sqlite3.IntegrityError:
+                flash("Já existe uma conta com esse nome.", "error")
+                return render_template("cliente_cadastro.html", planos=planos, form=form)
+            login_user(User(models.get_user_by_id(user_id)), remember=True)
+            return _cobrar_ou_avisar(user_id, plano)
+    return render_template("cliente_cadastro.html", planos=planos, form=form)
+
+
+def _cobrar_ou_avisar(user_id, plano):
+    if not asaas.configurado():
+        flash("Conta criada! O pagamento online ainda não está disponível -- a OneAgro vai entrar em contato para liberar seu acesso.", "success")
+        return redirect(url_for("cliente_assinatura"))
+    try:
+        link = _iniciar_cobranca(user_id, plano)
+    except asaas.AsaasErro as e:
+        print(f"[assinatura] falha ao criar cobranca do cliente {user_id}: {e}")
+        flash(f"Não foi possível gerar a cobrança agora ({e}). Tente de novo em alguns minutos.", "error")
+        return redirect(url_for("cliente_assinatura"))
+    if link:
+        return redirect(link)
+    flash("Assinatura criada. A fatura chega no seu e-mail.", "success")
+    return redirect(url_for("cliente_assinatura"))
+
+
+@app.route("/app/assinatura")
+@login_required
+def cliente_assinatura():
+    if not current_user.is_cliente:
+        abort(403)
+    assinatura, plano, liberada = _cliente_contexto()
+    return render_template(
+        "cliente_assinatura.html", assinatura=assinatura, plano=plano, liberada=liberada,
+        acesso_ate=models.acesso_ate(assinatura), pagamentos=models.get_pagamentos(int(current_user.id)),
+        planos=models.get_planos(apenas_ativos=True), pode_assinar=_pode_assinar(assinatura),
+    )
+
+
+def _pode_assinar(assinatura):
+    return not assinatura or not assinatura.get("asaas_subscription_id") or assinatura.get("status") == "cancelada"
+
+
+@app.route("/app/assinatura/assinar", methods=["POST"])
+@login_required
+def cliente_assinar():
+    if not current_user.is_cliente or _no_app_loja():
+        abort(403)
+    assinatura = models.get_assinatura(int(current_user.id))
+    if not _pode_assinar(assinatura):
+        flash("Você já tem uma assinatura em andamento.", "error")
+        return redirect(url_for("cliente_assinatura"))
+    plano = next((p for p in models.get_planos(apenas_ativos=True) if str(p["id"]) == request.form.get("plano_id")), None)
+    if not plano:
+        flash("Escolha um plano.", "error")
+        return redirect(url_for("cliente_assinatura"))
+    models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"])
+    return _cobrar_ou_avisar(int(current_user.id), plano)
+
+
+@app.route("/app/assinatura/cancelar", methods=["POST"])
+@login_required
+def cliente_cancelar_assinatura():
+    if not current_user.is_cliente:
+        abort(403)
+    user_id = int(current_user.id)
+    assinatura = models.get_assinatura(user_id)
+    if assinatura and assinatura.get("asaas_subscription_id") and assinatura["status"] != "cancelada":
+        try:
+            asaas.cancelar_assinatura(assinatura["asaas_subscription_id"])
+        except asaas.AsaasErro as e:
+            flash(f"Não foi possível cancelar agora ({e}). Tente de novo em alguns minutos.", "error")
+            return redirect(url_for("cliente_assinatura"))
+    models.atualizar_assinatura(user_id, status="cancelada")
+    flash("Assinatura cancelada. Seu acesso continua até o fim do período já pago.", "success")
+    return redirect(url_for("cliente_assinatura"))
+
+
+@app.route("/app/conta", methods=["GET", "POST"])
+@login_required
+def cliente_conta():
+    if not current_user.is_cliente:
+        abort(403)
+    user_id = int(current_user.id)
+    if request.method == "POST":
+        row = models.get_user_by_id(user_id)
+        atual = request.form.get("senha_atual", "")
+        nova = request.form.get("senha_nova", "")
+        if not check_password_hash(row["password_hash"], atual):
+            flash("Senha atual incorreta.", "error")
+        elif len(nova) < 6:
+            flash("A nova senha precisa ter pelo menos 6 caracteres.", "error")
+        elif nova != request.form.get("senha_confirmar", ""):
+            flash("A confirmação não bate com a nova senha.", "error")
+        else:
+            models.set_user_password(user_id, nova)
+            flash("Senha alterada.", "success")
+        return redirect(url_for("cliente_conta"))
+    return render_template("cliente_conta.html", user=models.get_user_by_id(user_id))
+
+
+@app.route("/app/conta/excluir", methods=["POST"])
+@login_required
+def cliente_excluir_conta():
+    """Exclusao da propria conta (exigencia da App Store/Google Play pra
+    app com cadastro): cancela a cobranca e apaga usuario, assinatura e
+    pontos."""
+    if not current_user.is_cliente:
+        abort(403)
+    user_id = int(current_user.id)
+    row = models.get_user_by_id(user_id)
+    if not check_password_hash(row["password_hash"], request.form.get("senha", "")):
+        flash("Senha incorreta -- a conta não foi excluída.", "error")
+        return redirect(url_for("cliente_conta"))
+    erro = _excluir_cliente(user_id)
+    if erro:
+        flash(f"Não foi possível cancelar a cobrança ({erro}). Tente de novo em alguns minutos.", "error")
+        return redirect(url_for("cliente_conta"))
+    logout_user()
+    flash("Sua conta foi excluída.", "success")
+    return redirect(url_for("login"))
+
+
+def _excluir_cliente(user_id):
+    assinatura = models.get_assinatura(user_id)
+    if assinatura and assinatura.get("asaas_subscription_id") and assinatura["status"] != "cancelada":
+        try:
+            asaas.cancelar_assinatura(assinatura["asaas_subscription_id"])
+        except asaas.AsaasErro as e:
+            return str(e)
+    models.delete_user(user_id)
+    return None
+
+
+@app.route("/app")
+@cliente_required
+def cliente_home():
+    pontos = models.get_cliente_pontos(int(current_user.id))
+    return render_template(
+        "cliente_home.html", pontos=pontos, plano=g.cliente_plano,
+        resumos={p["id"]: _resumo_ponto_cliente(p, g.cliente_plano) for p in pontos},
+    )
+
+
+@app.route("/app/pontos/novo", methods=["GET", "POST"])
+@cliente_required
+def cliente_ponto_novo():
+    user_id = int(current_user.id)
+    plano = g.cliente_plano
+    if len(models.get_cliente_pontos(user_id)) >= plano["max_pontos"]:
+        flash(f"Seu plano permite até {plano['max_pontos']} lavoura(s).", "error")
+        return redirect(url_for("cliente_home"))
+    if request.method == "POST":
+        nome = request.form.get("nome", "").strip()[:60]
+        try:
+            lat, lon = float(request.form.get("lat")), float(request.form.get("lon"))
+        except (TypeError, ValueError):
+            lat = lon = None
+        if not nome:
+            flash("Dê um nome para a lavoura.", "error")
+        elif lat is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            flash("Marque o local da lavoura no mapa.", "error")
+        else:
+            cultura = request.form.get("cultura", "")
+            ponto_id = models.criar_cliente_ponto(user_id, nome, lat, lon, cultura if cultura in _culturas_cliente() else "")
+            return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
+    return render_template("cliente_ponto_novo.html", culturas=_culturas_cliente())
+
+
+def _culturas_cliente():
+    return models.get_culturas_ativas()
+
+
+@app.route("/app/pontos/<int:ponto_id>")
+@cliente_required
+def cliente_ponto(ponto_id):
+    ponto = models.get_cliente_ponto(int(current_user.id), ponto_id)
+    if not ponto:
+        abort(404)
+    return render_template(
+        "cliente_ponto.html", ponto=ponto, plano=g.cliente_plano, culturas=_culturas_cliente(),
+        dados=_dados_ponto_cliente(ponto, g.cliente_plano),
+    )
+
+
+@app.route("/app/pontos/<int:ponto_id>/editar", methods=["POST"])
+@cliente_required
+def cliente_ponto_editar(ponto_id):
+    user_id = int(current_user.id)
+    if not models.get_cliente_ponto(user_id, ponto_id):
+        abort(404)
+    nome = request.form.get("nome", "").strip()[:60]
+    cultura = request.form.get("cultura", "")
+    if nome:
+        models.atualizar_cliente_ponto(user_id, ponto_id, nome, cultura if cultura in _culturas_cliente() else "")
+    return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
+
+
+@app.route("/app/pontos/<int:ponto_id>/excluir", methods=["POST"])
+@cliente_required
+def cliente_ponto_excluir(ponto_id):
+    models.excluir_cliente_ponto(int(current_user.id), ponto_id)
+    return redirect(url_for("cliente_home"))
+
+
+def _cards_ponto_cliente(ponto, plano):
+    """Esporos estimados no ponto (IDW das fazendas reais ativas dentro do
+    raio do plano), ja' filtrados pela cultura da lavoura e sem leitura
+    velha demais. Devolve (cards, n_estacoes)."""
+    chave = f"cliente-ponto:{ponto['id']}"
+    cards_reais = get_dashboard_data(None, _load_translations())
+    ocultas = models.get_deactivated_site_names()
+    coords_reais = {s: c for s, c in data_reader.read_site_coordinates().items() if s not in ocultas}
+    cards, vizinhas = virtual_farms.interpolar_cards(ponto["lat"], ponto["lon"], plano["raio_km"], cards_reais, coords_reais)
+    corte = (_hoje_cuiaba() - timedelta(days=DADOS_BLOQUEIO_DIAS)).isoformat()
+    cards = [c for c in cards if c.get("data") and c["data"] >= corte]
+    cultura = ponto["cultura"] or CULTURA_TODOS
+    cards = _filter_cards_by_cultura(
+        {chave: cards}, {(chave, "app"): {"cultura": cultura}}, models.get_doenca_culturas(), safra="app",
+    )[chave]
+    return cards, len(vizinhas)
+
+
+def _weather_ponto_cliente(ponto):
+    chave = f"cliente-ponto:{ponto['id']}"
+    return _get_weather_for_site(chave, {chave: (ponto["lat"], ponto["lon"])})
+
+
+def _riscos_ponto_cliente(ponto, weather):
+    """Risco de infeccao pelo clima de TODA doenca com germinacao
+    cadastrada que vale pra cultura e pais da lavoura -- nao depende de
+    haver estacao BioScout perto (e' 100% clima)."""
+    info = _disease_info_cached()
+    doenca_culturas = models.get_doenca_culturas()
+    doenca_paises = models.get_doenca_paises()
+    pais = countries.get_country(countries.detectar_pais_por_coordenada(ponto["lat"], ponto["lon"]))["nome"]
+    cultura = ponto["cultura"]
+    cards = [
+        {"doenca_en": en, "doenca": d["nome_pt"]} for en, d in info.items()
+        if (not cultura or not doenca_culturas.get(en) or cultura in doenca_culturas[en])
+        and (not doenca_paises.get(en) or pais in doenca_paises[en])
+    ]
+    riscos = _build_riscos_climaticos_sem_leitura(cards)
+    for d in riscos:
+        d["risco"] = _calc_risco_germinacao(d, weather)
+        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    ordem = {"vermelho": 0, "amarelo": 1, "verde": 2}
+    riscos = [d for d in riscos if d["risco"]]
+    riscos.sort(key=lambda d: (ordem.get(d["risco"], 3), d["doenca"]))
+    return riscos
+
+
+def _dados_ponto_cliente(ponto, plano):
+    recursos = set(plano["recursos"])
+    dados = {"recursos": recursos}
+    weather = _weather_ponto_cliente(ponto) if recursos & {"clima", "risco"} else None
+    if "clima" in recursos:
+        dados["weather"] = weather
+    if "risco" in recursos:
+        dados["riscos"] = _riscos_ponto_cliente(ponto, weather)
+    if recursos & {"esporos", "fungicidas"}:
+        cards, n_estacoes = _cards_ponto_cliente(ponto, plano)
+        dados["n_estacoes"] = n_estacoes
+        if "esporos" in recursos:
+            dados["cards"] = cards
+        if "fungicidas" in recursos:
+            dados["diseases"] = _build_site_diseases(
+                f"cliente-ponto:{ponto['id']}", cards, {}, cultura=ponto["cultura"] or None,
+            )
+    return dados
+
+
+def _resumo_ponto_cliente(ponto, plano):
+    """Linha curta da lista de lavouras (sem buscar clima -- a lista abre
+    rapido mesmo com varias lavouras)."""
+    if not set(plano["recursos"]) & {"esporos", "fungicidas"}:
+        return None
+    cards, _n = _cards_ponto_cliente(ponto, plano)
+    return {
+        "perigo": sum(1 for c in cards if c["status"] == "Perigo"),
+        "atencao": sum(1 for c in cards if c["status"] == "Atencao"),
+        "total": len(cards),
+    }
+
+
+@app.route("/webhooks/asaas", methods=["POST"])
+def asaas_webhook():
+    """Eventos do Asaas (pagamento criado/confirmado/vencido/estornado,
+    assinatura excluida). Sempre responde 200 pra evento valido -- o Asaas
+    pausa a fila inteira de webhooks se o endpoint devolver erro."""
+    token = asaas.token_webhook()
+    if not token or not secrets.compare_digest(request.headers.get("asaas-access-token", ""), token):
+        abort(401)
+    evento = request.get_json(silent=True) or {}
+    tipo = evento.get("event", "")
+    pagamento = evento.get("payment")
+    if pagamento:
+        assinatura = models.get_assinatura_por_subscription(pagamento.get("subscription") or "")
+        if not assinatura:
+            ref = pagamento.get("externalReference") or ""
+            if ref.startswith("cliente:") and ref[8:].isdigit():
+                assinatura = models.get_assinatura(int(ref[8:]))
+        if assinatura:
+            status = "DELETED" if tipo == "PAYMENT_DELETED" else pagamento.get("status")
+            models.registrar_pagamento(
+                assinatura["user_id"], pagamento["id"], pagamento.get("value"), status,
+                pagamento.get("dueDate"), pagamento.get("invoiceUrl"),
+            )
+    elif tipo in ("SUBSCRIPTION_DELETED", "SUBSCRIPTION_INACTIVATED"):
+        assinatura = models.get_assinatura_por_subscription((evento.get("subscription") or {}).get("id") or "")
+        if assinatura:
+            models.atualizar_assinatura(assinatura["user_id"], status="cancelada")
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/planos")
+@master_required
+def admin_planos():
+    return render_template(
+        "admin_planos.html", planos=models.get_planos(), recursos=models.RECURSOS_PLANO,
+        ciclos=models.CICLOS_PLANO, clientes=models.get_all_clientes(),
+        asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
+        asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
+        hoje=_hoje_cuiaba().isoformat(),
+    )
+
+
+@app.route("/admin/planos/salvar", methods=["POST"])
+@master_required
+def admin_planos_salvar():
+    form = request.form
+    try:
+        valor = float(form.get("valor", "0").replace(",", "."))
+        max_pontos = int(form.get("max_pontos", "1"))
+        raio_km = float(form.get("raio_km", "50").replace(",", "."))
+        ordem = int(form.get("ordem", "0") or 0)
+    except ValueError:
+        flash("Valor, lavouras, raio e ordem precisam ser números.", "error")
+        return redirect(url_for("admin_planos"))
+    nome = form.get("nome", "").strip()
+    if not nome or valor <= 0 or max_pontos < 1 or raio_km <= 0 or form.get("ciclo") not in models.CICLOS_PLANO:
+        flash("Preencha nome, valor (maior que zero), ciclo, lavouras e raio.", "error")
+        return redirect(url_for("admin_planos"))
+    models.salvar_plano(
+        int(form["plano_id"]) if form.get("plano_id", "").isdigit() else None,
+        nome, form.get("descricao", "").strip(), valor, form["ciclo"], max_pontos, raio_km,
+        form.getlist("recursos"), bool(form.get("ativo")), ordem,
+    )
+    flash("Plano salvo.", "success")
+    return redirect(url_for("admin_planos"))
+
+
+@app.route("/admin/planos/<int:plano_id>/excluir", methods=["POST"])
+@master_required
+def admin_planos_excluir(plano_id):
+    if models.excluir_plano(plano_id):
+        flash("Plano excluído.", "success")
+    else:
+        flash("Esse plano tem assinantes -- desative-o em vez de excluir.", "error")
+    return redirect(url_for("admin_planos"))
+
+
+@app.route("/admin/clientes/<int:user_id>/cortesia", methods=["POST"])
+@master_required
+def admin_cliente_cortesia(user_id):
+    """Libera (ou tira, data vazia) acesso sem cobranca ate' uma data --
+    teste, parceiro, acerto fora do Asaas."""
+    row = models.get_user_by_id(user_id)
+    if not row or not row["is_cliente"]:
+        abort(404)
+    data = _parse_iso_date(request.form.get("cortesia_ate", ""))
+    plano_id = request.form.get("plano_id", "")
+    campos = {"cortesia_ate": data.isoformat() if data else None}
+    if plano_id.isdigit() and models.get_plano(int(plano_id)):
+        campos["plano_id"] = int(plano_id)
+    models.atualizar_assinatura(user_id, **campos)
+    flash(f"Acesso de {row['username']} atualizado.", "success")
+    return redirect(url_for("admin_planos"))
+
+
+@app.route("/admin/clientes/<int:user_id>/excluir", methods=["POST"])
+@master_required
+def admin_cliente_excluir(user_id):
+    row = models.get_user_by_id(user_id)
+    if not row or not row["is_cliente"]:
+        abort(404)
+    erro = _excluir_cliente(user_id)
+    if erro:
+        flash(f"Não foi possível cancelar a cobrança no Asaas ({erro}) -- nada foi excluído.", "error")
+    else:
+        flash(f"Cliente {row['username']} excluído.", "success")
+    return redirect(url_for("admin_planos"))
 
 
 def _bootstrap_once():

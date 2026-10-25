@@ -461,6 +461,57 @@ def init_db():
             disparar_em TEXT NOT NULL,
             criado_em TEXT NOT NULL
         );
+
+        -- Assinatura do app (clientes que se cadastram e pagam sozinhos,
+        -- `users.is_cliente=1`): planos editaveis pelo Master, uma
+        -- assinatura por cliente (cobranca no Asaas) e os pontos (lavouras)
+        -- que o cliente marca no mapa -- o risco de cada ponto e' estimado
+        -- por interpolacao das fazendas reais (nunca o dado bruto delas).
+        CREATE TABLE IF NOT EXISTS planos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            descricao TEXT NOT NULL DEFAULT '',
+            valor REAL NOT NULL DEFAULT 0,
+            ciclo TEXT NOT NULL DEFAULT 'MONTHLY',
+            max_pontos INTEGER NOT NULL DEFAULT 1,
+            raio_km REAL NOT NULL DEFAULT 50,
+            recursos TEXT NOT NULL DEFAULT '[]',
+            ativo INTEGER NOT NULL DEFAULT 1,
+            ordem INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS assinaturas (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            plano_id INTEGER REFERENCES planos(id),
+            status TEXT NOT NULL DEFAULT 'pendente',
+            pago_ate TEXT,
+            cpf_cnpj TEXT,
+            asaas_customer_id TEXT,
+            asaas_subscription_id TEXT,
+            cortesia_ate TEXT,  -- acesso liberado a mao pelo Master (sem cobranca), alem do que foi pago
+            criado_em TEXT NOT NULL,
+            atualizado_em TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS assinatura_pagamentos (
+            asaas_payment_id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            valor REAL,
+            status TEXT,
+            vencimento TEXT,
+            invoice_url TEXT,
+            atualizado_em TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS cliente_pontos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            nome TEXT NOT NULL,
+            lat REAL NOT NULL,
+            lon REAL NOT NULL,
+            cultura TEXT NOT NULL DEFAULT '',
+            criado_em TEXT NOT NULL
+        );
         """
     )
     try:
@@ -566,6 +617,10 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     conn.execute("UPDATE users SET is_master = 1, is_admin = 1 WHERE username = ?", (MASTER_PRINCIPAL,))
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN is_cliente INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe (banco criado antes dessa versao)
     try:
         # Fazenda desativada (real ou virtual) para de aparecer em
         # qualquer tela (Painel, Mapa, Graficos, Recomendacoes, NDVI,
@@ -2819,11 +2874,12 @@ def get_user_by_id(user_id):
 def get_all_users():
     """Master primeiro, depois Administrador, depois Usuario (cada grupo em
     ordem alfabetica) -- pedido explicito do usuario, pra quem administra
-    o site aparecer sempre no topo da aba Usuarios."""
+    o site aparecer sempre no topo da aba Usuarios. Clientes do app
+    (`is_cliente`) ficam de fora -- eles aparecem so' na aba Planos."""
     conn = get_db()
     rows = conn.execute(
         "SELECT id, username, is_admin, is_master, email, telefone, whatsapp_pausado FROM users"
-        " ORDER BY is_master DESC, is_admin DESC, username COLLATE NOCASE"
+        " WHERE is_cliente = 0 ORDER BY is_master DESC, is_admin DESC, username COLLATE NOCASE"
     ).fetchall()
     conn.close()
     return rows
@@ -3237,5 +3293,277 @@ def set_subordinado_report_sites(subordinado_id, site_ids):
             "INSERT INTO subordinado_report_permissions (subordinado_id, site_id) VALUES (?, ?)",
             (subordinado_id, site_id),
         )
+    conn.commit()
+    conn.close()
+
+
+# --- Assinaturas do app (clientes pagantes) ---------------------------------
+
+RECURSOS_PLANO = [
+    ("clima", "Clima agora e previsão de 5 dias"),
+    ("esporos", "Esporos estimados na região (por doença)"),
+    ("risco", "Risco de infecção pelo clima (agora e próximos 5 dias)"),
+    ("fungicidas", "Recomendação de fungicidas químicos e biológicos"),
+]
+CICLOS_PLANO = {"MONTHLY": ("Mensal", 1), "QUARTERLY": ("Trimestral", 3), "SEMIANNUALLY": ("Semestral", 6), "YEARLY": ("Anual", 12)}
+# Dias de acesso alem do vencimento seguinte -- boleto/Pix da renovacao
+# leva uns dias pra compensar, o cliente nao perde o acesso nesse meio tempo.
+DIAS_TOLERANCIA_PAGAMENTO = 5
+PAGAMENTO_CONFIRMADO = ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH")
+
+
+def _plano_row_to_dict(r):
+    d = dict(r)
+    try:
+        d["recursos"] = [c for c in json.loads(d["recursos"] or "[]") if c in dict(RECURSOS_PLANO)]
+    except ValueError:
+        d["recursos"] = []
+    d["ciclo_label"] = CICLOS_PLANO.get(d["ciclo"], (d["ciclo"], 1))[0]
+    return d
+
+
+def get_planos(apenas_ativos=False):
+    conn = get_db()
+    sql = "SELECT * FROM planos" + (" WHERE ativo = 1" if apenas_ativos else "") + " ORDER BY ordem, valor, id"
+    rows = conn.execute(sql).fetchall()
+    conn.close()
+    return [_plano_row_to_dict(r) for r in rows]
+
+
+def get_plano(plano_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM planos WHERE id = ?", (plano_id,)).fetchone()
+    conn.close()
+    return _plano_row_to_dict(row) if row else None
+
+
+def salvar_plano(plano_id, nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem):
+    """Cria (plano_id None) ou atualiza um plano. Mudar o valor aqui NAO
+    muda a cobranca de quem ja assinou (fica a do Asaas) -- so' vale pra
+    assinatura nova."""
+    if ciclo not in CICLOS_PLANO:
+        raise ValueError("ciclo invalido")
+    valores = (
+        nome, descricao, float(valor), ciclo, int(max_pontos), float(raio_km),
+        json.dumps([c for c in recursos if c in dict(RECURSOS_PLANO)]), 1 if ativo else 0, int(ordem),
+    )
+    conn = get_db()
+    if plano_id:
+        conn.execute(
+            "UPDATE planos SET nome=?, descricao=?, valor=?, ciclo=?, max_pontos=?, raio_km=?, recursos=?, ativo=?, ordem=?"
+            " WHERE id = ?", valores + (plano_id,),
+        )
+    else:
+        cur = conn.execute(
+            "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", valores,
+        )
+        plano_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return plano_id
+
+
+def plano_em_uso(plano_id):
+    conn = get_db()
+    row = conn.execute("SELECT 1 FROM assinaturas WHERE plano_id = ? LIMIT 1", (plano_id,)).fetchone()
+    conn.close()
+    return row is not None
+
+
+def excluir_plano(plano_id):
+    """So' plano sem nenhuma assinatura -- os outros se desativam (somem
+    da pagina de planos, quem ja assinou continua)."""
+    if plano_em_uso(plano_id):
+        return False
+    conn = get_db()
+    conn.execute("DELETE FROM planos WHERE id = ?", (plano_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id):
+    """Usuario do app (`is_cliente=1`, nunca admin) + assinatura pendente.
+    Devolve o id do usuario."""
+    agora = _agora_cuiaba()
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO users (username, password_hash, is_admin, is_master, is_cliente, email, telefone)"
+            " VALUES (?, ?, 0, 0, 1, ?, ?)",
+            (username, generate_password_hash(password), email, telefone),
+        )
+        user_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO assinaturas (user_id, plano_id, status, cpf_cnpj, criado_em, atualizado_em)"
+            " VALUES (?, ?, 'pendente', ?, ?, ?)",
+            (user_id, plano_id, cpf_cnpj, agora, agora),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return user_id
+
+
+def get_assinatura(user_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM assinaturas WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_assinatura_por_subscription(asaas_subscription_id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM assinaturas WHERE asaas_subscription_id = ?", (asaas_subscription_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def atualizar_assinatura(user_id, **campos):
+    permitidos = {"plano_id", "status", "cpf_cnpj", "asaas_customer_id", "asaas_subscription_id", "cortesia_ate"}
+    campos = {k: v for k, v in campos.items() if k in permitidos}
+    if not campos:
+        return
+    sets = ", ".join(f"{k} = ?" for k in campos)
+    conn = get_db()
+    conn.execute(
+        f"UPDATE assinaturas SET {sets}, atualizado_em = ? WHERE user_id = ?",
+        tuple(campos.values()) + (_agora_cuiaba(), user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _hoje_cuiaba():
+    return _agora_cuiaba()[:10]
+
+
+def acesso_ate(assinatura):
+    """Ultimo dia (ISO) com acesso liberado: o maior entre o periodo pago
+    e a cortesia do Master. None = nunca pagou nem ganhou cortesia."""
+    if not assinatura:
+        return None
+    datas = [d for d in (assinatura.get("pago_ate"), assinatura.get("cortesia_ate")) if d]
+    return max(datas) if datas else None
+
+
+def assinatura_liberada(assinatura):
+    fim = acesso_ate(assinatura)
+    return bool(fim) and fim >= _hoje_cuiaba()
+
+
+def _somar_meses(data_iso, meses):
+    d = datetime.strptime(data_iso, "%Y-%m-%d").date()
+    mes = d.month - 1 + meses
+    ano, mes = d.year + mes // 12, mes % 12 + 1
+    dias_no_mes = [31, 29 if ano % 4 == 0 and (ano % 100 != 0 or ano % 400 == 0) else 28,
+                   31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mes - 1]
+    return d.replace(year=ano, month=mes, day=min(d.day, dias_no_mes))
+
+
+def registrar_pagamento(user_id, asaas_payment_id, valor, status, vencimento, invoice_url):
+    """Grava/atualiza um pagamento (webhook do Asaas, que pode chegar
+    repetido -- idempotente) e recalcula ate' quando o cliente tem
+    acesso: cada pagamento confirmado cobre do vencimento ate' o
+    vencimento seguinte (+ tolerancia). Estorno/exclusao tira o periodo."""
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO assinatura_pagamentos (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, atualizado_em)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(asaas_payment_id) DO UPDATE SET valor=excluded.valor, status=excluded.status,"
+        " vencimento=excluded.vencimento, invoice_url=COALESCE(excluded.invoice_url, invoice_url),"
+        " atualizado_em=excluded.atualizado_em",
+        (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, _agora_cuiaba()),
+    )
+    assinatura = conn.execute(
+        "SELECT a.status, p.ciclo FROM assinaturas a LEFT JOIN planos p ON p.id = a.plano_id WHERE a.user_id = ?",
+        (user_id,),
+    ).fetchone()
+    meses = CICLOS_PLANO.get(assinatura["ciclo"] if assinatura else None, ("", 1))[1]
+    pago_ate = None
+    marcadores = ",".join("?" * len(PAGAMENTO_CONFIRMADO))
+    for r in conn.execute(
+        f"SELECT vencimento FROM assinatura_pagamentos WHERE user_id = ? AND status IN ({marcadores}) AND vencimento IS NOT NULL",
+        (user_id,) + PAGAMENTO_CONFIRMADO,
+    ):
+        fim = (_somar_meses(r["vencimento"], meses) + timedelta(days=DIAS_TOLERANCIA_PAGAMENTO)).isoformat()
+        pago_ate = max(pago_ate or fim, fim)
+    novo_status = assinatura["status"] if assinatura else "pendente"
+    if status in PAGAMENTO_CONFIRMADO and novo_status != "cancelada":
+        novo_status = "ativa"
+    elif status == "OVERDUE" and novo_status != "cancelada":
+        novo_status = "atrasada"
+    conn.execute(
+        "UPDATE assinaturas SET pago_ate = ?, status = ?, atualizado_em = ? WHERE user_id = ?",
+        (pago_ate, novo_status, _agora_cuiaba(), user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_pagamentos(user_id):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM assinatura_pagamentos WHERE user_id = ? ORDER BY vencimento DESC", (user_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_all_clientes():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT u.id, u.username, u.email, u.telefone, a.status, a.pago_ate, a.cortesia_ate, a.criado_em,"
+        " p.nome AS plano_nome, (SELECT COUNT(*) FROM cliente_pontos cp WHERE cp.user_id = u.id) AS n_pontos"
+        " FROM users u LEFT JOIN assinaturas a ON a.user_id = u.id LEFT JOIN planos p ON p.id = a.plano_id"
+        " WHERE u.is_cliente = 1 ORDER BY u.username COLLATE NOCASE"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_cliente_pontos(user_id):
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM cliente_pontos WHERE user_id = ? ORDER BY id", (user_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_cliente_ponto(user_id, ponto_id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM cliente_pontos WHERE id = ? AND user_id = ?", (ponto_id, user_id)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def criar_cliente_ponto(user_id, nome, lat, lon, cultura=""):
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO cliente_pontos (user_id, nome, lat, lon, cultura, criado_em) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, nome, lat, lon, cultura, _agora_cuiaba()),
+    )
+    conn.commit()
+    conn.close()
+    return cur.lastrowid
+
+
+def atualizar_cliente_ponto(user_id, ponto_id, nome, cultura):
+    conn = get_db()
+    conn.execute(
+        "UPDATE cliente_pontos SET nome = ?, cultura = ? WHERE id = ? AND user_id = ?",
+        (nome, cultura, ponto_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def excluir_cliente_ponto(user_id, ponto_id):
+    conn = get_db()
+    conn.execute("DELETE FROM cliente_pontos WHERE id = ? AND user_id = ?", (ponto_id, user_id))
     conn.commit()
     conn.close()

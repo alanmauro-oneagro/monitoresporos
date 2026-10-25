@@ -1,0 +1,37 @@
+{% extends "cliente_base.html" %}
+{% block title %}Criar conta - OneAgro Monitor{% endblock %}
+{% block content %}
+<h1 class="titulo">Criar conta</h1>
+{% set plano_sel = form.get('plano_id') or request.args.get('plano') %}
+<form method="post" class="card shadow-sm"><div class="card-body">
+    <label class="form-label small mb-1" for="plano_id">Plano</label>
+    <select class="form-select mb-3" name="plano_id" id="plano_id" required>
+        {% for p in planos %}
+        <option value="{{ p.id }}" {% if plano_sel == p.id|string %}selected{% endif %}>{{ p.nome }} -- R$ {{ '%.2f' | format(p.valor) | replace('.', ',') }} / {{ p.ciclo_label | lower }}</option>
+        {% endfor %}
+    </select>
+    <label class="form-label small mb-1" for="username">Nome (também é o seu usuário de acesso)</label>
+    <input class="form-control mb-3" name="username" id="username" value="{{ form.get('username', '') }}" autocomplete="name" required>
+    <label class="form-label small mb-1" for="email">E-mail</label>
+    <input class="form-control mb-3" type="email" name="email" id="email" value="{{ form.get('email', '') }}" autocomplete="email" required>
+    <label class="form-label small mb-1" for="numero_telefone">Celular (WhatsApp)</label>
+    <div class="input-group mb-3">
+        <span class="input-group-text">+</span>
+        <input class="form-control" style="max-width: 4.5rem;" name="codigo_pais" value="{{ form.get('codigo_pais', '55') }}" inputmode="numeric" aria-label="Código do país">
+        <input class="form-control" name="numero_telefone" id="numero_telefone" value="{{ form.get('numero_telefone', '') }}" placeholder="DDD + número" inputmode="tel" required>
+    </div>
+    <label class="form-label small mb-1" for="cpf_cnpj">CPF ou CNPJ (para a nota/cobrança)</label>
+    <input class="form-control mb-3" name="cpf_cnpj" id="cpf_cnpj" value="{{ form.get('cpf_cnpj', '') }}" inputmode="numeric" required>
+    <label class="form-label small mb-1" for="senha">Senha</label>
+    <input class="form-control mb-3" type="password" name="senha" id="senha" minlength="6" autocomplete="new-password" required>
+    <label class="form-label small mb-1" for="senha_confirmar">Confirmar senha</label>
+    <input class="form-control mb-3" type="password" name="senha_confirmar" id="senha_confirmar" minlength="6" autocomplete="new-password" required>
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="aceite" id="aceite" required>
+        <label class="form-check-label small" for="aceite">Concordo com os termos de uso e entendo que as informações são estimativas de apoio à decisão, que não substituem a avaliação de um agrônomo.</label>
+    </div>
+    <button class="btn btn-success w-100" type="submit">Continuar para o pagamento</button>
+    <p class="small text-muted mt-2 mb-0">Pagamento por Pix, boleto ou cartão. A assinatura renova automaticamente e pode ser cancelada a qualquer momento.</p>
+</div></form>
+<div class="text-center small mt-3"><a href="{{ url_for('login') }}">Já tenho conta</a></div>
+{% endblock %}

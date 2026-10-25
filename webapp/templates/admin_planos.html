@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Planos e clientes - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Planos e clientes</h4>
+<p class="text-muted small mb-3">
+    Planos que o cliente do app pode assinar em <a href="{{ url_for('planos_publico') }}" target="_blank">{{ url_for('planos_publico', _external=True) }}</a>.
+    O cliente marca as lavouras dele no mapa e vê, em cada uma, o que o plano libera. Os esporos são sempre
+    <strong>estimados</strong> pelas fazendas reais dentro do raio do plano (nunca aparece nome nem leitura de fazenda real).
+    Mudar o valor de um plano só vale para assinaturas novas.
+</p>
+
+<div class="alert {{ 'alert-success' if asaas_configurado and asaas_webhook_ok else 'alert-warning' }} small">
+    <strong>Cobrança (Asaas):</strong>
+    {% if asaas_configurado %}chave configurada, ambiente <strong>{{ 'PRODUÇÃO' if asaas_producao else 'SANDBOX (teste, não cobra)' }}</strong>.{% else %}<strong>não configurada</strong> -- falta a variável <code>ASAAS_API_KEY</code> no Railway; quem se cadastrar fica aguardando liberação manual.{% endif %}
+    {% if not asaas_webhook_ok %}Falta <code>ASAAS_WEBHOOK_TOKEN</code> -- sem ela o pagamento não libera o acesso sozinho.{% endif %}
+    Webhook no Asaas: <code>{{ url_for('asaas_webhook', _external=True) }}</code> (eventos de cobrança e de assinatura).
+</div>
+
+{% macro form_plano(p) %}
+<form method="post" action="{{ url_for('admin_planos_salvar') }}" class="row g-2 align-items-end">
+    <input type="hidden" name="plano_id" value="{{ p.id if p else '' }}">
+    <div class="col-12 col-md-3"><label class="form-label small mb-0">Nome</label><input class="form-control form-control-sm" name="nome" value="{{ p.nome if p else '' }}" required></div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-0">Valor (R$)</label><input class="form-control form-control-sm" name="valor" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" required></div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-0">Ciclo</label>
+        <select class="form-select form-select-sm" name="ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }}</option>{% endfor %}</select></div>
+    <div class="col-4 col-md-1"><label class="form-label small mb-0">Lavouras</label><input class="form-control form-control-sm" name="max_pontos" value="{{ p.max_pontos if p else 1 }}" inputmode="numeric"></div>
+    <div class="col-4 col-md-1"><label class="form-label small mb-0">Raio (km)</label><input class="form-control form-control-sm" name="raio_km" value="{{ (p.raio_km | round | int) if p else 50 }}" inputmode="decimal"></div>
+    <div class="col-4 col-md-1"><label class="form-label small mb-0">Ordem</label><input class="form-control form-control-sm" name="ordem" value="{{ p.ordem if p else 0 }}" inputmode="numeric"></div>
+    <div class="col-12 col-md-2 form-check ms-2"><input class="form-check-input" type="checkbox" name="ativo" id="ativo_{{ p.id if p else 'novo' }}" {% if not p or p.ativo %}checked{% endif %}><label class="form-check-label small" for="ativo_{{ p.id if p else 'novo' }}">À venda</label></div>
+    <div class="col-12"><label class="form-label small mb-0">Descrição</label><input class="form-control form-control-sm" name="descricao" value="{{ p.descricao if p else '' }}"></div>
+    <div class="col-12 small">
+        {% for chave, rotulo in recursos %}
+        <span class="form-check form-check-inline">
+            <input class="form-check-input" type="checkbox" name="recursos" value="{{ chave }}" id="rec_{{ p.id if p else 'novo' }}_{{ chave }}" {% if p and chave in p.recursos %}checked{% endif %}>
+            <label class="form-check-label" for="rec_{{ p.id if p else 'novo' }}_{{ chave }}">{{ rotulo }}</label>
+        </span>
+        {% endfor %}
+    </div>
+    <div class="col-12"><button class="btn btn-success btn-sm" type="submit">{{ 'Salvar' if p else 'Criar plano' }}</button></div>
+</form>
+{% endmacro %}
+
+{% for p in planos %}
+<div class="card shadow-sm mb-2"><div class="card-body">
+    {{ form_plano(p) }}
+    <form method="post" action="{{ url_for('admin_planos_excluir', plano_id=p.id) }}" class="mt-1" onsubmit="return confirm('Excluir este plano?');">
+        <button class="btn btn-link btn-sm text-danger p-0" type="submit">Excluir plano</button>
+    </form>
+</div></div>
+{% endfor %}
+<div class="card shadow-sm mb-4 border-success"><div class="card-body">
+    <h6>Novo plano</h6>
+    {{ form_plano(none) }}
+</div></div>
+
+<h5>Clientes do app</h5>
+{% if not clientes %}
+<p class="text-muted small">Nenhum cliente cadastrado ainda.</p>
+{% else %}
+<div class="table-responsive">
+<table class="table table-sm align-middle small bg-white">
+    <thead><tr><th>Cliente</th><th>Contato</th><th>Plano</th><th>Situação</th><th>Pago até</th><th>Lavouras</th><th>Cortesia até / plano</th><th></th></tr></thead>
+    <tbody>
+    {% for c in clientes %}
+    {% set fim = [c.pago_ate or '', c.cortesia_ate or ''] | max %}
+    <tr>
+        <td>{{ c.username }}<div class="text-muted">desde {{ c.criado_em | data_br }}</div></td>
+        <td>{{ c.email or '' }}<div>{{ c.telefone | telefone_br if c.telefone else '' }}</div></td>
+        <td>{{ c.plano_nome or '—' }}</td>
+        <td>{{ c.status or '—' }} {% if fim and fim >= hoje %}<span class="badge bg-success">liberado</span>{% else %}<span class="badge bg-secondary">bloqueado</span>{% endif %}</td>
+        <td>{{ c.pago_ate | data_br if c.pago_ate else '—' }}</td>
+        <td>{{ c.n_pontos }}</td>
+        <td>
+            <form method="post" action="{{ url_for('admin_cliente_cortesia', user_id=c.id) }}" class="d-flex gap-1">
+                <input class="form-control form-control-sm" type="date" name="cortesia_ate" value="{{ c.cortesia_ate or '' }}" aria-label="Cortesia até">
+                <select class="form-select form-select-sm" name="plano_id" aria-label="Plano">
+                    <option value="">(mesmo plano)</option>
+                    {% for p in planos %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-outline-success btn-sm" type="submit">OK</button>
+            </form>
+        </td>
+        <td>
+            <form method="post" action="{{ url_for('admin_cliente_excluir', user_id=c.id) }}" onsubmit="return confirm('Excluir este cliente? A cobrança no Asaas é cancelada.');">
+                <button class="btn btn-outline-danger btn-sm" type="submit">Excluir</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
