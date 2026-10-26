@@ -3304,6 +3304,7 @@ RECURSOS_PLANO = [
     ("esporos", "Esporos estimados na região (por doença)"),
     ("risco", "Risco de infecção pelo clima (agora e próximos 5 dias)"),
     ("fungicidas", "Recomendação de fungicidas químicos e biológicos"),
+    ("regiao", "Mapa da região com as estações próximas (sem identificar as fazendas)"),
 ]
 CICLOS_PLANO = {"MONTHLY": ("Mensal", 1), "QUARTERLY": ("Trimestral", 3), "SEMIANNUALLY": ("Semestral", 6), "YEARLY": ("Anual", 12)}
 # Dias de acesso alem do vencimento seguinte -- boleto/Pix da renovacao

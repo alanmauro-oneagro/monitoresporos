@@ -1,0 +1,71 @@
+{% extends "cliente_base.html" %}
+{% block title %}Região - OneAgro Monitor{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>#mapaRegiao { height: 45vh; border-radius: 0.5rem; }</style>
+{% endblock %}
+{% block content %}
+<h1 class="titulo">Região</h1>
+{% if not liberado %}
+<div class="bloqueado mb-3">🔒 O mapa da região não faz parte do seu plano.{% if not no_app_loja %} <a href="{{ url_for('planos_publico') }}">Ver planos</a>{% endif %}</div>
+{% elif not pontos %}
+<div class="card shadow-sm"><div class="card-body">
+    <p class="mb-2">Marque uma lavoura para ver as estações da região dela.</p>
+    <a class="btn btn-success w-100" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar lavoura</a>
+</div></div>
+{% else %}
+<p class="small text-muted">Estações da rede OneAgro até {{ plano.raio_km | round | int }} km das suas lavouras. A posição é aproximada (cerca de 10 km), e as fazendas não são identificadas.</p>
+<div id="mapaRegiao" class="mb-3"></div>
+{% if not regioes %}
+<div class="alert alert-secondary small">Nenhuma estação com leitura recente perto das suas lavouras.</div>
+{% endif %}
+{% for r in regioes %}
+<div class="card shadow-sm mb-2"><div class="card-body py-2">
+    <div class="d-flex justify-content-between">
+        <span class="fw-semibold">{{ r.rotulo }}</span>
+        <span class="small text-muted">{{ r.distancia_km }} km</span>
+    </div>
+    <div class="d-flex flex-wrap gap-1 mt-1">
+        {% for d in r.doencas %}
+        <span class="badge card-{{ 'perigo' if d.status == 'Perigo' else ('atencao' if d.status == 'Atencao' else 'normal') }}" title="{{ d.data | data_br }}">{{ d.doenca }}: {{ d.concentracao }}</span>
+        {% endfor %}
+    </div>
+    <div class="small text-muted mt-1">Leitura até {{ r.doencas | map(attribute='data') | max | data_br }}</div>
+</div></div>
+{% endfor %}
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}
+{% if liberado and pontos %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+    if (typeof L === 'undefined') { document.getElementById('mapaRegiao').style.display = 'none'; return; }
+    var regioes = {{ regioes | tojson }};
+    var pontos = {{ pontos | map(attribute='lat') | list | tojson }}.map(function (lat, i) {
+        return { lat: lat, lon: {{ pontos | map(attribute='lon') | list | tojson }}[i], nome: {{ pontos | map(attribute='nome') | list | tojson }}[i] };
+    });
+    var cores = { Perigo: '#e03131', Atencao: '#f59f00' };
+    var mapa = L.map('mapaRegiao');
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 18, attribution: 'Esri'
+    }).addTo(mapa);
+    var limites = [];
+    pontos.forEach(function (p) {
+        L.marker([p.lat, p.lon]).addTo(mapa).bindPopup(document.createTextNode(p.nome).textContent);
+        limites.push([p.lat, p.lon]);
+    });
+    regioes.forEach(function (r) {
+        var linhas = r.doencas.map(function (d) { return d.doenca + ': ' + d.concentracao; });
+        var popup = document.createElement('div');
+        var titulo = document.createElement('strong'); titulo.textContent = r.rotulo; popup.appendChild(titulo);
+        linhas.forEach(function (t) { var div = document.createElement('div'); div.textContent = t; popup.appendChild(div); });
+        L.circle([r.lat, r.lon], { radius: 5000, color: cores[r.pior] || '#2f9e44', fillOpacity: 0.35, weight: 2 })
+            .addTo(mapa).bindPopup(popup);
+        limites.push([r.lat, r.lon]);
+    });
+    mapa.fitBounds(limites, { padding: [30, 30], maxZoom: 11 });
+})();
+</script>
+{% endif %}
+{% endblock %}
