@@ -49,6 +49,15 @@ precos e cortesia: Configuracoes -> Planos e clientes (`/admin/planos`,
 Master). Clientes nao aparecem na aba Usuarios. App Android/iOS em
 `mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
 app nao aparece preco nem link de pagamento (regra das lojas).
+Recurso de plano "regiao" (`/app/regiao`, pedido do Alan, 26/10/2026):
+estacoes reais ate' o raio do plano das lavouras do cliente, agrupadas em
+celulas de 0,1 grau (~11 km) e rotuladas so' pela cidade INMET mais
+proxima ("Regiao de X/UF") -- nunca site_name. Offline: `static/sw.js`
+guarda cada pagina /app aberta (cache `oneagro-app-dados`, apagado no
+logout) e devolve com `data-offline="1"` sem sinal; a home pre-carrega
+lavouras + regiao. iOS so' roda service worker com WKAppBoundDomains
+(Info.plist + `limitsNavigationsToAppBoundDomains`) -- dominio novo do
+site tem que entrar la'.
 
 ## Arquitetura / conceitos tecnicos principais
 

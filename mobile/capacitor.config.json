@@ -7,12 +7,15 @@
   "server": {
     "url": "https://monitoresporos-production.up.railway.app/app",
     "errorPath": "offline.html",
-    "allowNavigation": ["monitoresporos-production.up.railway.app"]
+    "allowNavigation": [
+      "monitoresporos-production.up.railway.app"
+    ]
   },
   "android": {
     "allowMixedContent": false
   },
   "ios": {
-    "contentInset": "never"
+    "contentInset": "never",
+    "limitsNavigationsToAppBoundDomains": true
   }
 }

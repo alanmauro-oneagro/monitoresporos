@@ -6298,7 +6298,10 @@ def _no_app_loja():
 
 @app.context_processor
 def _inject_no_app_loja():
-    return {"no_app_loja": _no_app_loja() if request else False}
+    return {
+        "no_app_loja": _no_app_loja() if request else False,
+        "gerado_em": _agora_cuiaba_dt().strftime("%d/%m %H:%M"),
+    }
 
 
 @app.before_request
@@ -6562,6 +6565,7 @@ def cliente_home():
     return render_template(
         "cliente_home.html", pontos=pontos, plano=g.cliente_plano,
         resumos={p["id"]: _resumo_ponto_cliente(p, g.cliente_plano) for p in pontos},
+        urls_offline=[url_for("cliente_ponto", ponto_id=p["id"]) for p in pontos] + [url_for("cliente_regiao")],
     )
 
 
@@ -6624,6 +6628,74 @@ def cliente_ponto_editar(ponto_id):
 def cliente_ponto_excluir(ponto_id):
     models.excluir_cliente_ponto(int(current_user.id), ponto_id)
     return redirect(url_for("cliente_home"))
+
+
+# Posicao das estacoes no mapa da regiao do cliente arredondada pra 0,1
+# grau (~11 km): mostra onde esta' o risco sem apontar a fazenda.
+REGIAO_PRECISAO_GRAUS = 1
+REGIAO_ROTULO_MAX_KM = 150  # cidade INMET mais longe que isso nao serve de rotulo
+
+
+def _rotulo_regiao(lat, lon):
+    estacao = inmet_stations.estacao_mais_proxima(lat, lon)
+    if estacao and estacao["distancia_km"] <= REGIAO_ROTULO_MAX_KM:
+        return f"Região de {estacao['cidade']}/{estacao['uf']}"
+    return f"Região {lat:.1f}, {lon:.1f}"
+
+
+def _regioes_cliente(pontos, raio_km):
+    """Estacoes reais ativas (com leitura recente) dentro do raio do plano
+    de alguma lavoura do cliente, agrupadas por celula de 0,1 grau -- cada
+    regiao leva so' o rotulo da cidade, a posicao arredondada e, por
+    doenca, a leitura mais alta das estacoes da celula. Nunca o nome
+    (site_name) da fazenda."""
+    if not pontos:
+        return []
+    cards_reais = get_dashboard_data(None, _load_translations())
+    ocultas = models.get_deactivated_site_names()
+    corte = (_hoje_cuiaba() - timedelta(days=DADOS_BLOQUEIO_DIAS)).isoformat()
+    celulas = {}
+    for site, (lat, lon) in data_reader.read_site_coordinates().items():
+        if site in ocultas:
+            continue
+        distancia = min(virtual_farms._haversine_km(p["lat"], p["lon"], lat, lon) for p in pontos)
+        if distancia > raio_km:
+            continue
+        cards = [c for c in cards_reais.get(site, []) if c.get("data") and c["data"] >= corte and c.get("concentracao") is not None]
+        if not cards:
+            continue
+        chave = (round(lat, REGIAO_PRECISAO_GRAUS), round(lon, REGIAO_PRECISAO_GRAUS))
+        celula = celulas.setdefault(chave, {"distancia_km": distancia, "doencas": {}})
+        celula["distancia_km"] = min(celula["distancia_km"], distancia)
+        for c in cards:
+            atual = celula["doencas"].get(c["doenca_en"])
+            if atual is None or c["concentracao"] > atual["concentracao"]:
+                celula["doencas"][c["doenca_en"]] = {
+                    "doenca": c["doenca"], "concentracao": c["concentracao"], "status": c["status"], "data": c["data"],
+                }
+    ordem_status = {"Perigo": 0, "Atencao": 1}
+    regioes = []
+    for (lat, lon), celula in celulas.items():
+        doencas = sorted(celula["doencas"].values(), key=lambda d: (ordem_status.get(d["status"], 2), d["doenca"]))
+        regioes.append({
+            "lat": lat, "lon": lon, "rotulo": _rotulo_regiao(lat, lon),
+            "distancia_km": round(celula["distancia_km"]), "doencas": doencas,
+            "pior": doencas[0]["status"] if doencas else None,
+        })
+    regioes.sort(key=lambda r: r["distancia_km"])
+    return regioes
+
+
+@app.route("/app/regiao")
+@cliente_required
+def cliente_regiao():
+    plano = g.cliente_plano
+    pontos = models.get_cliente_pontos(int(current_user.id))
+    liberado = "regiao" in plano["recursos"]
+    return render_template(
+        "cliente_regiao.html", plano=plano, pontos=pontos, liberado=liberado,
+        regioes=_regioes_cliente(pontos, plano["raio_km"]) if liberado else [],
+    )
 
 
 def _cards_ponto_cliente(ponto, plano):

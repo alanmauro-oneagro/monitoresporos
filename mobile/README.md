@@ -8,7 +8,11 @@ versão na loja. Só é preciso publicar de novo quando mudar ícone, nome, perm
   user-agent `OneAgroApp`. É por ele que o site esconde preços e links de pagamento dentro do
   app, porque as lojas não permitem vender assinatura por fora delas. A assinatura é feita no site
   (`/planos`), com Pix, boleto ou cartão pelo Asaas.
-- `www/offline.html`: tela de "sem conexão".
+- **Offline**: o service worker do site (`webapp/static/sw.js`) salva no celular as telas do
+  cliente (lavouras, detalhes e região) sempre que abrem com internet; sem sinal, o app mostra a
+  última versão com o aviso "Sem internet". No iOS isso depende de `WKAppBoundDomains` no
+  `Info.plist`: se o site mudar de domínio, atualize ali e em `capacitor.config.json`.
+- `www/offline.html`: tela de "sem conexão" para o primeiro acesso sem internet (nada salvo ainda).
 - `assets/`: ícone e splash de origem. Para regenerar:
   `npx @capacitor/assets generate --iconBackgroundColor '#ffffff' --splashBackgroundColor '#f4f6f4'`.
 

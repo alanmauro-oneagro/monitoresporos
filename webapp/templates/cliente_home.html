@@ -30,3 +30,23 @@
 {% endif %}
 <p class="small text-muted mt-3">Plano {{ plano.nome }}: até {{ plano.max_pontos }} lavoura{{ 's' if plano.max_pontos > 1 }}.</p>
 {% endblock %}
+{% block extra_scripts %}
+<script>
+// Abre cada lavoura e a regiao em segundo plano pra ficarem salvas no
+// celular (offline) -- no maximo uma vez a cada 30 minutos, a menos que
+// as lavouras tenham mudado (lavoura nova muda tambem a pagina da regiao).
+(function () {
+    if (!navigator.onLine || !('serviceWorker' in navigator) || !navigator.serviceWorker.controller) { return; }
+    var urls = {{ urls_offline | tojson }};
+    var chave = 'oneagro_offline_salvo', agora = Date.now(), lista = urls.join('|');
+    try {
+        var salvo = JSON.parse(localStorage.getItem(chave) || '{}');
+        if (salvo.lista === lista && agora - (salvo.em || 0) < 30 * 60 * 1000) { return; }
+        localStorage.setItem(chave, JSON.stringify({ lista: lista, em: agora }));
+    } catch (e) {}
+    urls.reduce(function (anterior, url) {
+        return anterior.then(function () { return fetch(url, { credentials: 'same-origin' }).catch(function () {}); });
+    }, Promise.resolve());
+})();
+</script>
+{% endblock %}

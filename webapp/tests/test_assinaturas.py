@@ -221,6 +221,36 @@ class AssinaturasTest(unittest.TestCase):
         self.assertIsNone(models.get_assinatura(uid))
         self.assertEqual(models.get_cliente_pontos(uid), [])
 
+    def test_regiao_sem_nome_de_fazenda_e_posicao_aproximada(self):
+        models.salvar_plano(None, "Zzz Regiao", "", 199.9, "MONTHLY", 2, 300, ["regiao"], True, 9)
+        plano = next(p for p in models.get_planos() if p["nome"] == "Zzz Regiao")
+        self._cadastrar("Zzz Teste Regiao", plano_id=plano["id"])
+        self._liberar("Zzz Teste Regiao")
+        self.assertIn("Adicionar lavoura", self.client.get("/app/regiao").get_data(as_text=True))
+        coords = data_reader.read_site_coordinates()
+        site, (lat, lon) = next(iter(coords.items()))
+        self.client.post("/app/pontos/novo", data={"nome": "Talhao R", "lat": lat, "lon": lon})
+        hoje = models._hoje_cuiaba()
+        leitura = {"doenca": "Ferrugem Zzz", "doenca_en": "Rust Zzz", "concentracao": 12.0, "status": "Perigo", "data": hoje}
+        with mock.patch.object(webapp, "get_dashboard_data", return_value={site: [leitura]}), \
+                mock.patch.object(webapp.inmet_stations, "estacao_mais_proxima",
+                                  return_value={"cidade": "Cidadezzz", "uf": "MT", "distancia_km": 10}):
+            regioes = webapp._regioes_cliente(models.get_cliente_pontos(models.get_user_by_username("Zzz Teste Regiao")["id"]), 300)
+            html = self.client.get("/app/regiao").get_data(as_text=True)
+        self.assertEqual(len(regioes), 1)
+        self.assertEqual((regioes[0]["lat"], regioes[0]["lon"]), (round(lat, 1), round(lon, 1)))
+        self.assertEqual(regioes[0]["rotulo"], "Região de Cidadezzz/MT")
+        self.assertIn("Ferrugem Zzz: 12.0", html)
+        self.assertIn('data-offline="0"', html)
+        for nome_real in data_reader.read_sites():
+            self.assertNotIn(nome_real, html, f"nome de fazenda real vazou: {nome_real}")
+        self.assertNotIn(f"{lat:.5f}", html)
+
+    def test_regiao_bloqueada_fora_do_plano(self):
+        self._cadastrar("Zzz Teste SemRegiao", plano_id=self.plano_basico)
+        self._liberar("Zzz Teste SemRegiao")
+        self.assertIn("não faz parte do seu plano", self.client.get("/app/regiao").get_data(as_text=True))
+
     def test_master_gerencia_planos_e_cortesia(self):
         models.create_user(models.MASTER_PRINCIPAL, "segredo1")
         self.client.post("/login", data={"username": models.MASTER_PRINCIPAL, "password": "segredo1"})

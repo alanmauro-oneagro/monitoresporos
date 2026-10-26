@@ -28,10 +28,13 @@
     </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body data-offline="0">
+<div id="avisoOffline" class="alert alert-warning rounded-0 mb-0 py-2 small text-center d-none">
+    Sem internet: mostrando os dados salvos em {{ gerado_em }}.
+</div>
 <div class="topo d-flex align-items-center justify-content-between">
     <img src="{{ url_for('static', filename='oneagro-logo.png') }}" alt="OneAgro">
-    {% if current_user.is_authenticated %}<a class="small text-muted" href="{{ url_for('logout') }}">Sair</a>{% endif %}
+    {% if current_user.is_authenticated %}<a class="small text-muted" href="{{ url_for('logout') }}" id="linkSair">Sair</a>{% endif %}
 </div>
 <div class="container" style="max-width: 720px;">
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -44,10 +47,28 @@
 {% if current_user.is_authenticated and current_user.is_cliente %}
 <nav class="abas">
     <a href="{{ url_for('cliente_home') }}" class="{% if request.endpoint in ('cliente_home', 'cliente_ponto', 'cliente_ponto_novo') %}ativa{% endif %}"><span class="ic">🌱</span>Lavouras</a>
+    <a href="{{ url_for('cliente_regiao') }}" class="{% if request.endpoint == 'cliente_regiao' %}ativa{% endif %}"><span class="ic">🗺️</span>Região</a>
     <a href="{{ url_for('cliente_assinatura') }}" class="{% if request.endpoint == 'cliente_assinatura' %}ativa{% endif %}"><span class="ic">⭐</span>Assinatura</a>
     <a href="{{ url_for('cliente_conta') }}" class="{% if request.endpoint == 'cliente_conta' %}ativa{% endif %}"><span class="ic">👤</span>Conta</a>
 </nav>
 {% endif %}
+<script>
+// Offline (app e celular sem sinal): o service worker devolve a ultima
+// versao salva da pagina com data-offline="1" no <body>.
+(function () {
+    if (document.body.dataset.offline === '1' || !navigator.onLine) {
+        document.getElementById('avisoOffline').classList.remove('d-none');
+    }
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(function () {}); }
+    var sair = document.getElementById('linkSair');
+    if (sair && window.caches) {
+        sair.addEventListener('click', function (e) {
+            e.preventDefault();
+            caches.delete('oneagro-app-dados').finally(function () { location.href = sair.href; });
+        });
+    }
+})();
+</script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>
