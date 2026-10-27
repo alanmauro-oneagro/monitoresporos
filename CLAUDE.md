@@ -270,10 +270,10 @@ Meta: 1.500 acessos simultaneos, 10 mil usuarios, 5 mil fazendas. Hoje:
 todas em `models.py`), CSVs/JSONs no disco do servidor, agendador e
 envio manual em threads dentro do site, caches em memoria por processo,
 WhatsApp pelo bridge (~2-3 mil mensagens/dia no maximo). Cada fase vai
-pra producao sozinha; testar tudo primeiro no staging.
+pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
 
 - **Fase 0 -- preparacao e medicao** (FEITA no codigo, 27/10/2026, falta
-  o staging):
+  o QAP):
   - Backup diario automatico (`models.fazer_backup_diario`, no loop do
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
@@ -287,12 +287,15 @@ pra producao sozinha; testar tudo primeiro no staging.
     producao). Linha de base local (mesma config do Railway, 8 fazendas,
     servicos externos fora, 4 CPUs): 50 pessoas = mediana 41 ms / p95
     220 ms; 100 = 130 / 800 ms; 200 = 2.200 / 4.700 ms (Recomendacoes
-    6,6 s no p95). Teto ~30 pedidos/s. Repetir no staging.
-  - PENDENTE (Alan, no painel do Railway): criar o servico "staging"
-    (mesmo repo, branch `staging`, volume proprio, copia do banco via
-    "Baixar backup do banco") e fixar `BIOSCOUT_WEB_SECRET` nos dois
-    servicos (sem ele a chave vem de `webapp/secret_key.bin`, que nao
-    serve com varias replicas).
+    6,6 s no p95). Teto ~30 pedidos/s. Repetir no QAP.
+  - PENDENTE (Alan, no painel do Railway): criar o ambiente de teste
+    **QAP** (Environment duplicado do production, servico na branch
+    `qap`, volume proprio; SEM as variaveis de WhatsApp/Asaas pra nao
+    mandar mensagem nem cobranca de verdade; copia do banco via "Baixar
+    backup do banco") e fixar `BIOSCOUT_WEB_SECRET` nos dois ambientes
+    (sem ele a chave vem de `webapp/secret_key.bin`, que nao serve com
+    varias replicas). A branch `staging` no GitHub sobrou sem uso (nome
+    antigo) -- pode apagar.
 - **Fase 1 -- PostgreSQL** (maior fase): Postgres no Railway + `psycopg`
   com pool; `get_db()` devolvendo conexao com linhas por nome (`?` ->
   `%s`); `CREATE TABLE` + os "ALTER ... except OperationalError" viram
@@ -303,7 +306,7 @@ pra producao sozinha; testar tudo primeiro no staging.
   (esporos, clima horario) viram tabelas indexadas; `agrofit_indice.json`,
   `adapar_bulas.json` e `open_meteo_diario.json` vao pra uma tabela de
   cache. Script de copia SQLite -> Postgres conferindo contagem por
-  tabela, ensaiado no staging. Virada a noite (depois dos envios), troca
+  tabela, ensaiado no QAP. Virada a noite (depois dos envios), troca
   de `DATABASE_URL`; SQLite guardado 7 dias pra voltar.
 - **Fase 2 -- worker separado**: servico "worker" no Railway (agendador
   WhatsApp/NDVI, busca BioScout, Agrofit/ADAPAR); site so' inicia as
