@@ -272,8 +272,7 @@ envio manual em threads dentro do site, caches em memoria por processo,
 WhatsApp pelo bridge (~2-3 mil mensagens/dia no maximo). Cada fase vai
 pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
 
-- **Fase 0 -- preparacao e medicao** (FEITA no codigo, 27/10/2026, falta
-  o QAP):
+- **Fase 0 -- preparacao e medicao** (FEITA, 27-28/10/2026):
   - Backup diario automatico (`models.fazer_backup_diario`, no loop do
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
@@ -288,14 +287,23 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     servicos externos fora, 4 CPUs): 50 pessoas = mediana 41 ms / p95
     220 ms; 100 = 130 / 800 ms; 200 = 2.200 / 4.700 ms (Recomendacoes
     6,6 s no p95). Teto ~30 pedidos/s. Repetir no QAP.
-  - PENDENTE (Alan, no painel do Railway): criar o ambiente de teste
-    **QAP** (Environment duplicado do production, servico na branch
-    `qap`, volume proprio; SEM as variaveis de WhatsApp/Asaas pra nao
-    mandar mensagem nem cobranca de verdade; copia do banco via "Baixar
-    backup do banco") e fixar `BIOSCOUT_WEB_SECRET` nos dois ambientes
-    (sem ele a chave vem de `webapp/secret_key.bin`, que nao serve com
-    varias replicas). A branch `staging` no GitHub sobrou sem uso (nome
-    antigo) -- pode apagar.
+  - Ambiente de teste **QAP** criado pelo Alan (28/10/2026): Railway
+    Environment "QAP", servico na branch `qap` (auto-deploy),
+    https://monitoresporos-qap-bb3f.up.railway.app. O site detecta pelo
+    `RAILWAY_ENVIRONMENT_NAME` (`app.AMBIENTE_QAP`): faixa amarela
+    "AMBIENTE DE TESTE" no topo e a tela **Restaurar backup** (Exportar,
+    `/admin/restaurar-backup`, Master; 404 fora do QAP) que carrega o
+    .db.gz do "Baixar backup do banco" da producao (confere integridade,
+    guarda copia do estado anterior, roda `init_db`, desloga). Pra levar
+    codigo novo pro QAP: atualizar a branch `qap` a partir da `main` (ou
+    de uma branch da migracao). O ambiente de nuvem do Claude nao alcanca
+    o QAP (nem a producao) sem liberar o dominio na rede da sessao.
+  - Conferir com o Alan: variaveis de WhatsApp/Asaas apagadas no QAP
+    (`WHATSAPP_BRIDGE_URL`, `WHATSAPP_PROVIDER`, `WHATSAPP_CLOUD_*`,
+    `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN`) e `BIOSCOUT_WEB_SECRET` fixo
+    nos dois ambientes (sem ele a chave vem de `webapp/secret_key.bin`,
+    que nao serve com varias replicas). A branch `staging` no GitHub
+    sobrou sem uso (nome antigo) -- pode apagar.
 - **Fase 1 -- PostgreSQL** (maior fase): Postgres no Railway + `psycopg`
   com pool; `get_db()` devolvendo conexao com linhas por nome (`?` ->
   `%s`); `CREATE TABLE` + os "ALTER ... except OperationalError" viram

@@ -407,6 +407,9 @@ window.OneAgroPrefs = (function () {
     };
 })();
 </script>
+{% if ambiente_qap %}
+<div class="text-center small fw-bold py-1" style="background:#ffd43b;color:#5c3c00;">AMBIENTE DE TESTE (QAP) -- nada feito aqui afeta o site de verdade</div>
+{% endif %}
 <div class="container mt-3">
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
