@@ -117,6 +117,46 @@ def get_db():
     return conn
 
 
+BACKUP_DIR = DB_PATH.parent / "backups"
+BACKUP_DIAS = 7
+BACKUP_HORA = 3  # Cuiaba -- depois da busca da madrugada, antes dos envios das 5h
+
+
+def copiar_banco(destino):
+    """Copia consistente do banco (API de backup do SQLite -- funciona
+    com o site no ar, sem travar quem esta lendo/gravando)."""
+    origem = get_db()
+    try:
+        alvo = sqlite3.connect(destino)
+        try:
+            origem.backup(alvo)
+        finally:
+            alvo.close()
+    finally:
+        origem.close()
+
+
+def fazer_backup_diario():
+    """Um backup por dia em `BACKUP_DIR` (a partir de `BACKUP_HORA`),
+    guardando so' os `BACKUP_DIAS` mais recentes (Fase 0 do plano de
+    migracao, ver CLAUDE.md). Mesmo volume do banco: protege contra
+    erro/migracao ruim, nao contra perder o volume -- pra isso, o botao
+    "Baixar backup do banco" da aba Exportar."""
+    agora = datetime.strptime(_agora_cuiaba(), "%Y-%m-%d %H:%M:%S")
+    if agora.hour < BACKUP_HORA:
+        return None
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    destino = BACKUP_DIR / f"{DB_PATH.stem}-{agora:%Y%m%d}.db"
+    if destino.exists():
+        return None
+    temporario = destino.with_suffix(".tmp")
+    copiar_banco(temporario)
+    temporario.replace(destino)
+    for antigo in sorted(BACKUP_DIR.glob(f"{DB_PATH.stem}-*.db"))[:-BACKUP_DIAS]:
+        antigo.unlink()
+    return destino
+
+
 def init_db():
     conn = get_db()
     conn.executescript(
