@@ -136,6 +136,26 @@ def copiar_banco(destino):
         origem.close()
 
 
+def restaurar_banco(origem):
+    """Substitui o conteudo do banco pelo de `origem` (arquivo .db ja
+    conferido por quem chama), guardando antes uma copia do atual em
+    `BACKUP_DIR`. So' usado no ambiente de teste (QAP) -- ver
+    `app.admin_restaurar_backup`."""
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    agora = datetime.strptime(_agora_cuiaba(), "%Y-%m-%d %H:%M:%S")
+    copiar_banco(BACKUP_DIR / f"antes-restauracao-{agora:%Y%m%d-%H%M%S}.db")
+    fonte = sqlite3.connect(origem)
+    try:
+        alvo = get_db()
+        try:
+            fonte.backup(alvo)
+        finally:
+            alvo.close()
+    finally:
+        fonte.close()
+    init_db()  # backup de versao anterior do site ganha as colunas novas
+
+
 def fazer_backup_diario():
     """Um backup por dia em `BACKUP_DIR` (a partir de `BACKUP_HORA`),
     guardando so' os `BACKUP_DIAS` mais recentes (Fase 0 do plano de

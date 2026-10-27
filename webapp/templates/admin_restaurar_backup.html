@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Restaurar backup - OneAgro{% endblock %}
+{% block content %}
+<h4 class="mb-2">Restaurar backup (só QAP)</h4>
+<p class="text-muted small mb-3">
+    Carrega no ambiente de teste a cópia do banco baixada na produção
+    (Configurações → Exportar → "💾 Baixar backup do banco"). Tudo o que existe
+    hoje no QAP é substituído — uma cópia do estado atual fica guardada no servidor.
+    Depois de restaurar, entre de novo com o seu usuário e senha da produção.
+</p>
+
+<div class="card shadow-sm" style="max-width: 520px;">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data"
+              onsubmit="return confirm('Substituir todo o banco do QAP por este backup?');">
+            <div class="mb-3">
+                <label class="form-label" for="arquivo">Arquivo do backup (.db.gz)</label>
+                <input type="file" name="arquivo" id="arquivo" class="form-control" accept=".gz,.db" required>
+            </div>
+            <button type="submit" class="btn btn-danger">Restaurar no QAP</button>
+            <a href="{{ url_for('admin_exportar') }}" class="btn btn-outline-secondary">Voltar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

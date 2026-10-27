@@ -154,6 +154,39 @@ class TelasPorNivelTest(unittest.TestCase):
         with mock.patch.object(models, "_agora_cuiaba", return_value="2026-10-27 02:59:00"):
             self.assertIsNone(models.fazer_backup_diario())  # antes das 3h nao faz
 
+    def test_restaurar_backup_so_existe_no_qap(self):
+        self.assertFalse(webapp.AMBIENTE_QAP)
+        self.assertEqual(self._status("master", "/admin/restaurar-backup"), 404)
+        self.assertNotIn("AMBIENTE DE TESTE", self._cliente("master").get("/admin/exportar").get_data(as_text=True))
+        with mock.patch.object(webapp, "AMBIENTE_QAP", True):
+            self.assertEqual(self._status("admin", "/admin/restaurar-backup"), 403)
+            self.assertEqual(self._status("master", "/admin/restaurar-backup"), 200)
+            self.assertIn("AMBIENTE DE TESTE", self._cliente("master").get("/admin/exportar").get_data(as_text=True))
+
+    def test_restaurar_backup_no_qap(self):
+        import io
+        backup = self._cliente("master").get("/admin/exportar/backup").data
+        models.create_user("Zzz Teste Depois Do Backup", "x")
+        with tempfile.TemporaryDirectory() as pasta, \
+                mock.patch.object(models, "BACKUP_DIR", models.Path(pasta)), \
+                mock.patch.object(webapp, "AMBIENTE_QAP", True):
+            invalido = self._cliente("master").post(
+                "/admin/restaurar-backup", data={"arquivo": (io.BytesIO(b"nao e banco"), "x.db.gz")},
+                content_type="multipart/form-data",
+            )
+            self.assertEqual(invalido.status_code, 302)
+            self.assertIsNotNone(models.get_user_by_username("Zzz Teste Depois Do Backup"))
+
+            ok = self._cliente("master").post(
+                "/admin/restaurar-backup", data={"arquivo": (io.BytesIO(backup), "backup.db.gz")},
+                content_type="multipart/form-data",
+            )
+            self.assertEqual(ok.status_code, 302)
+            self.assertIn("/login", ok.headers["Location"])
+            self.assertIsNone(models.get_user_by_username("Zzz Teste Depois Do Backup"))
+            self.assertIsNotNone(models.get_user_by_username("Zzz Teste Master Telas"))
+            self.assertEqual(len(list(models.Path(pasta).glob("antes-restauracao-*.db"))), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
