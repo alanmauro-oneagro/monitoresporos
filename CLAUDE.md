@@ -263,13 +263,69 @@ site tem que entrar la'.
   comentarios obvios no codigo; nao criar documentos de planejamento a menos
   que seja pedido.
 
-## Plano salvo, ainda nao implementado
+## Plano salvo, em andamento: migracao para escala (aprovado pelo Alan, 27/10/2026)
 
-Nenhum no momento (atualizado 2026-09-21) — o plano anterior (catalogo de
-autocompletar, correlacionar atividades no Relatorio Diario, raster de
-chuva interpolado, mapa de chuva no Mapa Interpolado, "esqueci a senha")
-foi TODO implementado e ja esta em producao. Resumo completo do trabalho
-recente em `.claude\RESUMO_PARA_NOVA_CONTA.md`.
+Meta: 1.500 acessos simultaneos, 10 mil usuarios, 5 mil fazendas. Hoje:
+1 processo gunicorn com 4 threads, SQLite (52 tabelas, 278 consultas,
+todas em `models.py`), CSVs/JSONs no disco do servidor, agendador e
+envio manual em threads dentro do site, caches em memoria por processo,
+WhatsApp pelo bridge (~2-3 mil mensagens/dia no maximo). Cada fase vai
+pra producao sozinha; testar tudo primeiro no staging.
+
+- **Fase 0 -- preparacao e medicao** (FEITA no codigo, 27/10/2026, falta
+  o staging):
+  - Backup diario automatico (`models.fazer_backup_diario`, no loop do
+    agendador, a partir das 3h de Cuiaba, guarda 7 em
+    `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
+    Exportar (`/admin/exportar/backup`, Master, .db.gz).
+  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas`
+    (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
+    com Master/Administrador/Usuario/Cliente (sem erro 500, rede
+    desligada) e confere as regras de acesso. Rodar antes de cada PR da
+    migracao; tela nova entra sozinha no teste.
+  - Teste de carga: `loadtest/locustfile.py` (Locust; NUNCA contra
+    producao). Linha de base local (mesma config do Railway, 8 fazendas,
+    servicos externos fora, 4 CPUs): 50 pessoas = mediana 41 ms / p95
+    220 ms; 100 = 130 / 800 ms; 200 = 2.200 / 4.700 ms (Recomendacoes
+    6,6 s no p95). Teto ~30 pedidos/s. Repetir no staging.
+  - PENDENTE (Alan, no painel do Railway): criar o servico "staging"
+    (mesmo repo, branch `staging`, volume proprio, copia do banco via
+    "Baixar backup do banco") e fixar `BIOSCOUT_WEB_SECRET` nos dois
+    servicos (sem ele a chave vem de `webapp/secret_key.bin`, que nao
+    serve com varias replicas).
+- **Fase 1 -- PostgreSQL** (maior fase): Postgres no Railway + `psycopg`
+  com pool; `get_db()` devolvendo conexao com linhas por nome (`?` ->
+  `%s`); `CREATE TABLE` + os "ALTER ... except OperationalError" viram
+  migracoes numeradas (.sql + tabela de controle); `INSERT OR IGNORE` ->
+  `ON CONFLICT DO NOTHING`, `lastrowid` -> `RETURNING id`, `COLLATE
+  NOCASE` -> `lower()`, `PRAGMA table_info` -> `information_schema`, BLOB
+  -> BYTEA; horarios continuam via `_agora_cuiaba()`. CSVs do BioScout
+  (esporos, clima horario) viram tabelas indexadas; `agrofit_indice.json`,
+  `adapar_bulas.json` e `open_meteo_diario.json` vao pra uma tabela de
+  cache. Script de copia SQLite -> Postgres conferindo contagem por
+  tabela, ensaiado no staging. Virada a noite (depois dos envios), troca
+  de `DATABASE_URL`; SQLite guardado 7 dias pra voltar.
+- **Fase 2 -- worker separado**: servico "worker" no Railway (agendador
+  WhatsApp/NDVI, busca BioScout, Agrofit/ADAPAR); site so' inicia as
+  threads com `RUN_SCHEDULER`; "Atualizar dados" e envio manual viram
+  pedidos numa tabela `fila_tarefas`; `_um_envio_por_vez` vira advisory
+  lock do Postgres (trava tambem contra 2 workers).
+- **Fase 3 -- escalar o site**: gunicorn 4 workers x 4 threads, 2+
+  replicas; tirar `_ensure_sites_synced` de cada requisicao (worker faz
+  depois da busca); Redis pros caches de clima/previsao/NDVI.
+- **Fase 4 -- telas pra volume**: paginacao + busca em Usuarios (fim das
+  3 consultas por usuario), permissoes, Recomendacoes/Manejos (filtro e
+  carga sob demanda por cartao), Envios; markercluster nos mapas; indices
+  em fazenda/usuario/data.
+- **Fase 5 -- WhatsApp em volume**: `WHATSAPP_PROVIDER=cloud_api`
+  (`whatsapp_cloud_api.py`), exige verificacao da empresa na Meta e
+  modelos aprovados, custo por conversa; fila com novas tentativas;
+  intervalo de 15 s so' no bridge (reserva).
+- **Fase 6 -- servicos externos**: clima por quadricula (fazendas
+  proximas na mesma consulta), plano pago do Open-Meteo se preciso;
+  NDVI/solo sempre pela fila do worker.
+- **Fase 7 -- carga final**: meta 1.500 simultaneos com p95 < 2 s nas
+  telas principais; ajustar replicas/processos.
 
 ## Notas / historico arquivado
 

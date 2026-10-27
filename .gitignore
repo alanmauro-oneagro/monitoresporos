@@ -23,3 +23,4 @@ logs/
 # Leitura diaria da Open-Meteo (gerada pelo site, fica no volume em producao)
 data/open_meteo_diario.json
 data/open_meteo_diario.tmp
+webapp/backups/

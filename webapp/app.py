@@ -10,6 +10,7 @@ e os dados novos aparecem quando a pessoa atualizar a pagina de novo.
 """
 import concurrent.futures
 import functools
+import gzip
 import io
 import json
 import os
@@ -17,6 +18,7 @@ import re
 import secrets
 import sqlite3
 import subprocess
+import tempfile
 import threading
 import time
 import unicodedata
@@ -2267,6 +2269,10 @@ def _whatsapp_scheduler_loop():
                 pass
             try:
                 agrofit_dados.atualizar_se_necessario()
+            except Exception:
+                pass
+            try:
+                models.fazer_backup_diario()
             except Exception:
                 pass
         time.sleep(60)
@@ -6125,6 +6131,19 @@ def admin_exportar_download():
         buffer, as_attachment=True, download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@app.route("/admin/exportar/backup")
+@master_required
+def admin_exportar_backup():
+    """Copia do banco inteiro (.db compactado em .gz) pra guardar fora do
+    servidor -- o backup diario automatico fica no mesmo volume do banco."""
+    with tempfile.TemporaryDirectory() as pasta:
+        copia = Path(pasta) / "banco.db"
+        models.copiar_banco(copia)
+        conteudo = gzip.compress(copia.read_bytes())
+    filename = f"backup_oneagro_{datetime.now().strftime('%Y%m%d_%H%M')}.db.gz"
+    return send_file(io.BytesIO(conteudo), as_attachment=True, download_name=filename, mimetype="application/gzip")
 
 
 @app.route("/admin/whatsapp")
