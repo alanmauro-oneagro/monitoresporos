@@ -7123,25 +7123,33 @@ def admin_planos():
 @app.route("/admin/planos/salvar", methods=["POST"])
 @master_required
 def admin_planos_salvar():
+    """Salva TODOS os planos da tela de uma vez (um botao so'), mais o
+    "Novo plano" se o nome dele foi preenchido. Confere tudo antes: com
+    algum erro, nada e' gravado."""
     form = request.form
-    try:
-        valor = float(form.get("valor", "0").replace(",", "."))
-        max_pontos = int(form.get("max_pontos", "1"))
-        raio_km = float(form.get("raio_km", "50").replace(",", "."))
-        ordem = int(form.get("ordem", "0") or 0)
-    except ValueError:
-        flash("Valor, lavouras, raio e ordem precisam ser números.", "error")
-        return redirect(url_for("admin_planos"))
-    nome = form.get("nome", "").strip()
-    if not nome or valor < 0 or max_pontos < 1 or raio_km <= 0 or form.get("ciclo") not in models.CICLOS_PLANO:
-        flash("Preencha nome, valor (0 = plano grátis), ciclo, lavouras e raio.", "error")
-        return redirect(url_for("admin_planos"))
-    models.salvar_plano(
-        int(form["plano_id"]) if form.get("plano_id", "").isdigit() else None,
-        nome, form.get("descricao", "").strip(), valor, form["ciclo"], max_pontos, raio_km,
-        form.getlist("recursos"), bool(form.get("ativo")), ordem,
-    )
-    flash("Plano salvo.", "success")
+    chaves = [k for k in form.getlist("plano_ids") if k.isdigit()]
+    if form.get("nome__novo", "").strip():
+        chaves.append("novo")
+    planos = []
+    for k in chaves:
+        nome = form.get(f"nome__{k}", "").strip()
+        try:
+            valor = float(form.get(f"valor__{k}", "").replace(",", ".") or "x")
+            max_pontos = int(form.get(f"max_pontos__{k}", "1"))
+            raio_km = float(form.get(f"raio_km__{k}", "50").replace(",", "."))
+            ordem = int(form.get(f"ordem__{k}", "0") or 0)
+        except ValueError:
+            flash(f"Plano \"{nome or 'novo'}\": valor, lavouras, raio e ordem precisam ser números.", "error")
+            return redirect(url_for("admin_planos"))
+        ciclo = form.get(f"ciclo__{k}")
+        if not nome or valor < 0 or max_pontos < 1 or raio_km <= 0 or ciclo not in models.CICLOS_PLANO:
+            flash(f"Plano \"{nome or 'novo'}\": preencha nome, valor (0 = plano grátis), ciclo, lavouras e raio.", "error")
+            return redirect(url_for("admin_planos"))
+        planos.append((None if k == "novo" else int(k), nome, form.get(f"descricao__{k}", "").strip(), valor, ciclo,
+                       max_pontos, raio_km, form.getlist(f"recursos__{k}"), bool(form.get(f"ativo__{k}")), ordem))
+    for dados in planos:
+        models.salvar_plano(*dados)
+    flash("Planos salvos.", "success")
     return redirect(url_for("admin_planos"))
 
 
