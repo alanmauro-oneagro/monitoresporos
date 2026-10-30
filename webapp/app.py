@@ -6632,6 +6632,7 @@ def cliente_assinatura():
         "cliente_assinatura.html", assinatura=assinatura, plano=plano, liberada=liberada,
         acesso_ate=models.acesso_ate(assinatura), pagamentos=models.get_pagamentos(int(current_user.id)),
         planos=models.get_planos(apenas_ativos=True), pode_assinar=_pode_assinar(assinatura),
+        recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO,
     )
 
 
@@ -6652,10 +6653,18 @@ def cliente_assinar():
     if not plano:
         flash("Escolha um plano.", "error")
         return redirect(url_for("cliente_assinatura"))
+    if plano["valor"] <= 0:
+        # Plano gratis: libera na hora, sem cobranca nem CPF/CNPJ.
+        models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"], status="ativa", cortesia_ate=models.SEM_PRAZO)
+        flash(f"Plano {plano['nome']} ativado!", "success")
+        return redirect(url_for("cliente_home"))
     cpf_cnpj = _CPF_CNPJ_RE.sub("", request.form.get("cpf_cnpj", "")) or (assinatura or {}).get("cpf_cnpj") or ""
     if not _cpf_cnpj_valido(cpf_cnpj):
         flash("Informe um CPF ou CNPJ válido para a cobrança.", "error")
         return redirect(url_for("cliente_assinatura"))
+    if (assinatura or {}).get("cortesia_ate") == models.SEM_PRAZO:
+        # Saindo do gratis pra um pago: o acesso passa a depender do pagamento.
+        models.atualizar_assinatura(int(current_user.id), cortesia_ate=None, status="pendente")
     models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"], cpf_cnpj=cpf_cnpj)
     return _cobrar_ou_avisar(int(current_user.id), plano)
 
@@ -7027,8 +7036,8 @@ def admin_planos_salvar():
         flash("Valor, lavouras, raio e ordem precisam ser números.", "error")
         return redirect(url_for("admin_planos"))
     nome = form.get("nome", "").strip()
-    if not nome or valor <= 0 or max_pontos < 1 or raio_km <= 0 or form.get("ciclo") not in models.CICLOS_PLANO:
-        flash("Preencha nome, valor (maior que zero), ciclo, lavouras e raio.", "error")
+    if not nome or valor < 0 or max_pontos < 1 or raio_km <= 0 or form.get("ciclo") not in models.CICLOS_PLANO:
+        flash("Preencha nome, valor (0 = plano grátis), ciclo, lavouras e raio.", "error")
         return redirect(url_for("admin_planos"))
     models.salvar_plano(
         int(form["plano_id"]) if form.get("plano_id", "").isdigit() else None,

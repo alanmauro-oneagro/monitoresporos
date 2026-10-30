@@ -6,11 +6,11 @@
 <div class="card shadow-sm mb-3"><div class="card-body">
     <div class="d-flex justify-content-between"><span class="text-muted small">Plano</span><strong>{{ plano.nome if plano else '—' }}</strong></div>
     <div class="d-flex justify-content-between"><span class="text-muted small">Situação</span><strong>{{ rotulos.get(assinatura.status, assinatura.status) if assinatura else '—' }}</strong></div>
-    <div class="d-flex justify-content-between"><span class="text-muted small">Acesso liberado até</span><strong>{{ acesso_ate | data_br if acesso_ate else '—' }}</strong></div>
+    <div class="d-flex justify-content-between"><span class="text-muted small">Acesso liberado até</span><strong>{% if acesso_ate == sem_prazo %}Sem prazo{% elif acesso_ate %}{{ acesso_ate | data_br }}{% else %}—{% endif %}</strong></div>
     {% if liberada %}
     <a class="btn btn-success w-100 mt-3" href="{{ url_for('cliente_home') }}">Ver minhas lavouras</a>
     {% else %}
-    <div class="alert alert-warning small mt-3 mb-0">Seu acesso está bloqueado até a confirmação do pagamento.{% if not no_app_loja %} Pix confirma na hora; boleto em até 3 dias úteis.{% endif %}</div>
+    <div class="alert alert-warning small mt-3 mb-0">{% if not plano %}Escolha um plano abaixo para liberar o acesso.{% else %}Seu acesso está bloqueado até a confirmação do pagamento.{% if not no_app_loja %} Pix confirma na hora; boleto em até 3 dias úteis.{% endif %}{% endif %}</div>
     {% endif %}
 </div></div>
 
@@ -21,17 +21,49 @@
 {% endif %}{% endfor %}
 
 {% if pode_assinar and planos %}
-<form method="post" action="{{ url_for('cliente_assinar') }}" class="card shadow-sm mb-3"><div class="card-body">
-    <h6>{{ 'Assinar novamente' if assinatura and assinatura.status == 'cancelada' else 'Gerar cobrança' }}</h6>
-    <select class="form-select mb-2" name="plano_id" aria-label="Plano">
-        {% for p in planos %}<option value="{{ p.id }}" {% if plano and plano.id == p.id %}selected{% endif %}>{{ p.nome }} -- R$ {{ '%.2f' | format(p.valor) | replace('.', ',') }} / {{ p.ciclo_label | lower }}</option>{% endfor %}
-    </select>
-    {% if not (assinatura and assinatura.cpf_cnpj) %}
-    <label class="form-label small mb-1" for="cpf_cnpj">CPF ou CNPJ (para a cobrança)</label>
-    <input class="form-control mb-2" name="cpf_cnpj" id="cpf_cnpj" inputmode="numeric" required>
-    {% endif %}
-    <button class="btn btn-success w-100" type="submit">Ir para o pagamento</button>
-</div></form>
+<form method="post" action="{{ url_for('cliente_assinar') }}" class="mb-3" id="form-plano">
+    <h6>{{ 'Trocar de plano' if liberada else ('Assinar novamente' if assinatura and assinatura.status == 'cancelada' else 'Escolha o seu plano') }}</h6>
+    {% for p in planos %}
+    <label class="card shadow-sm mb-2 plano-opcao" for="plano_{{ p.id }}" style="cursor: pointer;">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-baseline gap-2">
+                <input class="form-check-input mt-0" type="radio" name="plano_id" id="plano_{{ p.id }}" value="{{ p.id }}"
+                       data-gratis="{{ 1 if p.valor <= 0 else 0 }}" {% if plano and plano.id == p.id %}checked{% endif %} required>
+                <strong>{{ p.nome }}</strong>
+                <span class="ms-auto fw-bold text-success">{% if p.valor <= 0 %}Grátis{% else %}R$ {{ '%.2f' | format(p.valor) | replace('.', ',') }}<span class="small text-muted fw-normal"> / {{ p.ciclo_label | lower }}</span>{% endif %}</span>
+            </div>
+            {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
+            <ul class="small mb-0 ps-4 mt-1">
+                <li>Até {{ p.max_pontos }} lavoura{{ 's' if p.max_pontos > 1 }}</li>
+                {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}
+            </ul>
+        </div>
+    </label>
+    {% endfor %}
+    <div id="bloco-cpf" class="d-none mt-2">
+        {% if not (assinatura and assinatura.cpf_cnpj) %}
+        <label class="form-label small mb-1" for="cpf_cnpj">CPF ou CNPJ (para a cobrança)</label>
+        <input class="form-control mb-2" name="cpf_cnpj" id="cpf_cnpj" inputmode="numeric">
+        {% endif %}
+    </div>
+    <button class="btn btn-success w-100 mt-2" type="submit" id="botao-plano">Continuar</button>
+</form>
+<script>
+(function () {
+    var cpf = document.getElementById('cpf_cnpj');
+    var bloco = document.getElementById('bloco-cpf');
+    var botao = document.getElementById('botao-plano');
+    function atualizar() {
+        var sel = document.querySelector('input[name="plano_id"]:checked');
+        var pago = sel && sel.dataset.gratis === '0';
+        bloco.classList.toggle('d-none', !pago);
+        if (cpf) cpf.required = !!pago;
+        botao.textContent = !sel ? 'Continuar' : (pago ? 'Ir para o pagamento' : 'Ativar plano grátis');
+    }
+    document.querySelectorAll('input[name="plano_id"]').forEach(function (r) { r.addEventListener('change', atualizar); });
+    atualizar();
+})();
+</script>
 {% endif %}
 {% endif %}
 

@@ -20,7 +20,7 @@
 <form method="post" action="{{ url_for('admin_planos_salvar') }}" class="row g-2 align-items-end">
     <input type="hidden" name="plano_id" value="{{ p.id if p else '' }}">
     <div class="col-12 col-md-3"><label class="form-label small mb-0">Nome</label><input class="form-control form-control-sm" name="nome" value="{{ p.nome if p else '' }}" required></div>
-    <div class="col-6 col-md-2"><label class="form-label small mb-0">Valor (R$)</label><input class="form-control form-control-sm" name="valor" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" required></div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-0" title="0 = plano grátis (libera na hora, sem cobrança nem CPF)">Valor (R$) -- 0 = grátis</label><input class="form-control form-control-sm" name="valor" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" required></div>
     <div class="col-6 col-md-2"><label class="form-label small mb-0">Ciclo</label>
         <select class="form-select form-select-sm" name="ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }}</option>{% endfor %}</select></div>
     <div class="col-4 col-md-1"><label class="form-label small mb-0">Lavouras</label><input class="form-control form-control-sm" name="max_pontos" value="{{ p.max_pontos if p else 1 }}" inputmode="numeric"></div>
@@ -29,6 +29,7 @@
     <div class="col-12 col-md-2 form-check ms-2"><input class="form-check-input" type="checkbox" name="ativo" id="ativo_{{ p.id if p else 'novo' }}" {% if not p or p.ativo %}checked{% endif %}><label class="form-check-label small" for="ativo_{{ p.id if p else 'novo' }}">À venda</label></div>
     <div class="col-12"><label class="form-label small mb-0">Descrição</label><input class="form-control form-control-sm" name="descricao" value="{{ p.descricao if p else '' }}"></div>
     <div class="col-12 small">
+        <span class="fw-semibold me-2">Abas liberadas no app:</span>
         {% for chave, rotulo in recursos %}
         <span class="form-check form-check-inline">
             <input class="form-check-input" type="checkbox" name="recursos" value="{{ chave }}" id="rec_{{ p.id if p else 'novo' }}_{{ chave }}" {% if p and chave in p.recursos %}checked{% endif %}>
