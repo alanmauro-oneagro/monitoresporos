@@ -6631,7 +6631,9 @@ def cliente_assinatura():
     return render_template(
         "cliente_assinatura.html", assinatura=assinatura, plano=plano, liberada=liberada,
         acesso_ate=models.acesso_ate(assinatura), pagamentos=models.get_pagamentos(int(current_user.id)),
-        planos=models.get_planos(apenas_ativos=True), pode_assinar=_pode_assinar(assinatura),
+        # Todos os planos aparecem; os fora de venda (ou ainda sem preco, como
+        # os pagos recem-criados) ficam visiveis como "Em breve", sem escolha.
+        planos=models.get_planos(), pode_assinar=_pode_assinar(assinatura),
         recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO,
     )
 
