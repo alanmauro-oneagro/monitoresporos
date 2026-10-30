@@ -212,5 +212,20 @@ class TelasPorNivelTest(unittest.TestCase):
             self.assertIsNone(models.get_user_by_username("Zzz Teste Antes Primeiro Acesso"))  # banco restaurado
 
 
+    def test_qap_vazio_cria_login_do_alan(self):
+        with mock.patch.object(models, "existe_master", return_value=False), \
+                mock.patch.object(models, "get_user_by_username", return_value=None), \
+                mock.patch.object(models, "create_user") as criar:
+            webapp._bootstrap_master_qap()  # fora do QAP: nada
+            criar.assert_not_called()
+            with mock.patch.object(webapp, "AMBIENTE_QAP", True):
+                webapp._bootstrap_master_qap()
+            criar.assert_called_once_with(models.MASTER_PRINCIPAL, "Oneagro01!", is_master=True)
+        with mock.patch.object(webapp, "AMBIENTE_QAP", True), mock.patch.object(models, "create_user") as criar:
+            webapp._bootstrap_master_qap()  # ja tem Master: nao cria nem mexe em senha
+            criar.assert_not_called()
+        self.assertEqual(models.DEFAULT_PASSWORD, "Oneagro01!")
+
+
 if __name__ == "__main__":
     unittest.main()

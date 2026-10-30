@@ -7136,7 +7136,18 @@ def _bootstrap_once():
     duplicidade."""
     models.init_db()
     _bootstrap_admin_from_env()
+    _bootstrap_master_qap()
     threading.Thread(target=_whatsapp_scheduler_loop, daemon=True).start()
+
+
+def _bootstrap_master_qap():
+    """QAP sem nenhum Master (banco recem-criado ou vazio): cria o
+    "Alan Mauro" com a senha padrao (`models.DEFAULT_PASSWORD`), pra ele
+    conseguir entrar e restaurar o backup da producao (pedido do Alan,
+    31/10/2026). Nunca roda fora do QAP nem mexe em senha de quem ja existe."""
+    if not AMBIENTE_QAP or models.existe_master() or models.get_user_by_username(models.MASTER_PRINCIPAL):
+        return
+    models.create_user(models.MASTER_PRINCIPAL, models.DEFAULT_PASSWORD, is_master=True)
 
 
 def _bootstrap_admin_from_env():
@@ -7159,6 +7170,7 @@ def _bootstrap_admin_from_env():
 if __name__ == "__main__":
     models.init_db()
     _bootstrap_admin_from_env()
+    _bootstrap_master_qap()
     # so inicia o agendador uma vez (o reloader do Flask sobe o processo 2x em modo debug)
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
         threading.Thread(target=_whatsapp_scheduler_loop, daemon=True).start()
