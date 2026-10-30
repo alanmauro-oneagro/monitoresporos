@@ -704,6 +704,16 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     conn.execute("UPDATE users SET is_master = 1, is_admin = 1 WHERE username = ?", (MASTER_PRINCIPAL,))
+    # Planos padrao (pedido do Alan, 31/10/2026) -- so' cria o que ainda nao
+    # existe pelo nome; os pagos nascem fora de venda ate' o Master por o
+    # preco em Configuracoes > Planos e clientes.
+    for ordem, (nome, recursos, max_pontos, ativo) in enumerate(PLANOS_PADRAO, 1):
+        if not conn.execute("SELECT 1 FROM planos WHERE lower(nome) = lower(?)", (nome,)).fetchone():
+            conn.execute(
+                "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem)"
+                " VALUES (?, '', 0, 'MONTHLY', ?, 50, ?, ?, ?)",
+                (nome, max_pontos, json.dumps(recursos), 1 if ativo else 0, ordem),
+            )
     # Cadastro direto (pedido do Alan, 31/10/2026): cada linha e' o registro
     # de uma conta criada em /solicitar-acesso (status 'cadastrado'), pra
     # tela "Novos cadastros" do Master. As colunas de codigo/token ficaram
@@ -3405,6 +3415,15 @@ RECURSOS_PLANO = [
     ("fungicidas", "Recomendação de fungicidas químicos e biológicos"),
     ("regiao", "Mapa da região com as estações próximas (sem identificar as fazendas)"),
 ]
+PLANOS_PADRAO = [  # (nome, recursos, lavouras, a venda ja' de inicio)
+    ("Free", ["clima"], 1, True),
+    ("Básico", ["clima", "esporos"], 3, False),
+    ("Premium", ["clima", "esporos", "risco", "fungicidas", "regiao"], 10, False),
+    ("Premium + Estação", ["clima", "esporos", "risco", "fungicidas", "regiao"], 10, False),
+]
+# Plano de valor zero (Free) nao tem cobranca: a assinatura fica liberada
+# "sem prazo" (cortesia_ate nessa data) ate' o cliente trocar de plano.
+SEM_PRAZO = "2999-12-31"
 CICLOS_PLANO = {"MONTHLY": ("Mensal", 1), "QUARTERLY": ("Trimestral", 3), "SEMIANNUALLY": ("Semestral", 6), "YEARLY": ("Anual", 12)}
 # Dias de acesso alem do vencimento seguinte -- boleto/Pix da renovacao
 # leva uns dias pra compensar, o cliente nao perde o acesso nesse meio tempo.

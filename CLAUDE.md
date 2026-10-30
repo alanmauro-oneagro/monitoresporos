@@ -71,7 +71,15 @@ opcao "Assinar plano") e pago no Asaas (`webapp/asaas.py`, env `ASAAS_API_KEY`/`
 esporos ESTIMADOS por IDW das fazendas reais (nunca nome/leitura de
 fazenda real), clima, risco e fungicidas conforme o plano. Planos,
 precos e cortesia: Configuracoes -> Planos e clientes (`/admin/planos`,
-Master). Clientes nao aparecem na aba Usuarios. App Android/iOS em
+Master; "Abas liberadas no app" = `RECURSOS_PLANO`). Planos padrao
+(`models.PLANOS_PADRAO`, criados pelo `init_db` so' se faltar o nome --
+pedido do Alan, 31/10/2026): **Free** (valor 0, a venda), Basico, Premium e
+Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o
+preco). Valor 0 = gratis: em "Minha assinatura" (cartoes com os planos a
+venda) o Free ativa na hora, sem CPF nem Asaas (`cortesia_ate =
+models.SEM_PRAZO`, tela mostra "Sem prazo"); trocar pra um pago pede
+CPF/CNPJ e so' entao tira o "sem prazo" (acesso passa a depender do
+pagamento). Clientes nao aparecem na aba Usuarios. App Android/iOS em
 `mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
 app nao aparece preco nem link de pagamento (regra das lojas).
 Recurso de plano "regiao" (`/app/regiao`, pedido do Alan, 26/10/2026):
@@ -302,7 +310,7 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
     Exportar (`/admin/exportar/backup`, Master, .db.gz).
-  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes`
+  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos`
     (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
     com Master/Administrador/Usuario/Cliente (sem erro 500, rede
     desligada) e confere as regras de acesso. Rodar antes de cada PR da
