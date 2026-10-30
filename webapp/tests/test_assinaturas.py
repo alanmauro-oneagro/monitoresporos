@@ -50,14 +50,15 @@ class AssinaturasTest(unittest.TestCase):
     def setUp(self):
         self.client = webapp.app.test_client()
 
-    def _cadastrar(self, nome, plano_id=None, **extra):
-        dados = {
-            "username": nome, "email": "teste@example.com", "codigo_pais": "55",
-            "numero_telefone": "65999990000", "cpf_cnpj": CPF_VALIDO, "senha": "segredo1",
-            "senha_confirmar": "segredo1", "plano_id": str(plano_id or self.plano_pro), "aceite": "on",
-        }
-        dados.update(extra)
-        return self.client.post("/cadastro", data=dados)
+    def _cadastrar(self, nome, plano_id=None):
+        """Cliente ja' aprovado pelo Master (conta nova so' nasce pela
+        solicitacao de acesso, ver test_solicitacoes) e logado."""
+        uid = models.criar_cliente(nome, "segredo1", "teste@example.com", "5565999990000", CPF_VALIDO,
+                                   plano_id or self.plano_pro)
+        with self.client.session_transaction() as s:
+            s["_user_id"] = str(uid)
+            s["_fresh"] = True
+        return uid
 
     def _liberar(self, nome):
         user = models.get_user_by_username(nome)
@@ -117,9 +118,7 @@ class AssinaturasTest(unittest.TestCase):
         self.assertNotIn("Conheça os planos", resp.get_data(as_text=True))
 
     def test_cadastro_sem_asaas_fica_aguardando(self):
-        resp = self._cadastrar("Zzz Teste Cadastro")
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn("/app/assinatura", resp.headers["Location"])
+        self._cadastrar("Zzz Teste Cadastro")
         user = models.get_user_by_username("Zzz Teste Cadastro")
         self.assertEqual(user["is_cliente"], 1)
         self.assertEqual(user["is_admin"], 0)
@@ -129,14 +128,10 @@ class AssinaturasTest(unittest.TestCase):
         self.assertIn("/app", self.client.get("/recommendations").headers["Location"])
         self.assertEqual(self.client.get("/admin/planos").status_code, 302)
 
-    def test_cadastro_validacoes(self):
-        html = self._cadastrar("Zzz Teste Cpf", cpf_cnpj="12345678900").get_data(as_text=True)
-        self.assertIn("CPF/CNPJ inválido", html)
-        html = self._cadastrar("Zzz Teste Senha", senha_confirmar="outra").get_data(as_text=True)
-        self.assertIn("confirmação não bate", html)
-        html = self._cadastrar("Zzz Teste Aceite", aceite="").get_data(as_text=True)
-        self.assertIn("aceitar os termos", html)
-        self.assertIsNone(models.get_user_by_username("Zzz Teste Cpf"))
+    def test_cadastro_direto_virou_solicitacao(self):
+        resp = self.client.post("/cadastro", data={"username": "Zzz Teste Direto", "plano_id": str(self.plano_pro)})
+        self.assertIn("/solicitar-acesso", resp.headers["Location"])
+        self.assertIsNone(models.get_user_by_username("Zzz Teste Direto"))
 
     def test_cadastro_com_asaas_redireciona_para_fatura(self):
         with mock.patch.dict(os.environ, {"ASAAS_API_KEY": "chave"}), \
@@ -146,7 +141,8 @@ class AssinaturasTest(unittest.TestCase):
                     "id": "pay_1", "value": 99.9, "status": "PENDING",
                     "dueDate": models._hoje_cuiaba(), "invoiceUrl": "https://asaas/fatura/1",
                 }]):
-            resp = self._cadastrar("Zzz Teste Asaas")
+            self._cadastrar("Zzz Teste Asaas")
+            resp = self.client.post("/app/assinatura/assinar", data={"plano_id": str(self.plano_pro)})
         self.assertEqual(resp.headers["Location"], "https://asaas/fatura/1")
         self.assertEqual(criar_cliente.call_args[0][1], CPF_VALIDO)
         self.assertEqual(criar_assinatura.call_args[0][1:3], (99.9, "MONTHLY"))

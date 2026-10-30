@@ -42,9 +42,23 @@ que seja pedido explicitamente paridade para Administradores.
 "Subordinados" na aba Usuarios continuam sendo os contatos leves de
 WhatsApp de cada usuario (tabela `subordinados`), nao um nivel de acesso.
 
+**Conta nova so' com aprovacao do Master (pedido do Alan, 30/10/2026)**:
+"Ainda nao tem conta? Solicite seu acesso" (login) e o "Solicitar acesso"
+de `/planos` levam ao pre-cadastro publico `/solicitar-acesso` (tabela
+`solicitacoes_acesso`): tipo **Usuario** ou **Cliente do app** (+ plano),
+nome/usuario, e-mail, celular, CPF/CNPJ, empresa/fazenda, cidade/UF,
+culturas, area (ha), "sou consultor" + regiao desejada, mensagem e senha
+(guardada so' o hash). `/cadastro` so' redireciona pra la' -- ninguem cria
+conta nem paga sozinho. Master analisa em Configuracoes -> Solicitacoes de
+acesso (`/admin/solicitacoes`, contador vermelho no menu): pode trocar
+tipo/plano, Aprovar (cria a conta com a senha que a pessoa escolheu;
+Usuario cai direto em Editar fazendas; Cliente fica com assinatura
+pendente e paga em "Minha assinatura" ou ganha cortesia) ou Recusar.
+Login com solicitacao pendente avisa "em analise".
+
 **Cliente do app (pedido do Alan, 25/10/2026)**: 4o tipo de conta,
-`users.is_cliente=1` (nunca admin), criado sozinho em `/cadastro` e
-pago no Asaas (`webapp/asaas.py`, env `ASAAS_API_KEY`/`ASAAS_AMBIENTE`/
+`users.is_cliente=1` (nunca admin), criado pela aprovacao de uma
+solicitacao de acesso (acima) e pago no Asaas (`webapp/asaas.py`, env `ASAAS_API_KEY`/`ASAAS_AMBIENTE`/
 `ASAAS_WEBHOOK_TOKEN`, webhook `/webhooks/asaas`). So' enxerga `/app/*`
 (`_restringir_cliente`); marca lavouras no mapa (`cliente_pontos`) e ve
 esporos ESTIMADOS por IDW das fazendas reais (nunca nome/leitura de
@@ -281,7 +295,7 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
     Exportar (`/admin/exportar/backup`, Master, .db.gz).
-  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas`
+  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes`
     (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
     com Master/Administrador/Usuario/Cliente (sem erro 500, rede
     desligada) e confere as regras de acesso. Rodar antes de cada PR da

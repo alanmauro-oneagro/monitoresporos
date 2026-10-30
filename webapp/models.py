@@ -540,6 +540,33 @@ def init_db():
             ordem INTEGER NOT NULL DEFAULT 0
         );
 
+        -- Pre-cadastro publico (/solicitar-acesso, pedido do Alan, 30/10/2026):
+        -- ninguem cria conta sozinho -- o Master aprova (vira users) ou
+        -- recusa em Configuracoes > Solicitacoes de acesso.
+        CREATE TABLE IF NOT EXISTS solicitacoes_acesso (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            email TEXT,
+            telefone TEXT,
+            cpf_cnpj TEXT,
+            tipo TEXT NOT NULL,  -- 'usuario' ou 'cliente'
+            plano_id INTEGER REFERENCES planos(id),
+            empresa TEXT,
+            cidade TEXT,
+            uf TEXT,
+            culturas TEXT,
+            area_ha REAL,
+            consultor INTEGER NOT NULL DEFAULT 0,
+            regiao TEXT,
+            mensagem TEXT,
+            status TEXT NOT NULL DEFAULT 'pendente',  -- 'pendente', 'aprovada', 'recusada'
+            criado_em TEXT NOT NULL,
+            decidido_em TEXT,
+            decidido_por TEXT,
+            user_id INTEGER
+        );
+
         CREATE TABLE IF NOT EXISTS assinaturas (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             plano_id INTEGER REFERENCES planos(id),
@@ -2950,13 +2977,14 @@ MASTER_PRINCIPAL = "Alan Mauro"  # sempre Master; unico que designa quem mais e'
 DEFAULT_PASSWORD = "Oneagro01!"  # senha de todo usuario novo, e pra onde o botao "Redefinir senha" volta
 
 
-def create_user(username, password, is_admin=False, email="", telefone="", is_master=False):
+def create_user(username, password, is_admin=False, email="", telefone="", is_master=False, password_hash=None):
     is_master = is_master or username == MASTER_PRINCIPAL
     conn = get_db()
     try:
         conn.execute(
             "INSERT INTO users (username, password_hash, is_admin, is_master, email, telefone) VALUES (?, ?, ?, ?, ?, ?)",
-            (username, generate_password_hash(password), 1 if (is_admin or is_master) else 0, 1 if is_master else 0, email, telefone),
+            (username, password_hash or generate_password_hash(password), 1 if (is_admin or is_master) else 0,
+             1 if is_master else 0, email, telefone),
         )
         conn.commit()
     finally:
@@ -3444,7 +3472,7 @@ def excluir_plano(plano_id):
     return True
 
 
-def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id):
+def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id, password_hash=None):
     """Usuario do app (`is_cliente=1`, nunca admin) + assinatura pendente.
     Devolve o id do usuario."""
     agora = _agora_cuiaba()
@@ -3453,7 +3481,7 @@ def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id):
         cur = conn.execute(
             "INSERT INTO users (username, password_hash, is_admin, is_master, is_cliente, email, telefone)"
             " VALUES (?, ?, 0, 0, 1, ?, ?)",
-            (username, generate_password_hash(password), email, telefone),
+            (username, password_hash or generate_password_hash(password), email, telefone),
         )
         user_id = cur.lastrowid
         conn.execute(
@@ -3465,6 +3493,75 @@ def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id):
     finally:
         conn.close()
     return user_id
+
+
+_CAMPOS_SOLICITACAO = (
+    "username", "password_hash", "email", "telefone", "cpf_cnpj", "tipo", "plano_id", "empresa",
+    "cidade", "uf", "culturas", "area_ha", "consultor", "regiao", "mensagem",
+)
+
+
+def criar_solicitacao(dados):
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            f"INSERT INTO solicitacoes_acesso ({', '.join(_CAMPOS_SOLICITACAO)}, criado_em)"
+            f" VALUES ({', '.join('?' for _ in _CAMPOS_SOLICITACAO)}, ?)",
+            tuple(dados.get(c) for c in _CAMPOS_SOLICITACAO) + (_agora_cuiaba(),),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def get_solicitacao(solicitacao_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM solicitacoes_acesso WHERE id = ?", (solicitacao_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_solicitacao_pendente_por_username(username):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM solicitacoes_acesso WHERE status = 'pendente' AND lower(username) = lower(?)", (username,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_solicitacoes(pendentes=True, limite=50):
+    """Pendentes (mais antigas primeiro, ordem de chegada) ou ja'
+    decididas (mais recentes primeiro)."""
+    conn = get_db()
+    if pendentes:
+        rows = conn.execute("SELECT * FROM solicitacoes_acesso WHERE status = 'pendente' ORDER BY id").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM solicitacoes_acesso WHERE status != 'pendente' ORDER BY decidido_em DESC, id DESC LIMIT ?",
+            (limite,),
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def contar_solicitacoes_pendentes():
+    conn = get_db()
+    n = conn.execute("SELECT COUNT(*) FROM solicitacoes_acesso WHERE status = 'pendente'").fetchone()[0]
+    conn.close()
+    return n
+
+
+def decidir_solicitacao(solicitacao_id, status, decidido_por, user_id=None, tipo=None, plano_id=None):
+    conn = get_db()
+    conn.execute(
+        "UPDATE solicitacoes_acesso SET status = ?, decidido_em = ?, decidido_por = ?, user_id = ?,"
+        " tipo = COALESCE(?, tipo), plano_id = COALESCE(?, plano_id) WHERE id = ?",
+        (status, _agora_cuiaba(), decidido_por, user_id, tipo, plano_id, solicitacao_id),
+    )
+    conn.commit()
+    conn.close()
 
 
 def get_assinatura(user_id):

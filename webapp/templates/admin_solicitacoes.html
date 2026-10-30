@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Solicitações de acesso - OneAgro{% endblock %}
+{% block content %}
+<style>
+.sol-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 0.75rem; margin: 0; font-size: 0.85rem; }
+.sol-card dt { color: #6c757d; font-weight: 400; }
+.sol-card dd { margin: 0; overflow-wrap: anywhere; }
+</style>
+<h4 class="mb-2">Solicitações de acesso</h4>
+<p class="text-muted small mb-3">Pedidos feitos pela página "Solicite seu acesso". A conta só passa a existir quando você aprova; dá para trocar o tipo de acesso (e o plano) na hora de aprovar.</p>
+
+{% if not pendentes %}
+<div class="alert alert-secondary">Nenhuma solicitação aguardando análise.</div>
+{% endif %}
+
+{% for s in pendentes %}
+<div class="card shadow-sm mb-3 sol-card">
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2">
+            <h5 class="mb-0">{{ s.username }}</h5>
+            <span class="badge bg-warning text-dark">{{ 'Cliente do app' if s.tipo == 'cliente' else 'Usuário' }}{% if s.tipo == 'cliente' and s.plano_id %} -- {{ nome_plano.get(s.plano_id, '?') }}{% endif %}</span>
+            {% if s.consultor %}<span class="badge bg-info text-dark">Consultor</span>{% endif %}
+            <span class="text-muted small ms-auto">pedido em {{ s.criado_em | data_br }}</span>
+        </div>
+        <dl class="mb-3">
+            <dt>E-mail</dt><dd>{{ s.email }}</dd>
+            <dt>Celular</dt><dd>{{ s.telefone | telefone_br }}</dd>
+            <dt>CPF/CNPJ</dt><dd>{{ s.cpf_cnpj }}</dd>
+            <dt>Empresa/fazenda</dt><dd>{{ s.empresa or '-' }}</dd>
+            <dt>Cidade</dt><dd>{{ s.cidade }}{% if s.uf %}/{{ s.uf }}{% endif %}</dd>
+            <dt>Culturas</dt><dd>{{ s.culturas or '-' }}</dd>
+            <dt>Área</dt><dd>{% if s.area_ha %}{{ '{:,.0f}'.format(s.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
+            {% if s.consultor %}<dt>Região desejada</dt><dd>{{ s.regiao }}</dd>{% endif %}
+            {% if s.mensagem %}<dt>Mensagem</dt><dd>{{ s.mensagem }}</dd>{% endif %}
+        </dl>
+        <div class="d-flex flex-wrap align-items-end gap-2">
+            <form method="post" action="{{ url_for('aprovar_solicitacao', solicitacao_id=s.id) }}" class="d-flex flex-wrap align-items-end gap-2 mb-0"
+                  onsubmit="return confirm('Aprovar o acesso de {{ s.username|e }}?');">
+                <div>
+                    <label class="form-label small text-muted mb-1" for="tipo_{{ s.id }}">Tipo</label>
+                    <select name="tipo" id="tipo_{{ s.id }}" class="form-select form-select-sm sol-tipo" data-plano="plano_{{ s.id }}">
+                        {% for chave, rotulo in tipos.items() %}
+                        <option value="{{ chave }}" {% if s.tipo == chave %}selected{% endif %}>{{ 'Cliente do app' if chave == 'cliente' else 'Usuário' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="plano_{{ s.id }}" class="{% if s.tipo != 'cliente' %}d-none{% endif %}">
+                    <label class="form-label small text-muted mb-1" for="plano_sel_{{ s.id }}">Plano</label>
+                    <select name="plano_id" id="plano_sel_{{ s.id }}" class="form-select form-select-sm">
+                        {% for p in planos %}
+                        <option value="{{ p.id }}" {% if s.plano_id == p.id %}selected{% endif %}>{{ p.nome }}{% if not p.ativo %} (inativo){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-sm btn-success">✅ Aprovar</button>
+            </form>
+            <form method="post" action="{{ url_for('recusar_solicitacao', solicitacao_id=s.id) }}" class="mb-0"
+                  onsubmit="return confirm('Recusar a solicitação de {{ s.username|e }}?');">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Recusar</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% if decididas %}
+<h6 class="mt-4 mb-2">Já analisadas</h6>
+<div class="table-responsive">
+<table class="table table-sm bg-white shadow-sm" style="font-size: 0.85rem;">
+    <thead><tr><th>Nome</th><th>Tipo</th><th>Cidade</th><th>Situação</th><th>Quando</th><th>Por</th></tr></thead>
+    <tbody>
+    {% for s in decididas %}
+        <tr>
+            <td>{{ s.username }}</td>
+            <td>{{ 'Cliente do app' if s.tipo == 'cliente' else 'Usuário' }}{% if s.tipo == 'cliente' and s.plano_id %} ({{ nome_plano.get(s.plano_id, '?') }}){% endif %}</td>
+            <td>{{ s.cidade }}{% if s.uf %}/{{ s.uf }}{% endif %}</td>
+            <td>{% if s.status == 'aprovada' %}<span class="text-success">Aprovada</span>{% else %}<span class="text-danger">Recusada</span>{% endif %}</td>
+            <td>{{ s.decidido_em | data_br }}</td>
+            <td>{{ s.decidido_por }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+<script>
+document.querySelectorAll('.sol-tipo').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+        document.getElementById(sel.dataset.plano).classList.toggle('d-none', sel.value !== 'cliente');
+    });
+});
+</script>
+{% endblock %}

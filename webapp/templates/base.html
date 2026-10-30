@@ -142,7 +142,7 @@
         <button type="button" class="navbar-toggler" id="navToggleBtn" aria-label="Abrir menu">
             <span class="navbar-toggler-icon"></span>
         </button>
-        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'ndvi', 'whatsapp_gerenciamento', 'admin_whatsapp', 'admin_exportar', 'admin_exportar_download', 'fazendas_ocultas', 'solo', 'admin_acessos', 'admin_planos'] %}
+        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'ndvi', 'whatsapp_gerenciamento', 'admin_whatsapp', 'admin_exportar', 'admin_exportar_download', 'fazendas_ocultas', 'solo', 'admin_acessos', 'admin_planos', 'admin_solicitacoes'] %}
         <div class="d-none d-lg-flex flex-column flex-lg-row gap-2 gap-lg-3 align-items-lg-center justify-content-lg-end w-100" id="mainNavMenu">
             <a class="nav-link text-white{% if request.endpoint == 'mapa' %} tab-ativa{% endif %}" href="{{ url_for('mapa') }}">Mapa</a>
             <a class="nav-link text-white{% if request.endpoint == 'dashboard' %} tab-ativa{% endif %}" href="{{ url_for('dashboard') }}">Alertas</a>
@@ -154,7 +154,7 @@
             <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>
             {% if current_user.is_master or abas_config_permitidas %}
             <div class="position-relative">
-                <button type="button" class="btn btn-link nav-link text-white px-3 py-2{% if request.endpoint in _admin_dropdown_endpoints %} tab-ativa{% endif %}" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮<span class="d-lg-none fs-6 fw-bold ms-2 config-rotulo">Configurações</span></button>
+                <button type="button" class="btn btn-link nav-link text-white px-3 py-2{% if request.endpoint in _admin_dropdown_endpoints %} tab-ativa{% endif %}" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮{% if solicitacoes_pendentes %}<span class="badge bg-danger align-top" style="font-size: 0.6rem;" title="Solicitações de acesso aguardando análise">{{ solicitacoes_pendentes }}</span>{% endif %}<span class="d-lg-none fs-6 fw-bold ms-2 config-rotulo">Configurações</span></button>
                 <div id="settingsMenu" class="d-none position-absolute end-0 bg-white shadow rounded mt-2 py-1" style="min-width: 160px; z-index: 1050;">
                     {% if pode_aba('usuarios') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_users' %} tab-ativa{% endif %}" href="{{ url_for('admin_users') }}">Usuários</a>{% endif %}
                     {% if pode_aba('doencas') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_doencas' %} tab-ativa{% endif %}" href="{{ url_for('admin_doencas') }}">Doenças</a>{% endif %}
@@ -165,6 +165,7 @@
                     {% if pode_aba('envios') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'whatsapp_gerenciamento' %} tab-ativa{% endif %}" href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>{% endif %}
                     {% if current_user.is_master %}
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_acessos' %} tab-ativa{% endif %}" href="{{ url_for('admin_acessos') }}">Acessos</a>
+                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_solicitacoes' %} tab-ativa{% endif %}" href="{{ url_for('admin_solicitacoes') }}">Solicitações de acesso{% if solicitacoes_pendentes %} <span class="badge bg-danger">{{ solicitacoes_pendentes }}</span>{% endif %}</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_planos' %} tab-ativa{% endif %}" href="{{ url_for('admin_planos') }}">Planos e clientes</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('admin_whatsapp') }}">Conexão WhatsApp</a>
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_exportar' %} tab-ativa{% endif %}" href="{{ url_for('admin_exportar') }}">Exportar</a>
@@ -413,7 +414,7 @@ window.OneAgroPrefs = (function () {
 <div class="container mt-3">
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
-            <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }}">{{ message }}</div>
+            <div class="alert alert-{{ 'danger' if category == 'error' else ('info' if category == 'info' else 'success') }}">{{ message }}</div>
         {% endfor %}
     {% endwith %}
     {% block content %}{% endblock %}
