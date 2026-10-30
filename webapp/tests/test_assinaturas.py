@@ -252,8 +252,8 @@ class AssinaturasTest(unittest.TestCase):
         self.client.post("/login", data={"username": models.MASTER_PRINCIPAL, "password": "segredo1"})
         self.assertEqual(self.client.get("/admin/planos").status_code, 200)
         self.client.post("/admin/planos/salvar", data={
-            "nome": "Zzz Anual", "valor": "999,00", "ciclo": "YEARLY", "max_pontos": "5", "raio_km": "100",
-            "ordem": "3", "ativo": "on", "recursos": ["clima", "risco", "inventado"],
+            "nome__novo": "Zzz Anual", "valor__novo": "999,00", "ciclo__novo": "YEARLY", "max_pontos__novo": "5",
+            "raio_km__novo": "100", "ordem__novo": "3", "ativo__novo": "on", "recursos__novo": ["clima", "risco", "inventado"],
         })
         plano = next(p for p in models.get_planos() if p["nome"] == "Zzz Anual")
         self.assertEqual((plano["valor"], plano["recursos"]), (999.0, ["clima", "risco"]))

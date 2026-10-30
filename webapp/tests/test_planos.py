@@ -49,20 +49,32 @@ class PlanosTest(unittest.TestCase):
     def test_master_define_preco_e_abas(self):
         master = self._logado(models.get_user_by_username("Zzz Teste Master Planos")["id"])
         premium = self.planos["Premium"]
+        basico = self.planos["Básico"]
+        k, b = premium["id"], basico["id"]
+        # um envio so' grava todos os planos da tela
         master.post("/admin/planos/salvar", data={
-            "plano_id": str(premium["id"]), "nome": "Premium", "valor": "149,90", "ciclo": "MONTHLY",
-            "max_pontos": "10", "raio_km": "50", "ordem": "3", "recursos": ["clima", "esporos", "risco"], "ativo": "on",
+            "plano_ids": [str(k), str(b)],
+            f"nome__{k}": "Premium", f"valor__{k}": "149,90", f"ciclo__{k}": "MONTHLY", f"max_pontos__{k}": "10",
+            f"raio_km__{k}": "50", f"ordem__{k}": "3", f"recursos__{k}": ["clima", "esporos", "risco"], f"ativo__{k}": "on",
+            f"nome__{b}": "Básico", f"valor__{b}": "59,90", f"ciclo__{b}": "MONTHLY", f"max_pontos__{b}": "3",
+            f"raio_km__{b}": "50", f"ordem__{b}": "2", f"recursos__{b}": ["clima", "site_mapa"],
+            "nome__novo": "",
         })
-        p = models.get_plano(premium["id"])
+        p = models.get_plano(k)
         self.assertEqual((p["valor"], p["ativo"], p["recursos"]), (149.9, 1, ["clima", "esporos", "risco"]))
+        self.assertEqual((models.get_plano(b)["valor"], models.get_plano(b)["ativo"]), (59.9, 0))
         html = master.get("/admin/planos").get_data(as_text=True)
         self.assertIn("Abas liberadas no app", html)
         self.assertIn("0 = grátis", html)
+        self.assertEqual(html.count('type="submit">Salvar</button>'), 1)  # um botao Salvar so'
+        # com um plano errado, nenhum e' gravado
         negativo = master.post("/admin/planos/salvar", data={
-            "plano_id": str(premium["id"]), "nome": "Premium", "valor": "-1", "ciclo": "MONTHLY", "max_pontos": "10", "raio_km": "50",
+            "plano_ids": [str(k), str(b)],
+            f"nome__{k}": "Premium", f"valor__{k}": "-1", f"ciclo__{k}": "MONTHLY", f"max_pontos__{k}": "10", f"raio_km__{k}": "50",
+            f"nome__{b}": "Básico", f"valor__{b}": "1,00", f"ciclo__{b}": "MONTHLY", f"max_pontos__{b}": "3", f"raio_km__{b}": "50",
         }, follow_redirects=True)
         self.assertIn("0 = plano grátis", negativo.get_data(as_text=True))
-        self.assertEqual(models.get_plano(premium["id"])["valor"], 149.9)
+        self.assertEqual((models.get_plano(k)["valor"], models.get_plano(b)["valor"]), (149.9, 59.9))
 
     def test_free_libera_na_hora_sem_cpf(self):
         uid = self._cliente("Zzz Cliente Free")
