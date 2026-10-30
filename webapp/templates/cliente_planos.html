@@ -25,10 +25,11 @@
             <li>Até {{ p.max_pontos }} lavoura{{ 's' if p.max_pontos > 1 }}</li>
             {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}
         </ul>
-        <a class="btn btn-success w-100" href="{{ url_for('cadastro', plano=p.id) }}">Assinar</a>
+        <a class="btn btn-success w-100" href="{{ url_for('solicitar_acesso', tipo='cliente', plano=p.id) }}">Solicitar acesso</a>
     </div>
 </div>
 {% endfor %}
+<p class="small text-muted text-center">Cada solicitação é analisada pela OneAgro antes de liberar o acesso.</p>
 <div class="text-center small"><a href="{{ url_for('login') }}">Já tenho conta</a></div>
 {% endif %}
 {% endblock %}

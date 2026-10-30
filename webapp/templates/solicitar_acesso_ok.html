@@ -1,0 +1,10 @@
+{% extends "cliente_base.html" %}
+{% block title %}Solicitação enviada - OneAgro Monitor{% endblock %}
+{% block content %}
+<h1 class="titulo">Solicitação enviada</h1>
+<div class="card shadow-sm"><div class="card-body">
+    <p class="mb-2">Obrigado, {{ nome }}! Recebemos a sua solicitação de acesso.</p>
+    <p class="mb-2">A equipe OneAgro vai analisar os seus dados. Quando o acesso for liberado, é só entrar com o nome e a senha que você acabou de cadastrar.</p>
+    <a class="btn btn-success w-100 mt-2" href="{{ url_for('login') }}">Ir para o login</a>
+</div></div>
+{% endblock %}
