@@ -3,6 +3,8 @@
 {% block content %}
 <h1 class="titulo">Assinatura</h1>
 {% set rotulos = {'pendente': 'Aguardando pagamento', 'ativa': 'Ativa', 'atrasada': 'Pagamento atrasado', 'cancelada': 'Cancelada'} %}
+{# Situacao so' depois de escolher um plano (pedido do Alan) -- antes disso a tela mostra so' os planos. #}
+{% if plano %}
 <div class="card shadow-sm mb-3"><div class="card-body">
     <div class="d-flex justify-content-between"><span class="text-muted small">Plano</span><strong>{{ plano.nome if plano else '—' }}</strong></div>
     <div class="d-flex justify-content-between"><span class="text-muted small">Situação</span><strong>{{ rotulos.get(assinatura.status, assinatura.status) if assinatura else '—' }}</strong></div>
@@ -10,9 +12,12 @@
     {% if liberada %}
     <a class="btn btn-success w-100 mt-3" href="{{ url_for('cliente_home') }}">Ver minhas lavouras</a>
     {% else %}
-    <div class="alert alert-warning small mt-3 mb-0">{% if not plano %}Escolha um plano abaixo para liberar o acesso.{% else %}Seu acesso está bloqueado até a confirmação do pagamento.{% if not no_app_loja %} Pix confirma na hora; boleto em até 3 dias úteis.{% endif %}{% endif %}</div>
+    <div class="alert alert-warning small mt-3 mb-0">Seu acesso está bloqueado até a confirmação do pagamento.{% if not no_app_loja %} Pix confirma na hora; boleto em até 3 dias úteis.{% endif %}</div>
     {% endif %}
 </div></div>
+{% elif no_app_loja %}
+<div class="alert alert-secondary">A escolha do plano é feita pelo site da OneAgro. Depois de escolher, é só voltar aqui.</div>
+{% endif %}
 
 {% if not no_app_loja %}
 {% set em_aberto = pagamentos | selectattr('status', 'in', ['PENDING', 'OVERDUE']) | list %}
@@ -24,13 +29,14 @@
 <form method="post" action="{{ url_for('cliente_assinar') }}" class="mb-3" id="form-plano">
     <h6>{{ 'Trocar de plano' if liberada else ('Assinar novamente' if assinatura and assinatura.status == 'cancelada' else 'Escolha o seu plano') }}</h6>
     {% for p in planos %}
-    <label class="card shadow-sm mb-2 plano-opcao" for="plano_{{ p.id }}" style="cursor: pointer;">
+    {% set disponivel = p.ativo %}
+    <label class="card shadow-sm mb-2 plano-opcao{% if not disponivel %} opacity-50{% endif %}" for="plano_{{ p.id }}" style="cursor: {{ 'pointer' if disponivel else 'default' }};">
         <div class="card-body py-2">
             <div class="d-flex align-items-baseline gap-2">
                 <input class="form-check-input mt-0" type="radio" name="plano_id" id="plano_{{ p.id }}" value="{{ p.id }}"
-                       data-gratis="{{ 1 if p.valor <= 0 else 0 }}" {% if plano and plano.id == p.id %}checked{% endif %} required>
+                       data-gratis="{{ 1 if p.valor <= 0 else 0 }}" {% if not disponivel %}disabled{% elif plano and plano.id == p.id %}checked{% endif %} required>
                 <strong>{{ p.nome }}</strong>
-                <span class="ms-auto fw-bold text-success">{% if p.valor <= 0 %}Grátis{% else %}R$ {{ '%.2f' | format(p.valor) | replace('.', ',') }}<span class="small text-muted fw-normal"> / {{ p.ciclo_label | lower }}</span>{% endif %}</span>
+                <span class="ms-auto fw-bold {{ 'text-success' if disponivel else 'text-muted' }}">{% if not disponivel %}Em breve{% elif p.valor <= 0 %}Grátis{% else %}R$ {{ '%.2f' | format(p.valor) | replace('.', ',') }}<span class="small text-muted fw-normal"> / {{ p.ciclo_label | lower }}</span>{% endif %}</span>
             </div>
             {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
             <ul class="small mb-0 ps-4 mt-1">

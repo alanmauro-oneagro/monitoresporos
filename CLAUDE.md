@@ -75,8 +75,10 @@ Master; "Abas liberadas no app" = `RECURSOS_PLANO`). Planos padrao
 (`models.PLANOS_PADRAO`, criados pelo `init_db` so' se faltar o nome --
 pedido do Alan, 31/10/2026): **Free** (valor 0, a venda), Basico, Premium e
 Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o
-preco). Valor 0 = gratis: em "Minha assinatura" (cartoes com os planos a
-venda) o Free ativa na hora, sem CPF nem Asaas (`cortesia_ate =
+preco). Valor 0 = gratis: em "Minha assinatura" (cartoes com TODOS os
+planos; os fora de venda aparecem como "Em breve", sem escolha; o quadro
+de situacao/"Aguardando pagamento" so' aparece depois de escolher um
+plano) o Free ativa na hora, sem CPF nem Asaas (`cortesia_ate =
 models.SEM_PRAZO`, tela mostra "Sem prazo"); trocar pra um pago pede
 CPF/CNPJ e so' entao tira o "sem prazo" (acesso passa a depender do
 pagamento). Clientes nao aparecem na aba Usuarios. App Android/iOS em

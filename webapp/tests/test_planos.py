@@ -70,6 +70,15 @@ class PlanosTest(unittest.TestCase):
         html = c.get("/app/assinatura").get_data(as_text=True)
         self.assertIn("Escolha o seu plano", html)
         self.assertIn("Grátis", html)
+        # todos os planos aparecem; os fora de venda como "Em breve", sem escolha
+        self.assertIn("Premium + Estação", html)
+        self.assertIn("Em breve", html)
+        self.assertIn(f'id="plano_{self.planos["Premium + Estação"]["id"]}"', html)
+        self.assertNotIn("Aguardando pagamento", html)  # situacao so' depois de escolher
+        forcado = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Premium + Estação"]["id"])},
+                         follow_redirects=True)
+        self.assertIn("Escolha um plano", forcado.get_data(as_text=True))
+        self.assertIsNone(models.get_assinatura(uid)["plano_id"])
         self.assertIn("/app/assinatura", c.get("/app").headers["Location"])  # sem plano: bloqueado
         resp = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Free"]["id"])})
         self.assertTrue(resp.headers["Location"].endswith("/app"))
