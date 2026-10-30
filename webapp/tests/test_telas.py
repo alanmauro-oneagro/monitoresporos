@@ -188,5 +188,29 @@ class TelasPorNivelTest(unittest.TestCase):
             self.assertEqual(len(list(models.Path(pasta).glob("antes-restauracao-*.db"))), 1)
 
 
+    def test_qap_primeiro_acesso_sem_login(self):
+        import io
+        anonimo = webapp.app.test_client()
+        self.assertEqual(anonimo.get("/qap/primeiro-acesso").status_code, 404)  # fora do QAP
+        with mock.patch.object(webapp, "AMBIENTE_QAP", True):
+            # QAP ja' tem Master: rota fechada e sem aviso no login
+            self.assertEqual(anonimo.get("/qap/primeiro-acesso").status_code, 404)
+            self.assertNotIn("Primeiro acesso", anonimo.get("/login").get_data(as_text=True))
+            backup = self._cliente("master").get("/admin/exportar/backup").data
+            models.create_user("Zzz Teste Antes Primeiro Acesso", "x")
+            with tempfile.TemporaryDirectory() as pasta, \
+                    mock.patch.object(models, "BACKUP_DIR", models.Path(pasta)), \
+                    mock.patch.object(models, "existe_master", return_value=False):
+                self.assertIn("Primeiro acesso", anonimo.get("/login").get_data(as_text=True))
+                self.assertEqual(anonimo.get("/qap/primeiro-acesso").status_code, 200)
+                ruim = anonimo.post("/qap/primeiro-acesso", data={"arquivo": (io.BytesIO(b"x"), "x.gz")},
+                                    content_type="multipart/form-data")
+                self.assertIn("/qap/primeiro-acesso", ruim.headers["Location"])
+                ok = anonimo.post("/qap/primeiro-acesso", data={"arquivo": (io.BytesIO(backup), "b.db.gz")},
+                                  content_type="multipart/form-data")
+                self.assertIn("/login", ok.headers["Location"])
+            self.assertIsNone(models.get_user_by_username("Zzz Teste Antes Primeiro Acesso"))  # banco restaurado
+
+
 if __name__ == "__main__":
     unittest.main()

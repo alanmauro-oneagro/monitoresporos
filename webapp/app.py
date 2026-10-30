@@ -588,7 +588,7 @@ class _Request(app.request_class):
     def max_content_length(self):
         if self.path == "/admin/fungicidas/agrofit-enviar":
             return 600 * 1024 * 1024
-        if self.path == "/admin/restaurar-backup":
+        if self.path in ("/admin/restaurar-backup", "/qap/primeiro-acesso"):
             return 300 * 1024 * 1024
         return super().max_content_length
 
@@ -6145,6 +6145,36 @@ def admin_exportar_download():
     )
 
 
+def _restaurar_backup_enviado(arquivo):
+    """Confere e carrega o .db.gz/.db enviado no banco do QAP. Devolve a
+    mensagem de erro, ou None se restaurou."""
+    conteudo = arquivo.read() if arquivo else b""
+    if conteudo[:2] == b"\x1f\x8b":
+        try:
+            conteudo = gzip.decompress(conteudo)
+        except OSError:
+            conteudo = b""
+    if not conteudo.startswith(b"SQLite format 3\x00"):
+        return "Arquivo invalido -- use o .db.gz do botao \"Baixar backup do banco\" (Exportar) da producao."
+    with tempfile.TemporaryDirectory() as pasta:
+        caminho = Path(pasta) / "restaurar.db"
+        caminho.write_bytes(conteudo)
+        conn = sqlite3.connect(caminho)
+        try:
+            integro = conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            tem_usuarios = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+            ).fetchone() is not None
+        except sqlite3.DatabaseError:
+            integro = tem_usuarios = False
+        finally:
+            conn.close()
+        if not (integro and tem_usuarios):
+            return "O arquivo nao e' um backup valido do OneAgro (banco corrompido ou sem usuarios)."
+        models.restaurar_banco(caminho)
+    return None
+
+
 @app.route("/admin/restaurar-backup", methods=["GET", "POST"])
 @master_required
 def admin_restaurar_backup():
@@ -6154,37 +6184,40 @@ def admin_restaurar_backup():
     if not AMBIENTE_QAP:
         abort(404)
     if request.method == "POST":
-        arquivo = request.files.get("arquivo")
-        conteudo = arquivo.read() if arquivo else b""
-        if conteudo[:2] == b"\x1f\x8b":
-            try:
-                conteudo = gzip.decompress(conteudo)
-            except OSError:
-                conteudo = b""
-        if not conteudo.startswith(b"SQLite format 3\x00"):
-            flash("Arquivo invalido -- use o .db.gz do botao \"Baixar backup do banco\" (Exportar) da producao.", "error")
+        erro = _restaurar_backup_enviado(request.files.get("arquivo"))
+        if erro:
+            flash(erro, "error")
             return redirect(url_for("admin_restaurar_backup"))
-        with tempfile.TemporaryDirectory() as pasta:
-            caminho = Path(pasta) / "restaurar.db"
-            caminho.write_bytes(conteudo)
-            conn = sqlite3.connect(caminho)
-            try:
-                integro = conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-                tem_usuarios = conn.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
-                ).fetchone() is not None
-            except sqlite3.DatabaseError:
-                integro = tem_usuarios = False
-            finally:
-                conn.close()
-            if not (integro and tem_usuarios):
-                flash("O arquivo nao e' um backup valido do OneAgro (banco corrompido ou sem usuarios).", "error")
-                return redirect(url_for("admin_restaurar_backup"))
-            models.restaurar_banco(caminho)
         logout_user()  # o id do usuario logado pode ser outro no banco restaurado
         flash("Backup restaurado no QAP. Entre de novo com o seu usuario e senha da producao.", "success")
         return redirect(url_for("login"))
     return render_template("admin_restaurar_backup.html")
+
+
+def _qap_sem_master():
+    return AMBIENTE_QAP and not models.existe_master()
+
+
+@app.context_processor
+def _inject_qap_sem_master():
+    return {"qap_sem_master": _qap_sem_master() if request.endpoint == "login" else False}
+
+
+@app.route("/qap/primeiro-acesso", methods=["GET", "POST"])
+def qap_primeiro_acesso():
+    """QAP recem-criado (banco vazio, ninguem consegue entrar): carrega o
+    backup da producao sem login. So' existe no QAP e so' enquanto o banco
+    nao tiver nenhum Master -- depois da 1a restauracao, some."""
+    if not _qap_sem_master():
+        abort(404)
+    if request.method == "POST":
+        erro = _restaurar_backup_enviado(request.files.get("arquivo"))
+        if erro:
+            flash(erro, "error")
+            return redirect(url_for("qap_primeiro_acesso"))
+        flash("Backup restaurado no QAP. Entre com o seu usuario e senha da producao.", "success")
+        return redirect(url_for("login"))
+    return render_template("admin_restaurar_backup.html", primeiro_acesso=True)
 
 
 @app.route("/admin/exportar/backup")

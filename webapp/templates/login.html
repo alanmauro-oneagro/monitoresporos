@@ -62,6 +62,12 @@
                 </form>
                 <div class="text-center mt-3">
                     <a href="{{ url_for('esqueci_senha') }}" class="small">Esqueci minha senha</a>
+                    {% if qap_sem_master %}
+                    <div class="alert alert-warning small mt-3 mb-0 text-start">
+                        O QAP ainda está vazio (sem nenhum usuário). <a href="{{ url_for('qap_primeiro_acesso') }}" class="fw-semibold">Primeiro acesso: carregar o backup da produção</a>
+                        -- depois disso, entre com o seu usuário e senha de sempre.
+                    </div>
+                    {% endif %}
                     {% if not no_app_loja %}
                     <div class="mt-2"><a href="{{ url_for('solicitar_acesso') }}" class="small fw-semibold">Ainda não tem conta? Cadastre-se</a></div>
                     <div class="mt-1"><a href="{{ url_for('planos_publico') }}" class="small">Conheça os planos</a></div>

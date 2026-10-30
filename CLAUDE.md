@@ -329,7 +329,12 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     "AMBIENTE DE TESTE" no topo e a tela **Restaurar backup** (Exportar,
     `/admin/restaurar-backup`, Master; 404 fora do QAP) que carrega o
     .db.gz do "Baixar backup do banco" da producao (confere integridade,
-    guarda copia do estado anterior, roda `init_db`, desloga). Pra levar
+    guarda copia do estado anterior, roda `init_db`, desloga). QAP com o
+    banco sem nenhum Master (recem-criado): o login mostra "Primeiro
+    acesso: carregar o backup da producao" (`/qap/primeiro-acesso`, sem
+    login, mesma conferencia `_restaurar_backup_enviado`; 404 fora do QAP
+    ou assim que existir um Master). O QAP tem banco proprio: usuarios da
+    producao so' existem la' depois de restaurar um backup. Pra levar
     codigo novo pro QAP: atualizar a branch `qap` a partir da `main` (ou
     de uma branch da migracao). O ambiente de nuvem do Claude nao alcanca
     o QAP (nem a producao) sem liberar o dominio na rede da sessao.
