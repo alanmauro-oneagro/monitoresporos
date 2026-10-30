@@ -47,9 +47,9 @@ e o codigo no WhatsApp de 30/10)**: "Ainda nao tem conta? Cadastre-se"
 (login) e o "Assinar" de `/planos` levam a `/solicitar-acesso`; `/cadastro`
 so' redireciona pra la'. A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
-(tudo obrigatorio, menos e-mail): nome completo, usuario (sugerido como
+(tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao
-digitar em `/solicitar-acesso/usuario` e de novo no envio, sem diferenciar
+digitar em `/solicitar-acesso/usuario` e de novo no envio -- mudar o nome sempre refaz a sugestao --, sem diferenciar
 maiusculas -- `models.username_em_uso`), celular, fazenda/empresa,
 cidade/UF, culturas, area plantada/atendida, mensagem e senha (>= 6). A
 conta nasce na hora e a pessoa ja' entra: "Assinar plano" vira cliente do

@@ -6546,8 +6546,6 @@ def solicitar_acesso():
             erro = "Marque pelo menos uma cultura."
         elif area_ha <= 0:
             erro = "Informe a área plantada/atendida em hectares (só o número)."
-        elif not form.get("mensagem", "").strip():
-            erro = "Escreva uma mensagem contando o que você procura."
         elif len(senha) < 6:
             erro = "A senha precisa ter pelo menos 6 caracteres."
         elif senha != form.get("senha_confirmar", ""):

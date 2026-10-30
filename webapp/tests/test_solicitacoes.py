@@ -91,7 +91,6 @@ class CadastroTest(unittest.TestCase):
             "sem UF": dict(uf=""),
             "sem cultura": dict(cultura_outra=""),
             "sem area": dict(area_ha=""),
-            "sem mensagem": dict(mensagem=" "),
             "senha curta": dict(senha="123", senha_confirmar="123"),
             "senha diferente": dict(senha_confirmar="outra1"),
         }
@@ -103,6 +102,11 @@ class CadastroTest(unittest.TestCase):
                 self.assertFalse(models.username_em_uso(extra["username"]) and caso != "usuario repetido")
         html = webapp.app.test_client().post("/solicitar-acesso", data=_form(username="Zzz Teste Master Cad")).get_data(as_text=True)
         self.assertIn("já existe", html)
+        # mensagem e' opcional
+        resp = webapp.app.test_client().post("/solicitar-acesso", data=_form(username="Zzz Sem Mensagem", mensagem="",
+                                                                            numero_telefone="65999990008"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(models.username_em_uso("Zzz Sem Mensagem"))
 
     def test_acesso_a_fazenda_cria_usuario_sem_fazendas(self):
         self.enviadas.clear()

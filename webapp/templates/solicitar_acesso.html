@@ -70,8 +70,8 @@
     <label class="form-label small mb-1" for="area_ha">Área plantada / atendida (hectares)</label>
     <input class="form-control mb-3" name="area_ha" id="area_ha" value="{{ form.get('area_ha', '') }}" inputmode="decimal" placeholder="Ex.: 1500" required>
 
-    <label class="form-label small mb-1" for="mensagem">Mensagem</label>
-    <textarea class="form-control mb-3" name="mensagem" id="mensagem" rows="3" placeholder="Conte o que você procura" required>{{ form.get('mensagem', '') }}</textarea>
+    <label class="form-label small mb-1" for="mensagem">Mensagem (opcional)</label>
+    <textarea class="form-control mb-3" name="mensagem" id="mensagem" rows="3" placeholder="Conte o que você procura">{{ form.get('mensagem', '') }}</textarea>
 
     <h6 class="mt-4 mb-2">Senha</h6>
     <label class="form-label small mb-1" for="senha">Senha (pelo menos 6 caracteres)</label>
@@ -92,7 +92,6 @@
     var usuario = document.getElementById('username');
     var status = document.getElementById('usuario-status');
     var url = '{{ url_for("verificar_usuario_cadastro") }}';
-    var editadoNaMao = usuario.value !== '';
     var timer = null;
 
     function consultar(sugerir) {
@@ -100,7 +99,7 @@
         fetch(url + '?' + params.toString())
             .then(function (r) { return r.json(); })
             .then(function (d) {
-                if (sugerir && !editadoNaMao && d.sugestao) {
+                if (sugerir && d.sugestao) {
                     usuario.value = d.sugestao;
                     status.textContent = 'Usuário sugerido -- pode trocar se quiser.';
                     status.className = 'small mb-3 text-muted';
@@ -120,13 +119,13 @@
             .catch(function () { status.textContent = ''; });
     }
 
+    // Mudou o nome: refaz a sugestao de usuario, mesmo que a pessoa ja'
+    // tenha trocado o usuario antes (pedido do Alan).
     nome.addEventListener('input', function () {
-        if (editadoNaMao) return;
         clearTimeout(timer);
         timer = setTimeout(function () { consultar(true); }, 400);
     });
     usuario.addEventListener('input', function () {
-        editadoNaMao = usuario.value.trim() !== '';
         clearTimeout(timer);
         timer = setTimeout(function () { consultar(false); }, 400);
     });
