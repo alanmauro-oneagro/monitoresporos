@@ -52,6 +52,7 @@
     <a href="{{ url_for('cliente_regiao') }}" class="{% if request.endpoint == 'cliente_regiao' %}ativa{% endif %}"><span class="ic">🗺️</span>Região</a>
     <a href="{{ url_for('cliente_assinatura') }}" class="{% if request.endpoint == 'cliente_assinatura' %}ativa{% endif %}"><span class="ic">⭐</span>Assinatura</a>
     <a href="{{ url_for('cliente_conta') }}" class="{% if request.endpoint == 'cliente_conta' %}ativa{% endif %}"><span class="ic">👤</span>Conta</a>
+    {% if menu_site_cliente %}<a href="{{ url_for(menu_site_cliente[0][1]) }}"><span class="ic">🌐</span>Site</a>{% endif %}
 </nav>
 {% endif %}
 <script>

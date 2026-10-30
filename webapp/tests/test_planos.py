@@ -107,5 +107,60 @@ class PlanosTest(unittest.TestCase):
         self.assertFalse(models.assinatura_liberada(assinatura))
 
 
+    def _cliente_no_plano(self, nome, recursos):
+        plano_id = models.salvar_plano(None, f"Zzz Plano {nome}", "", 0, "MONTHLY", 3, 40, recursos, True, 9)
+        uid = self._cliente(nome)
+        models.atualizar_assinatura(uid, plano_id=plano_id, status="ativa", cortesia_ate=models.SEM_PRAZO)
+        return uid
+
+    def test_recursos_do_site_depois_da_previsao(self):
+        chaves = [c for c, _ in models.RECURSOS_PLANO]
+        self.assertEqual(chaves[:6], ["clima", "site_mapa", "site_alertas", "site_graficos", "site_manejos", "site_recomendacoes"])
+        self.assertIn("fazenda_estimada", chaves)
+
+    def test_abas_do_site_conforme_plano_e_fazenda_estimada(self):
+        uid = self._cliente_no_plano("Abas", ["clima", "site_mapa", "site_manejos", "site_recomendacoes", "fazenda_estimada"])
+        c = self._logado(uid)
+        self.assertEqual(c.get("/mapa").status_code, 200)
+        self.assertEqual(c.get("/fazendas").status_code, 200)
+        self.assertEqual(c.get("/recommendations", follow_redirects=True).status_code, 200)
+        for fora in ("/graficos", "/dashboard", "/admin/users", "/mapa-interpolado"):
+            with self.subTest(rota=fora):
+                self.assertTrue(c.get(fora).headers["Location"].endswith("/app"))
+        menu = c.get("/mapa").get_data(as_text=True)
+        self.assertIn("📱 App", menu)
+        self.assertNotIn(">Graficos<", menu)
+        self.assertIn("🌐", c.get("/app").get_data(as_text=True))
+
+        # lavoura nova vira fazenda estimada liberada so' pra ele
+        resp = c.post("/app/pontos/novo", data={"nome": "Talhao Zzz", "lat": "-12.5", "lon": "-55.7"})
+        self.assertEqual(resp.status_code, 302)
+        ponto = models.get_cliente_pontos(uid)[0]
+        self.assertTrue(ponto["site_name"])
+        vf = models.get_virtual_farm(ponto["site_name"])
+        self.assertEqual((vf["nome"], vf["raio_km"], vf["tipo"]), ("Talhao Zzz (Abas)", 40, "doenca"))
+        self.assertIn(ponto["site_name"], models.get_user_permitted_site_names(uid))
+        # apagar a lavoura apaga a fazenda estimada
+        c.post(f"/app/pontos/{ponto['id']}/excluir")
+        self.assertIsNone(models.get_virtual_farm(ponto["site_name"]))
+
+    def test_plano_sem_fazenda_estimada_e_free_sem_site(self):
+        uid = self._cliente_no_plano("Estacao", ["clima", "site_mapa"])
+        c = self._logado(uid)
+        c.post("/app/pontos/novo", data={"nome": "Talhao Estacao", "lat": "-12.5", "lon": "-55.7"})
+        self.assertIsNone(models.get_cliente_pontos(uid)[0]["site_name"])  # Premium + Estacao: Master libera a real
+        self.assertEqual(c.get("/mapa").status_code, 200)
+        free = self._cliente_no_plano("Free Site", ["clima"])
+        self.assertTrue(self._logado(free).get("/mapa").headers["Location"].endswith("/app"))
+
+    def test_excluir_cliente_apaga_fazendas_estimadas(self):
+        uid = self._cliente_no_plano("Excluir Site", ["clima", "site_mapa", "fazenda_estimada"])
+        self._logado(uid).post("/app/pontos/novo", data={"nome": "Talhao Exc", "lat": "-12.5", "lon": "-55.7"})
+        site_name = models.get_cliente_pontos(uid)[0]["site_name"]
+        self.assertIsNotNone(models.get_virtual_farm(site_name))
+        models.delete_user(uid)
+        self.assertIsNone(models.get_virtual_farm(site_name))
+
+
 if __name__ == "__main__":
     unittest.main()

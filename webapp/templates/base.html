@@ -140,18 +140,26 @@
 <nav class="navbar navbar-expand-lg" style="background:#ffffff; border-bottom: 3px solid #63b445; position: sticky; top: 0; z-index: 1030;">
     <div class="container">
         <a class="navbar-brand" href="https://www.oneagro.com.br/" target="_blank" rel="noopener"><img src="{{ url_for('static', filename='oneagro-logo.png') }}" alt="OneAgro"></a>
-        {% if current_user.is_authenticated and not current_user.is_cliente %}
+        {% if current_user.is_authenticated and (not current_user.is_cliente or menu_site_cliente) %}
         <button type="button" class="navbar-toggler" id="navToggleBtn" aria-label="Abrir menu">
             <span class="navbar-toggler-icon"></span>
         </button>
         {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'ndvi', 'whatsapp_gerenciamento', 'admin_whatsapp', 'admin_exportar', 'admin_exportar_download', 'fazendas_ocultas', 'solo', 'admin_acessos', 'admin_planos', 'admin_solicitacoes'] %}
         <div class="d-none d-lg-flex flex-column flex-lg-row gap-2 gap-lg-3 align-items-lg-center justify-content-lg-end w-100" id="mainNavMenu">
+            {% if menu_site_cliente is not none %}
+            {# Cliente de plano: so' as abas do site que o plano libera + volta pro app. #}
+            <a class="nav-link text-white" href="{{ url_for('cliente_home') }}">📱 App</a>
+            {% for rotulo, ep in menu_site_cliente %}
+            <a class="nav-link text-white{% if request.endpoint == ep or (ep == 'recommendations_default' and request.endpoint == 'recommendations') %} tab-ativa{% endif %}" href="{{ url_for(ep) }}">{{ rotulo }}</a>
+            {% endfor %}
+            {% else %}
             <a class="nav-link text-white{% if request.endpoint == 'mapa' %} tab-ativa{% endif %}" href="{{ url_for('mapa') }}">Mapa</a>
             <a class="nav-link text-white{% if request.endpoint == 'dashboard' %} tab-ativa{% endif %}" href="{{ url_for('dashboard') }}">Alertas</a>
             <a class="nav-link text-white{% if request.endpoint == 'graficos' %} tab-ativa{% endif %}" href="{{ url_for('graficos') }}">Graficos</a>
             <a class="nav-link text-white{% if request.endpoint == 'fazendas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas') }}">Manejos</a>
             <a class="nav-link text-white{% if request.endpoint == 'recommendations' %} tab-ativa{% endif %}" href="{{ url_for('recommendations_default') }}">Recomendações</a>
             <a class="nav-link text-white" href="https://new.bioscout.com.au/" target="_blank" rel="noopener">BioScout</a>
+            {% endif %}
             <a class="nav-link text-white{% if request.endpoint == 'change_password' %} tab-ativa{% endif %}" href="{{ url_for('change_password') }}" title="Trocar senha">Trocar senha</a>
             <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>
             {% if current_user.is_master or abas_config_permitidas %}
