@@ -2270,14 +2270,15 @@ def _whatsapp_scheduler_loop():
                 _atualizar_open_meteo_diario()
             except Exception:
                 pass
-            try:
-                _run_scheduled_whatsapp_sends()
-            except Exception:
-                pass  # nunca deixa o loop do agendador morrer
-            try:
-                _run_scheduled_ndvi_sends()
-            except Exception:
-                pass
+            if not AMBIENTE_QAP:  # QAP (banco copiado da producao) nunca dispara relatorio agendado
+                try:
+                    _run_scheduled_whatsapp_sends()
+                except Exception:
+                    pass  # nunca deixa o loop do agendador morrer
+                try:
+                    _run_scheduled_ndvi_sends()
+                except Exception:
+                    pass
             try:
                 agrofit_dados.atualizar_se_necessario()
             except Exception:
@@ -6363,7 +6364,7 @@ def admin_user_subordinados(user_id):
 
 _ENDPOINTS_LIVRES_CLIENTE = {
     "static", "service_worker", "index", "login", "logout", "esqueci_senha",
-    "definir_nova_senha", "planos_publico", "cadastro", "solicitar_acesso", "asaas_webhook",
+    "definir_nova_senha", "planos_publico", "cadastro", "solicitar_acesso", "confirmar_solicitacao", "asaas_webhook",
 }
 _CPF_CNPJ_RE = re.compile(r"\D")
 
@@ -6533,7 +6534,8 @@ def solicitar_acesso():
         if erro:
             flash(erro, "error")
         else:
-            models.criar_solicitacao({
+            token = secrets.token_urlsafe(24)
+            solicitacao_id = models.criar_solicitacao({
                 "username": username, "password_hash": generate_password_hash(senha), "email": email,
                 "telefone": telefone, "cpf_cnpj": cpf_cnpj, "tipo": tipo,
                 "plano_id": plano["id"] if tipo == "cliente" else None,
@@ -6541,8 +6543,9 @@ def solicitar_acesso():
                 "culturas": ", ".join(culturas_sel + ([outra] if outra else [])), "area_ha": area_ha,
                 "consultor": 1 if consultor else 0, "regiao": regiao if consultor else "",
                 "mensagem": form.get("mensagem", "").strip(),
-            })
-            return render_template("solicitar_acesso_ok.html", nome=username)
+            }, status="verificando", token=token)
+            _enviar_codigo_solicitacao(models.get_solicitacao(solicitacao_id))
+            return redirect(url_for("confirmar_solicitacao", token=token))
     return render_template(
         "solicitar_acesso.html", planos=planos, culturas=culturas, ufs=UFS_BR, tipos=TIPOS_SOLICITACAO, form=form,
     )
@@ -6920,6 +6923,87 @@ def asaas_webhook():
         if assinatura:
             models.atualizar_assinatura(assinatura["user_id"], status="cancelada")
     return jsonify({"ok": True})
+
+
+CODIGO_VALIDADE_MIN = 30
+CODIGO_MAX_TENTATIVAS = 5
+CODIGO_MAX_REENVIOS = 3
+CODIGO_INTERVALO_REENVIO_S = 60
+
+
+def _whatsapp_em_segundo_plano(telefone, texto):
+    """O portao de envio (`whatsapp._um_envio_por_vez`) pode segurar a
+    mensagem por varios segundos -- a tela responde na hora."""
+    threading.Thread(target=whatsapp.send_whatsapp, args=(telefone, texto), daemon=True).start()
+
+
+def _enviar_codigo_solicitacao(sol, reenvio=False):
+    codigo = f"{secrets.randbelow(10 ** 6):06d}"
+    expira = (_agora_cuiaba_dt() + timedelta(minutes=CODIGO_VALIDADE_MIN)).strftime("%Y-%m-%d %H:%M:%S")
+    models.gravar_codigo_solicitacao(sol["id"], generate_password_hash(codigo), expira, reenvio=reenvio)
+    _whatsapp_em_segundo_plano(sol["telefone"], (
+        f"OneAgro Monitor: seu código de confirmação é *{codigo}*.\n"
+        f"Ele vale por {CODIGO_VALIDADE_MIN} minutos. Se você não pediu acesso à OneAgro, ignore esta mensagem."
+    ))
+
+
+def _avisar_master_solicitacao(sol):
+    tipo = "Cliente do app" if sol["tipo"] == "cliente" else "Usuário"
+    if sol["tipo"] == "cliente" and sol["plano_id"]:
+        plano = models.get_plano(sol["plano_id"])
+        tipo += f" ({plano['nome']})" if plano else ""
+    linhas = [
+        "🔔 *Nova solicitação de acesso - OneAgro*",
+        f"Nome: {sol['username']}",
+        f"Tipo: {tipo}",
+        f"Cidade: {sol['cidade']}/{sol['uf']}",
+    ]
+    if sol["empresa"]:
+        linhas.append(f"Empresa/fazenda: {sol['empresa']}")
+    if sol["consultor"]:
+        linhas.append(f"Consultor -- região: {sol['regiao']}")
+    linhas += ["", f"Analise em: {url_for('admin_solicitacoes', _external=True)}"]
+    for telefone in models.get_master_telefones():
+        _whatsapp_em_segundo_plano(telefone, "\n".join(linhas))
+
+
+@app.route("/solicitar-acesso/confirmar/<token>", methods=["GET", "POST"])
+def confirmar_solicitacao(token):
+    """Pessoa digita o codigo que chegou no WhatsApp: so' assim a
+    solicitacao vai pro Master (e ele recebe o aviso)."""
+    sol = models.get_solicitacao_por_token(token)
+    if not sol:
+        abort(404)
+    if sol["status"] != "verificando":
+        return render_template("solicitar_acesso_ok.html", nome=sol["username"])
+    if request.method == "POST":
+        if request.form.get("acao") == "reenviar":
+            enviado_em = datetime.strptime(sol["codigo_enviado_em"], "%Y-%m-%d %H:%M:%S") if sol["codigo_enviado_em"] else None
+            if sol["codigo_reenvios"] >= CODIGO_MAX_REENVIOS:
+                flash("Limite de reenvios atingido. Faça uma nova solicitação.", "error")
+            elif enviado_em and (_agora_cuiaba_dt().replace(tzinfo=None) - enviado_em).total_seconds() < CODIGO_INTERVALO_REENVIO_S:
+                flash("Aguarde um minuto antes de pedir outro código.", "error")
+            else:
+                _enviar_codigo_solicitacao(sol, reenvio=True)
+                flash("Enviamos um novo código pelo WhatsApp.", "success")
+            return redirect(url_for("confirmar_solicitacao", token=token))
+        codigo = re.sub(r"\D", "", request.form.get("codigo", ""))
+        expirado = not sol["codigo_expira"] or _agora_cuiaba_dt().strftime("%Y-%m-%d %H:%M:%S") > sol["codigo_expira"]
+        if sol["codigo_tentativas"] >= CODIGO_MAX_TENTATIVAS:
+            flash("Muitas tentativas erradas. Peça um novo código.", "error")
+        elif expirado:
+            flash("Esse código expirou. Peça um novo código.", "error")
+        elif not sol["codigo_hash"] or not check_password_hash(sol["codigo_hash"], codigo):
+            models.registrar_tentativa_codigo(sol["id"])
+            flash("Código incorreto. Confira a mensagem no WhatsApp e tente de novo.", "error")
+        elif models.get_user_by_username(sol["username"]) or models.get_solicitacao_pendente_por_username(sol["username"]):
+            flash("Esse nome acabou de ser usado por outra pessoa. Faça a solicitação de novo com outro nome.", "error")
+        else:
+            models.confirmar_celular_solicitacao(sol["id"])
+            _avisar_master_solicitacao(models.get_solicitacao(sol["id"]))
+            return render_template("solicitar_acesso_ok.html", nome=sol["username"])
+        return redirect(url_for("confirmar_solicitacao", token=token))
+    return render_template("solicitar_acesso_codigo.html", sol=sol, token=token, validade=CODIGO_VALIDADE_MIN)
 
 
 @app.route("/admin/solicitacoes")

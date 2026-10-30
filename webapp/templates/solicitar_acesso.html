@@ -2,7 +2,7 @@
 {% block title %}Solicitar acesso - OneAgro Monitor{% endblock %}
 {% block content %}
 <h1 class="titulo">Solicitar acesso</h1>
-<p class="small text-muted">Preencha seus dados e escolha o tipo de acesso. A OneAgro analisa cada solicitação e avisa quando o acesso for liberado.</p>
+<p class="small text-muted">Preencha seus dados e escolha o tipo de acesso. Para confirmar o seu celular, enviamos um código pelo WhatsApp. Depois, a OneAgro analisa cada solicitação antes de liberar o acesso.</p>
 {% set tipo_sel = form.get('tipo') or request.args.get('tipo', '') %}
 {% set plano_sel = form.get('plano_id') or request.args.get('plano', '') %}
 <form method="post" class="card shadow-sm mb-3"><div class="card-body">
