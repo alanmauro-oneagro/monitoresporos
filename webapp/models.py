@@ -704,6 +704,15 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     conn.execute("UPDATE users SET is_master = 1, is_admin = 1 WHERE username = ?", (MASTER_PRINCIPAL,))
+    # Codigo de confirmacao do celular por WhatsApp na solicitacao de acesso
+    # (pedido do Alan, 30/10/2026): status 'verificando' ate' a pessoa
+    # digitar o codigo; so' entao vira 'pendente' e aparece pro Master.
+    for coluna in ("token TEXT", "codigo_hash TEXT", "codigo_expira TEXT", "codigo_enviado_em TEXT",
+                   "codigo_tentativas INTEGER NOT NULL DEFAULT 0", "codigo_reenvios INTEGER NOT NULL DEFAULT 0"):
+        try:
+            conn.execute(f"ALTER TABLE solicitacoes_acesso ADD COLUMN {coluna}")
+        except sqlite3.OperationalError:
+            pass  # coluna ja existe
     try:
         conn.execute("ALTER TABLE users ADD COLUMN is_cliente INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -3501,13 +3510,13 @@ _CAMPOS_SOLICITACAO = (
 )
 
 
-def criar_solicitacao(dados):
+def criar_solicitacao(dados, status="pendente", token=None):
     conn = get_db()
     try:
         cur = conn.execute(
-            f"INSERT INTO solicitacoes_acesso ({', '.join(_CAMPOS_SOLICITACAO)}, criado_em)"
-            f" VALUES ({', '.join('?' for _ in _CAMPOS_SOLICITACAO)}, ?)",
-            tuple(dados.get(c) for c in _CAMPOS_SOLICITACAO) + (_agora_cuiaba(),),
+            f"INSERT INTO solicitacoes_acesso ({', '.join(_CAMPOS_SOLICITACAO)}, criado_em, status, token)"
+            f" VALUES ({', '.join('?' for _ in _CAMPOS_SOLICITACAO)}, ?, ?, ?)",
+            tuple(dados.get(c) for c in _CAMPOS_SOLICITACAO) + (_agora_cuiaba(), status, token),
         )
         conn.commit()
         return cur.lastrowid
@@ -3520,6 +3529,51 @@ def get_solicitacao(solicitacao_id):
     row = conn.execute("SELECT * FROM solicitacoes_acesso WHERE id = ?", (solicitacao_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def get_solicitacao_por_token(token):
+    if not token:
+        return None
+    conn = get_db()
+    row = conn.execute("SELECT * FROM solicitacoes_acesso WHERE token = ?", (token,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def gravar_codigo_solicitacao(solicitacao_id, codigo_hash, expira, reenvio=False):
+    conn = get_db()
+    conn.execute(
+        "UPDATE solicitacoes_acesso SET codigo_hash = ?, codigo_expira = ?, codigo_enviado_em = ?,"
+        " codigo_tentativas = 0, codigo_reenvios = codigo_reenvios + ? WHERE id = ?",
+        (codigo_hash, expira, _agora_cuiaba(), 1 if reenvio else 0, solicitacao_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def registrar_tentativa_codigo(solicitacao_id):
+    conn = get_db()
+    conn.execute("UPDATE solicitacoes_acesso SET codigo_tentativas = codigo_tentativas + 1 WHERE id = ?", (solicitacao_id,))
+    conn.commit()
+    conn.close()
+
+
+def confirmar_celular_solicitacao(solicitacao_id):
+    conn = get_db()
+    conn.execute(
+        "UPDATE solicitacoes_acesso SET status = 'pendente', codigo_hash = NULL, criado_em = ?"
+        " WHERE id = ? AND status = 'verificando'",
+        (_agora_cuiaba(), solicitacao_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_master_telefones():
+    conn = get_db()
+    rows = conn.execute("SELECT telefone FROM users WHERE is_master = 1 AND telefone != ''").fetchall()
+    conn.close()
+    return [r["telefone"] for r in rows if r["telefone"]]
 
 
 def get_solicitacao_pendente_por_username(username):
@@ -3539,7 +3593,8 @@ def get_solicitacoes(pendentes=True, limite=50):
         rows = conn.execute("SELECT * FROM solicitacoes_acesso WHERE status = 'pendente' ORDER BY id").fetchall()
     else:
         rows = conn.execute(
-            "SELECT * FROM solicitacoes_acesso WHERE status != 'pendente' ORDER BY decidido_em DESC, id DESC LIMIT ?",
+            "SELECT * FROM solicitacoes_acesso WHERE status IN ('aprovada', 'recusada')"
+            " ORDER BY decidido_em DESC, id DESC LIMIT ?",
             (limite,),
         ).fetchall()
     conn.close()

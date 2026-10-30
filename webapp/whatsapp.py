@@ -20,6 +20,7 @@ import base64
 import functools
 import json
 import os
+import re
 import threading
 import time
 import urllib.request
@@ -50,9 +51,23 @@ _portao_envio = threading.Lock()
 _fim_ultimo_envio = [0.0]
 
 
+# Ambiente de teste (Railway Environment "QAP", banco copiado da producao):
+# so' manda pra quem estiver em QAP_WHATSAPP_PERMITIDOS (numeros separados
+# por virgula) -- sem a variavel, nao manda nada. Evita relatorio agendado
+# ou envio manual do QAP chegar em cliente de verdade.
+AMBIENTE_QAP = os.environ.get("RAILWAY_ENVIRONMENT_NAME", "").strip().lower() == "qap"
+
+
+def _qap_permitidos():
+    return {re.sub(r"\D", "", n) for n in os.environ.get("QAP_WHATSAPP_PERMITIDOS", "").split(",") if n.strip()}
+
+
 def _um_envio_por_vez(funcao):
     @functools.wraps(funcao)
     def envolvida(*args, **kwargs):
+        telefone = args[0] if args else kwargs.get("phone")
+        if AMBIENTE_QAP and re.sub(r"\D", "", str(telefone or "")) not in _qap_permitidos():
+            return False, "Ambiente de teste (QAP): numero fora de QAP_WHATSAPP_PERMITIDOS, nada enviado."
         with _portao_envio:
             espera = _fim_ultimo_envio[0] + INTERVALO_ENTRE_ENVIOS_S - time.monotonic()
             if espera > 0:

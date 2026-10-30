@@ -54,7 +54,13 @@ acesso (`/admin/solicitacoes`, contador vermelho no menu): pode trocar
 tipo/plano, Aprovar (cria a conta com a senha que a pessoa escolheu;
 Usuario cai direto em Editar fazendas; Cliente fica com assinatura
 pendente e paga em "Minha assinatura" ou ganha cortesia) ou Recusar.
-Login com solicitacao pendente avisa "em analise".
+Login com solicitacao pendente avisa "em analise". Celular confirmado
+por codigo no WhatsApp (pedido do Alan, 30/10/2026): o formulario cria a
+solicitacao como 'verificando' e manda um codigo de 6 digitos
+(`/solicitar-acesso/confirmar/<token>`; vale 30 min, 5 tentativas, ate' 3
+reenvios com 1 min de intervalo); so' com o codigo certo vira 'pendente',
+aparece pro Master e todo Master com telefone recebe o aviso no WhatsApp
+(`_avisar_master_solicitacao`). Envio em thread (`_whatsapp_em_segundo_plano`).
 
 **Cliente do app (pedido do Alan, 25/10/2026)**: 4o tipo de conta,
 `users.is_cliente=1` (nunca admin), criado pela aprovacao de uma
@@ -316,6 +322,11 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     codigo novo pro QAP: atualizar a branch `qap` a partir da `main` (ou
     de uma branch da migracao). O ambiente de nuvem do Claude nao alcanca
     o QAP (nem a producao) sem liberar o dominio na rede da sessao.
+  - WhatsApp no QAP: `whatsapp._um_envio_por_vez` so' deixa sair pra
+    numeros em `QAP_WHATSAPP_PERMITIDOS` (variavel do QAP, separados por
+    virgula; sem ela nada sai) e o agendador do QAP nunca dispara
+    relatorio/NDVI agendado. Pra testar WhatsApp no QAP: colocar
+    `WHATSAPP_BRIDGE_URL` (a mesma da producao) + `QAP_WHATSAPP_PERMITIDOS`.
   - Conferir com o Alan: variaveis de WhatsApp/Asaas apagadas no QAP
     (`WHATSAPP_BRIDGE_URL`, `WHATSAPP_PROVIDER`, `WHATSAPP_CLOUD_*`,
     `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN`) e `BIOSCOUT_WEB_SECRET` fixo
