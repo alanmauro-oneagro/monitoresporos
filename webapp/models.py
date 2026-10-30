@@ -704,11 +704,13 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     conn.execute("UPDATE users SET is_master = 1, is_admin = 1 WHERE username = ?", (MASTER_PRINCIPAL,))
-    # Codigo de confirmacao do celular por WhatsApp na solicitacao de acesso
-    # (pedido do Alan, 30/10/2026): status 'verificando' ate' a pessoa
-    # digitar o codigo; so' entao vira 'pendente' e aparece pro Master.
+    # Cadastro direto (pedido do Alan, 31/10/2026): cada linha e' o registro
+    # de uma conta criada em /solicitar-acesso (status 'cadastrado'), pra
+    # tela "Novos cadastros" do Master. As colunas de codigo/token ficaram
+    # do fluxo anterior (com codigo no WhatsApp e aprovacao), sem uso.
     for coluna in ("token TEXT", "codigo_hash TEXT", "codigo_expira TEXT", "codigo_enviado_em TEXT",
-                   "codigo_tentativas INTEGER NOT NULL DEFAULT 0", "codigo_reenvios INTEGER NOT NULL DEFAULT 0"):
+                   "codigo_tentativas INTEGER NOT NULL DEFAULT 0", "codigo_reenvios INTEGER NOT NULL DEFAULT 0",
+                   "nome_completo TEXT", "perfil TEXT", "visto INTEGER NOT NULL DEFAULT 0"):
         try:
             conn.execute(f"ALTER TABLE solicitacoes_acesso ADD COLUMN {coluna}")
         except sqlite3.OperationalError:
@@ -3505,18 +3507,20 @@ def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id, passw
 
 
 _CAMPOS_SOLICITACAO = (
-    "username", "password_hash", "email", "telefone", "cpf_cnpj", "tipo", "plano_id", "empresa",
-    "cidade", "uf", "culturas", "area_ha", "consultor", "regiao", "mensagem",
+    "username", "nome_completo", "perfil", "email", "telefone", "tipo", "empresa",
+    "cidade", "uf", "culturas", "area_ha", "mensagem", "user_id",
 )
 
 
-def criar_solicitacao(dados, status="pendente", token=None):
+def registrar_cadastro(dados):
+    """Registro de uma conta criada em /solicitar-acesso, pra tela "Novos
+    cadastros" do Master (nao e' a conta em si -- essa fica em users)."""
     conn = get_db()
     try:
         cur = conn.execute(
-            f"INSERT INTO solicitacoes_acesso ({', '.join(_CAMPOS_SOLICITACAO)}, criado_em, status, token)"
-            f" VALUES ({', '.join('?' for _ in _CAMPOS_SOLICITACAO)}, ?, ?, ?)",
-            tuple(dados.get(c) for c in _CAMPOS_SOLICITACAO) + (_agora_cuiaba(), status, token),
+            f"INSERT INTO solicitacoes_acesso ({', '.join(_CAMPOS_SOLICITACAO)}, password_hash, status, criado_em)"
+            f" VALUES ({', '.join('?' for _ in _CAMPOS_SOLICITACAO)}, '', 'cadastrado', ?)",
+            tuple(dados.get(c) for c in _CAMPOS_SOLICITACAO) + (_agora_cuiaba(),),
         )
         conn.commit()
         return cur.lastrowid
@@ -3524,49 +3528,38 @@ def criar_solicitacao(dados, status="pendente", token=None):
         conn.close()
 
 
-def get_solicitacao(solicitacao_id):
+def get_cadastros(limite=200):
+    """Mais recentes primeiro; `conta_existe` cai pra 0 se a conta foi
+    excluida depois."""
     conn = get_db()
-    row = conn.execute("SELECT * FROM solicitacoes_acesso WHERE id = ?", (solicitacao_id,)).fetchone()
+    rows = conn.execute(
+        "SELECT s.*, u.id IS NOT NULL AS conta_existe FROM solicitacoes_acesso s"
+        " LEFT JOIN users u ON u.id = s.user_id WHERE s.status = 'cadastrado' ORDER BY s.id DESC LIMIT ?",
+        (limite,),
+    ).fetchall()
     conn.close()
-    return dict(row) if row else None
+    return [dict(r) for r in rows]
 
 
-def get_solicitacao_por_token(token):
-    if not token:
-        return None
+def contar_cadastros_nao_vistos():
     conn = get_db()
-    row = conn.execute("SELECT * FROM solicitacoes_acesso WHERE token = ?", (token,)).fetchone()
+    n = conn.execute("SELECT COUNT(*) FROM solicitacoes_acesso WHERE status = 'cadastrado' AND visto = 0").fetchone()[0]
     conn.close()
-    return dict(row) if row else None
+    return n
 
 
-def gravar_codigo_solicitacao(solicitacao_id, codigo_hash, expira, reenvio=False):
+def marcar_cadastros_vistos():
     conn = get_db()
-    conn.execute(
-        "UPDATE solicitacoes_acesso SET codigo_hash = ?, codigo_expira = ?, codigo_enviado_em = ?,"
-        " codigo_tentativas = 0, codigo_reenvios = codigo_reenvios + ? WHERE id = ?",
-        (codigo_hash, expira, _agora_cuiaba(), 1 if reenvio else 0, solicitacao_id),
-    )
+    conn.execute("UPDATE solicitacoes_acesso SET visto = 1 WHERE status = 'cadastrado' AND visto = 0")
     conn.commit()
     conn.close()
 
 
-def registrar_tentativa_codigo(solicitacao_id):
+def username_em_uso(username):
     conn = get_db()
-    conn.execute("UPDATE solicitacoes_acesso SET codigo_tentativas = codigo_tentativas + 1 WHERE id = ?", (solicitacao_id,))
-    conn.commit()
+    row = conn.execute("SELECT 1 FROM users WHERE lower(username) = lower(?)", (username.strip(),)).fetchone()
     conn.close()
-
-
-def confirmar_celular_solicitacao(solicitacao_id):
-    conn = get_db()
-    conn.execute(
-        "UPDATE solicitacoes_acesso SET status = 'pendente', codigo_hash = NULL, criado_em = ?"
-        " WHERE id = ? AND status = 'verificando'",
-        (_agora_cuiaba(), solicitacao_id),
-    )
-    conn.commit()
-    conn.close()
+    return row is not None
 
 
 def get_master_telefones():
@@ -3574,49 +3567,6 @@ def get_master_telefones():
     rows = conn.execute("SELECT telefone FROM users WHERE is_master = 1 AND telefone != ''").fetchall()
     conn.close()
     return [r["telefone"] for r in rows if r["telefone"]]
-
-
-def get_solicitacao_pendente_por_username(username):
-    conn = get_db()
-    row = conn.execute(
-        "SELECT * FROM solicitacoes_acesso WHERE status = 'pendente' AND lower(username) = lower(?)", (username,)
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def get_solicitacoes(pendentes=True, limite=50):
-    """Pendentes (mais antigas primeiro, ordem de chegada) ou ja'
-    decididas (mais recentes primeiro)."""
-    conn = get_db()
-    if pendentes:
-        rows = conn.execute("SELECT * FROM solicitacoes_acesso WHERE status = 'pendente' ORDER BY id").fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM solicitacoes_acesso WHERE status IN ('aprovada', 'recusada')"
-            " ORDER BY decidido_em DESC, id DESC LIMIT ?",
-            (limite,),
-        ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def contar_solicitacoes_pendentes():
-    conn = get_db()
-    n = conn.execute("SELECT COUNT(*) FROM solicitacoes_acesso WHERE status = 'pendente'").fetchone()[0]
-    conn.close()
-    return n
-
-
-def decidir_solicitacao(solicitacao_id, status, decidido_por, user_id=None, tipo=None, plano_id=None):
-    conn = get_db()
-    conn.execute(
-        "UPDATE solicitacoes_acesso SET status = ?, decidido_em = ?, decidido_por = ?, user_id = ?,"
-        " tipo = COALESCE(?, tipo), plano_id = COALESCE(?, plano_id) WHERE id = ?",
-        (status, _agora_cuiaba(), decidido_por, user_id, tipo, plano_id, solicitacao_id),
-    )
-    conn.commit()
-    conn.close()
 
 
 def get_assinatura(user_id):

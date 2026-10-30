@@ -2590,11 +2590,7 @@ def login():
             login_user(User(row), remember=lembrar)
             session["deve_definir_senha"] = True
             return redirect(url_for("definir_nova_senha"))
-        pendente = None if row else models.get_solicitacao_pendente_por_username(username)
-        if pendente and check_password_hash(pendente["password_hash"], password):
-            flash("Sua solicitação de acesso ainda está em análise pela OneAgro. Você poderá entrar assim que ela for aprovada.", "info")
-        else:
-            flash("Usuario ou senha invalidos.", "error")
+        flash("Usuario ou senha invalidos.", "error")
     return render_template("login.html")
 
 
@@ -6364,7 +6360,7 @@ def admin_user_subordinados(user_id):
 
 _ENDPOINTS_LIVRES_CLIENTE = {
     "static", "service_worker", "index", "login", "logout", "esqueci_senha",
-    "definir_nova_senha", "planos_publico", "cadastro", "solicitar_acesso", "confirmar_solicitacao", "asaas_webhook",
+    "definir_nova_senha", "planos_publico", "cadastro", "solicitar_acesso", "verificar_usuario_cadastro", "asaas_webhook",
 }
 _CPF_CNPJ_RE = re.compile(r"\D")
 
@@ -6466,65 +6462,92 @@ def planos_publico():
 
 @app.route("/cadastro", methods=["GET", "POST"])
 def cadastro():
-    # Conta nova so' pela solicitacao com aprovacao do Master (pedido do
-    # Alan, 30/10/2026) -- link antigo cai no formulario novo.
+    # Link antigo do cadastro com pagamento direto cai no formulario de
+    # cadastro (`solicitar_acesso`).
     plano = request.args.get("plano")
-    return redirect(url_for("solicitar_acesso", tipo="cliente", plano=plano) if plano else url_for("solicitar_acesso"))
+    return redirect(url_for("solicitar_acesso", modalidade="plano") if plano else url_for("solicitar_acesso"))
 
 
 UFS_BR = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR",
           "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]
-TIPOS_SOLICITACAO = {"usuario": "Usuário (acesso às fazendas monitoradas)", "cliente": "Cliente do app (plano)"}
+MODALIDADES_CADASTRO = {"plano": "Assinar plano", "fazenda": "Ter acesso à fazenda cadastrada"}
+PERFIS_CADASTRO = {"produtor": "Produtor", "tecnico": "Técnico do setor"}
+
+
+def _sugerir_usuario(nome_completo):
+    """'Nome Ultimo-sobrenome' (pedido do Alan); se ja' existir, acrescenta
+    2, 3... ate' achar um livre."""
+    partes = [p.capitalize() for p in nome_completo.split()]
+    if not partes:
+        return ""
+    base = f"{partes[0]} {partes[-1]}" if len(partes) > 1 else partes[0]
+    sugestao, n = base, 2
+    while models.username_em_uso(sugestao):
+        sugestao, n = f"{base} {n}", n + 1
+    return sugestao
+
+
+@app.route("/solicitar-acesso/usuario")
+def verificar_usuario_cadastro():
+    usuario = request.args.get("usuario", "").strip()
+    return jsonify({
+        "disponivel": len(usuario) >= 3 and not models.username_em_uso(usuario),
+        "sugestao": _sugerir_usuario(request.args.get("nome") or usuario),
+    })
 
 
 @app.route("/solicitar-acesso", methods=["GET", "POST"])
 def solicitar_acesso():
-    """Pre-cadastro publico: a pessoa preenche tudo e escolhe o tipo de
-    acesso; a conta so' nasce quando o Master aprova (`admin_solicitacoes`)."""
+    """Cadastro publico (pedido do Alan, 31/10/2026): a conta nasce na hora
+    e a pessoa ja' entra. "Assinar plano" vira cliente do app (escolhe o
+    plano e informa CPF/CNPJ na tela da assinatura); "Ter acesso a fazenda
+    cadastrada" vira Usuario sem nenhuma fazenda ate' o Master liberar. O
+    Master ve cada cadastro em Configuracoes > Novos cadastros."""
     if current_user.is_authenticated:
         return redirect(url_for("index"))
-    planos = models.get_planos(apenas_ativos=True)
     culturas = models.get_culturas_ativas()
     form = request.form
     if request.method == "POST":
-        username = form.get("username", "").strip()
+        modalidade = form.get("modalidade", "")
+        perfis = [p for p in form.getlist("perfil") if p in PERFIS_CADASTRO]
+        nome_completo = " ".join(form.get("nome_completo", "").split())
+        username = " ".join(form.get("username", "").split())
         email = form.get("email", "").strip()
         telefone = _telefone_from_form(form)
-        cpf_cnpj = _CPF_CNPJ_RE.sub("", form.get("cpf_cnpj", ""))
-        senha = form.get("senha", "")
-        tipo = form.get("tipo", "")
-        plano = next((p for p in planos if str(p["id"]) == form.get("plano_id")), None)
-        consultor = bool(form.get("consultor"))
-        regiao = form.get("regiao", "").strip()
         uf = form.get("uf", "")
         culturas_sel = [c for c in form.getlist("culturas") if c in culturas]
         outra = form.get("cultura_outra", "").strip()
         area_txt = form.get("area_ha", "").strip().replace(".", "").replace(",", ".")
         try:
-            area_ha = float(area_txt) if area_txt else None
+            area_ha = float(area_txt)
         except ValueError:
-            area_ha = -1
+            area_ha = 0
+        senha = form.get("senha", "")
         erro = None
-        if tipo not in TIPOS_SOLICITACAO:
-            erro = "Escolha o tipo de acesso."
-        elif tipo == "cliente" and not plano:
-            erro = "Escolha um plano."
+        if modalidade not in MODALIDADES_CADASTRO:
+            erro = "Escolha o que você quer: assinar um plano ou ter acesso à fazenda cadastrada."
+        elif not perfis:
+            erro = "Marque se você é produtor e/ou técnico do setor."
+        elif len(nome_completo.split()) < 2:
+            erro = "Informe o seu nome completo (nome e sobrenome)."
         elif len(username) < 3:
-            erro = "Informe seu nome (pelo menos 3 letras) -- ele também será o seu usuário de acesso."
-        elif models.get_user_by_username(username) or models.get_solicitacao_pendente_por_username(username):
-            erro = "Já existe uma conta ou solicitação com esse nome. Use outro (ex.: nome + sobrenome)."
-        elif not _is_valid_email(email):
-            erro = "E-mail inválido."
+            erro = "O usuário precisa ter pelo menos 3 letras."
+        elif models.username_em_uso(username):
+            erro = f"O usuário \"{username}\" já existe. Sugestão: {_sugerir_usuario(nome_completo)}."
         elif not _is_valid_phone(telefone):
             erro = "Celular inválido -- informe DDD + número."
-        elif not _cpf_cnpj_valido(cpf_cnpj):
-            erro = "CPF/CNPJ inválido."
+        elif email and not _is_valid_email(email):
+            erro = "E-mail inválido."
+        elif not form.get("empresa", "").strip():
+            erro = "Informe a fazenda ou empresa."
         elif not form.get("cidade", "").strip() or uf not in UFS_BR:
             erro = "Informe a cidade e o estado (UF)."
-        elif area_ha is not None and area_ha < 0:
-            erro = "Área inválida -- informe só o número de hectares."
-        elif consultor and not regiao:
-            erro = "Como consultor, informe a região (cidades/estados) em que quer ter acesso aos dados."
+        elif not culturas_sel and not outra:
+            erro = "Marque pelo menos uma cultura."
+        elif area_ha <= 0:
+            erro = "Informe a área plantada/atendida em hectares (só o número)."
+        elif not form.get("mensagem", "").strip():
+            erro = "Escreva uma mensagem contando o que você procura."
         elif len(senha) < 6:
             erro = "A senha precisa ter pelo menos 6 caracteres."
         elif senha != form.get("senha_confirmar", ""):
@@ -6534,21 +6557,55 @@ def solicitar_acesso():
         if erro:
             flash(erro, "error")
         else:
-            token = secrets.token_urlsafe(24)
-            solicitacao_id = models.criar_solicitacao({
-                "username": username, "password_hash": generate_password_hash(senha), "email": email,
-                "telefone": telefone, "cpf_cnpj": cpf_cnpj, "tipo": tipo,
-                "plano_id": plano["id"] if tipo == "cliente" else None,
+            try:
+                if modalidade == "plano":
+                    user_id = models.criar_cliente(username, senha, email, telefone, "", None)
+                else:
+                    models.create_user(username, senha, email=email, telefone=telefone)
+                    user_id = models.get_user_by_username(username)["id"]
+            except sqlite3.IntegrityError:
+                flash(f"O usuário \"{username}\" acabou de ser usado. Sugestão: {_sugerir_usuario(nome_completo)}.", "error")
+                return render_template("solicitar_acesso.html", culturas=culturas, ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
+                                       perfis=PERFIS_CADASTRO, form=form)
+            registro = {
+                "username": username, "nome_completo": nome_completo, "perfil": ",".join(perfis), "email": email,
+                "telefone": telefone, "tipo": "cliente" if modalidade == "plano" else "usuario",
                 "empresa": form.get("empresa", "").strip(), "cidade": form.get("cidade", "").strip(), "uf": uf,
                 "culturas": ", ".join(culturas_sel + ([outra] if outra else [])), "area_ha": area_ha,
-                "consultor": 1 if consultor else 0, "regiao": regiao if consultor else "",
-                "mensagem": form.get("mensagem", "").strip(),
-            }, status="verificando", token=token)
-            _enviar_codigo_solicitacao(models.get_solicitacao(solicitacao_id))
-            return redirect(url_for("confirmar_solicitacao", token=token))
-    return render_template(
-        "solicitar_acesso.html", planos=planos, culturas=culturas, ufs=UFS_BR, tipos=TIPOS_SOLICITACAO, form=form,
-    )
+                "mensagem": form.get("mensagem", "").strip(), "user_id": user_id,
+            }
+            models.registrar_cadastro(registro)
+            _avisar_master_cadastro(registro)
+            login_user(User(models.get_user_by_id(user_id)), remember=True)
+            if modalidade == "plano":
+                flash("Conta criada! Agora escolha o seu plano para liberar o acesso.", "success")
+                return redirect(url_for("cliente_assinatura"))
+            flash("Conta criada! A OneAgro vai liberar as fazendas para você -- assim que isso acontecer, elas aparecem aqui.", "success")
+            return redirect(url_for("index"))
+    return render_template("solicitar_acesso.html", culturas=culturas, ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
+                           perfis=PERFIS_CADASTRO, form=form)
+
+
+def _whatsapp_em_segundo_plano(telefone, texto):
+    """O portao de envio (`whatsapp._um_envio_por_vez`) pode segurar a
+    mensagem por varios segundos -- a tela responde na hora."""
+    threading.Thread(target=whatsapp.send_whatsapp, args=(telefone, texto), daemon=True).start()
+
+
+def _avisar_master_cadastro(reg):
+    perfis = " e ".join(PERFIS_CADASTRO[p] for p in reg["perfil"].split(",") if p in PERFIS_CADASTRO)
+    linhas = [
+        "🔔 *Novo cadastro - OneAgro*",
+        f"{reg['nome_completo']} (usuário: {reg['username']})",
+        f"Quer: {'Assinar plano' if reg['tipo'] == 'cliente' else 'Ter acesso à fazenda cadastrada'}",
+        f"Perfil: {perfis}",
+        f"Celular: {models.fmt_telefone_br(reg['telefone'])}",
+        f"{reg['empresa']} -- {reg['cidade']}/{reg['uf']}",
+        "",
+        f"Detalhes: {url_for('admin_solicitacoes', _external=True)}",
+    ]
+    for telefone in models.get_master_telefones():
+        _whatsapp_em_segundo_plano(telefone, "\n".join(linhas))
 
 
 def _cobrar_ou_avisar(user_id, plano):
@@ -6597,7 +6654,11 @@ def cliente_assinar():
     if not plano:
         flash("Escolha um plano.", "error")
         return redirect(url_for("cliente_assinatura"))
-    models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"])
+    cpf_cnpj = _CPF_CNPJ_RE.sub("", request.form.get("cpf_cnpj", "")) or (assinatura or {}).get("cpf_cnpj") or ""
+    if not _cpf_cnpj_valido(cpf_cnpj):
+        flash("Informe um CPF ou CNPJ válido para a cobrança.", "error")
+        return redirect(url_for("cliente_assinatura"))
+    models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"], cpf_cnpj=cpf_cnpj)
     return _cobrar_ou_avisar(int(current_user.id), plano)
 
 
@@ -6925,147 +6986,21 @@ def asaas_webhook():
     return jsonify({"ok": True})
 
 
-CODIGO_VALIDADE_MIN = 30
-CODIGO_MAX_TENTATIVAS = 5
-CODIGO_MAX_REENVIOS = 3
-CODIGO_INTERVALO_REENVIO_S = 60
-
-
-def _whatsapp_em_segundo_plano(telefone, texto):
-    """O portao de envio (`whatsapp._um_envio_por_vez`) pode segurar a
-    mensagem por varios segundos -- a tela responde na hora."""
-    threading.Thread(target=whatsapp.send_whatsapp, args=(telefone, texto), daemon=True).start()
-
-
-def _enviar_codigo_solicitacao(sol, reenvio=False):
-    codigo = f"{secrets.randbelow(10 ** 6):06d}"
-    expira = (_agora_cuiaba_dt() + timedelta(minutes=CODIGO_VALIDADE_MIN)).strftime("%Y-%m-%d %H:%M:%S")
-    models.gravar_codigo_solicitacao(sol["id"], generate_password_hash(codigo), expira, reenvio=reenvio)
-    _whatsapp_em_segundo_plano(sol["telefone"], (
-        f"OneAgro Monitor: seu código de confirmação é *{codigo}*.\n"
-        f"Ele vale por {CODIGO_VALIDADE_MIN} minutos. Se você não pediu acesso à OneAgro, ignore esta mensagem."
-    ))
-
-
-def _avisar_master_solicitacao(sol):
-    tipo = "Cliente do app" if sol["tipo"] == "cliente" else "Usuário"
-    if sol["tipo"] == "cliente" and sol["plano_id"]:
-        plano = models.get_plano(sol["plano_id"])
-        tipo += f" ({plano['nome']})" if plano else ""
-    linhas = [
-        "🔔 *Nova solicitação de acesso - OneAgro*",
-        f"Nome: {sol['username']}",
-        f"Tipo: {tipo}",
-        f"Cidade: {sol['cidade']}/{sol['uf']}",
-    ]
-    if sol["empresa"]:
-        linhas.append(f"Empresa/fazenda: {sol['empresa']}")
-    if sol["consultor"]:
-        linhas.append(f"Consultor -- região: {sol['regiao']}")
-    linhas += ["", f"Analise em: {url_for('admin_solicitacoes', _external=True)}"]
-    for telefone in models.get_master_telefones():
-        _whatsapp_em_segundo_plano(telefone, "\n".join(linhas))
-
-
-@app.route("/solicitar-acesso/confirmar/<token>", methods=["GET", "POST"])
-def confirmar_solicitacao(token):
-    """Pessoa digita o codigo que chegou no WhatsApp: so' assim a
-    solicitacao vai pro Master (e ele recebe o aviso)."""
-    sol = models.get_solicitacao_por_token(token)
-    if not sol:
-        abort(404)
-    if sol["status"] != "verificando":
-        return render_template("solicitar_acesso_ok.html", nome=sol["username"])
-    if request.method == "POST":
-        if request.form.get("acao") == "reenviar":
-            enviado_em = datetime.strptime(sol["codigo_enviado_em"], "%Y-%m-%d %H:%M:%S") if sol["codigo_enviado_em"] else None
-            if sol["codigo_reenvios"] >= CODIGO_MAX_REENVIOS:
-                flash("Limite de reenvios atingido. Faça uma nova solicitação.", "error")
-            elif enviado_em and (_agora_cuiaba_dt().replace(tzinfo=None) - enviado_em).total_seconds() < CODIGO_INTERVALO_REENVIO_S:
-                flash("Aguarde um minuto antes de pedir outro código.", "error")
-            else:
-                _enviar_codigo_solicitacao(sol, reenvio=True)
-                flash("Enviamos um novo código pelo WhatsApp.", "success")
-            return redirect(url_for("confirmar_solicitacao", token=token))
-        codigo = re.sub(r"\D", "", request.form.get("codigo", ""))
-        expirado = not sol["codigo_expira"] or _agora_cuiaba_dt().strftime("%Y-%m-%d %H:%M:%S") > sol["codigo_expira"]
-        if sol["codigo_tentativas"] >= CODIGO_MAX_TENTATIVAS:
-            flash("Muitas tentativas erradas. Peça um novo código.", "error")
-        elif expirado:
-            flash("Esse código expirou. Peça um novo código.", "error")
-        elif not sol["codigo_hash"] or not check_password_hash(sol["codigo_hash"], codigo):
-            models.registrar_tentativa_codigo(sol["id"])
-            flash("Código incorreto. Confira a mensagem no WhatsApp e tente de novo.", "error")
-        elif models.get_user_by_username(sol["username"]) or models.get_solicitacao_pendente_por_username(sol["username"]):
-            flash("Esse nome acabou de ser usado por outra pessoa. Faça a solicitação de novo com outro nome.", "error")
-        else:
-            models.confirmar_celular_solicitacao(sol["id"])
-            _avisar_master_solicitacao(models.get_solicitacao(sol["id"]))
-            return render_template("solicitar_acesso_ok.html", nome=sol["username"])
-        return redirect(url_for("confirmar_solicitacao", token=token))
-    return render_template("solicitar_acesso_codigo.html", sol=sol, token=token, validade=CODIGO_VALIDADE_MIN)
-
-
 @app.route("/admin/solicitacoes")
 @master_required
 def admin_solicitacoes():
-    planos = models.get_planos()
-    return render_template(
-        "admin_solicitacoes.html", pendentes=models.get_solicitacoes(pendentes=True),
-        decididas=models.get_solicitacoes(pendentes=False), planos=planos,
-        nome_plano={p["id"]: p["nome"] for p in planos}, tipos=TIPOS_SOLICITACAO,
-    )
-
-
-@app.route("/admin/solicitacoes/<int:solicitacao_id>/aprovar", methods=["POST"])
-@master_required
-def aprovar_solicitacao(solicitacao_id):
-    sol = models.get_solicitacao(solicitacao_id)
-    if not sol or sol["status"] != "pendente":
-        abort(404)
-    tipo = request.form.get("tipo", sol["tipo"])
-    plano = next((p for p in models.get_planos() if str(p["id"]) == request.form.get("plano_id", str(sol["plano_id"]))), None)
-    if tipo not in TIPOS_SOLICITACAO or (tipo == "cliente" and not plano):
-        flash("Escolha o tipo de acesso (e o plano, se for cliente do app).", "error")
-        return redirect(url_for("admin_solicitacoes"))
-    if models.get_user_by_username(sol["username"]):
-        flash(f"Já existe um usuário chamado '{sol['username']}' -- recuse esta solicitação ou renomeie o usuário existente.", "error")
-        return redirect(url_for("admin_solicitacoes"))
-    if tipo == "cliente":
-        user_id = models.criar_cliente(
-            sol["username"], None, sol["email"], sol["telefone"], sol["cpf_cnpj"], plano["id"],
-            password_hash=sol["password_hash"],
-        )
-        proximo = ("O cliente já pode entrar e fazer o pagamento em \"Minha assinatura\" -- ou dê uma cortesia em "
-                   "Planos e clientes.")
-    else:
-        models.create_user(sol["username"], None, email=sol["email"], telefone=sol["telefone"],
-                           password_hash=sol["password_hash"])
-        user_id = models.get_user_by_username(sol["username"])["id"]
-        proximo = "Agora libere as fazendas dele em Usuários > Editar fazendas."
-    models.decidir_solicitacao(solicitacao_id, "aprovada", current_user.username, user_id=user_id, tipo=tipo,
-                               plano_id=plano["id"] if tipo == "cliente" else None)
-    flash(f"Acesso de '{sol['username']}' aprovado. {proximo}", "success")
-    if tipo == "usuario":
-        return redirect(url_for("admin_user_permissions", user_id=user_id))
-    return redirect(url_for("admin_solicitacoes"))
-
-
-@app.route("/admin/solicitacoes/<int:solicitacao_id>/recusar", methods=["POST"])
-@master_required
-def recusar_solicitacao(solicitacao_id):
-    sol = models.get_solicitacao(solicitacao_id)
-    if not sol or sol["status"] != "pendente":
-        abort(404)
-    models.decidir_solicitacao(solicitacao_id, "recusada", current_user.username)
-    flash(f"Solicitação de '{sol['username']}' recusada.", "success")
-    return redirect(url_for("admin_solicitacoes"))
+    """Novos cadastros feitos em /solicitar-acesso -- data e contatos de
+    quem se cadastrou. Abrir a tela marca todos como vistos (zera o
+    contador do menu)."""
+    cadastros = models.get_cadastros()
+    models.marcar_cadastros_vistos()
+    return render_template("admin_solicitacoes.html", cadastros=cadastros, perfis=PERFIS_CADASTRO)
 
 
 @app.context_processor
-def _inject_solicitacoes_pendentes():
+def _inject_cadastros_novos():
     if current_user.is_authenticated and getattr(current_user, "is_master", False):
-        return {"solicitacoes_pendentes": models.contar_solicitacoes_pendentes()}
+        return {"solicitacoes_pendentes": models.contar_cadastros_nao_vistos()}
     return {"solicitacoes_pendentes": 0}
 
 

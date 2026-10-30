@@ -26,6 +26,10 @@
     <select class="form-select mb-2" name="plano_id" aria-label="Plano">
         {% for p in planos %}<option value="{{ p.id }}" {% if plano and plano.id == p.id %}selected{% endif %}>{{ p.nome }} -- R$ {{ '%.2f' | format(p.valor) | replace('.', ',') }} / {{ p.ciclo_label | lower }}</option>{% endfor %}
     </select>
+    {% if not (assinatura and assinatura.cpf_cnpj) %}
+    <label class="form-label small mb-1" for="cpf_cnpj">CPF ou CNPJ (para a cobrança)</label>
+    <input class="form-control mb-2" name="cpf_cnpj" id="cpf_cnpj" inputmode="numeric" required>
+    {% endif %}
     <button class="btn btn-success w-100" type="submit">Ir para o pagamento</button>
 </div></form>
 {% endif %}

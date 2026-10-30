@@ -42,29 +42,30 @@ que seja pedido explicitamente paridade para Administradores.
 "Subordinados" na aba Usuarios continuam sendo os contatos leves de
 WhatsApp de cada usuario (tabela `subordinados`), nao um nivel de acesso.
 
-**Conta nova so' com aprovacao do Master (pedido do Alan, 30/10/2026)**:
-"Ainda nao tem conta? Solicite seu acesso" (login) e o "Solicitar acesso"
-de `/planos` levam ao pre-cadastro publico `/solicitar-acesso` (tabela
-`solicitacoes_acesso`): tipo **Usuario** ou **Cliente do app** (+ plano),
-nome/usuario, e-mail, celular, CPF/CNPJ, empresa/fazenda, cidade/UF,
-culturas, area (ha), "sou consultor" + regiao desejada, mensagem e senha
-(guardada so' o hash). `/cadastro` so' redireciona pra la' -- ninguem cria
-conta nem paga sozinho. Master analisa em Configuracoes -> Solicitacoes de
-acesso (`/admin/solicitacoes`, contador vermelho no menu): pode trocar
-tipo/plano, Aprovar (cria a conta com a senha que a pessoa escolheu;
-Usuario cai direto em Editar fazendas; Cliente fica com assinatura
-pendente e paga em "Minha assinatura" ou ganha cortesia) ou Recusar.
-Login com solicitacao pendente avisa "em analise". Celular confirmado
-por codigo no WhatsApp (pedido do Alan, 30/10/2026): o formulario cria a
-solicitacao como 'verificando' e manda um codigo de 6 digitos
-(`/solicitar-acesso/confirmar/<token>`; vale 30 min, 5 tentativas, ate' 3
-reenvios com 1 min de intervalo); so' com o codigo certo vira 'pendente',
-aparece pro Master e todo Master com telefone recebe o aviso no WhatsApp
-(`_avisar_master_solicitacao`). Envio em thread (`_whatsapp_em_segundo_plano`).
+**Cadastro direto (pedido do Alan, 31/10/2026 -- substitui a aprovacao
+e o codigo no WhatsApp de 30/10)**: "Ainda nao tem conta? Cadastre-se"
+(login) e o "Assinar" de `/planos` levam a `/solicitar-acesso`; `/cadastro`
+so' redireciona pra la'. A pessoa escolhe **Assinar plano** ou **Ter acesso
+a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
+(tudo obrigatorio, menos e-mail): nome completo, usuario (sugerido como
+"Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao
+digitar em `/solicitar-acesso/usuario` e de novo no envio, sem diferenciar
+maiusculas -- `models.username_em_uso`), celular, fazenda/empresa,
+cidade/UF, culturas, area plantada/atendida, mensagem e senha (>= 6). A
+conta nasce na hora e a pessoa ja' entra: "Assinar plano" vira cliente do
+app com assinatura sem plano e sem CPF (escolhe o plano e informa o
+CPF/CNPJ na tela "Minha assinatura", `cliente_assinar` valida); "fazenda"
+vira Usuario sem nenhuma fazenda ate' o Master liberar. Cada cadastro fica
+registrado em `solicitacoes_acesso` (status 'cadastrado') pra tela
+Configuracoes -> **Novos cadastros** (`/admin/solicitacoes`, Master;
+contador vermelho = nao vistos, abrir a tela marca como visto): data,
+nome, usuario, perfil, celular (link wa.me), e-mail, fazenda, cidade,
+culturas, area, mensagem e atalho "Liberar fazendas". Todo Master com
+telefone recebe aviso no WhatsApp (`_avisar_master_cadastro`, em thread).
 
 **Cliente do app (pedido do Alan, 25/10/2026)**: 4o tipo de conta,
-`users.is_cliente=1` (nunca admin), criado pela aprovacao de uma
-solicitacao de acesso (acima) e pago no Asaas (`webapp/asaas.py`, env `ASAAS_API_KEY`/`ASAAS_AMBIENTE`/
+`users.is_cliente=1` (nunca admin), criado pelo cadastro direto (acima,
+opcao "Assinar plano") e pago no Asaas (`webapp/asaas.py`, env `ASAAS_API_KEY`/`ASAAS_AMBIENTE`/
 `ASAAS_WEBHOOK_TOKEN`, webhook `/webhooks/asaas`). So' enxerga `/app/*`
 (`_restringir_cliente`); marca lavouras no mapa (`cliente_pontos`) e ve
 esporos ESTIMADOS por IDW das fazendas reais (nunca nome/leitura de
