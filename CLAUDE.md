@@ -333,7 +333,9 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     banco sem nenhum Master (recem-criado): o login mostra "Primeiro
     acesso: carregar o backup da producao" (`/qap/primeiro-acesso`, sem
     login, mesma conferencia `_restaurar_backup_enviado`; 404 fora do QAP
-    ou assim que existir um Master). O QAP tem banco proprio: usuarios da
+    ou assim que existir um Master). E na subida do QAP sem nenhum Master
+    `_bootstrap_master_qap` cria "Alan Mauro" com `models.DEFAULT_PASSWORD`
+    (so' no QAP; nunca mexe em quem ja existe). O QAP tem banco proprio: usuarios da
     producao so' existem la' depois de restaurar um backup. Pra levar
     codigo novo pro QAP: atualizar a branch `qap` a partir da `main` (ou
     de uma branch da migracao). O ambiente de nuvem do Claude nao alcanca
