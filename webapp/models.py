@@ -3560,6 +3560,13 @@ def get_cadastros(limite=200):
     return [dict(r) for r in rows]
 
 
+def existe_master():
+    conn = get_db()
+    row = conn.execute("SELECT 1 FROM users WHERE is_master = 1 LIMIT 1").fetchone()
+    conn.close()
+    return row is not None
+
+
 def contar_cadastros_nao_vistos():
     conn = get_db()
     n = conn.execute("SELECT COUNT(*) FROM solicitacoes_acesso WHERE status = 'cadastrado' AND visto = 0").fetchone()[0]

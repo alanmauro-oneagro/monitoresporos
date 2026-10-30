@@ -18,7 +18,7 @@
                 <input type="file" name="arquivo" id="arquivo" class="form-control" accept=".gz,.db" required>
             </div>
             <button type="submit" class="btn btn-danger">Restaurar no QAP</button>
-            <a href="{{ url_for('admin_exportar') }}" class="btn btn-outline-secondary">Voltar</a>
+            <a href="{{ url_for('login') if primeiro_acesso else url_for('admin_exportar') }}" class="btn btn-outline-secondary">Voltar</a>
         </form>
     </div>
 </div>
