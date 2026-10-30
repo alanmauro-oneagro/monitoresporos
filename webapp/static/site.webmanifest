@@ -1,12 +1,20 @@
 {
-  "name": "OneAgro Monitor",
-  "short_name": "OneAgro",
+  "name": "OneAgro App",
+  "short_name": "OneAgro App",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f6f4",
   "theme_color": "#63b445",
   "icons": [
-    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
