@@ -4,6 +4,8 @@
 <dict>
 	<key>WKAppBoundDomains</key>
 	<array>
+		<string>oneagroapp.com.br</string>
+		<string>www.oneagroapp.com.br</string>
 		<string>monitoresporos-production.up.railway.app</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
