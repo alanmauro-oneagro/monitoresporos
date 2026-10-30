@@ -1,93 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Solicitações de acesso - OneAgro{% endblock %}
+{% block title %}Novos cadastros - OneAgro{% endblock %}
 {% block content %}
 <style>
-.sol-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 0.75rem; margin: 0; font-size: 0.85rem; }
-.sol-card dt { color: #6c757d; font-weight: 400; }
-.sol-card dd { margin: 0; overflow-wrap: anywhere; }
+.cad-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 0.75rem; margin: 0; font-size: 0.85rem; }
+.cad-card dt { color: #6c757d; font-weight: 400; }
+.cad-card dd { margin: 0; overflow-wrap: anywhere; }
 </style>
-<h4 class="mb-2">Solicitações de acesso</h4>
-<p class="text-muted small mb-3">Pedidos feitos pela página "Solicite seu acesso". A conta só passa a existir quando você aprova; dá para trocar o tipo de acesso (e o plano) na hora de aprovar.</p>
+<h4 class="mb-2">Novos cadastros</h4>
+<p class="text-muted small mb-3">Contas criadas pela página "Cadastre-se", mais recentes primeiro. Quem pediu acesso à fazenda cadastrada entra sem ver nenhuma fazenda até você liberar.</p>
 
-{% if not pendentes %}
-<div class="alert alert-secondary">Nenhuma solicitação aguardando análise.</div>
+{% if not cadastros %}
+<div class="alert alert-secondary">Nenhum cadastro ainda.</div>
 {% endif %}
 
-{% for s in pendentes %}
-<div class="card shadow-sm mb-3 sol-card">
+{% for c in cadastros %}
+{% set telefone_digitos = (c.telefone or '') | replace('+', '') %}
+<div class="card shadow-sm mb-3 cad-card">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2">
-            <h5 class="mb-0">{{ s.username }}</h5>
-            <span class="badge bg-warning text-dark">{{ 'Cliente do app' if s.tipo == 'cliente' else 'Usuário' }}{% if s.tipo == 'cliente' and s.plano_id %} -- {{ nome_plano.get(s.plano_id, '?') }}{% endif %}</span>
-            {% if s.consultor %}<span class="badge bg-info text-dark">Consultor</span>{% endif %}
-            <span class="text-muted small ms-auto">pedido em {{ s.criado_em | data_br }}</span>
+            <h5 class="mb-0">{{ c.nome_completo or c.username }}</h5>
+            {% if not c.visto %}<span class="badge bg-danger">Novo</span>{% endif %}
+            <span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Assinar plano' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
+            {% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
+            <span class="text-muted small ms-auto">cadastrado em {{ c.criado_em | data_br }} às {{ c.criado_em[11:16] }}</span>
         </div>
         <dl class="mb-3">
-            <dt>E-mail</dt><dd>{{ s.email }}</dd>
-            <dt>Celular</dt><dd>{{ s.telefone | telefone_br }}</dd>
-            <dt>CPF/CNPJ</dt><dd>{{ s.cpf_cnpj }}</dd>
-            <dt>Empresa/fazenda</dt><dd>{{ s.empresa or '-' }}</dd>
-            <dt>Cidade</dt><dd>{{ s.cidade }}{% if s.uf %}/{{ s.uf }}{% endif %}</dd>
-            <dt>Culturas</dt><dd>{{ s.culturas or '-' }}</dd>
-            <dt>Área</dt><dd>{% if s.area_ha %}{{ '{:,.0f}'.format(s.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
-            {% if s.consultor %}<dt>Região desejada</dt><dd>{{ s.regiao }}</dd>{% endif %}
-            {% if s.mensagem %}<dt>Mensagem</dt><dd>{{ s.mensagem }}</dd>{% endif %}
+            <dt>Usuário</dt><dd>{{ c.username }}{% if not c.conta_existe %} <span class="text-danger">(conta excluída)</span>{% endif %}</dd>
+            <dt>Celular</dt><dd>{{ c.telefone | telefone_br }}{% if telefone_digitos %} -- <a href="https://wa.me/{{ telefone_digitos }}" target="_blank" rel="noopener">abrir no WhatsApp</a>{% endif %}</dd>
+            <dt>E-mail</dt><dd>{% if c.email %}<a href="mailto:{{ c.email }}">{{ c.email }}</a>{% else %}-{% endif %}</dd>
+            <dt>Fazenda/empresa</dt><dd>{{ c.empresa or '-' }}</dd>
+            <dt>Cidade</dt><dd>{{ c.cidade }}{% if c.uf %}/{{ c.uf }}{% endif %}</dd>
+            <dt>Culturas</dt><dd>{{ c.culturas or '-' }}</dd>
+            <dt>Área</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
+            <dt>Mensagem</dt><dd>{{ c.mensagem or '-' }}</dd>
         </dl>
-        <div class="d-flex flex-wrap align-items-end gap-2">
-            <form method="post" action="{{ url_for('aprovar_solicitacao', solicitacao_id=s.id) }}" class="d-flex flex-wrap align-items-end gap-2 mb-0"
-                  onsubmit="return confirm('Aprovar o acesso de {{ s.username|e }}?');">
-                <div>
-                    <label class="form-label small text-muted mb-1" for="tipo_{{ s.id }}">Tipo</label>
-                    <select name="tipo" id="tipo_{{ s.id }}" class="form-select form-select-sm sol-tipo" data-plano="plano_{{ s.id }}">
-                        {% for chave, rotulo in tipos.items() %}
-                        <option value="{{ chave }}" {% if s.tipo == chave %}selected{% endif %}>{{ 'Cliente do app' if chave == 'cliente' else 'Usuário' }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div id="plano_{{ s.id }}" class="{% if s.tipo != 'cliente' %}d-none{% endif %}">
-                    <label class="form-label small text-muted mb-1" for="plano_sel_{{ s.id }}">Plano</label>
-                    <select name="plano_id" id="plano_sel_{{ s.id }}" class="form-select form-select-sm">
-                        {% for p in planos %}
-                        <option value="{{ p.id }}" {% if s.plano_id == p.id %}selected{% endif %}>{{ p.nome }}{% if not p.ativo %} (inativo){% endif %}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-sm btn-success">✅ Aprovar</button>
-            </form>
-            <form method="post" action="{{ url_for('recusar_solicitacao', solicitacao_id=s.id) }}" class="mb-0"
-                  onsubmit="return confirm('Recusar a solicitação de {{ s.username|e }}?');">
-                <button type="submit" class="btn btn-sm btn-outline-danger">Recusar</button>
-            </form>
-        </div>
+        {% if c.conta_existe %}
+            {% if c.tipo == 'cliente' %}
+            <a href="{{ url_for('admin_planos') }}" class="btn btn-sm btn-outline-secondary">Ver em Planos e clientes</a>
+            {% else %}
+            <a href="{{ url_for('admin_user_permissions', user_id=c.user_id) }}" class="btn btn-sm btn-outline-primary">Liberar fazendas</a>
+            {% endif %}
+        {% endif %}
     </div>
 </div>
 {% endfor %}
-
-{% if decididas %}
-<h6 class="mt-4 mb-2">Já analisadas</h6>
-<div class="table-responsive">
-<table class="table table-sm bg-white shadow-sm" style="font-size: 0.85rem;">
-    <thead><tr><th>Nome</th><th>Tipo</th><th>Cidade</th><th>Situação</th><th>Quando</th><th>Por</th></tr></thead>
-    <tbody>
-    {% for s in decididas %}
-        <tr>
-            <td>{{ s.username }}</td>
-            <td>{{ 'Cliente do app' if s.tipo == 'cliente' else 'Usuário' }}{% if s.tipo == 'cliente' and s.plano_id %} ({{ nome_plano.get(s.plano_id, '?') }}){% endif %}</td>
-            <td>{{ s.cidade }}{% if s.uf %}/{{ s.uf }}{% endif %}</td>
-            <td>{% if s.status == 'aprovada' %}<span class="text-success">Aprovada</span>{% else %}<span class="text-danger">Recusada</span>{% endif %}</td>
-            <td>{{ s.decidido_em | data_br }}</td>
-            <td>{{ s.decidido_por }}</td>
-        </tr>
-    {% endfor %}
-    </tbody>
-</table>
-</div>
-{% endif %}
-<script>
-document.querySelectorAll('.sol-tipo').forEach(function (sel) {
-    sel.addEventListener('change', function () {
-        document.getElementById(sel.dataset.plano).classList.toggle('d-none', sel.value !== 'cliente');
-    });
-});
-</script>
 {% endblock %}

@@ -1,9 +1,9 @@
-"""Pre-cadastro publico (/solicitar-acesso) com aprovacao do Master.
+"""Cadastro publico (/solicitar-acesso): conta criada na hora, tela
+"Novos cadastros" do Master e CPF/CNPJ so' na hora de assinar.
 
 Rodar a partir de webapp/:  python -m unittest tests.test_solicitacoes
 """
 import os
-import re
 import sys
 import tempfile
 import unittest
@@ -21,25 +21,24 @@ CPF_VALIDO = "52998224725"
 
 def _form(**extra):
     dados = {
-        "tipo": "usuario", "username": "Zzz Teste Solicita", "email": "s@t.com", "codigo_pais": "55",
-        "numero_telefone": "65999990001", "cpf_cnpj": CPF_VALIDO, "empresa": "Fazenda Zzz", "cidade": "Sorriso",
-        "uf": "MT", "area_ha": "1.500", "mensagem": "Quero acompanhar a ferrugem", "senha": "segredo1",
-        "senha_confirmar": "segredo1", "aceite": "on",
+        "modalidade": "fazenda", "perfil": ["produtor"], "nome_completo": "Zzz Teste da Silva Cadastro",
+        "username": "Zzz Cadastro", "codigo_pais": "55", "numero_telefone": "65999990001", "email": "",
+        "empresa": "Fazenda Zzz", "cidade": "Sorriso", "uf": "MT", "cultura_outra": "Soja", "area_ha": "1.500",
+        "mensagem": "Quero acompanhar a ferrugem", "senha": "segredo1", "senha_confirmar": "segredo1", "aceite": "on",
     }
     dados.update(extra)
     return dados
 
 
-class SolicitacaoAcessoTest(unittest.TestCase):
+class CadastroTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         webapp.app.config["TESTING"] = True
-        for nome, master, admin in (("Zzz Teste Master Sol", True, True), ("Zzz Teste Admin Sol", False, True)):
-            if not models.get_user_by_username(nome):
-                models.create_user(nome, "x", is_admin=admin, is_master=master)
-        cls.plano = models.salvar_plano(None, "Zzz Plano Sol", "", 30.0, "MONTHLY", 2, 50, ["clima"], True, 1)
-        master = models.get_user_by_username("Zzz Teste Master Sol")
-        models.set_user_contato(master["id"], "m@t.com", "5565988887777")
+        if not models.get_user_by_username("Zzz Teste Master Cad"):
+            models.create_user("Zzz Teste Master Cad", "x", is_master=True, telefone="5565988887777")
+        if not models.get_user_by_username("Zzz Teste Admin Cad"):
+            models.create_user("Zzz Teste Admin Cad", "x", is_admin=True)
+        cls.plano = models.salvar_plano(None, "Zzz Plano Cad", "", 30.0, "MONTHLY", 2, 50, ["clima"], True, 1)
         cls.enviadas = []
         cls.patch_whats = mock.patch.object(
             webapp, "_whatsapp_em_segundo_plano", side_effect=lambda tel, texto: cls.enviadas.append((tel, texto)),
@@ -50,10 +49,6 @@ class SolicitacaoAcessoTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.patch_whats.stop()
 
-    def _codigo_para(self, telefone):
-        textos = [t for tel, t in self.enviadas if tel == telefone and "código de confirmação" in t]
-        return re.search(r"\*(\d{6})\*", textos[-1]).group(1)
-
     def _logado(self, nome):
         c = webapp.app.test_client()
         with c.session_transaction() as s:
@@ -61,140 +56,100 @@ class SolicitacaoAcessoTest(unittest.TestCase):
             s["_fresh"] = True
         return c
 
-    def _enviar(self, **extra):
-        return webapp.app.test_client().post("/solicitar-acesso", data=_form(**extra))
+    def _cadastro(self, username):
+        return next((c for c in models.get_cadastros() if c["username"] == username), None)
 
-    def _enviar_e_confirmar(self, **extra):
-        resp = self._enviar(**extra)
-        self.assertIn("/solicitar-acesso/confirmar/", resp.headers["Location"])
-        telefone = "55" + _form(**extra)["numero_telefone"]
-        return webapp.app.test_client().post(resp.headers["Location"], data={"codigo": self._codigo_para(telefone)})
-
-    def _ultima(self, username):
-        return models.get_solicitacao_pendente_por_username(username)
-
-    def test_formulario_e_links(self):
+    def test_links_e_formulario(self):
         c = webapp.app.test_client()
         html = c.get("/solicitar-acesso").get_data(as_text=True)
-        self.assertIn('name="tipo"', html)
-        self.assertIn('name="regiao"', html)
-        self.assertIn("Solicite seu acesso", c.get("/login").get_data(as_text=True))
-        self.assertIn("/solicitar-acesso", c.get("/cadastro?plano=3").headers["Location"])
-        self.assertIn("solicitar-acesso?tipo=cliente", c.get("/planos").get_data(as_text=True))
+        for trecho in ("Assinar plano", "Ter acesso à fazenda cadastrada", "Produtor", "Técnico do setor", 'name="nome_completo"'):
+            self.assertIn(trecho, html)
+        self.assertNotIn('name="cpf_cnpj"', html)
+        self.assertIn("Cadastre-se", c.get("/login").get_data(as_text=True))
+        self.assertIn("modalidade=plano", c.get("/cadastro?plano=3").headers["Location"])
+        self.assertIn("solicitar-acesso?modalidade=plano", c.get("/planos").get_data(as_text=True))
+
+    def test_sugestao_e_duplicidade_de_usuario(self):
+        self.assertEqual(webapp._sugerir_usuario("joão da silva pereira"), "João Pereira")
+        models.create_user("Zzz Repetido Teste", "x")
+        self.assertEqual(webapp._sugerir_usuario("Zzz Fulano Repetido Teste"), "Zzz Teste")
+        self.assertEqual(webapp._sugerir_usuario("Zzz Repetido Teste"), "Zzz Teste")
+        models.create_user("Zzz Teste", "x")
+        self.assertEqual(webapp._sugerir_usuario("Zzz Fulano Teste"), "Zzz Teste 2")
+        r = webapp.app.test_client().get("/solicitar-acesso/usuario?usuario=zzz+teste&nome=Zzz+Fulano+Teste").get_json()
+        self.assertEqual(r, {"disponivel": False, "sugestao": "Zzz Teste 2"})
+        r = webapp.app.test_client().get("/solicitar-acesso/usuario?usuario=Zzz+Livre+123").get_json()
+        self.assertTrue(r["disponivel"])
 
     def test_validacoes(self):
         casos = {
-            "cliente sem plano": dict(username="Zzz Val 1", tipo="cliente"),
-            "consultor sem regiao": dict(username="Zzz Val 2", consultor="on", regiao=""),
-            "sem UF": dict(username="Zzz Val 3", uf=""),
-            "CPF invalido": dict(username="Zzz Val 4", cpf_cnpj="11111111111"),
-            "senha diferente": dict(username="Zzz Val 5", senha_confirmar="outra1"),
-            "sem tipo": dict(username="Zzz Val 6", tipo=""),
+            "sem modalidade": dict(modalidade=""),
+            "sem perfil": dict(perfil=[]),
+            "so um nome": dict(nome_completo="Zzz"),
+            "usuario repetido": dict(username="zzz teste master cad"),
+            "sem fazenda": dict(empresa=""),
+            "sem UF": dict(uf=""),
+            "sem cultura": dict(cultura_outra=""),
+            "sem area": dict(area_ha=""),
+            "sem mensagem": dict(mensagem=" "),
+            "senha curta": dict(senha="123", senha_confirmar="123"),
+            "senha diferente": dict(senha_confirmar="outra1"),
         }
         for caso, extra in casos.items():
             with self.subTest(caso=caso):
-                resp = self._enviar(**extra)
+                extra.setdefault("username", f"Zzz Val {caso}")
+                resp = webapp.app.test_client().post("/solicitar-acesso", data=_form(**extra))
                 self.assertEqual(resp.status_code, 200)
-                self.assertIsNone(self._ultima(extra["username"]))
+                self.assertFalse(models.username_em_uso(extra["username"]) and caso != "usuario repetido")
+        html = webapp.app.test_client().post("/solicitar-acesso", data=_form(username="Zzz Teste Master Cad")).get_data(as_text=True)
+        self.assertIn("já existe", html)
 
-    def test_usuario_aprovado_entra_com_a_senha_dele(self):
+    def test_acesso_a_fazenda_cria_usuario_sem_fazendas(self):
         self.enviadas.clear()
-        resp = self._enviar_e_confirmar(username="Zzz Sol Usuario", consultor="on", regiao="Sorriso e Sinop (MT)")
-        self.assertIn("Solicitação enviada", resp.get_data(as_text=True))
+        c = webapp.app.test_client()
+        resp = c.post("/solicitar-acesso", data=_form(username="Zzz Cad Fazenda", perfil=["produtor", "tecnico"]))
+        self.assertEqual(resp.status_code, 302)
+        user = models.get_user_by_username("Zzz Cad Fazenda")
+        self.assertEqual((user["is_admin"], user["is_cliente"], user["telefone"]), (0, 0, "5565999990001"))
+        self.assertFalse(models.get_user_permitted_site_ids(user["id"]))
+        self.assertEqual(c.get("/fazendas").status_code, 200)  # ja' entrou logado
+        reg = self._cadastro("Zzz Cad Fazenda")
+        self.assertEqual((reg["tipo"], reg["perfil"], reg["area_ha"], reg["nome_completo"]),
+                         ("usuario", "produtor,tecnico", 1500.0, "Zzz Teste da Silva Cadastro"))
         aviso = [t for tel, t in self.enviadas if tel == "5565988887777"]
         self.assertEqual(len(aviso), 1)
-        self.assertIn("Zzz Sol Usuario", aviso[0])
-        self.assertIn("Sorriso e Sinop (MT)", aviso[0])
-        self.assertIn("/admin/solicitacoes", aviso[0])
-        sol = self._ultima("Zzz Sol Usuario")
-        self.assertEqual((sol["tipo"], sol["regiao"], sol["area_ha"], sol["consultor"]), ("usuario", "Sorriso e Sinop (MT)", 1500.0, 1))
-        self.assertIsNone(models.get_user_by_username("Zzz Sol Usuario"))
-
-        login = webapp.app.test_client().post("/login", data={"username": "Zzz Sol Usuario", "password": "segredo1"})
-        self.assertIn("em análise", login.get_data(as_text=True))
-        dup = self._enviar(username="zzz sol usuario")
-        self.assertIn("Já existe", dup.get_data(as_text=True))
-
-        self.assertEqual(self._logado("Zzz Teste Admin Sol").get("/admin/solicitacoes").status_code, 403)
-        master = self._logado("Zzz Teste Master Sol")
-        self.assertIn("Zzz Sol Usuario", master.get("/admin/solicitacoes").get_data(as_text=True))
-        resp = master.post(f"/admin/solicitacoes/{sol['id']}/aprovar", data={"tipo": "usuario"})
-        self.assertIn("/permissions", resp.headers["Location"])
-
-        user = models.get_user_by_username("Zzz Sol Usuario")
-        self.assertEqual((user["is_admin"], user["is_cliente"], user["email"]), (0, 0, "s@t.com"))
-        self.assertEqual(models.get_solicitacao(sol["id"])["status"], "aprovada")
-        login = webapp.app.test_client().post("/login", data={"username": "Zzz Sol Usuario", "password": "segredo1"})
+        self.assertIn("Zzz Cad Fazenda", aviso[0])
+        login = webapp.app.test_client().post("/login", data={"username": "Zzz Cad Fazenda", "password": "segredo1"})
         self.assertEqual(login.status_code, 302)
 
-    def test_master_troca_para_cliente_na_aprovacao(self):
-        self._enviar_e_confirmar(username="Zzz Sol Cliente", numero_telefone="65999990003")
-        sol = self._ultima("Zzz Sol Cliente")
-        master = self._logado("Zzz Teste Master Sol")
-        master.post(f"/admin/solicitacoes/{sol['id']}/aprovar", data={"tipo": "cliente", "plano_id": str(self.plano)})
-        user = models.get_user_by_username("Zzz Sol Cliente")
+    def test_assinar_plano_cria_cliente_e_pede_cpf_na_assinatura(self):
+        c = webapp.app.test_client()
+        resp = c.post("/solicitar-acesso", data=_form(username="Zzz Cad Plano", modalidade="plano", numero_telefone="65999990002"))
+        self.assertIn("/app/assinatura", resp.headers["Location"])
+        user = models.get_user_by_username("Zzz Cad Plano")
         self.assertEqual(user["is_cliente"], 1)
         assinatura = models.get_assinatura(user["id"])
-        self.assertEqual((assinatura["plano_id"], assinatura["cpf_cnpj"], assinatura["status"]), (self.plano, CPF_VALIDO, "pendente"))
-        self.assertEqual(models.get_solicitacao(sol["id"])["tipo"], "cliente")
+        self.assertEqual((assinatura["cpf_cnpj"], assinatura["plano_id"]), ("", None))
+        self.assertIn('name="cpf_cnpj"', c.get("/app/assinatura").get_data(as_text=True))
 
-    def test_recusar_nao_cria_conta(self):
-        self._enviar_e_confirmar(username="Zzz Sol Recusada", tipo="cliente", plano_id=str(self.plano),
-                                 numero_telefone="65999990004")
-        sol = self._ultima("Zzz Sol Recusada")
-        self.assertEqual(sol["plano_id"], self.plano)
-        master = self._logado("Zzz Teste Master Sol")
+        sem_cpf = c.post("/app/assinatura/assinar", data={"plano_id": str(self.plano)}, follow_redirects=True)
+        self.assertIn("CPF ou CNPJ válido", sem_cpf.get_data(as_text=True))
+        c.post("/app/assinatura/assinar", data={"plano_id": str(self.plano), "cpf_cnpj": "529.982.247-25"})
+        assinatura = models.get_assinatura(user["id"])
+        self.assertEqual((assinatura["cpf_cnpj"], assinatura["plano_id"]), (CPF_VALIDO, self.plano))
+        self.assertNotIn('name="cpf_cnpj"', c.get("/app/assinatura").get_data(as_text=True))
+
+    def test_tela_novos_cadastros_do_master(self):
+        webapp.app.test_client().post("/solicitar-acesso", data=_form(username="Zzz Cad Tela", numero_telefone="65999990003",
+                                                                     email="tela@t.com"))
+        self.assertEqual(self._logado("Zzz Teste Admin Cad").get("/admin/solicitacoes").status_code, 403)
+        master = self._logado("Zzz Teste Master Cad")
         self.assertIn("badge bg-danger", master.get("/mapa").get_data(as_text=True))
-        master.post(f"/admin/solicitacoes/{sol['id']}/recusar")
-        self.assertEqual(models.get_solicitacao(sol["id"])["status"], "recusada")
-        self.assertIsNone(models.get_user_by_username("Zzz Sol Recusada"))
-        self.assertEqual(master.post(f"/admin/solicitacoes/{sol['id']}/aprovar", data={"tipo": "usuario"}).status_code, 404)
-
-
-    def test_codigo_errado_expirado_e_reenvio(self):
-        self.enviadas.clear()
-        resp = self._enviar(username="Zzz Sol Codigo", numero_telefone="65999990005")
-        url = resp.headers["Location"]
-        token = url.rsplit("/", 1)[1]
-        c = webapp.app.test_client()
-        self.assertIn("terminado em", c.get(url).get_data(as_text=True))
-        self.assertIsNone(self._ultima("Zzz Sol Codigo"))  # Master ainda nao ve
-        certo = self._codigo_para("5565999990005")
-        errado = "000000" if certo != "000000" else "111111"
-
-        c.post(url, data={"codigo": errado})
-        sol = models.get_solicitacao_por_token(token)
-        self.assertEqual((sol["status"], sol["codigo_tentativas"]), ("verificando", 1))
-
-        # reenvio: so' depois de 1 minuto; gera codigo novo e zera tentativas
-        self.assertIn("Aguarde", c.post(url, data={"acao": "reenviar"}, follow_redirects=True).get_data(as_text=True))
-        models.gravar_codigo_solicitacao(sol["id"], sol["codigo_hash"], sol["codigo_expira"])  # volta o relogio:
-        with mock.patch.object(webapp, "_agora_cuiaba_dt", return_value=webapp._agora_cuiaba_dt() + webapp.timedelta(minutes=2)):
-            c.post(url, data={"acao": "reenviar"})
-        novo = self._codigo_para("5565999990005")
-        self.assertEqual(models.get_solicitacao_por_token(token)["codigo_reenvios"], 1)
-
-        # codigo expirado nao vale
-        with mock.patch.object(webapp, "_agora_cuiaba_dt", return_value=webapp._agora_cuiaba_dt() + webapp.timedelta(hours=2)):
-            html = c.post(url, data={"codigo": novo}, follow_redirects=True).get_data(as_text=True)
-        self.assertIn("expirou", html)
-        self.assertEqual(models.get_solicitacao_por_token(token)["status"], "verificando")
-
-        self.assertIn("Solicitação enviada", c.post(url, data={"codigo": novo}).get_data(as_text=True))
-        self.assertEqual(models.get_solicitacao_por_token(token)["status"], "pendente")
-        self.assertIsNotNone(self._ultima("Zzz Sol Codigo"))
-
-    def test_muitas_tentativas_bloqueia(self):
-        resp = self._enviar(username="Zzz Sol Tentativas", numero_telefone="65999990006")
-        url = resp.headers["Location"]
-        certo = self._codigo_para("5565999990006")
-        errado = "000000" if certo != "000000" else "111111"
-        c = webapp.app.test_client()
-        for _ in range(webapp.CODIGO_MAX_TENTATIVAS):
-            c.post(url, data={"codigo": errado})
-        html = c.post(url, data={"codigo": certo}, follow_redirects=True).get_data(as_text=True)
-        self.assertIn("Muitas tentativas", html)
-        self.assertIsNone(self._ultima("Zzz Sol Tentativas"))
+        html = master.get("/admin/solicitacoes").get_data(as_text=True)
+        for trecho in ("Zzz Cad Tela", "Novo", "wa.me/5565999990003", "mailto:tela@t.com", "Liberar fazendas", "Fazenda Zzz"):
+            self.assertIn(trecho, html)
+        self.assertEqual(models.contar_cadastros_nao_vistos(), 0)  # abrir a tela marca como visto
+        self.assertNotIn(">Novo<", master.get("/admin/solicitacoes").get_data(as_text=True))
 
 
 class TravaWhatsappQapTest(unittest.TestCase):
