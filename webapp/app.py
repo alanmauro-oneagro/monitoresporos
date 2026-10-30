@@ -2407,7 +2407,7 @@ def _acessos_por_nivel():
 
 
 def pode_acessar_aba(chave):
-    if not current_user.is_authenticated:
+    if not current_user.is_authenticated or getattr(current_user, "is_cliente", False):
         return False
     if current_user.is_master:
         return True
@@ -6410,13 +6410,53 @@ def _inject_no_app_loja():
     }
 
 
+# Abas do site que o plano do cliente pode liberar (recursos "site_*" em
+# models.RECURSOS_PLANO, pedido do Alan, 31/10/2026). Nelas o cliente ve so'
+# as fazendas liberadas pra ele, igual a um Usuario comum.
+ABAS_SITE_CLIENTE = {
+    "mapa": "site_mapa",
+    "dashboard": "site_alertas",
+    "graficos": "site_graficos", "graficos_dados": "site_graficos",
+    "fazendas": "site_manejos", "save_farm_produtos": "site_manejos", "save_farm_plantio": "site_manejos",
+    "save_farm_espacamento": "site_manejos", "save_farm_aplicacoes": "site_manejos",
+    "save_farm_cultura": "site_manejos", "save_recommendations": "site_manejos", "save_produtos_folha": "site_manejos",
+    "recommendations": "site_recomendacoes", "recommendations_default": "site_recomendacoes",
+    "recommendation_pdf": "site_recomendacoes",
+}
+ABAS_SITE_MENU = [  # (recurso, rotulo, endpoint do link)
+    ("site_mapa", "Mapa", "mapa"), ("site_alertas", "Alertas", "dashboard"), ("site_graficos", "Graficos", "graficos"),
+    ("site_manejos", "Manejos", "fazendas"), ("site_recomendacoes", "Recomendações", "recommendations_default"),
+]
+
+
+def _abas_site_do_cliente():
+    """Recursos "site_*" do plano do cliente logado (vazio sem plano em dia)."""
+    abas = getattr(g, "_abas_site_cliente", None)
+    if abas is None:
+        _assinatura, plano, liberada = _cliente_contexto()
+        abas = g._abas_site_cliente = {r for r in (plano or {}).get("recursos", []) if r.startswith("site_")} if liberada else set()
+    return abas
+
+
 @app.before_request
 def _restringir_cliente():
     if not current_user.is_authenticated or not current_user.is_cliente:
         return
     endpoint = request.endpoint or ""
+    if endpoint in ABAS_SITE_CLIENTE and ABAS_SITE_CLIENTE[endpoint] in _abas_site_do_cliente():
+        return
+    if endpoint in ("change_password", "salvar_preferencia"):
+        return
     if not endpoint.startswith("cliente_") and endpoint not in _ENDPOINTS_LIVRES_CLIENTE:
         return redirect(url_for("cliente_home"))
+
+
+@app.context_processor
+def _inject_abas_site_cliente():
+    if current_user.is_authenticated and getattr(current_user, "is_cliente", False):
+        abas = _abas_site_do_cliente()
+        return {"menu_site_cliente": [(rot, ep) for rec, rot, ep in ABAS_SITE_MENU if rec in abas]}
+    return {"menu_site_cliente": None}
 
 
 def _cpf_cnpj_valido(numero):
@@ -6810,8 +6850,30 @@ def cliente_ponto_novo():
         else:
             cultura = request.form.get("cultura", "")
             ponto_id = models.criar_cliente_ponto(user_id, nome, lat, lon, cultura if cultura in _culturas_cliente() else "")
+            if "fazenda_estimada" in plano["recursos"]:
+                _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano)
             return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
     return render_template("cliente_ponto_novo.html", culturas=_culturas_cliente())
+
+
+def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano):
+    """Mesmo processo do Mapa Interpolado (`adicionar_ponto_virtual`): fazenda
+    estimada no local da lavoura, com o raio do plano, liberada so' pro
+    cliente dono dela. Nome com o usuario pra nao colidir com outro cliente."""
+    base = f"{nome} ({current_user.username})"
+    for tentativa in range(1, 20):
+        nome_fazenda = base if tentativa == 1 else f"{base} {tentativa}"
+        try:
+            site_name = models.create_virtual_farm(
+                nome_fazenda, lat, lon, plano["raio_km"], criado_por=current_user.username,
+                country_code=countries.detectar_pais_por_coordenada(lat, lon), tipo="doenca",
+            )
+        except sqlite3.IntegrityError:
+            continue
+        models.liberar_fazenda_para_usuario(user_id, site_name)
+        models.ligar_ponto_a_fazenda(ponto_id, site_name)
+        return site_name
+    return None
 
 
 def _culturas_cliente():

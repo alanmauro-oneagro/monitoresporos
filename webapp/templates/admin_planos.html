@@ -60,7 +60,7 @@
 {% else %}
 <div class="table-responsive">
 <table class="table table-sm align-middle small bg-white">
-    <thead><tr><th>Cliente</th><th>Contato</th><th>Plano</th><th>Situação</th><th>Pago até</th><th>Lavouras</th><th>Cortesia até / plano</th><th></th></tr></thead>
+    <thead><tr><th>Cliente</th><th>Contato</th><th>Plano</th><th>Situação</th><th>Pago até</th><th>Lavouras</th><th>Cortesia até / plano</th><th>Fazendas no site</th><th></th></tr></thead>
     <tbody>
     {% for c in clientes %}
     {% set fim = [c.pago_ate or '', c.cortesia_ate or ''] | max %}
@@ -81,6 +81,7 @@
                 <button class="btn btn-outline-success btn-sm" type="submit">OK</button>
             </form>
         </td>
+        <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin_user_permissions', user_id=c.id) }}" title="Fazendas que o cliente vê nas abas do site: as estimadas das lavouras dele e, no Premium + Estação, a fazenda real da estação dele">Liberar fazendas</a></td>
         <td>
             <form method="post" action="{{ url_for('admin_cliente_excluir', user_id=c.id) }}" onsubmit="return confirm('Excluir este cliente? A cobrança no Asaas é cancelada.');">
                 <button class="btn btn-outline-danger btn-sm" type="submit">Excluir</button>

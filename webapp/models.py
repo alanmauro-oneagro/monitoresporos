@@ -704,6 +704,11 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     conn.execute("UPDATE users SET is_master = 1, is_admin = 1 WHERE username = ?", (MASTER_PRINCIPAL,))
+    try:
+        # Fazenda estimada criada pra lavoura do cliente (recurso "fazenda_estimada").
+        conn.execute("ALTER TABLE cliente_pontos ADD COLUMN site_name TEXT")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
     # Planos padrao (pedido do Alan, 31/10/2026) -- so' cria o que ainda nao
     # existe pelo nome; os pagos nascem fora de venda ate' o Master por o
     # preco em Configuracoes > Planos e clientes.
@@ -3157,6 +3162,15 @@ def get_all_sites_report_user_ids():
 
 def delete_user(user_id):
     conn = get_db()
+    # Fazendas estimadas criadas pras lavouras do cliente saem junto com ele.
+    sites = [r["site_name"] for r in conn.execute(
+        "SELECT site_name FROM cliente_pontos WHERE user_id = ? AND site_name IS NOT NULL", (user_id,)
+    ).fetchall()]
+    conn.close()
+    for site_name in sites:
+        if get_virtual_farm(site_name):
+            delete_virtual_farm(site_name)
+    conn = get_db()
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
@@ -3410,16 +3424,27 @@ def set_subordinado_report_sites(subordinado_id, site_ids):
 
 RECURSOS_PLANO = [
     ("clima", "Clima agora e previsão de 5 dias"),
+    # Abas do site liberadas pro cliente do plano (pedido do Alan, 31/10/2026)
+    # -- ele so' ve as fazendas liberadas pra ele (estimadas, ver
+    # "fazenda_estimada", ou a real da estacao dele no Premium + Estacao).
+    ("site_mapa", "Site: Mapa"),
+    ("site_alertas", "Site: Alertas"),
+    ("site_graficos", "Site: Gráficos"),
+    ("site_manejos", "Site: Manejos"),
+    ("site_recomendacoes", "Site: Recomendações"),
+    ("fazenda_estimada", "Cada lavoura vira uma fazenda estimada no site (como no Mapa Interpolado)"),
     ("esporos", "Esporos estimados na região (por doença)"),
     ("risco", "Risco de infecção pelo clima (agora e próximos 5 dias)"),
     ("fungicidas", "Recomendação de fungicidas químicos e biológicos"),
     ("regiao", "Mapa da região com as estações próximas (sem identificar as fazendas)"),
 ]
+_ABAS_SITE = ["site_mapa", "site_alertas", "site_graficos", "site_manejos", "site_recomendacoes"]
 PLANOS_PADRAO = [  # (nome, recursos, lavouras, a venda ja' de inicio)
     ("Free", ["clima"], 1, True),
-    ("Básico", ["clima", "esporos"], 3, False),
-    ("Premium", ["clima", "esporos", "risco", "fungicidas", "regiao"], 10, False),
-    ("Premium + Estação", ["clima", "esporos", "risco", "fungicidas", "regiao"], 10, False),
+    ("Básico", ["clima", "site_mapa", "site_alertas", "fazenda_estimada", "esporos"], 3, False),
+    ("Premium", ["clima"] + _ABAS_SITE + ["fazenda_estimada", "esporos", "risco", "fungicidas", "regiao"], 10, False),
+    # Fazenda real (estacao BioScout do cliente), liberada pelo Master -- sem fazenda estimada.
+    ("Premium + Estação", ["clima"] + _ABAS_SITE + ["esporos", "risco", "fungicidas", "regiao"], 10, False),
 ]
 # Plano de valor zero (Free) nao tem cobranca: a assinatura fica liberada
 # "sem prazo" (cortesia_ate nessa data) ate' o cliente trocar de plano.
@@ -3751,8 +3776,34 @@ def atualizar_cliente_ponto(user_id, ponto_id, nome, cultura):
     conn.close()
 
 
+def ligar_ponto_a_fazenda(ponto_id, site_name):
+    conn = get_db()
+    conn.execute("UPDATE cliente_pontos SET site_name = ? WHERE id = ?", (site_name, ponto_id))
+    conn.commit()
+    conn.close()
+
+
+def liberar_fazenda_para_usuario(user_id, site_name):
+    """Acrescenta UMA fazenda as permissoes do usuario (sem tirar as outras)."""
+    conn = get_db()
+    row = conn.execute("SELECT id FROM sites WHERE site_name = ?", (site_name,)).fetchone()
+    if row:
+        conn.execute(
+            "INSERT OR IGNORE INTO user_site_permissions (user_id, site_id) VALUES (?, ?)", (user_id, row["id"]),
+        )
+        conn.commit()
+    conn.close()
+
+
 def excluir_cliente_ponto(user_id, ponto_id):
+    """Apaga a lavoura e, se ela tinha virado fazenda estimada no site, a
+    fazenda estimada junto. Devolve o site_name apagado (ou None)."""
+    ponto = get_cliente_ponto(user_id, ponto_id)
+    site_name = (ponto or {}).get("site_name")
+    if site_name and get_virtual_farm(site_name):
+        delete_virtual_farm(site_name)
     conn = get_db()
     conn.execute("DELETE FROM cliente_pontos WHERE id = ? AND user_id = ?", (ponto_id, user_id))
     conn.commit()
     conn.close()
+    return site_name

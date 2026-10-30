@@ -66,8 +66,19 @@ telefone recebe aviso no WhatsApp (`_avisar_master_cadastro`, em thread).
 **Cliente do app (pedido do Alan, 25/10/2026)**: 4o tipo de conta,
 `users.is_cliente=1` (nunca admin), criado pelo cadastro direto (acima,
 opcao "Assinar plano") e pago no Asaas (`webapp/asaas.py`, env `ASAAS_API_KEY`/`ASAAS_AMBIENTE`/
-`ASAAS_WEBHOOK_TOKEN`, webhook `/webhooks/asaas`). So' enxerga `/app/*`
-(`_restringir_cliente`); marca lavouras no mapa (`cliente_pontos`) e ve
+`ASAAS_WEBHOOK_TOKEN`, webhook `/webhooks/asaas`). Enxerga `/app/*` e,
+se o plano liberar (recursos "site_*" em `RECURSOS_PLANO`, logo depois de
+"clima"; pedido do Alan, 31/10/2026), as abas do site Mapa/Alertas/
+Graficos/Manejos/Recomendacoes (`ABAS_SITE_CLIENTE` em `_restringir_cliente`;
+menu do `base.html` so' com essas abas + "📱 App"; no app, aba "🌐 Site").
+Nelas o cliente e' como um Usuario: so' as fazendas liberadas pra ele.
+Basico/Premium (recurso "fazenda_estimada"): cada lavoura nova vira uma
+fazenda ESTIMADA (mesmo processo do Mapa Interpolado, raio do plano, nome
+"<lavoura> (<usuario>)", `_criar_fazenda_estimada_da_lavoura`) liberada so'
+pra ele; apagar a lavoura ou o cliente apaga a fazenda estimada. O Master
+tambem pode criar no Mapa Interpolado e liberar. Premium + Estacao: sem
+fazenda estimada -- o Master libera a fazenda REAL da estacao BioScout do
+cliente (Planos e clientes -> "Liberar fazendas"). Marca lavouras no mapa (`cliente_pontos`) e ve
 esporos ESTIMADOS por IDW das fazendas reais (nunca nome/leitura de
 fazenda real), clima, risco e fungicidas conforme o plano. Planos,
 precos e cortesia: Configuracoes -> Planos e clientes (`/admin/planos`,
