@@ -268,7 +268,7 @@ def ultimas_24h_estacao(country_code, codigo, uf):
 MET_NORWAY_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 # A MET Norway exige identificar o aplicativo no User-Agent (termos de uso);
 # dados sob CC BY 4.0 -- a fonte aparece como "MET Norway" no rotulo.
-MET_NORWAY_USER_AGENT = "OneAgroMonitor/1.0 (+https://monitoresporos-production.up.railway.app)"
+MET_NORWAY_USER_AGENT = "OneAgroMonitor/1.0 (+https://oneagroapp.com.br)"
 
 
 def _offset_estimado(lat, lon):

@@ -10,7 +10,11 @@ Mantido por: Alan Mauro (OneAgro, alan.mauro@outlook.com), unico responsavel pel
   fazendas.
 - Repo: github.com/alanmauro-oneagro/monitoresporos
 - Deploy: Railway, auto-deploy a partir da branch `main`.
-- URL producao: https://monitoresporos-production.up.railway.app
+- URL producao: https://oneagroapp.com.br (dominio proprio, 30/10/2026;
+  o endereco antigo https://monitoresporos-production.up.railway.app
+  continua no ar e autorizado no app). Dominio novo tem que entrar em
+  `mobile/capacitor.config.json` (`allowNavigation`) e no
+  `WKAppBoundDomains` do `mobile/ios/App/App/Info.plist`.
 - Codigo do app fica em `webapp/` dentro deste repo.
 
 ## Regra de negocio permanente (nao mudar sem confirmar com o Alan)

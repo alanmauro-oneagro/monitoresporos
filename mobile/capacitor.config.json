@@ -5,9 +5,11 @@
   "appendUserAgent": "OneAgroApp",
   "backgroundColor": "#f4f6f4",
   "server": {
-    "url": "https://monitoresporos-production.up.railway.app/app",
+    "url": "https://oneagroapp.com.br/app",
     "errorPath": "offline.html",
     "allowNavigation": [
+      "oneagroapp.com.br",
+      "www.oneagroapp.com.br",
       "monitoresporos-production.up.railway.app"
     ]
   },
