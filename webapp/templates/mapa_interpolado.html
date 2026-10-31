@@ -110,10 +110,23 @@
                         <button type="button" id="limpar-ponto-btn" class="btn btn-sm btn-secondary" title="Remove o pino e o circulo de previa do mapa e limpa latitude/longitude -- nada e' salvo ate clicar em Salvar Ponto, entao um clique sem querer no mapa pode ser desfeito por aqui">🧹 Limpar ponto</button>
                     </div>
                 </form>
+                <div id="sinal-ponto" class="border rounded p-2 mt-3 small d-none" style="background:#f8f9fa;" aria-live="polite"></div>
             </div>
         </div>
     </div>
 </div>
+
+{% if current_user.is_master %}
+<div class="card shadow-sm mt-3"><div class="card-body small">
+    <strong>📶 Base de antenas de celular (Anatel)</strong>
+    {% if info_erbs %}-- {{ info_erbs.antenas }} antenas, atualizada em {{ info_erbs.em | data_br }}.{% else %}-- ainda não carregada.{% endif %}
+    <div class="text-muted">Usada para estimar o sinal de celular em Manejos, aqui no mapa e em Novos cadastros. Envie o arquivo de estações licenciadas (ERBs do Serviço Móvel Pessoal) dos dados abertos da Anatel -- .csv, .zip ou .gz. A base anterior é substituída.</div>
+    <form method="post" action="{{ url_for('enviar_antenas_anatel') }}" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-center mt-2">
+        <input type="file" name="arquivo" class="form-control form-control-sm" style="max-width: 360px;" accept=".csv,.zip,.gz" required>
+        <button type="submit" class="btn btn-sm btn-outline-primary">Enviar arquivo da Anatel</button>
+    </form>
+</div></div>
+{% endif %}
 
 <h6 class="fw-bold mt-4 mb-2">Pontos Criados</h6>
 {% if not pontos_virtuais %}
@@ -772,6 +785,40 @@
     // acompanha o campo "raio_km" ao digitar.
     var latInput = document.getElementById('novo-lat');
     var lonInput = document.getElementById('novo-lon');
+
+    // Sinal de celular estimado no ponto marcado (lat/lon mudam por clique,
+    // arrasto do pino, busca ou digitacao -- confere a cada segundo).
+    var sinalBox = document.getElementById('sinal-ponto');
+    var sinalUltimo = '';
+    var SINAL_CORES = { bom: 'success', regular: 'warning text-dark', fraco: 'danger' };
+    function textoSeguro(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+    setInterval(function () {
+        var lat = parseFloat(latInput.value), lon = parseFloat(lonInput.value);
+        var chave = isNaN(lat) || isNaN(lon) ? '' : lat.toFixed(4) + ',' + lon.toFixed(4);
+        if (chave === sinalUltimo) return;
+        sinalUltimo = chave;
+        if (!chave) { sinalBox.classList.add('d-none'); return; }
+        fetch('{{ url_for("sinal_celular_ponto") }}?lat=' + lat + '&lon=' + lon)
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (chave !== sinalUltimo) return;
+                var html = '<strong>📶 Sinal de celular (estimado)</strong> ';
+                if (d.operadoras === null) {
+                    html += '<span class="text-muted">-- base de antenas da Anatel ainda não carregada.</span>';
+                } else if (!d.operadoras.length) {
+                    html += '<span class="text-muted">-- nenhuma antena de operadora ao alcance (até 30 km).</span>';
+                } else {
+                    html += '<ul class="list-unstyled mb-0 mt-1">' + d.operadoras.map(function (o) {
+                        return '<li><span class="badge bg-' + SINAL_CORES[o.nivel] + '">' + o.nivel + '</span> <strong>' +
+                            textoSeguro(o.operadora) + '</strong>: ' + o.tecnologia + ' ' + o.faixa + ' MHz a ' +
+                            String(o.km).replace('.', ',') + ' km</li>';
+                    }).join('') + '</ul><div class="text-muted" style="font-size:0.75rem;">Relevo e mata mudam o sinal real -- confirme no local.</div>';
+                }
+                sinalBox.innerHTML = html;
+                sinalBox.classList.remove('d-none');
+            })
+            .catch(function () {});
+    }, 1000);
     var raioInput = document.getElementById('novo-raio');
     var countrySelect = document.getElementById('novo-country');
     var novoMarker = null;

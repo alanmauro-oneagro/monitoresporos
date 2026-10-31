@@ -1,0 +1,20 @@
+{# Quadro "Sinal de celular (estimado)" -- ver sinal_celular.estimar. #}
+{% macro quadro(sinal, titulo="📶 Sinal de celular (estimado)") %}
+{% set cores = {'bom': 'success', 'regular': 'warning', 'fraco': 'danger'} %}
+<div class="small">
+    <strong>{{ titulo }}</strong>
+    {% if sinal is none %}
+    <span class="text-muted">-- base de antenas da Anatel ainda não carregada.</span>
+    {% elif not sinal %}
+    <span class="text-muted">-- nenhuma antena de operadora ao alcance (até 30 km).</span>
+    {% else %}
+    <ul class="list-unstyled mb-0 mt-1">
+        {% for o in sinal %}
+        <li><span class="badge bg-{{ cores[o.nivel] }}{% if o.nivel == 'regular' %} text-dark{% endif %}">{{ o.nivel }}</span>
+            <strong>{{ o.operadora }}</strong>: {{ o.tecnologia }} {{ o.faixa }} MHz a {{ ('%.1f' | format(o.km)) | replace('.', ',') }} km</li>
+        {% endfor %}
+    </ul>
+    <div class="text-muted" style="font-size: 0.75rem;">Pela distância e frequência da antena mais próxima de cada operadora (Anatel). Relevo e mata mudam o sinal real -- confirme no local.</div>
+    {% endif %}
+</div>
+{% endmacro %}

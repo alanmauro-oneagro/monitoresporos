@@ -275,6 +275,19 @@ site tem que entrar la'.
   nessa rota) -- o navegador filtra o CSV antes (so' linhas com
   "Fungicida" na coluna CLASSE) e manda .csv.gz (~265MB -> ~2MB no teste);
   `montar_indice` aceita .csv/.zip/.gz e tambem so' indexa fungicidas. O ambiente de nuvem do Claude nao alcanca esse portal.
+- **Sinal de celular estimado** (pedido do Alan, 31/10/2026, `webapp/sinal_celular.py`):
+  base de antenas (ERBs licenciadas) dos dados abertos da Anatel, enviada
+  pelo Master no Mapa Interpolado ("Base de antenas de celular", rota
+  `enviar_antenas_anatel`, .csv/.zip/.gz ate' 1 GB, lido em fluxo; colunas
+  achadas pelo nome -- entidade, tecnologia, FreqTxMHz, latitude/longitude
+  decimal ou "12S3456"); fica na tabela `erbs` (substituida inteira).
+  `estimar(lat, lon)`: por operadora (Vivo/Claro/TIM/Oi...), a antena ate'
+  30 km que da' o melhor nivel (bom/regular/fraco) pela distancia e faixa
+  (700-900 MHz alcanca mais). Aparece em Manejos (quadro em cada fazenda),
+  no Mapa Interpolado (ao marcar o ponto, `/sinal-celular`) e em Novos
+  cadastros (lavouras do cliente e fazendas liberadas). O ambiente de nuvem
+  do Claude nao alcanca a Anatel -- formato real do arquivo ainda nao
+  conferido; se a importacao reclamar de coluna, ajustar `_colunas`.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois
@@ -323,7 +336,7 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
     Exportar (`/admin/exportar/backup`, Master, .db.gz).
-  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos`
+  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular`
     (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
     com Master/Administrador/Usuario/Cliente (sem erro 500, rede
     desligada) e confere as regras de acesso. Rodar antes de cada PR da
