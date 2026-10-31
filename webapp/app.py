@@ -590,8 +590,6 @@ class _Request(app.request_class):
     def max_content_length(self):
         if self.path == "/admin/fungicidas/agrofit-enviar":
             return 600 * 1024 * 1024
-        if self.path == "/mapa-interpolado/antenas":
-            return 1024 * 1024 * 1024
         if self.path in ("/admin/restaurar-backup", "/qap/primeiro-acesso"):
             return 300 * 1024 * 1024
         return super().max_content_length
@@ -2288,6 +2286,10 @@ def _whatsapp_scheduler_loop():
             except Exception:
                 pass
             try:
+                sinal_celular.atualizar_se_necessario()
+            except Exception:
+                pass
+            try:
                 models.fazer_backup_diario()
             except Exception:
                 pass
@@ -3457,7 +3459,7 @@ def mapa_interpolado():
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
-        info_erbs=models.info_erbs(),
+        info_cobertura=sinal_celular.info(),
         **_country_map_context(),
     )
 
@@ -3557,27 +3559,13 @@ def chuva_grade():
     return jsonify(weather_forecast.get_rain_forecast_grid(lats, lons))
 
 
-@app.route("/mapa-interpolado/antenas", methods=["POST"])
+@app.route("/mapa-interpolado/cobertura-anatel", methods=["POST"])
 @master_required
-def enviar_antenas_anatel():
-    """Base de antenas de celular (ERBs licenciadas, dados abertos da
-    Anatel) pra estimar sinal -- substitui a anterior inteira."""
-    arquivo = request.files.get("arquivo")
-    if not arquivo or not arquivo.filename:
-        flash("Escolha o arquivo de estacoes da Anatel (.csv, .zip ou .gz).", "error")
-        return redirect(url_for("mapa_interpolado"))
-    with tempfile.TemporaryDirectory() as pasta:
-        caminho = Path(pasta) / "anatel"
-        arquivo.save(caminho)
-        try:
-            antenas, lidas = sinal_celular.importar(caminho)
-        except (ValueError, OSError, zipfile.BadZipFile, EOFError) as e:
-            flash(f"Nao consegui ler o arquivo da Anatel: {e}.", "error")
-            return redirect(url_for("mapa_interpolado"))
-    if not antenas:
-        flash(f"Nenhuma antena reconhecida em {lidas} linhas -- confira se e' o arquivo de estacoes licenciadas da Anatel.", "error")
-    else:
-        flash(f"Base de antenas atualizada: {antenas} antenas (de {lidas} linhas do arquivo).", "success")
+def atualizar_cobertura_anatel():
+    """Baixa de novo os mapas de cobertura da Anatel (o agendador ja' faz
+    sozinho uma vez por mes)."""
+    sinal_celular.atualizar_em_segundo_plano(forcar=True)
+    flash("Baixando os mapas de cobertura da Anatel -- leva alguns minutos. Recarregue a página para acompanhar.", "success")
     return redirect(url_for("mapa_interpolado"))
 
 

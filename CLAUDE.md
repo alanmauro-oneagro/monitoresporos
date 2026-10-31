@@ -275,19 +275,20 @@ site tem que entrar la'.
   nessa rota) -- o navegador filtra o CSV antes (so' linhas com
   "Fungicida" na coluna CLASSE) e manda .csv.gz (~265MB -> ~2MB no teste);
   `montar_indice` aceita .csv/.zip/.gz e tambem so' indexa fungicidas. O ambiente de nuvem do Claude nao alcanca esse portal.
-- **Sinal de celular estimado** (pedido do Alan, 31/10/2026, `webapp/sinal_celular.py`):
-  base de antenas (ERBs licenciadas) dos dados abertos da Anatel, enviada
-  pelo Master no Mapa Interpolado ("Base de antenas de celular", rota
-  `enviar_antenas_anatel`, .csv/.zip/.gz ate' 1 GB, lido em fluxo; colunas
-  achadas pelo nome -- entidade, tecnologia, FreqTxMHz, latitude/longitude
-  decimal ou "12S3456"); fica na tabela `erbs` (substituida inteira).
-  `estimar(lat, lon)`: por operadora (Vivo/Claro/TIM/Oi...), a antena ate'
-  30 km que da' o melhor nivel (bom/regular/fraco) pela distancia e faixa
-  (700-900 MHz alcanca mais). Aparece em Manejos (quadro em cada fazenda),
-  no Mapa Interpolado (ao marcar o ponto, `/sinal-celular`) e em Novos
-  cadastros (lavouras do cliente e fazendas liberadas). O ambiente de nuvem
-  do Claude nao alcanca a Anatel -- formato real do arquivo ainda nao
-  conferido; se a importacao reclamar de coluna, ajustar `_colunas`.
+- **Sinal de celular** (pedido do Alan, 31/10/2026, `webapp/sinal_celular.py`):
+  mapas oficiais de cobertura prevista da Anatel (Mosaico SMP,
+  `sistemas.anatel.gov.br/se/public/cmap.php`, ~70 zips
+  `pred_{2G..5G}_{OPERADORA}_dbm-{N}.zip`, 2 limiares por tecnologia: o
+  menor dBm = "bom", o maior = "fraco"; "5G_SA_NSA" conta como 5G). O
+  servidor baixa tudo sozinho 1x/mes (`atualizar_se_necessario` no
+  agendador, em thread; ~170 MB, ~3 min, ~400 MB de memoria no pico) ou
+  pelo botao "Baixar agora" do Master no Mapa Interpolado. Cada shapefile
+  (um poligono com centenas de milhares de partes -- shapely inteiro e'
+  lento demais) vira grade de bits de 0,0025 grau (~280 m) em blocos de 1
+  grau, em `cobertura_anatel.db` ao lado do banco (fora do backup, ~42 MB).
+  `estimar(lat, lon)` le 1 bit por mapa (~3 ms). Aparece em Manejos, no
+  Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. Substituiu a
+  1a versao por distancia de antena (ERBs, tabela `erbs` apagada).
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois
