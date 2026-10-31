@@ -22,6 +22,7 @@ import tempfile
 import threading
 import time
 import unicodedata
+import zipfile
 from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g
@@ -47,6 +48,7 @@ import whatsapp
 import weather_forecast
 import inmet_stations
 import virtual_farms
+import sinal_celular
 import ndvi_service
 import countries
 import dmc_stations
@@ -588,6 +590,8 @@ class _Request(app.request_class):
     def max_content_length(self):
         if self.path == "/admin/fungicidas/agrofit-enviar":
             return 600 * 1024 * 1024
+        if self.path == "/mapa-interpolado/antenas":
+            return 1024 * 1024 * 1024
         if self.path in ("/admin/restaurar-backup", "/qap/primeiro-acesso"):
             return 300 * 1024 * 1024
         return super().max_content_length
@@ -3453,6 +3457,7 @@ def mapa_interpolado():
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
+        info_erbs=models.info_erbs(),
         **_country_map_context(),
     )
 
@@ -3550,6 +3555,40 @@ def chuva_grade():
             return jsonify({"pendente": True}), 202
         return jsonify(resultado)
     return jsonify(weather_forecast.get_rain_forecast_grid(lats, lons))
+
+
+@app.route("/mapa-interpolado/antenas", methods=["POST"])
+@master_required
+def enviar_antenas_anatel():
+    """Base de antenas de celular (ERBs licenciadas, dados abertos da
+    Anatel) pra estimar sinal -- substitui a anterior inteira."""
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not arquivo.filename:
+        flash("Escolha o arquivo de estacoes da Anatel (.csv, .zip ou .gz).", "error")
+        return redirect(url_for("mapa_interpolado"))
+    with tempfile.TemporaryDirectory() as pasta:
+        caminho = Path(pasta) / "anatel"
+        arquivo.save(caminho)
+        try:
+            antenas, lidas = sinal_celular.importar(caminho)
+        except (ValueError, OSError, zipfile.BadZipFile, EOFError) as e:
+            flash(f"Nao consegui ler o arquivo da Anatel: {e}.", "error")
+            return redirect(url_for("mapa_interpolado"))
+    if not antenas:
+        flash(f"Nenhuma antena reconhecida em {lidas} linhas -- confira se e' o arquivo de estacoes licenciadas da Anatel.", "error")
+    else:
+        flash(f"Base de antenas atualizada: {antenas} antenas (de {lidas} linhas do arquivo).", "success")
+    return redirect(url_for("mapa_interpolado"))
+
+
+@app.route("/sinal-celular")
+@aba_required("mapa_interpolado")
+def sinal_celular_ponto():
+    try:
+        lat, lon = float(request.args.get("lat")), float(request.args.get("lon"))
+    except (TypeError, ValueError):
+        abort(400)
+    return jsonify({"operadoras": sinal_celular.estimar(lat, lon)})
 
 
 @app.route("/mapa-interpolado/adicionar", methods=["POST"])
@@ -3999,6 +4038,7 @@ def save_whatsapp_days_pdf():
 @login_required
 def fazendas():
     virtual_names = models.virtual_farm_site_names()
+    coords_sinal = _coords_all()
     # Fazenda desativada some daqui tambem -- reativar so' na tela
     # Fazendas ocultas (pedido do Alan, 18/10/2026).
     desativadas = models.get_deactivated_site_names()
@@ -4114,6 +4154,7 @@ def fazendas():
             "estacao_pais": escolha["country_code"] if escolha else "",
             "country_code": country_code,
             "ativo": site not in desativadas,
+            "sinal_celular": sinal_celular.estimar(*coords_sinal[site]) if site in coords_sinal else None,
         })
 
     return render_template(
@@ -7098,6 +7139,15 @@ def admin_solicitacoes():
     contador do menu)."""
     cadastros = models.get_cadastros()
     models.marcar_cadastros_vistos()
+    # Sinal de celular estimado em cada local com coordenada da pessoa:
+    # lavouras (cliente do app) e fazendas ja' liberadas pra ela.
+    coords = _coords_all()
+    for c in cadastros:
+        locais = []
+        if c["user_id"] and c["conta_existe"]:
+            locais += [(p["nome"], p["lat"], p["lon"]) for p in models.get_cliente_pontos(c["user_id"])]
+            locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(c["user_id"]) if s in coords]
+        c["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon)) for nome, lat, lon in locais]
     return render_template("admin_solicitacoes.html", cadastros=cadastros, perfis=PERFIS_CADASTRO)
 
 
