@@ -567,18 +567,9 @@ def init_db():
             user_id INTEGER
         );
 
-        -- Antenas de celular (ERBs) licenciadas pela Anatel, so' o necessario
-        -- pra estimar sinal (`sinal_celular.py`). Substituida inteira a cada
-        -- envio do arquivo da Anatel (Mapa Interpolado, Master).
-        CREATE TABLE IF NOT EXISTS erbs (
-            operadora TEXT NOT NULL,
-            tecnologia TEXT NOT NULL,
-            faixa INTEGER NOT NULL,
-            lat REAL NOT NULL,
-            lon REAL NOT NULL,
-            PRIMARY KEY (operadora, tecnologia, faixa, lat, lon)
-        ) WITHOUT ROWID;
-        CREATE INDEX IF NOT EXISTS idx_erbs_lat_lon ON erbs (lat, lon);
+        -- Base de antenas (ERBs) da 1a versao do sinal de celular; trocada
+        -- pelos mapas de cobertura da Anatel (`sinal_celular.py`).
+        DROP TABLE IF EXISTS erbs;
 
         CREATE TABLE IF NOT EXISTS assinaturas (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -3593,46 +3584,6 @@ def get_cadastros(limite=200):
         "SELECT s.*, u.id IS NOT NULL AS conta_existe FROM solicitacoes_acesso s"
         " LEFT JOIN users u ON u.id = s.user_id WHERE s.status = 'cadastrado' ORDER BY s.id DESC LIMIT ?",
         (limite,),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-_ERBS_INFO_KEY = "erbs_importacao"
-
-
-def substituir_erbs(antenas):
-    """Troca a base de antenas inteira (lista de (operadora, tecnologia,
-    faixa, lat, lon)) e guarda data/quantidade da importacao."""
-    conn = get_db()
-    try:
-        conn.execute("DELETE FROM erbs")
-        conn.executemany("INSERT OR IGNORE INTO erbs (operadora, tecnologia, faixa, lat, lon) VALUES (?, ?, ?, ?, ?)", antenas)
-        conn.commit()
-    finally:
-        conn.close()
-    set_setting(_ERBS_INFO_KEY, json.dumps({"em": _agora_cuiaba(), "antenas": len(antenas)}))
-
-
-def info_erbs():
-    try:
-        return json.loads(get_setting(_ERBS_INFO_KEY) or "null")
-    except ValueError:
-        return None
-
-
-def erbs_carregadas():
-    conn = get_db()
-    row = conn.execute("SELECT 1 FROM erbs LIMIT 1").fetchone()
-    conn.close()
-    return row is not None
-
-
-def get_erbs_na_caixa(lat_min, lat_max, lon_min, lon_max):
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT operadora, tecnologia, faixa, lat, lon FROM erbs WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
-        (lat_min, lat_max, lon_min, lon_max),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]

@@ -37,7 +37,7 @@
         </dl>
         <div class="border rounded p-2 mb-3" style="background:#f8f9fa;">
             {% for nome, sinal in c.sinal_locais %}
-            <div class="{% if not loop.last %}mb-2{% endif %}">{{ sinal_cel.quadro(sinal, "📶 Sinal de celular em " ~ nome ~ " (estimado)") }}</div>
+            <div class="{% if not loop.last %}mb-2{% endif %}">{{ sinal_cel.quadro(sinal, "📶 Sinal de celular em " ~ nome ~ " (Anatel)") }}</div>
             {% else %}
             <div class="small text-muted">📶 Sinal de celular: aparece quando a pessoa marcar uma lavoura no app ou você liberar uma fazenda para ela (é preciso a coordenada).</div>
             {% endfor %}

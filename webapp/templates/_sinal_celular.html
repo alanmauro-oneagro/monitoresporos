@@ -1,20 +1,20 @@
-{# Quadro "Sinal de celular (estimado)" -- ver sinal_celular.estimar. #}
-{% macro quadro(sinal, titulo="📶 Sinal de celular (estimado)") %}
-{% set cores = {'bom': 'success', 'regular': 'warning', 'fraco': 'danger'} %}
+{# Quadro "Sinal de celular" -- cobertura prevista pela Anatel, ver sinal_celular.estimar. #}
+{% macro quadro(sinal, titulo="📶 Sinal de celular (Anatel)") %}
+{% set cores = {'bom': 'success', 'fraco': 'warning text-dark'} %}
 <div class="small">
     <strong>{{ titulo }}</strong>
     {% if sinal is none %}
-    <span class="text-muted">-- base de antenas da Anatel ainda não carregada.</span>
+    <span class="text-muted">-- mapas de cobertura da Anatel ainda não baixados.</span>
     {% elif not sinal %}
-    <span class="text-muted">-- nenhuma antena de operadora ao alcance (até 30 km).</span>
+    <span class="text-muted">-- sem cobertura de nenhuma operadora prevista neste ponto.</span>
     {% else %}
     <ul class="list-unstyled mb-0 mt-1">
         {% for o in sinal %}
-        <li><span class="badge bg-{{ cores[o.nivel] }}{% if o.nivel == 'regular' %} text-dark{% endif %}">{{ o.nivel }}</span>
-            <strong>{{ o.operadora }}</strong>: {{ o.tecnologia }} {{ o.faixa }} MHz a {{ ('%.1f' | format(o.km)) | replace('.', ',') }} km</li>
+        <li><span class="badge bg-{{ cores[o.nivel] }}">{{ o.nivel }}</span>
+            <strong>{{ o.operadora }}</strong>: {% for t in o.tecnologias %}{{ t.tecnologia }} {{ t.nivel }}{% if not loop.last %} · {% endif %}{% endfor %}</li>
         {% endfor %}
     </ul>
-    <div class="text-muted" style="font-size: 0.75rem;">Pela distância e frequência da antena mais próxima de cada operadora (Anatel). Relevo e mata mudam o sinal real -- confirme no local.</div>
+    <div class="text-muted" style="font-size: 0.75rem;">Cobertura prevista pela Anatel no ponto exato (bom = sinal forte; fraco = só o mínimo para funcionar). Relevo, mata e dentro de casa mudam o sinal real -- confirme no local.</div>
     {% endif %}
 </div>
 {% endmacro %}

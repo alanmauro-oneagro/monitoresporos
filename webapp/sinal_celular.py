@@ -1,209 +1,351 @@
-"""Sinal de celular ESTIMADO numa coordenada, a partir da lista oficial de
-antenas (ERBs) licenciadas da Anatel (pedido do Alan, 31/10/2026).
+"""Sinal de celular numa coordenada pelos mapas oficiais de cobertura da
+Anatel (Mosaico SMP, pedido do Alan, 31/10/2026).
 
-O Master envia o arquivo da Anatel (CSV, .zip ou .gz) pelo Mapa
-Interpolado; `importar` le linha a linha (o arquivo e' grande), guarda so'
-operadora/tecnologia/faixa/coordenada na tabela `erbs` e descarta o resto.
-`estimar` acha, por operadora, a antena que da' o melhor sinal provavel
-pela distancia e pela faixa de frequencia (faixa baixa alcanca mais longe).
-E' estimativa: relevo, mata, altura e direcao da antena mudam o sinal real.
+A Anatel publica, por tecnologia (2G/3G/4G/5G) e operadora, dois mapas
+de cobertura prevista: sinal forte (-82 dBm no 2G/3G, -90 dBm no 4G/5G) e
+sinal minimo (-95 / -102 / -110 dBm). Cada mapa e' um shapefile com um
+poligono do Brasil inteiro (centenas de milhares de partes). O servidor
+baixa os ~70 arquivos uma vez por mes (`atualizar_se_necessario`, no
+agendador) e transforma cada mapa numa grade de bits (`RESOLUCAO` graus,
+~280 m) em blocos de 1 grau, guardados em `cobertura_anatel.db` ao lado do
+banco (fora do banco principal: nao entra no backup). A consulta de uma
+coordenada (`estimar`) le um bit por mapa.
 """
-import csv
-import gzip
-import io
-import math
+import os
 import re
-import unicodedata
+import sqlite3
+import threading
+import urllib.request
 import zipfile
+import zlib
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import numpy as np
 
 import models
 
-# Nome da entidade na Anatel -> marca conhecida (o resto fica com o nome
-# da propria entidade).
-_OPERADORAS = [
-    ("TELEFONICA", "Vivo"), ("VIVO", "Vivo"), ("CLARO", "Claro"), ("TIM ", "TIM"), ("TIM S", "TIM"),
-    ("OI ", "Oi"), ("OI S", "Oi"), ("TELEMAR", "Oi"), ("ALGAR", "Algar"), ("BRISANET", "Brisanet"),
-    ("SERCOMTEL", "Sercomtel"), ("UNIFIQUE", "Unifique"), ("WINITY", "Winity"),
-]
-_TECNOLOGIAS = [("NR", "5G"), ("5G", "5G"), ("LTE", "4G"), ("4G", "4G"), ("WCDMA", "3G"), ("UMTS", "3G"),
-                ("3G", "3G"), ("GSM", "2G"), ("2G", "2G")]
-# (limite superior em MHz, faixa exibida)
-_FAIXAS = [(800, 700), (890, 850), (960, 900), (1990, 1800), (2300, 2100), (2700, 2600), (4000, 3500)]
-# Distancia maxima (km) pra cada nivel, por grupo de faixa.
-_ALCANCE = {
-    "baixa": [("bom", 8), ("regular", 15), ("fraco", 30)],   # 700-900 MHz
-    "media": [("bom", 3), ("regular", 7), ("fraco", 12)],    # 1800-2100 MHz
-    "alta": [("bom", 1.5), ("regular", 3), ("fraco", 5)],    # 2600-3500 MHz
-}
-NIVEIS = ["bom", "regular", "fraco"]
-RAIO_BUSCA_KM = 30
+PAGINA = "https://sistemas.anatel.gov.br/se/public/cmap.php"
+SITE = "https://sistemas.anatel.gov.br"
+_LINK = re.compile(r"/se/public/file/b/smp/pred_[A-Za-z0-9_]+_dbm-\d+\.zip")
+_NOME = re.compile(r"pred_(\dG)_(?:SA_NSA_)?([A-Za-z0-9_]+?)_dbm-(\d+)\.zip$")
+_CABECALHOS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                             "Chrome/124.0 Safari/537.36"}
+COBERTURA_PATH = Path(models.DB_PATH).parent / "cobertura_anatel.db"
+INTERVALO_ATUALIZACAO = timedelta(days=30)
+RETENTATIVA_APOS_FALHA = timedelta(hours=6)
 
-_DMS = re.compile(r"^(\d{1,3})([NSEWOL])(\d{2})(\d{2})(\d*)$")
+# Grade: celulas de RESOLUCAO grau, blocos de 1 grau (BLOCO x BLOCO celulas).
+RESOLUCAO = 0.0025
+BLOCO = 400
+LON_MIN, LON_MAX, LAT_MIN, LAT_MAX = -75, -28, -35, 6
 
+_MARCAS = {"VIVO": "Vivo", "CLARO": "Claro", "TIM": "TIM", "ALGAR": "Algar", "BRISANET": "Brisanet",
+           "SERCOMTEL": "Sercomtel", "UNIFIQUE": "Unifique", "IEZ": "IEZ!", "LIGUE": "Ligue", "SUMICITY": "Sumicity",
+           "OI": "Oi"}
+NIVEIS = ["bom", "fraco"]
+_TEC_ORDEM = ["5G", "4G", "3G", "2G"]
 
-def _sem_acento(texto):
-    return unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode().upper().strip()
-
-
-def _operadora(nome):
-    n = _sem_acento(nome) + " "
-    for chave, marca in _OPERADORAS:
-        if n.startswith(chave) or f" {chave}" in f" {n}":
-            return marca
-    return (nome or "").strip().title() or None
+_lock = threading.Lock()
+_rodando = threading.Event()
+_progresso = {}
 
 
-def _tecnologia(valor):
-    v = _sem_acento(valor)
-    for chave, rotulo in _TECNOLOGIAS:
-        if chave in v:
-            return rotulo
-    return None
+def _agora():
+    return datetime.strptime(models._agora_cuiaba()[:19], "%Y-%m-%d %H:%M:%S")
 
 
-def _faixa(mhz):
-    for limite, faixa in _FAIXAS:
-        if mhz < limite:
-            return faixa
-    return None
-
-
-def _grupo(faixa):
-    return "baixa" if faixa <= 900 else ("media" if faixa <= 2100 else "alta")
-
-
-def _numero(texto):
-    try:
-        return float(str(texto).strip().replace(",", "."))
-    except ValueError:
+def _camada(nome_arquivo):
+    """'pred_4G_VIVO_dbm-90.zip' -> ("4G", "Vivo", 90) ou None."""
+    m = _NOME.search(nome_arquivo)
+    if not m:
         return None
+    tec, operadora, dbm = m.groups()
+    return tec, _MARCAS.get(operadora.upper(), operadora.replace("_", " ").title()), int(dbm)
 
 
-def _coordenada(texto):
-    """Decimal ("-12,345" / "-12.345") ou o formato da Anatel em graus,
-    minutos e segundos sem separador ("12S3456" = 12 graus 34' 56" Sul)."""
-    t = _sem_acento(texto).replace(" ", "")
-    m = _DMS.match(t)
-    if m:
-        graus, hemis, minutos, segundos, frac = m.groups()
-        seg = float(f"{segundos}.{frac}") if frac else float(segundos)
-        valor = int(graus) + int(minutos) / 60 + seg / 3600
-        return -valor if hemis in ("S", "W", "O") else valor
-    return _numero(t)
+# ---------------------------------------------------------------- leitura
+
+def _aneis(conteudo_shp):
+    """Pontos (N x 2, lon/lat) e inicio de cada anel de todos os poligonos
+    de um .shp (tipos 5/15/25 -- os primeiros campos sao iguais)."""
+    b = memoryview(conteudo_shp)
+    pos, pontos, inicios, total = 100, [], [], 0
+    while pos + 8 <= len(b):
+        tamanho = int.from_bytes(b[pos + 4:pos + 8], "big") * 2
+        reg = pos + 8
+        tipo = int.from_bytes(b[reg:reg + 4], "little")
+        if tipo in (5, 15, 25):
+            npartes, npts = np.frombuffer(b[reg + 36:reg + 44], "<i4")
+            partes = np.frombuffer(b[reg + 44:reg + 44 + 4 * npartes], "<i4")
+            ini = reg + 44 + 4 * npartes
+            pontos.append(np.frombuffer(b[ini:ini + 16 * npts], "<f8").reshape(-1, 2))
+            inicios.append(partes.astype(np.int64) + total)
+            total += int(npts)
+        pos = reg + tamanho
+    if not pontos:
+        return np.zeros((0, 2)), np.zeros(0, np.int64)
+    if len(pontos) == 1:  # o normal: um registro so' (sem copiar)
+        return pontos[0], inicios[0]
+    return np.concatenate(pontos), np.concatenate(inicios)
 
 
-def _colunas(cabecalho):
-    """Indice de cada campo, achado pelo nome (sem acento/maiusculas)."""
-    nomes = [_sem_acento(c).replace(" ", "").replace("_", "") for c in cabecalho]
+def _blocos(pontos, inicios):
+    """Varredura por linha da grade (regra par-impar), uma faixa de 1 grau
+    por vez (pouca memoria): gera (bx, by, cheio, dados) de cada bloco de
+    1 grau com cobertura -- `dados` = bits das celulas, compactados."""
+    ncol = round((LON_MAX - LON_MIN) / RESOLUCAO)
+    nlin = round((LAT_MAX - LAT_MIN) / RESOLUCAO)
+    if len(pontos) < 2:
+        return
+    p1, p2 = pontos[:-1], pontos[1:]
+    # linha r tem centro em LAT_MIN + (r + 0.5) * RESOLUCAO; a aresta cruza
+    # as linhas r0 <= r < r1
+    ya = (p1[:, 1] - LAT_MIN) / RESOLUCAO - 0.5
+    yb = (p2[:, 1] - LAT_MIN) / RESOLUCAO - 0.5
+    r0 = np.ceil(np.minimum(ya, yb)).astype(np.int32)
+    r1 = np.ceil(np.maximum(ya, yb)).astype(np.int32)
+    del ya, yb
+    r1[inicios[1:] - 1] = r0[inicios[1:] - 1]  # aresta entre o fim de um anel e o inicio do proximo
+    for by in range(nlin // BLOCO):
+        lo, hi = by * BLOCO, (by + 1) * BLOCO
+        idx = np.nonzero((r1 > r0) & (r1 > lo) & (r0 < hi))[0]
+        if not len(idx):
+            continue
+        a0, a1 = np.maximum(r0[idx], lo), np.minimum(r1[idx], hi)
+        n = (a1 - a0).astype(np.int64)
+        aresta = np.repeat(idx, n)
+        linhas = np.repeat(a0, n) + (np.arange(len(aresta)) - np.repeat(np.cumsum(n) - n, n))
+        yc = LAT_MIN + (linhas + 0.5) * RESOLUCAO
+        x1, y1, x2, y2 = p1[aresta, 0], p1[aresta, 1], p2[aresta, 0], p2[aresta, 1]
+        xs = x1 + (yc - y1) * (x2 - x1) / (y2 - y1)
+        ordem = np.lexsort((xs, linhas))
+        linhas, xs = linhas[ordem], xs[ordem]
+        # aneis fechados: cada linha tem numero par de cruzamentos -> pares seguidos
+        r, xa, xb = linhas[0::2] - lo, xs[0::2], xs[1::2]
+        c0 = np.clip(np.ceil((xa - LON_MIN) / RESOLUCAO - 0.5), 0, ncol).astype(np.int64)
+        c1 = np.clip(np.ceil((xb - LON_MIN) / RESOLUCAO - 0.5), 0, ncol).astype(np.int64)
+        dif = np.zeros((BLOCO, ncol + 1), np.int32)
+        np.add.at(dif, (r, c0), 1)
+        np.add.at(dif, (r, c1), -1)
+        grade = np.cumsum(dif, axis=1)[:, :ncol] > 0
+        del dif
+        for bx in range(ncol // BLOCO):
+            bloco = grade[:, bx * BLOCO:(bx + 1) * BLOCO]
+            soma = int(bloco.sum())
+            if soma == 0:
+                continue
+            if soma == BLOCO * BLOCO:
+                yield bx, by, 1, None
+            else:
+                yield bx, by, 0, zlib.compress(np.packbits(bloco).tobytes(), 9)
 
-    def achar(*opcoes):
-        for opcao in opcoes:
-            for i, n in enumerate(nomes):
-                if n == opcao:
-                    return i
-        for opcao in opcoes:
-            for i, n in enumerate(nomes):
-                if opcao in n:
-                    return i
-        return None
 
-    return {
-        "entidade": achar("NOMEENTIDADE", "ENTIDADE", "PRESTADORA", "OPERADORA"),
-        "tecnologia": achar("TECNOLOGIA", "TIPOTECNOLOGIA"),
-        "freq": achar("FREQTXMHZ", "FREQTX", "FREQUENCIA", "FAIXA"),
-        "lat": achar("LATITUDE", "LAT"),
-        "lon": achar("LONGITUDE", "LON"),
-    }
+def _criar_tabelas(conn):
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS camadas (id INTEGER PRIMARY KEY, arquivo TEXT, tecnologia TEXT,
+                                            operadora TEXT, dbm INTEGER);
+        CREATE TABLE IF NOT EXISTS blocos (bx INTEGER, by INTEGER, camada INTEGER, cheio INTEGER, dados BLOB,
+                                           PRIMARY KEY (bx, by, camada)) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS info (chave TEXT PRIMARY KEY, valor TEXT);
+    """)
 
 
-def _abrir_texto(caminho):
-    """Abre .zip (primeiro .csv dentro), .gz ou .csv como texto, em fluxo
-    (o arquivo da Anatel tem centenas de MB -- nunca le tudo na memoria)."""
-    with open(caminho, "rb") as f:
-        inicio = f.read(2)
-    if inicio == b"PK":
-        z = zipfile.ZipFile(caminho)
-        nome = next((n for n in z.namelist() if n.lower().endswith(".csv")), z.namelist()[0])
-        bruto = z.open(nome)
-    elif inicio == b"\x1f\x8b":
-        bruto = gzip.open(caminho, "rb")
-    else:
-        bruto = open(caminho, "rb")
-    amostra = bruto.peek(65536)[:65536] if hasattr(bruto, "peek") else b""
+def importar_zip(conn, caminho_zip, nome_arquivo):
+    """Le um zip da Anatel e grava a camada na base em montagem."""
+    camada = _camada(nome_arquivo)
+    if not camada:
+        return False
+    with zipfile.ZipFile(caminho_zip) as z:
+        shp = next((n for n in z.namelist() if n.lower().endswith(".shp")), None)
+        if not shp:
+            raise ValueError(f"{nome_arquivo}: sem .shp")
+        conteudo = z.read(shp)
+    pontos, inicios = _aneis(conteudo)
+    del conteudo
+    cur = conn.execute("INSERT INTO camadas (arquivo, tecnologia, operadora, dbm) VALUES (?, ?, ?, ?)",
+                       (nome_arquivo, *camada))
+    camada_id = cur.lastrowid
+    conn.executemany("INSERT INTO blocos (bx, by, camada, cheio, dados) VALUES (?, ?, ?, ?, ?)",
+                     ((bx, by, camada_id, cheio, dados) for bx, by, cheio, dados in _blocos(pontos, inicios)))
+    conn.commit()
+    return True
+
+
+# ---------------------------------------------------------------- download
+
+def _abrir(url, timeout):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=_CABECALHOS), timeout=timeout)
+
+
+def _links():
+    with _abrir(PAGINA, 60) as resp:
+        html = resp.read().decode("utf-8", "replace")
+    return sorted(set(_LINK.findall(html)))
+
+
+def _ler_info(caminho=None):
+    caminho = caminho or COBERTURA_PATH
+    if not Path(caminho).exists():
+        return {}
     try:
-        amostra.decode("utf-8")
-        codificacao = "utf-8-sig"
-    except UnicodeDecodeError:
-        codificacao = "latin-1"
-    return io.TextIOWrapper(bruto, encoding=codificacao, errors="replace", newline="")
+        conn = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
+        try:
+            return dict(conn.execute("SELECT chave, valor FROM info").fetchall())
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return {}
 
 
-def importar(caminho):
-    """Le o arquivo da Anatel e substitui a base `erbs`. Devolve (antenas
-    gravadas, linhas lidas) ou levanta ValueError se faltar coluna."""
-    with _abrir_texto(caminho) as texto:
-        primeira = texto.readline()
-        if not primeira.strip():
-            raise ValueError("arquivo vazio")
-        separador = ";" if primeira.count(";") >= primeira.count(",") else ","
-        col = _colunas(next(csv.reader([primeira], delimiter=separador)))
-        faltando = [k for k, v in col.items() if v is None]
-        if faltando:
-            raise ValueError("coluna(s) nao encontrada(s): " + ", ".join(faltando))
-        antenas, lidas = set(), 0
-        for linha in csv.reader(texto, delimiter=separador):
-            lidas += 1
+def info():
+    """Situacao da base pra tela: baixado_em, camadas, erro, rodando."""
+    dados = _ler_info()
+    dados["rodando"] = _rodando.is_set()
+    dados["progresso"] = dict(_progresso)
+    return dados
+
+
+def _gravar_info(**valores):
+    conn = sqlite3.connect(COBERTURA_PATH)
+    try:
+        _criar_tabelas(conn)
+        conn.executemany("INSERT OR REPLACE INTO info (chave, valor) VALUES (?, ?)",
+                         [(k, str(v)) for k, v in valores.items()])
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _baixar_tudo():
+    links = _links()
+    if not links:
+        raise RuntimeError("nenhum mapa de cobertura encontrado na pagina da Anatel")
+    tmp_db = COBERTURA_PATH.with_suffix(".montando")
+    tmp_zip = COBERTURA_PATH.with_suffix(".zip.download")
+    tmp_db.unlink(missing_ok=True)
+    conn = sqlite3.connect(tmp_db)
+    try:
+        _criar_tabelas(conn)
+        for i, link in enumerate(links, 1):
+            nome = link.rsplit("/", 1)[-1]
+            _progresso.update(etapa=f"baixando {nome}", feitos=i - 1, total=len(links))
+            for tentativa in range(3):
+                try:
+                    with _abrir(SITE + link, 600) as resp, open(tmp_zip, "wb") as f:
+                        while True:
+                            bloco = resp.read(1 << 20)
+                            if not bloco:
+                                break
+                            f.write(bloco)
+                    break
+                except OSError:
+                    if tentativa == 2:
+                        raise
+            importar_zip(conn, tmp_zip, nome)
+        conn.executemany("INSERT OR REPLACE INTO info (chave, valor) VALUES (?, ?)",
+                         [("baixado_em", _agora().isoformat()), ("camadas", str(len(links)))])
+        conn.commit()
+    finally:
+        conn.close()
+        tmp_zip.unlink(missing_ok=True)
+    tmp_db.replace(COBERTURA_PATH)
+    _cache.clear()
+
+
+def atualizar(forcar=False):
+    with _lock:
+        _rodando.set()
+        try:
+            agora = _agora()
+            if not forcar and not _vencida():
+                return
             try:
-                operadora = _operadora(linha[col["entidade"]])
-                tecnologia = _tecnologia(linha[col["tecnologia"]])
-                mhz = _numero(linha[col["freq"]])
-                lat, lon = _coordenada(linha[col["lat"]]), _coordenada(linha[col["lon"]])
-            except IndexError:
-                continue
-            faixa = _faixa(mhz) if mhz else None
-            if not (operadora and tecnologia and faixa and lat is not None and lon is not None):
-                continue
-            if not (-35 <= lat <= 6 and -75 <= lon <= -28):  # fora do Brasil = coordenada mal lida
-                continue
-            antenas.add((operadora, tecnologia, faixa, round(lat, 5), round(lon, 5)))
-    models.substituir_erbs(antenas)
-    return len(antenas), lidas
+                _baixar_tudo()
+            except Exception as exc:
+                COBERTURA_PATH.with_suffix(".montando").unlink(missing_ok=True)
+                _gravar_info(tentativa_em=agora.isoformat(), erro=str(exc)[:300])
+        finally:
+            _rodando.clear()
+            _progresso.clear()
 
 
-def _distancia_km(lat1, lon1, lat2, lon2):
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp, dl = p2 - p1, math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 6371 * 2 * math.asin(math.sqrt(a))
+def _vencida():
+    meta, agora = _ler_info(), _agora()
+    if meta.get("baixado_em") and agora - datetime.fromisoformat(meta["baixado_em"]) < INTERVALO_ATUALIZACAO:
+        return False
+    if meta.get("tentativa_em") and agora - datetime.fromisoformat(meta["tentativa_em"]) < RETENTATIVA_APOS_FALHA:
+        return False
+    return True
 
 
-def _nivel(faixa, km):
-    for nivel, limite in _ALCANCE[_grupo(faixa)]:
-        if km <= limite:
-            return nivel
-    return None
+def atualizar_se_necessario():
+    """Chamado pelo agendador a cada minuto: baixa em segundo plano (leva
+    alguns minutos) so' se a base tiver mais de 30 dias."""
+    if not _rodando.is_set() and _vencida():
+        atualizar_em_segundo_plano()
+
+
+def atualizar_em_segundo_plano(forcar=False):
+    if _rodando.is_set():
+        return
+    _rodando.set()
+    threading.Thread(target=atualizar, kwargs={"forcar": forcar}, daemon=True).start()
+
+
+# ---------------------------------------------------------------- consulta
+
+_cache = {}
+
+
+def base_carregada():
+    return COBERTURA_PATH.exists() and bool(_ler_info().get("baixado_em"))
 
 
 def estimar(lat, lon):
-    """Por operadora (melhor primeiro): nivel provavel e a antena que da'
-    esse nivel. [{"operadora", "nivel", "tecnologia", "faixa", "km"}].
-    Operadora sem antena util no raio fica de fora. None se a base de
-    antenas ainda nao foi carregada."""
-    if not models.erbs_carregadas():
+    """Por operadora (melhor primeiro): [{"operadora", "nivel" (bom/fraco),
+    "tecnologias": [{"tecnologia", "nivel"}]}] -- so' quem tem cobertura
+    no ponto. None se os mapas da Anatel ainda nao foram baixados."""
+    if not base_carregada():
         return None
-    dlat = RAIO_BUSCA_KM / 111
-    dlon = RAIO_BUSCA_KM / (111 * max(math.cos(math.radians(lat)), 0.2))
-    melhor = {}
-    for e in models.get_erbs_na_caixa(lat - dlat, lat + dlat, lon - dlon, lon + dlon):
-        km = _distancia_km(lat, lon, e["lat"], e["lon"])
-        nivel = _nivel(e["faixa"], km)
-        if not nivel:
-            continue
-        chave = (NIVEIS.index(nivel), km)
-        atual = melhor.get(e["operadora"])
-        if atual is None or chave < atual[0]:
-            melhor[e["operadora"]] = (chave, {
-                "operadora": e["operadora"], "nivel": nivel, "tecnologia": e["tecnologia"],
-                "faixa": e["faixa"], "km": round(km, 1),
-            })
-    return [d for _c, d in sorted(melhor.values(), key=lambda x: x[0])]
+    col = int((lon - LON_MIN) // RESOLUCAO)
+    lin = int((lat - LAT_MIN) // RESOLUCAO)
+    chave = (os.path.getmtime(COBERTURA_PATH), lin, col)
+    if chave in _cache:
+        return _cache[chave]
+    bx, by = col // BLOCO, lin // BLOCO
+    indice = (lin - by * BLOCO) * BLOCO + (col - bx * BLOCO)
+    conn = sqlite3.connect(f"file:{COBERTURA_PATH}?mode=ro", uri=True)
+    try:
+        dbm_por = {}
+        for row in conn.execute("SELECT tecnologia, dbm FROM camadas"):
+            dbm_por.setdefault(row[0], set()).add(row[1])
+        linhas = conn.execute(
+            "SELECT c.tecnologia, c.operadora, c.dbm, b.cheio, b.dados FROM blocos b JOIN camadas c ON c.id = b.camada "
+            "WHERE b.bx = ? AND b.by = ?", (bx, by)).fetchall()
+    finally:
+        conn.close()
+    melhor = {}  # (operadora, tecnologia) -> nivel
+    for tec, operadora, dbm, cheio, dados in linhas:
+        if not cheio:
+            bits = np.frombuffer(zlib.decompress(dados), np.uint8)
+            if not (bits[indice >> 3] >> (7 - (indice & 7))) & 1:
+                continue
+        nivel = "bom" if dbm == min(dbm_por[tec]) else "fraco"
+        atual = melhor.get((operadora, tec))
+        if atual is None or NIVEIS.index(nivel) < NIVEIS.index(atual):
+            melhor[(operadora, tec)] = nivel
+    por_operadora = {}
+    for (operadora, tec), nivel in melhor.items():
+        por_operadora.setdefault(operadora, []).append({"tecnologia": tec, "nivel": nivel})
+    resultado = []
+    for operadora, tecs in por_operadora.items():
+        tecs.sort(key=lambda t: _TEC_ORDEM.index(t["tecnologia"]))
+        nivel = min((t["nivel"] for t in tecs), key=NIVEIS.index)
+        resultado.append({"operadora": operadora, "nivel": nivel, "tecnologias": tecs})
+    resultado.sort(key=lambda o: (NIVEIS.index(o["nivel"]), sum(t["nivel"] == "bom" for t in o["tecnologias"]) * -1,
+                                  _TEC_ORDEM.index(o["tecnologias"][0]["tecnologia"]), o["operadora"]))
+    if len(_cache) > 5000:
+        _cache.clear()
+    _cache[chave] = resultado
+    return resultado

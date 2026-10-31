@@ -1,41 +1,65 @@
-"""Sinal de celular estimado pela base de antenas (ERBs) da Anatel.
+"""Sinal de celular pelos mapas de cobertura da Anatel (Mosaico SMP).
 
 Rodar a partir de webapp/:  python -m unittest tests.test_sinal_celular
 """
-import gzip
 import io
 import os
 import sys
 import tempfile
 import unittest
 import zipfile
+from pathlib import Path
 from unittest import mock
 
 os.environ.setdefault("BIOSCOUT_DB_PATH", os.path.join(tempfile.mkdtemp(), "teste.db"))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import shapefile  # noqa: E402
+
 import app as webapp  # noqa: E402
 import models  # noqa: E402
 import sinal_celular  # noqa: E402
 
-# Fazenda de teste em (-12.5, -55.7). 1 grau de latitude ~ 111 km.
-CSV_ANATEL = "\n".join([
-    "NomeEntidade;NumEstacao;Tecnologia;FreqTxMHz;Latitude;Longitude;Município",
-    "TELEFONICA BRASIL S.A.;1;LTE;763.000;-12.5450;-55.7000;Sorriso",        # Vivo 4G 700 a ~5 km -> bom
-    "TELEFONICA BRASIL S.A.;2;LTE;1845.000;-12.5100;-55.7000;Sorriso",       # Vivo 4G 1800 a ~1 km -> bom (mais perto)
-    "CLARO S.A.;3;LTE;1845.000;12S3500;55W4200;Sorriso",                     # Claro 4G 1800 a ~10 km (DMS) -> fraco
-    "TIM S A;4;GSM;935.000;-12.6800;-55.7000;Sorriso",                       # TIM 2G 900 a ~20 km -> fraco
-    "OI MOVEL S.A.;5;NR;3550.000;-12.7000;-55.7000;Sorriso",                 # Oi 5G 3500 a ~22 km -> fora do alcance
-    "CLARO S.A.;6;LTE;;-12.5;-55.7;Sem frequencia",                          # descartada
-    "linha quebrada",
-])
+
+def _quadrado(lon, lat, lado, horario=True):
+    q = [(lon, lat), (lon, lat + lado), (lon + lado, lat + lado), (lon + lado, lat), (lon, lat)]
+    return q if horario else q[::-1]
 
 
-def _arquivo(conteudo_bytes):
-    f = tempfile.NamedTemporaryFile(delete=False)
-    f.write(conteudo_bytes)
-    f.close()
-    return f.name
+def _zip_shp(aneis):
+    """Zip com um shapefile de UM poligono (varios aneis), como os da Anatel."""
+    shp, shx, dbf = io.BytesIO(), io.BytesIO(), io.BytesIO()
+    w = shapefile.Writer(shp=shp, shx=shx, dbf=dbf, shapeType=shapefile.POLYGON)
+    w.field("OID", "N")
+    w.poly(aneis)
+    w.record(1)
+    w.close()
+    saida = io.BytesIO()
+    with zipfile.ZipFile(saida, "w") as z:
+        for ext, buf in (("shp", shp), ("shx", shx), ("dbf", dbf)):
+            z.writestr(f"camada.{ext}", buf.getvalue())
+    return saida.getvalue()
+
+
+# Fazenda de teste em (-12.5, -55.7).
+CAMADAS = {
+    # Vivo 4G forte num quadrado pequeno em volta da fazenda; minimo num
+    # quadrado maior com um "buraco" em (-12.0, -55.0)
+    "pred_4G_VIVO_dbm-90.zip": _zip_shp([_quadrado(-55.75, -12.55, 0.1)]),
+    "pred_4G_VIVO_dbm-110.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.5), _quadrado(-55.1, -12.1, 0.2, horario=False)]),
+    "pred_2G_TIM_dbm-95.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.0)]),
+    "pred_2G_TIM_dbm-82.zip": _zip_shp([_quadrado(-40.0, -10.0, 0.5)]),
+    "pred_5G_SA_NSA_CLARO_dbm-90.zip": _zip_shp([_quadrado(-55.71, -12.51, 0.02), _quadrado(-47.0, -16.0, 0.3)]),
+}
+PAGINA = "<html>" + "".join(
+    f'<a href="/se/public/file/b/smp/{nome}">x</a> <a href="https://sistemas.anatel.gov.br/se/public/file/b/smp/{nome}">y</a>'
+    for nome in CAMADAS) + "</html>"
+
+
+def _abrir_falso(url, timeout):
+    if url == sinal_celular.PAGINA:
+        return io.BytesIO(PAGINA.encode())
+    return io.BytesIO(CAMADAS[url.rsplit("/", 1)[-1]])
 
 
 class SinalCelularTest(unittest.TestCase):
@@ -44,7 +68,15 @@ class SinalCelularTest(unittest.TestCase):
         webapp.app.config["TESTING"] = True
         if not models.get_user_by_username("Zzz Teste Master Sinal"):
             models.create_user("Zzz Teste Master Sinal", "x", is_master=True)
-        sinal_celular.importar(_arquivo(CSV_ANATEL.encode("latin-1")))
+        cls.pasta = tempfile.mkdtemp()
+        cls.patch = mock.patch.object(sinal_celular, "COBERTURA_PATH", Path(cls.pasta) / "cobertura_anatel.db")
+        cls.patch.start()
+        with mock.patch.object(sinal_celular, "_abrir", _abrir_falso):
+            sinal_celular.atualizar(forcar=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.patch.stop()
 
     def _master(self):
         c = webapp.app.test_client()
@@ -53,56 +85,62 @@ class SinalCelularTest(unittest.TestCase):
             s["_fresh"] = True
         return c
 
-    def test_leitura_de_campos(self):
-        self.assertAlmostEqual(sinal_celular._coordenada("12S3500"), -(12 + 35 / 60), places=5)
-        self.assertAlmostEqual(sinal_celular._coordenada("55W4200"), -(55 + 42 / 60), places=5)
-        self.assertAlmostEqual(sinal_celular._coordenada("-12,5"), -12.5)
-        self.assertEqual(sinal_celular._operadora("TELEFÔNICA BRASIL S.A."), "Vivo")
-        self.assertEqual(sinal_celular._operadora("TIM S A"), "TIM")
-        self.assertEqual((sinal_celular._faixa(763), sinal_celular._faixa(1845), sinal_celular._faixa(3550)), (700, 1800, 3500))
-        self.assertEqual(sinal_celular._tecnologia("NR"), "5G")
+    def test_nome_dos_arquivos(self):
+        self.assertEqual(sinal_celular._camada("pred_4G_VIVO_dbm-90.zip"), ("4G", "Vivo", 90))
+        self.assertEqual(sinal_celular._camada("pred_5G_SA_NSA_UNIFIQUE_dbm-110.zip"), ("5G", "Unifique", 110))
+        self.assertEqual(sinal_celular._camada("pred_4G_IEZ_dbm-90.zip")[1], "IEZ!")
+        self.assertIsNone(sinal_celular._camada("leiame.zip"))
 
-    def test_estimativa_por_operadora(self):
+    def test_baixou_tudo(self):
+        info = sinal_celular.info()
+        self.assertEqual(info["camadas"], "5")
+        self.assertTrue(info["baixado_em"])
+        self.assertFalse(sinal_celular._vencida())
+
+    def test_cobertura_no_ponto(self):
         r = {o["operadora"]: o for o in sinal_celular.estimar(-12.5, -55.7)}
-        self.assertEqual((r["Vivo"]["nivel"], r["Vivo"]["faixa"]), ("bom", 1800))
-        self.assertEqual((r["Claro"]["nivel"], r["Claro"]["tecnologia"]), ("fraco", "4G"))
-        self.assertEqual((r["TIM"]["nivel"], r["TIM"]["faixa"]), ("fraco", 900))
-        self.assertNotIn("Oi", r)  # 5G 3500 a 22 km nao alcanca
-        self.assertEqual([o["operadora"] for o in sinal_celular.estimar(-12.5, -55.7)][0], "Vivo")  # melhor primeiro
-        self.assertEqual(sinal_celular.estimar(-5.0, -45.0), [])  # longe de tudo
-        with mock.patch.object(models, "erbs_carregadas", return_value=False):
+        self.assertEqual(r["Vivo"]["tecnologias"], [{"tecnologia": "4G", "nivel": "bom"}])
+        self.assertEqual((r["TIM"]["nivel"], r["TIM"]["tecnologias"][0]["tecnologia"]), ("fraco", "2G"))
+        self.assertEqual(r["Claro"]["tecnologias"], [{"tecnologia": "5G", "nivel": "bom"}])
+        self.assertEqual(r["TIM"], sinal_celular.estimar(-12.5, -55.7)[-1])  # fraco por ultimo
+        # fora do quadrado forte, dentro do minimo
+        r = {o["operadora"]: o for o in sinal_celular.estimar(-12.3, -55.3)}
+        self.assertEqual(r["Vivo"]["nivel"], "fraco")
+        self.assertNotIn("Claro", r)
+        # no buraco do poligono: sem Vivo
+        self.assertNotIn("Vivo", {o["operadora"] for o in sinal_celular.estimar(-12.0, -55.0)})
+        self.assertEqual(sinal_celular.estimar(-5.0, -45.0), [])
+        self.assertEqual(sinal_celular.estimar(40.0, 10.0), [])  # fora do Brasil
+        with mock.patch.object(sinal_celular, "COBERTURA_PATH", Path(self.pasta) / "nao_existe.db"):
             self.assertIsNone(sinal_celular.estimar(-12.5, -55.7))
 
-    def test_importa_zip_e_gz(self):
-        zip_bytes = io.BytesIO()
-        with zipfile.ZipFile(zip_bytes, "w") as z:
-            z.writestr("estacoes.csv", CSV_ANATEL)
-        for conteudo in (zip_bytes.getvalue(), gzip.compress(CSV_ANATEL.encode("utf-8"))):
-            with self.subTest(formato=conteudo[:2]):
-                antenas, lidas = sinal_celular.importar(_arquivo(conteudo))
-                self.assertEqual((antenas, lidas), (5, 7))
-        with self.assertRaises(ValueError):
-            sinal_celular.importar(_arquivo(b"a;b;c\n1;2;3\n"))
+    def test_falha_no_download_guarda_a_base_anterior(self):
+        def fora_do_ar(url, timeout):
+            raise OSError("fora do ar")
+        with mock.patch.object(sinal_celular, "_abrir", fora_do_ar):
+            sinal_celular.atualizar(forcar=True)
+        info = sinal_celular.info()
+        self.assertIn("fora do ar", info["erro"])
+        self.assertTrue(sinal_celular.estimar(-12.5, -55.7))
 
     def test_telas(self):
         master = self._master()
-        # envio do arquivo pelo Mapa Interpolado
-        resp = master.post("/mapa-interpolado/antenas", data={"arquivo": (io.BytesIO(CSV_ANATEL.encode("latin-1")), "erbs.csv")},
-                           content_type="multipart/form-data", follow_redirects=True)
-        self.assertIn("Base de antenas atualizada: 5 antenas", resp.get_data(as_text=True))
-        ruim = master.post("/mapa-interpolado/antenas", data={"arquivo": (io.BytesIO(b"x;y\n1;2"), "x.csv")},
-                           content_type="multipart/form-data", follow_redirects=True)
-        self.assertIn("coluna(s) nao encontrada(s)", ruim.get_data(as_text=True))
-        self.assertIn("5 antenas", master.get("/mapa-interpolado").get_data(as_text=True))
+        html = master.get("/mapa-interpolado").get_data(as_text=True)
+        self.assertIn("Mapas de cobertura de celular (Anatel)", html)
+        self.assertIn("5 mapas", html)
+        with mock.patch.object(sinal_celular, "atualizar_em_segundo_plano") as baixar:
+            resp = master.post("/mapa-interpolado/cobertura-anatel", follow_redirects=True)
+        baixar.assert_called_once_with(forcar=True)
+        self.assertIn("Baixando os mapas de cobertura", resp.get_data(as_text=True))
         # consulta ao clicar no mapa
         d = master.get("/sinal-celular?lat=-12.5&lon=-55.7").get_json()
-        self.assertEqual(d["operadoras"][0]["operadora"], "Vivo")
+        self.assertIn("Vivo", [o["operadora"] for o in d["operadoras"]])
         self.assertEqual(master.get("/sinal-celular?lat=x").status_code, 400)
         # Manejos: quadro em cada fazenda
         models.create_virtual_farm("Zzz Fazenda Sinal", -12.5, -55.7, 30)
         html = master.get("/fazendas").get_data(as_text=True)
-        self.assertIn("Sinal de celular (estimado)", html)
-        self.assertIn("Vivo</strong>: 4G 1800 MHz", html)
+        self.assertIn("Sinal de celular (Anatel)", html)
+        self.assertIn("Vivo</strong>: 4G bom", html)
         # Novos cadastros: pela lavoura do cliente
         plano = models.salvar_plano(None, "Zzz Plano Sinal", "", 0, "MONTHLY", 2, 50, ["clima"], True, 9)
         uid = models.criar_cliente("Zzz Cliente Sinal", "segredo1", "", "5565999990000", "", plano)
@@ -111,6 +149,7 @@ class SinalCelularTest(unittest.TestCase):
                                    "telefone": "5565999990000", "tipo": "cliente", "user_id": uid})
         html = master.get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("Sinal de celular em Talhao Sinal", html)
+        self.assertIn("TIM</strong>: 2G fraco", html)
 
 
 if __name__ == "__main__":
