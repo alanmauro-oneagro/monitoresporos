@@ -100,17 +100,18 @@ class SinalCelularTest(unittest.TestCase):
     def test_cobertura_no_ponto(self):
         r = {o["operadora"]: o for o in sinal_celular.estimar(-12.5, -55.7)}
         self.assertEqual(r["Vivo"]["tecnologias"], [{"tecnologia": "4G", "nivel": "bom"}])
-        self.assertEqual((r["TIM"]["nivel"], r["TIM"]["tecnologias"][0]["tecnologia"]), ("fraco", "2G"))
-        self.assertEqual(r["Claro"]["tecnologias"], [{"tecnologia": "5G", "nivel": "bom"}])
-        self.assertEqual(r["TIM"], sinal_celular.estimar(-12.5, -55.7)[-1])  # fraco por ultimo
-        # fora do quadrado forte, dentro do minimo
-        r = {o["operadora"]: o for o in sinal_celular.estimar(-12.3, -55.3)}
-        self.assertEqual(r["Vivo"]["nivel"], "fraco")
-        self.assertNotIn("Claro", r)
+        self.assertEqual(r["Vivo"]["nivel"], "otimo")  # 4G forte
+        self.assertEqual(r["Claro"]["nivel"], "otimo")  # 5G forte
+        self.assertEqual((r["TIM"]["nivel"], r["TIM"]["tecnologias"][0]["tecnologia"]), ("fraco", "2G"))  # 2G no minimo
+        self.assertEqual(sinal_celular.estimar(-12.5, -55.7)[-1]["operadora"], "TIM")  # pior por ultimo
+        # fora do quadrado forte, dentro do minimo: 4G minimo = bom; Claro aparece "sem" pra comparar
+        r = {o["operadora"]: o["nivel"] for o in sinal_celular.estimar(-12.3, -55.3)}
+        self.assertEqual(r, {"Vivo": "bom", "TIM": "fraco", "Claro": "sem"})
         # no buraco do poligono: sem Vivo
-        self.assertNotIn("Vivo", {o["operadora"] for o in sinal_celular.estimar(-12.0, -55.0)})
-        self.assertEqual(sinal_celular.estimar(-5.0, -45.0), [])
-        self.assertEqual(sinal_celular.estimar(40.0, 10.0), [])  # fora do Brasil
+        self.assertEqual({o["operadora"]: o["nivel"] for o in sinal_celular.estimar(-12.0, -55.0)}["Vivo"], "sem")
+        self.assertEqual({o["nivel"] for o in sinal_celular.estimar(-5.0, -45.0)}, {"sem"})
+        self.assertEqual({o["nivel"] for o in sinal_celular.estimar(40.0, 10.0)}, {"sem"})  # fora do Brasil
+        self.assertEqual(sinal_celular._nivel_operadora([{"tecnologia": "3G", "nivel": "bom"}]), "bom")
         with mock.patch.object(sinal_celular, "COBERTURA_PATH", Path(self.pasta) / "nao_existe.db"):
             self.assertIsNone(sinal_celular.estimar(-12.5, -55.7))
 
@@ -135,12 +136,14 @@ class SinalCelularTest(unittest.TestCase):
         # consulta ao clicar no mapa
         d = master.get("/sinal-celular?lat=-12.5&lon=-55.7").get_json()
         self.assertIn("Vivo", [o["operadora"] for o in d["operadoras"]])
+        self.assertIn("<strong>Vivo</strong>", d["html"])
         self.assertEqual(master.get("/sinal-celular?lat=x").status_code, 400)
         # Manejos: quadro em cada fazenda
         models.create_virtual_farm("Zzz Fazenda Sinal", -12.5, -55.7, 30)
         html = master.get("/fazendas").get_data(as_text=True)
         self.assertIn("Sinal de celular (Anatel)", html)
-        self.assertIn("Vivo</strong>: 4G bom", html)
+        self.assertIn('title="Vivo: ótimo -- 4G forte"', html)
+        self.assertIn("#198754", html)  # verde
         # Novos cadastros: pela lavoura do cliente
         plano = models.salvar_plano(None, "Zzz Plano Sinal", "", 0, "MONTHLY", 2, 50, ["clima"], True, 9)
         uid = models.criar_cliente("Zzz Cliente Sinal", "segredo1", "", "5565999990000", "", plano)
@@ -149,7 +152,7 @@ class SinalCelularTest(unittest.TestCase):
                                    "telefone": "5565999990000", "tipo": "cliente", "user_id": uid})
         html = master.get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("Sinal de celular em Talhao Sinal", html)
-        self.assertIn("TIM</strong>: 2G fraco", html)
+        self.assertIn('title="TIM: fraco -- 2G mínimo"', html)
 
 
 if __name__ == "__main__":

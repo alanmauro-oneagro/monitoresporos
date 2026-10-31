@@ -25,7 +25,7 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g, get_template_attribute
 from flask_compress import Compress
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
@@ -3576,7 +3576,9 @@ def sinal_celular_ponto():
         lat, lon = float(request.args.get("lat")), float(request.args.get("lon"))
     except (TypeError, ValueError):
         abort(400)
-    return jsonify({"operadoras": sinal_celular.estimar(lat, lon)})
+    operadoras = sinal_celular.estimar(lat, lon)
+    quadro = get_template_attribute("_sinal_celular.html", "quadro")
+    return jsonify({"operadoras": operadoras, "html": str(quadro(operadoras))})
 
 
 @app.route("/mapa-interpolado/adicionar", methods=["POST"])

@@ -286,7 +286,12 @@ site tem que entrar la'.
   (um poligono com centenas de milhares de partes -- shapely inteiro e'
   lento demais) vira grade de bits de 0,0025 grau (~280 m) em blocos de 1
   grau, em `cobertura_anatel.db` ao lado do banco (fora do backup, ~42 MB).
-  `estimar(lat, lon)` le 1 bit por mapa (~3 ms). Aparece em Manejos, no
+  `estimar(lat, lon)` le 1 bit por mapa (~3 ms). Tela (`_sinal_celular.html`,
+  pedido do Alan): um icone de barras por operadora, lado a lado --
+  verde otimo (4G/5G forte), amarelo bom (4G/5G minimo ou 2G/3G forte),
+  vermelho fraco (so' 2G/3G minimo), cinza com X sem sinal (Vivo/Claro/TIM
+  sempre aparecem, pra comparar); detalhe por tecnologia no `title`. O
+  Mapa Interpolado recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
   Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. Substituiu a
   1a versao por distancia de antena (ERBs, tabela `erbs` apagada).
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
