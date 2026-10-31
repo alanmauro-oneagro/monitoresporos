@@ -43,7 +43,12 @@ LON_MIN, LON_MAX, LAT_MIN, LAT_MAX = -75, -28, -35, 6
 _MARCAS = {"VIVO": "Vivo", "CLARO": "Claro", "TIM": "TIM", "ALGAR": "Algar", "BRISANET": "Brisanet",
            "SERCOMTEL": "Sercomtel", "UNIFIQUE": "Unifique", "IEZ": "IEZ!", "LIGUE": "Ligue", "SUMICITY": "Sumicity",
            "OI": "Oi"}
-NIVEIS = ["bom", "fraco"]
+NIVEIS = ["bom", "fraco"]  # por mapa: limiar forte / minimo da Anatel
+# Nivel da operadora no ponto (pedido do Alan, 31/10/2026 -- icone colorido):
+# otimo = 4G/5G forte; bom = 4G/5G no minimo ou 2G/3G forte; fraco = so'
+# 2G/3G no minimo; sem = sem cobertura (so' pras PRINCIPAIS, pra comparar).
+NIVEIS_OPERADORA = ["otimo", "bom", "fraco", "sem"]
+PRINCIPAIS = ["Vivo", "Claro", "TIM"]
 _TEC_ORDEM = ["5G", "4G", "3G", "2G"]
 
 _lock = threading.Lock()
@@ -302,10 +307,21 @@ def base_carregada():
     return COBERTURA_PATH.exists() and bool(_ler_info().get("baixado_em"))
 
 
+def _nivel_operadora(tecs):
+    dados = [t["nivel"] for t in tecs if t["tecnologia"] in ("4G", "5G")]
+    voz = [t["nivel"] for t in tecs if t["tecnologia"] in ("2G", "3G")]
+    if "bom" in dados:
+        return "otimo"
+    if dados or "bom" in voz:
+        return "bom"
+    return "fraco"
+
+
 def estimar(lat, lon):
-    """Por operadora (melhor primeiro): [{"operadora", "nivel" (bom/fraco),
-    "tecnologias": [{"tecnologia", "nivel"}]}] -- so' quem tem cobertura
-    no ponto. None se os mapas da Anatel ainda nao foram baixados."""
+    """Por operadora (melhor primeiro): [{"operadora", "nivel"
+    (otimo/bom/fraco/sem), "tecnologias": [{"tecnologia", "nivel" (bom/fraco)}]}]
+    -- quem tem cobertura no ponto, mais Vivo/Claro/TIM como "sem" se nao
+    tiverem. None se os mapas da Anatel ainda nao foram baixados."""
     if not base_carregada():
         return None
     col = int((lon - LON_MIN) // RESOLUCAO)
@@ -341,10 +357,12 @@ def estimar(lat, lon):
     resultado = []
     for operadora, tecs in por_operadora.items():
         tecs.sort(key=lambda t: _TEC_ORDEM.index(t["tecnologia"]))
-        nivel = min((t["nivel"] for t in tecs), key=NIVEIS.index)
-        resultado.append({"operadora": operadora, "nivel": nivel, "tecnologias": tecs})
-    resultado.sort(key=lambda o: (NIVEIS.index(o["nivel"]), sum(t["nivel"] == "bom" for t in o["tecnologias"]) * -1,
-                                  _TEC_ORDEM.index(o["tecnologias"][0]["tecnologia"]), o["operadora"]))
+        resultado.append({"operadora": operadora, "nivel": _nivel_operadora(tecs), "tecnologias": tecs})
+    for operadora in PRINCIPAIS:
+        if operadora not in por_operadora:
+            resultado.append({"operadora": operadora, "nivel": "sem", "tecnologias": []})
+    resultado.sort(key=lambda o: (NIVEIS_OPERADORA.index(o["nivel"]), -sum(t["nivel"] == "bom" for t in o["tecnologias"]),
+                                  -len(o["tecnologias"]), o["operadora"]))
     if len(_cache) > 5000:
         _cache.clear()
     _cache[chave] = resultado

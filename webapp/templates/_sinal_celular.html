@@ -1,20 +1,32 @@
-{# Quadro "Sinal de celular" -- cobertura prevista pela Anatel, ver sinal_celular.estimar. #}
+{# Quadro "Sinal de celular" -- cobertura prevista pela Anatel, ver sinal_celular.estimar.
+   Um icone de barras colorido por operadora, lado a lado, pra comparar
+   (pedido do Alan, 31/10/2026): verde otimo, amarelo bom, vermelho fraco. #}
+{% macro icone(nivel) %}
+{% set cor = {'otimo': '#198754', 'bom': '#e0a800', 'fraco': '#dc3545'}.get(nivel, '#adb5bd') %}
+{% set barras = {'otimo': 4, 'bom': 3, 'fraco': 1}.get(nivel, 0) %}
+<svg width="18" height="16" viewBox="0 0 18 16" aria-hidden="true" style="vertical-align: -2px;">
+    {% for i in range(4) %}<rect x="{{ i * 4.5 }}" y="{{ 12 - i * 4 }}" width="3.2" height="{{ 4 + i * 4 }}" rx="0.8" fill="{{ cor if i < barras else '#dee2e6' }}"/>{% endfor %}
+    {% if nivel == 'sem' %}<path d="M1 1 L8 8 M8 1 L1 8" stroke="#dc3545" stroke-width="1.6"/>{% endif %}
+</svg>
+{% endmacro %}
 {% macro quadro(sinal, titulo="📶 Sinal de celular (Anatel)") %}
-{% set cores = {'bom': 'success', 'fraco': 'warning text-dark'} %}
+{% set nomes = {'otimo': 'ótimo', 'bom': 'bom', 'fraco': 'fraco', 'sem': 'sem sinal'} %}
 <div class="small">
     <strong>{{ titulo }}</strong>
     {% if sinal is none %}
     <span class="text-muted">-- mapas de cobertura da Anatel ainda não baixados.</span>
-    {% elif not sinal %}
-    <span class="text-muted">-- sem cobertura de nenhuma operadora prevista neste ponto.</span>
     {% else %}
-    <ul class="list-unstyled mb-0 mt-1">
+    <div class="d-flex flex-wrap gap-2 mt-1">
         {% for o in sinal %}
-        <li><span class="badge bg-{{ cores[o.nivel] }}">{{ o.nivel }}</span>
-            <strong>{{ o.operadora }}</strong>: {% for t in o.tecnologias %}{{ t.tecnologia }} {{ t.nivel }}{% if not loop.last %} · {% endif %}{% endfor %}</li>
+        <span class="border rounded-pill px-2 py-1 bg-white text-nowrap" title="{{ o.operadora }}: {{ nomes[o.nivel] }}{% if o.tecnologias %} -- {% for t in o.tecnologias %}{{ t.tecnologia }} {{ 'forte' if t.nivel == 'bom' else 'mínimo' }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}">
+            {{ icone(o.nivel) }} <strong>{{ o.operadora }}</strong>
+        </span>
         {% endfor %}
-    </ul>
-    <div class="text-muted" style="font-size: 0.75rem;">Cobertura prevista pela Anatel no ponto exato (bom = sinal forte; fraco = só o mínimo para funcionar). Relevo, mata e dentro de casa mudam o sinal real -- confirme no local.</div>
+    </div>
+    <div class="text-muted mt-1" style="font-size: 0.75rem;">
+        {{ icone('otimo') }} ótimo (4G/5G forte) &nbsp; {{ icone('bom') }} bom &nbsp; {{ icone('fraco') }} fraco &nbsp; {{ icone('sem') }} sem sinal
+        -- previsão da Anatel no ponto exato; relevo e mata mudam o sinal real.
+    </div>
     {% endif %}
 </div>
 {% endmacro %}

@@ -794,8 +794,6 @@
     // arrasto do pino, busca ou digitacao -- confere a cada segundo).
     var sinalBox = document.getElementById('sinal-ponto');
     var sinalUltimo = '';
-    var SINAL_CORES = { bom: 'success', fraco: 'warning text-dark' };
-    function textoSeguro(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
     setInterval(function () {
         var lat = parseFloat(latInput.value), lon = parseFloat(lonInput.value);
         var chave = isNaN(lat) || isNaN(lon) ? '' : lat.toFixed(4) + ',' + lon.toFixed(4);
@@ -806,19 +804,7 @@
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (chave !== sinalUltimo) return;
-                var html = '<strong>📶 Sinal de celular (Anatel)</strong> ';
-                if (d.operadoras === null) {
-                    html += '<span class="text-muted">-- mapas de cobertura da Anatel ainda não baixados.</span>';
-                } else if (!d.operadoras.length) {
-                    html += '<span class="text-muted">-- sem cobertura de nenhuma operadora prevista neste ponto.</span>';
-                } else {
-                    html += '<ul class="list-unstyled mb-0 mt-1">' + d.operadoras.map(function (o) {
-                        return '<li><span class="badge bg-' + SINAL_CORES[o.nivel] + '">' + o.nivel + '</span> <strong>' +
-                            textoSeguro(o.operadora) + '</strong>: ' + o.tecnologias.map(function (t) {
-                                return t.tecnologia + ' ' + t.nivel;
-                            }).join(' · ') + '</li>';
-                    }).join('') + '</ul><div class="text-muted" style="font-size:0.75rem;">Cobertura prevista pela Anatel (bom = sinal forte; fraco = só o mínimo). Relevo e mata mudam o sinal real -- confirme no local.</div>';
-                }
+                var html = d.html;
                 sinalBox.innerHTML = html;
                 sinalBox.classList.remove('d-none');
             })
