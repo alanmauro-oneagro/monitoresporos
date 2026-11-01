@@ -165,21 +165,17 @@
             {% if current_user.is_master or abas_config_permitidas %}
             <div class="position-relative">
                 <button type="button" class="btn btn-link nav-link text-white px-3 py-2{% if request.endpoint in _admin_dropdown_endpoints %} tab-ativa{% endif %}" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮{% if solicitacoes_pendentes %}<span class="badge bg-danger align-top" style="font-size: 0.6rem;" title="Novos cadastros">{{ solicitacoes_pendentes }}</span>{% endif %}<span class="d-lg-none fs-6 fw-bold ms-2 config-rotulo">Configurações</span></button>
-                <div id="settingsMenu" class="d-none position-absolute end-0 bg-white shadow rounded mt-2 py-1" style="min-width: 160px; z-index: 1050;">
-                    {% if pode_aba('usuarios') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_users' %} tab-ativa{% endif %}" href="{{ url_for('admin_users') }}">Usuários</a>{% endif %}
-                    {% if pode_aba('doencas') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_doencas' %} tab-ativa{% endif %}" href="{{ url_for('admin_doencas') }}">Doenças</a>{% endif %}
-                    {% if pode_aba('fungicidas') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_fungicidas' %} tab-ativa{% endif %}" href="{{ url_for('admin_fungicidas') }}">Fungicidas</a>{% endif %}
-                    {% if pode_aba('mapa_interpolado') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'mapa_interpolado' %} tab-ativa{% endif %}" href="{{ url_for('mapa_interpolado') }}">Mapa de Estudos</a>{% endif %}
-                    {% if pode_aba('solo') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'solo' %} tab-ativa{% endif %}" href="{{ url_for('solo') }}">Mapa de Solos</a>{% endif %}
-                    {% if pode_aba('ndvi') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'ndvi' %} tab-ativa{% endif %}" href="{{ url_for('ndvi') }}">NDVI</a>{% endif %}
-                    {% if pode_aba('envios') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'whatsapp_gerenciamento' %} tab-ativa{% endif %}" href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>{% endif %}
-                    {% if current_user.is_master %}
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_acessos' %} tab-ativa{% endif %}" href="{{ url_for('admin_acessos') }}">Acessos</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_solicitacoes' %} tab-ativa{% endif %}" href="{{ url_for('admin_solicitacoes') }}">Clientes e cadastros{% if solicitacoes_pendentes %} <span class="badge bg-danger">{{ solicitacoes_pendentes }}</span>{% endif %}</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_planos' %} tab-ativa{% endif %}" href="{{ url_for('admin_planos') }}">Planos</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_whatsapp' %} tab-ativa{% endif %}" href="{{ url_for('admin_whatsapp') }}">Conexão WhatsApp</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_exportar' %} tab-ativa{% endif %}" href="{{ url_for('admin_exportar') }}">Exportar</a>
-                    <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'fazendas_ocultas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas_ocultas') }}">Fazendas ocultas</a>
+                <div id="settingsMenu" class="d-none position-absolute end-0 bg-white shadow rounded mt-2 py-1" style="min-width: 220px; z-index: 1050;">
+                    {% for item in menu_config %}
+                    <div class="d-flex align-items-center menu-config-item" data-chave="{{ item.chave }}">
+                        <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark flex-grow-1{% if request.endpoint == item.endpoint %} tab-ativa{% endif %}" href="{{ url_for(item.endpoint) }}">{{ item.rotulo }}{% if item.chave == 'cadastros' and solicitacoes_pendentes %} <span class="badge bg-danger">{{ solicitacoes_pendentes }}</span>{% endif %}</a>
+                        {% if pode_ordenar_menu %}<span class="menu-ordem-setas d-none pe-2 text-nowrap"><button type="button" class="btn btn-sm btn-light py-0 px-1" data-mover="-1" aria-label="Subir {{ item.rotulo }}">▲</button><button type="button" class="btn btn-sm btn-light py-0 px-1 ms-1" data-mover="1" aria-label="Descer {{ item.rotulo }}">▼</button></span>{% endif %}
+                    </div>
+                    {% endfor %}
+                    {% if pode_ordenar_menu %}
+                    <div class="border-top mt-1 pt-1">
+                        <button type="button" class="btn btn-link btn-sm text-decoration-none text-muted px-3" id="menu-ordenar-toggle">↕ Ordenar abas</button>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -188,6 +184,36 @@
         {% endif %}
     </div>
 </nav>
+{% if pode_ordenar_menu %}
+<script>
+// Ordem das abas do menu Configuracoes -- so' o Alan (pedido dele, 01/11/2026):
+// "↕ Ordenar abas" mostra ▲▼ em cada item; cada clique ja' salva.
+(function () {
+    var menu = document.getElementById('settingsMenu');
+    var botao = document.getElementById('menu-ordenar-toggle');
+    if (!menu || !botao) return;
+    botao.addEventListener('click', function () {
+        var ligado = botao.classList.toggle('fw-bold');
+        botao.textContent = ligado ? '✓ Pronto' : '↕ Ordenar abas';
+        menu.querySelectorAll('.menu-ordem-setas').forEach(function (s) { s.classList.toggle('d-none', !ligado); });
+    });
+    menu.addEventListener('click', function (e) {
+        var seta = e.target.closest('[data-mover]');
+        if (!seta) return;
+        e.preventDefault();
+        var item = seta.closest('.menu-config-item');
+        var vizinho = seta.dataset.mover === '-1' ? item.previousElementSibling : item.nextElementSibling;
+        if (!vizinho || !vizinho.classList.contains('menu-config-item')) return;
+        if (seta.dataset.mover === '-1') item.parentNode.insertBefore(item, vizinho);
+        else item.parentNode.insertBefore(vizinho, item);
+        var ordem = Array.prototype.map.call(menu.querySelectorAll('.menu-config-item'), function (i) { return i.dataset.chave; });
+        fetch('{{ url_for("salvar_ordem_menu_config") }}', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ordem: ordem }),
+        });
+    });
+})();
+</script>
+{% endif %}
 <script>
 (function () {
     // Menu hambúrguer do mobile -- separado do mecanismo generico de

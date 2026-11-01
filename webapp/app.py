@@ -7263,6 +7263,70 @@ def admin_solicitacoes():
                            planos=models.get_planos(), hoje=_hoje_cuiaba().isoformat())
 
 
+# Itens do menu Configuracoes (botao ⋮): (chave, rotulo, endpoint, quem ve
+# -- chave de ABAS_CONFIG ou "master"). A ORDEM e' escolhida so' pelo Alan
+# ("↕ Ordenar abas" no proprio menu; pedido do Alan, 01/11/2026), guardada
+# no setting `ordem_menu_config` e vale pro menu de todo mundo (cada um so'
+# ve os itens que pode abrir). Aba nova do menu entra aqui tambem.
+MENU_CONFIG = [
+    ("usuarios", "Usuários", "admin_users", "usuarios"),
+    ("doencas", "Doenças", "admin_doencas", "doencas"),
+    ("fungicidas", "Fungicidas", "admin_fungicidas", "fungicidas"),
+    ("mapa_interpolado", "Mapa de Estudos", "mapa_interpolado", "mapa_interpolado"),
+    ("solo", "Mapa de Solos", "solo", "solo"),
+    ("ndvi", "NDVI", "ndvi", "ndvi"),
+    ("envios", "Envios", "whatsapp_gerenciamento", "envios"),
+    ("acessos", "Acessos", "admin_acessos", "master"),
+    ("cadastros", "Clientes e cadastros", "admin_solicitacoes", "master"),
+    ("planos", "Planos", "admin_planos", "master"),
+    ("whatsapp", "Conexão WhatsApp", "admin_whatsapp", "master"),
+    ("exportar", "Exportar", "admin_exportar", "master"),
+    ("ocultas", "Fazendas ocultas", "fazendas_ocultas", "master"),
+]
+_ORDEM_MENU_KEY = "ordem_menu_config"
+
+
+def _ordem_menu_config():
+    try:
+        salvo = json.loads(models.get_setting(_ORDEM_MENU_KEY) or "[]")
+    except ValueError:
+        salvo = []
+    padrao = [m[0] for m in MENU_CONFIG]
+    salvo = [c for c in salvo if c in padrao]
+    return salvo + [c for c in padrao if c not in salvo]  # item novo vai pro fim
+
+
+def _menu_config_do_usuario():
+    por_chave = {m[0]: m for m in MENU_CONFIG}
+    itens = []
+    for chave in _ordem_menu_config():
+        _c, rotulo, endpoint, quem = por_chave[chave]
+        if current_user.is_master if quem == "master" else pode_acessar_aba(quem):
+            itens.append({"chave": chave, "rotulo": rotulo, "endpoint": endpoint})
+    return itens
+
+
+@app.context_processor
+def _inject_menu_config():
+    if not current_user.is_authenticated or current_user.is_cliente:
+        return {"menu_config": [], "pode_ordenar_menu": False}
+    return {"menu_config": _menu_config_do_usuario(),
+            "pode_ordenar_menu": current_user.username == ALAN_MAURO_USERNAME}
+
+
+@app.route("/admin/menu-config/ordem", methods=["POST"])
+@login_required
+def salvar_ordem_menu_config():
+    if current_user.username != ALAN_MAURO_USERNAME:
+        abort(403)
+    ordem = (request.get_json(silent=True) or {}).get("ordem") or []
+    validas = {m[0] for m in MENU_CONFIG}
+    if not isinstance(ordem, list) or not all(isinstance(c, str) and c in validas for c in ordem):
+        abort(400)
+    models.set_setting(_ORDEM_MENU_KEY, json.dumps(ordem))
+    return jsonify({"ok": True, "ordem": _ordem_menu_config()})
+
+
 @app.context_processor
 def _inject_whatsapp_conectado():
     """`whatsapp_conectado()` nos templates: so' consulta o servico quando a
