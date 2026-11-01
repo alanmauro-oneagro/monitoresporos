@@ -229,7 +229,9 @@ site tem que entrar la'.
   18/10/2026). Quem recebe (relatorio E NDVI) so'
   se marca na aba Envios; Usuarios mostra so' a contagem; NDVI so' mostra.
   Horario de envio so' em Envios (o padrao `get_whatsapp_send_hour` ficou
-  so' interno). Exportar = Excel + historico de envios. Solo so' na aba
+  so' interno). Exportar = Excel + historico de envios (o Excel tem tambem as abas
+  "Clientes" -- cadastro + assinatura de cada cliente do app -- e "Planos"
+  -- preco, ciclo, abas e quantos clientes; pedido do Alan, 01/11/2026). Solo so' na aba
   Mapa de Solos. Tudo que se EDITA da safra fica na aba Manejos (cultura
   por safra, TS/Sulco/Folha, plantio, aplicacoes e "Anotações por doença"
   -- `_anotacoes_da_fazenda`, mesmas rotas `save_farm_cultura`/
