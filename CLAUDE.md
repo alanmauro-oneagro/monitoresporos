@@ -72,7 +72,10 @@ culturas, area, mensagem, sinal e "Liberar fazendas"; se for cliente,
 quadro da assinatura (plano, situacao, pago ate', lavouras, cortesia) e
 "Excluir cliente". Cliente sem registro de cadastro (de antes do
 cadastro direto) entra so' com os dados da conta. Filtros Todos/Novos/
-Clientes/Acesso a' fazenda (no navegador). Todo Master com
+Clientes/Acesso a' fazenda (no navegador). Cartoes RECOLHIDOS como em
+Manejos (so' nome, selos e data; clicar abre), sem texto explicativo no
+topo; sinal de celular na mesma linha discreta de Manejos, uma por local
+(pedido do Alan, 01/11/2026). Todo Master com
 telefone recebe aviso no WhatsApp (`_avisar_master_cadastro`, em thread). **Sem cadastro
 duplicado** (pedido do Alan, 01/11/2026): celular (mesmos digitos ou os
 11 ultimos) ou e-mail ja' usado por outra conta = aviso "ja' esta'

@@ -352,7 +352,7 @@ class SinalCelularTest(unittest.TestCase):
         models.registrar_cadastro({"username": "Zzz Cliente Sinal", "nome_completo": "Zzz Cliente Sinal", "perfil": "produtor",
                                    "telefone": "5565999990000", "tipo": "cliente", "user_id": uid})
         html = master.get("/admin/solicitacoes").get_data(as_text=True)
-        self.assertIn("Sinal de celular em Talhao Sinal", html)
+        self.assertIn("📶 Talhao Sinal", html)  # linha de sinal compacta por local
         self.assertIn('title="TIM: fraco -- 3G mínimo', html)
 
 
