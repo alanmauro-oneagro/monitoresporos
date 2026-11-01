@@ -14,7 +14,7 @@
 {% import "_sinal_celular.html" as sinal_cel %}
 <h4 class="mb-2">Sinal telefonia</h4>
 <p class="text-muted small mb-2">Cobertura de celular prevista pela Anatel por operadora. Quanto mais forte a cor, melhor o sinal:
-    clara = fraco (só 2G/3G no mínimo), média = bom, forte = ótimo (4G/5G forte). Clique no mapa ou numa fazenda (círculos; amarelo = estimada) para ver o sinal de todas as operadoras no ponto.</p>
+    clara = fraco (só 3G no mínimo), média = bom (4G/5G no mínimo ou 3G forte), forte = ótimo (4G/5G forte). Clique no mapa ou numa fazenda (círculos; amarelo = estimada) para ver o sinal de todas as operadoras no ponto.</p>
 
 {% if operadoras %}
 <div class="d-flex flex-wrap gap-2 mb-2" id="operadoras">
@@ -38,7 +38,7 @@
     {% elif info_cobertura.baixado_em %}-- {% if info_cobertura.camadas %}{{ info_cobertura.camadas }} mapas, {% endif %}baixados em {{ info_cobertura.baixado_em[:10] | data_br }}.
     {% else %}-- ainda não baixados.{% endif %}
     {% if info_cobertura.erro and not info_cobertura.rodando %}<div class="text-danger">Última tentativa falhou: {{ info_cobertura.erro }}</div>{% endif %}
-    <div class="text-muted">Mosaico SMP da Anatel (2G a 5G, todas as operadoras). Também aparece em Manejos, no Mapa Interpolado e em Novos cadastros. O servidor baixa sozinho uma vez por mês.</div>
+    <div class="text-muted">Mosaico SMP da Anatel -- Vivo, Claro e TIM, 3G a 5G (2G não é considerado). Também aparece em Manejos, no Mapa Interpolado e em Novos cadastros. O servidor baixa sozinho uma vez por mês.</div>
     {% if current_user.is_master and not info_cobertura.rodando %}
     <form method="post" action="{{ url_for('atualizar_cobertura_anatel') }}" class="mt-2">
         <button type="submit" class="btn btn-sm btn-outline-primary">Baixar agora</button>

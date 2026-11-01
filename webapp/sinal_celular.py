@@ -46,11 +46,15 @@ _MARCAS = {"VIVO": "Vivo", "CLARO": "Claro", "TIM": "TIM", "ALGAR": "Algar", "BR
            "OI": "Oi"}
 NIVEIS = ["bom", "fraco"]  # por mapa: limiar forte / minimo da Anatel
 # Nivel da operadora no ponto (pedido do Alan, 31/10/2026 -- icone colorido):
-# otimo = 4G/5G forte; bom = 4G/5G no minimo ou 2G/3G forte; fraco = so'
-# 2G/3G no minimo; sem = sem cobertura (so' pras PRINCIPAIS, pra comparar).
+# otimo = 4G/5G forte; bom = 4G/5G no minimo ou 3G forte; fraco = so' 3G
+# no minimo; sem = sem cobertura.
 NIVEIS_OPERADORA = ["otimo", "bom", "fraco", "sem"]
+# So' Vivo, Claro e TIM, sem 2G (pedido do Alan, 01/11/2026): o resto nem
+# e' baixado, e a consulta ignora o que tiver sobrado de uma base antiga.
 PRINCIPAIS = ["Vivo", "Claro", "TIM"]
-_TEC_ORDEM = ["5G", "4G", "3G", "2G"]
+TECNOLOGIAS = ["5G", "4G", "3G"]
+_TEC_ORDEM = TECNOLOGIAS
+_FILTRO_SQL = "c.operadora IN ('Vivo', 'Claro', 'TIM') AND c.tecnologia IN ('5G', '4G', '3G')"
 
 _lock = threading.Lock()
 _rodando = threading.Event()
@@ -59,6 +63,10 @@ _progresso = {}
 
 def _agora():
     return datetime.strptime(models._agora_cuiaba()[:19], "%Y-%m-%d %H:%M:%S")
+
+
+def _usada(camada):
+    return bool(camada) and camada[1] in PRINCIPAIS and camada[0] in TECNOLOGIAS
 
 
 def _camada(nome_arquivo):
@@ -160,7 +168,7 @@ def _criar_tabelas(conn):
 def importar_zip(conn, caminho_zip, nome_arquivo):
     """Le um zip da Anatel e grava a camada na base em montagem."""
     camada = _camada(nome_arquivo)
-    if not camada:
+    if not _usada(camada):
         return False
     with zipfile.ZipFile(caminho_zip) as z:
         shp = next((n for n in z.namelist() if n.lower().endswith(".shp")), None)
@@ -187,7 +195,7 @@ def _abrir(url, timeout):
 def _links():
     with _abrir(PAGINA, 60) as resp:
         html = resp.read().decode("utf-8", "replace")
-    return sorted(set(_LINK.findall(html)))
+    return sorted(l for l in set(_LINK.findall(html)) if _usada(_camada(l.rsplit("/", 1)[-1])))
 
 
 def _ler_info(caminho=None):
@@ -310,7 +318,7 @@ def base_carregada():
 
 def _nivel_operadora(tecs):
     dados = [t["nivel"] for t in tecs if t["tecnologia"] in ("4G", "5G")]
-    voz = [t["nivel"] for t in tecs if t["tecnologia"] in ("2G", "3G")]
+    voz = [t["nivel"] for t in tecs if t["tecnologia"] == "3G"]
     if "bom" in dados:
         return "otimo"
     if dados or "bom" in voz:
@@ -346,11 +354,11 @@ def estimar(lat, lon):
     conn = sqlite3.connect(f"file:{COBERTURA_PATH}?mode=ro", uri=True)
     try:
         dbm_por = {}
-        for row in conn.execute("SELECT tecnologia, dbm FROM camadas"):
+        for row in conn.execute("SELECT c.tecnologia, c.dbm FROM camadas c WHERE " + _FILTRO_SQL):
             dbm_por.setdefault(row[0], set()).add(row[1])
         linhas = conn.execute(
             "SELECT c.tecnologia, c.operadora, c.dbm, b.cheio, b.dados FROM blocos b JOIN camadas c ON c.id = b.camada "
-            "WHERE b.bx = ? AND b.by = ?", (bx, by)).fetchall()
+            "WHERE b.bx = ? AND b.by = ? AND " + _FILTRO_SQL, (bx, by)).fetchall()
     finally:
         conn.close()
     melhor = {}  # (operadora, tecnologia) -> nivel
@@ -386,12 +394,8 @@ def estimar(lat, lon):
 # Cada operadora vira uma camada de "tiles" do Leaflet: mesma cor, mais
 # forte onde o sinal e' otimo e mais clara onde e' fraco (como o mapa de
 # chuva). Nivel por celula: 3 otimo (4G/5G forte), 2 bom (4G/5G minimo ou
-# 2G/3G forte), 1 fraco (2G/3G minimo), 0 sem.
-CORES_OPERADORA = {
-    "Vivo": (110, 30, 160), "Claro": (215, 30, 30), "TIM": (0, 80, 170), "Algar": (0, 150, 90),
-    "Brisanet": (240, 120, 0), "Sercomtel": (0, 160, 190), "Unifique": (60, 170, 40), "IEZ!": (200, 0, 120),
-    "Ligue": (120, 90, 40), "Sumicity": (90, 90, 90), "Oi": (230, 180, 0),
-}
+# 3G forte), 1 fraco (3G minimo), 0 sem.
+CORES_OPERADORA = {"Vivo": (110, 30, 160), "Claro": (215, 30, 30), "TIM": (0, 80, 170)}
 _COR_PADRAO = (80, 80, 80)
 _ALFA = np.array([0, 70, 140, 215], np.uint8)  # sem, fraco, bom, otimo
 TILE = 256
@@ -421,10 +425,10 @@ def operadoras():
         return []
     conn = _conectar()
     try:
-        nomes = {r[0] for r in conn.execute("SELECT DISTINCT operadora FROM camadas")}
+        nomes = {r[0] for r in conn.execute("SELECT DISTINCT c.operadora FROM camadas c WHERE " + _FILTRO_SQL)}
     finally:
         conn.close()
-    return [o for o in PRINCIPAIS if o in nomes] + sorted(nomes - set(PRINCIPAIS))
+    return [o for o in PRINCIPAIS if o in nomes]
 
 
 def cor(operadora):
@@ -445,7 +449,7 @@ def _grade(conn, operadora, bx, by, forte_por_tec):
     grade, grade_5g, tem_4g = None, None, None
     for tec, dbm, cheio, dados in conn.execute(
             "SELECT c.tecnologia, c.dbm, b.cheio, b.dados FROM blocos b JOIN camadas c ON c.id = b.camada "
-            "WHERE b.bx = ? AND b.by = ? AND c.operadora = ?", (bx, by, operadora)):
+            "WHERE b.bx = ? AND b.by = ? AND c.operadora = ? AND " + _FILTRO_SQL, (bx, by, operadora)):
         codigo = _codigo(tec, dbm == forte_por_tec[tec])
         if cheio:
             camada = np.full((BLOCO, BLOCO), codigo, np.uint8)
@@ -471,7 +475,7 @@ def _grade(conn, operadora, bx, by, forte_por_tec):
 
 def _forte_por_tec(conn):
     forte = {}
-    for tec, dbm in conn.execute("SELECT tecnologia, dbm FROM camadas"):
+    for tec, dbm in conn.execute("SELECT c.tecnologia, c.dbm FROM camadas c WHERE " + _FILTRO_SQL):
         forte[tec] = min(dbm, forte.get(tec, dbm))
     return forte
 
@@ -492,7 +496,8 @@ def _visao(operadora, passo):
             try:
                 forte = _forte_por_tec(conn)
                 blocos = conn.execute(
-                    "SELECT DISTINCT b.bx, b.by FROM blocos b JOIN camadas c ON c.id = b.camada WHERE c.operadora = ?",
+                    "SELECT DISTINCT b.bx, b.by FROM blocos b JOIN camadas c ON c.id = b.camada "
+                    "WHERE c.operadora = ? AND " + _FILTRO_SQL,
                     (operadora,)).fetchall()
                 for bx, by in blocos:
                     grade = _grade(conn, operadora, bx, by, forte)

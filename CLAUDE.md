@@ -286,7 +286,10 @@ site tem que entrar la'.
   mapas oficiais de cobertura prevista da Anatel (Mosaico SMP,
   `sistemas.anatel.gov.br/se/public/cmap.php`, ~70 zips
   `pred_{2G..5G}_{OPERADORA}_dbm-{N}.zip`, 2 limiares por tecnologia: o
-  menor dBm = "bom", o maior = "fraco"; "5G_SA_NSA" conta como 5G). O
+  menor dBm = "bom", o maior = "fraco"; "5G_SA_NSA" conta como 5G). **So'
+  Vivo, Claro e TIM, sem 2G** (pedido do Alan, 01/11/2026: `PRINCIPAIS`/
+  `TECNOLOGIAS`; o resto nem e' baixado e `_FILTRO_SQL` ignora o que
+  sobrar numa base antiga). O
   servidor baixa tudo sozinho 1x/mes (`atualizar_se_necessario` no
   agendador, em thread; ~170 MB, ~3 min, ~400 MB de memoria no pico) ou
   pelo botao "Baixar agora" do Master no Mapa Interpolado. Cada shapefile
@@ -295,8 +298,8 @@ site tem que entrar la'.
   grau, em `cobertura_anatel.db` ao lado do banco (fora do backup, ~42 MB).
   `estimar(lat, lon)` le 1 bit por mapa (~3 ms). Tela (`_sinal_celular.html`,
   pedido do Alan): um icone de barras por operadora, lado a lado --
-  verde otimo (4G/5G forte), amarelo bom (4G/5G minimo ou 2G/3G forte),
-  vermelho fraco (so' 2G/3G minimo), cinza com X sem sinal (Vivo/Claro/TIM
+  verde otimo (4G/5G forte), amarelo bom (4G/5G minimo ou 3G forte),
+  vermelho fraco (so' 3G minimo), cinza com X sem sinal (Vivo/Claro/TIM
   sempre aparecem, pra comparar); detalhe por tecnologia no `title`. O
   Mapa Interpolado recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
   Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. Aba propria

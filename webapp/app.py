@@ -3619,7 +3619,7 @@ def sinal_telefonia():
 @app.route("/sinal-telefonia/tile/<operadora>/<int:z>/<int:x>/<int:y>.png")
 @aba_required("sinal_telefonia")
 def sinal_telefonia_tile(operadora, z, x, y):
-    if not (0 <= z <= 18 and 0 <= x < 2 ** z and 0 <= y < 2 ** z):
+    if operadora not in sinal_celular.PRINCIPAIS or not (0 <= z <= 18 and 0 <= x < 2 ** z and 0 <= y < 2 ** z):
         abort(404)
     resp = app.response_class(sinal_celular.tile(operadora, z, x, y), mimetype="image/png")
     resp.headers["Cache-Control"] = "private, max-age=86400"  # URL muda (?v=) quando a base e' baixada de novo
