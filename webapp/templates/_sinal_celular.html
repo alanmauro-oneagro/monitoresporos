@@ -2,10 +2,10 @@
    Um icone de barras colorido por operadora, lado a lado, pra comparar
    (pedido do Alan, 31/10/2026): verde otimo, amarelo bom, vermelho fraco;
    com a tecnologia e a frequencia (MHz) da antena mais proxima, quando ha'. #}
-{% macro icone(nivel) %}
+{% macro icone(nivel, tamanho=18) %}
 {% set cor = {'otimo': '#198754', 'bom': '#e0a800', 'fraco': '#dc3545'}.get(nivel, '#adb5bd') %}
 {% set barras = {'otimo': 4, 'bom': 3, 'fraco': 1}.get(nivel, 0) %}
-<svg width="18" height="16" viewBox="0 0 18 16" aria-hidden="true" style="vertical-align: -2px;">
+<svg width="{{ tamanho }}" height="{{ (tamanho * 16 / 18) | round(1) }}" viewBox="0 0 18 16" aria-hidden="true" style="vertical-align: -2px; flex: none;">
     {% for i in range(4) %}<rect x="{{ i * 4.5 }}" y="{{ 12 - i * 4 }}" width="3.2" height="{{ 4 + i * 4 }}" rx="0.8" fill="{{ cor if i < barras else '#dee2e6' }}"/>{% endfor %}
     {% if nivel == 'sem' %}<path d="M1 1 L8 8 M8 1 L1 8" stroke="#dc3545" stroke-width="1.6"/>{% endif %}
 </svg>
@@ -18,6 +18,25 @@
     {{ icone(o.nivel) }} <strong>{{ o.operadora }}</strong>{% if o.tecnologia %} <span class="text-muted">{{ o.tecnologia }}{% if o.faixas %} {{ o.faixas | join('/') }} MHz{% endif %}</span>{% endif %}
 </span>
 {% endfor %}
+{% endmacro %}
+
+{# Linha discreta (Manejos, abaixo do nome da fazenda -- pedido do Alan,
+   01/11/2026): sem bordas, letra e icone menores; operadora sem sinal
+   esmaecida; nenhuma com sinal = "Sem sinal previsto". Estilo em
+   `.sinal-linha` (fazendas.html). #}
+{% macro linha(sinal) %}
+{% set nomes = {'otimo': 'ótimo', 'bom': 'bom', 'fraco': 'fraco', 'sem': 'sem sinal'} %}
+<div class="sinal-linha">
+    {% if sinal | selectattr('nivel', 'ne', 'sem') | list %}
+    {% for o in sinal %}
+    <span class="sinal-item{% if o.nivel == 'sem' %} sinal-sem{% endif %}" title="{{ o.operadora }}: {{ nomes[o.nivel] }}{% if o.tecnologias %} -- {% for t in o.tecnologias %}{{ t.tecnologia }} {{ 'forte' if t.nivel == 'bom' else 'mínimo' }}{% if t.faixas %} ({{ t.faixas | join('/') }} MHz){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %} (previsão da Anatel)">
+        {{ icone(o.nivel, 13) }}<b>{{ o.operadora }}</b>{% if o.tecnologia %}<span class="sinal-det">{{ o.tecnologia }}{% if o.faixas %} {{ o.faixas | join('/') }} MHz{% endif %}</span>{% endif %}
+    </span>
+    {% endfor %}
+    {% else %}
+    <span class="sinal-item sinal-sem" title="Nenhuma operadora (Vivo, Claro, TIM) com cobertura prevista pela Anatel neste ponto">{{ icone('sem', 13) }}Sem sinal previsto</span>
+    {% endif %}
+</div>
 {% endmacro %}
 
 {% macro quadro(sinal, titulo="📶 Sinal de celular (Anatel)") %}

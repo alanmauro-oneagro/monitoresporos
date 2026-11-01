@@ -9,6 +9,13 @@
 .farm-toggle { font-size: 1rem; }
 [data-site].card { margin-bottom: 0.5rem !important; }
 [data-site] > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+/* Sinal de celular abaixo do nome (ver _sinal_celular.linha): discreto,
+   alinhado com o texto do nome (depois do ▶). */
+.sinal-linha { display: flex; flex-wrap: wrap; gap: 0.15rem 0.9rem; margin: 0.2rem 0 0 1.3rem; font-size: 0.78rem; line-height: 1.35; }
+.sinal-item { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; color: #212529; }
+.sinal-item b { font-weight: 600; }
+.sinal-det { color: #6c757d; }
+.sinal-sem { color: #6c757d; opacity: 0.6; }
 /* Celular: cada linha das tabelas vira um bloco, com o nome do campo
    acima de cada caixa (antes as ultimas colunas ficavam cortadas). */
 @media (max-width: 575.98px) {
@@ -48,12 +55,10 @@
 {% set farm_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="farm-body-{{ farm_idx }}">
-                <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
-            </button>
-            {% if site_group.sinal_celular %}<span class="d-inline-flex flex-wrap gap-1" title="Sinal de celular (previsão da Anatel)">{{ sinal_cel.chips(site_group.sinal_celular) }}</span>{% endif %}
-        </div>
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="farm-body-{{ farm_idx }}">
+            <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
+        </button>
+        {% if site_group.sinal_celular %}{{ sinal_cel.linha(site_group.sinal_celular) }}{% endif %}
         <div class="d-none mt-3" id="farm-body-{{ farm_idx }}">
             <div class="d-flex gap-2 mb-3">
                 {% for safra_group in site_group.safras %}
