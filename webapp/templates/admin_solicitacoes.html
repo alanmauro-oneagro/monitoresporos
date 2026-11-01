@@ -1,40 +1,75 @@
 {% extends "base.html" %}
-{% block title %}Novos cadastros - OneAgro App{% endblock %}
+{% block title %}Clientes e cadastros - OneAgro App{% endblock %}
 {% block content %}
 {% import "_sinal_celular.html" as sinal_cel %}
 <style>
 .cad-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 0.75rem; margin: 0; font-size: 0.85rem; }
 .cad-card dt { color: #6c757d; font-weight: 400; }
 .cad-card dd { margin: 0; overflow-wrap: anywhere; }
+.cad-assinatura { background: #f3faf5; border: 1px solid #cfe8d6; border-radius: 0.5rem; padding: 0.5rem 0.65rem; }
 </style>
-<h4 class="mb-2">Novos cadastros</h4>
-<p class="text-muted small mb-3">Contas criadas pela página "Cadastre-se", mais recentes primeiro. Quem pediu acesso à fazenda cadastrada entra sem ver nenhuma fazenda até você liberar.</p>
+<h4 class="mb-2">Clientes e cadastros</h4>
+<p class="text-muted small mb-2">Todas as contas criadas pela página "Cadastre-se" e os clientes do app, mais recentes primeiro. Quem pediu acesso à fazenda cadastrada entra sem ver nenhuma fazenda até você liberar. Preços e abas de cada plano ficam em <a href="{{ url_for('admin_planos') }}">Planos</a>.</p>
 
-{% if not cadastros %}
+{% set n_novos = pessoas | selectattr('visto', 'equalto', 0) | list | length %}
+{% set n_clientes = pessoas | selectattr('tipo', 'equalto', 'cliente') | list | length %}
+<div class="btn-group btn-group-sm flex-wrap mb-3" role="group" id="filtro-pessoas">
+    <button type="button" class="btn btn-outline-secondary active" data-filtro="todos">Todos ({{ pessoas | length }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="novo">Novos ({{ n_novos }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="cliente">Clientes ({{ n_clientes }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="usuario">Acesso à fazenda ({{ pessoas | length - n_clientes }})</button>
+</div>
+
+{% if not pessoas %}
 <div class="alert alert-secondary">Nenhum cadastro ainda.</div>
 {% endif %}
 
-{% for c in cadastros %}
+{% for c in pessoas %}
 {% set telefone_digitos = (c.telefone or '') | replace('+', '') %}
-<div class="card shadow-sm mb-3 cad-card">
+{% set cl = c.cliente %}
+<div class="card shadow-sm mb-3 cad-card" data-tipo="{{ 'cliente' if c.tipo == 'cliente' else 'usuario' }}" data-novo="{{ 0 if c.visto else 1 }}">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2">
             <h5 class="mb-0">{{ c.nome_completo or c.username }}</h5>
             {% if not c.visto %}<span class="badge bg-danger">Novo</span>{% endif %}
-            <span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Assinar plano' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
+            <span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Cliente do app' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
             {% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
-            <span class="text-muted small ms-auto">cadastrado em {{ c.criado_em | data_br }} às {{ c.criado_em[11:16] }}</span>
+            {% if c.data %}<span class="text-muted small ms-auto">cadastrado em {{ c.data | data_br }}</span>{% endif %}
         </div>
         <dl class="mb-3">
-            <dt>Usuário</dt><dd>{{ c.username }}{% if not c.conta_existe %} <span class="text-danger">(conta excluída)</span>{% endif %}</dd>
-            <dt>Celular</dt><dd>{{ c.telefone | telefone_br }}{% if telefone_digitos %} -- <a href="https://wa.me/{{ telefone_digitos }}" target="_blank" rel="noopener">abrir no WhatsApp</a>{% endif %}</dd>
+            <dt>Usuário</dt><dd>{{ c.username }}</dd>
+            <dt>Celular</dt><dd>{% if c.telefone %}{{ c.telefone | telefone_br }}{% if telefone_digitos %} -- <a href="https://wa.me/{{ telefone_digitos }}" target="_blank" rel="noopener">abrir no WhatsApp</a>{% endif %}{% else %}-{% endif %}</dd>
             <dt>E-mail</dt><dd>{% if c.email %}<a href="mailto:{{ c.email }}">{{ c.email }}</a>{% else %}-{% endif %}</dd>
+            {% if c.empresa or c.cidade or c.culturas or c.area_ha or c.mensagem %}
             <dt>Fazenda/empresa</dt><dd>{{ c.empresa or '-' }}</dd>
-            <dt>Cidade</dt><dd>{{ c.cidade }}{% if c.uf %}/{{ c.uf }}{% endif %}</dd>
+            <dt>Cidade</dt><dd>{{ c.cidade or '-' }}{% if c.uf %}/{{ c.uf }}{% endif %}</dd>
             <dt>Culturas</dt><dd>{{ c.culturas or '-' }}</dd>
             <dt>Área</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
             <dt>Mensagem</dt><dd>{{ c.mensagem or '-' }}</dd>
+            {% endif %}
         </dl>
+
+        {% if cl %}
+        {% set fim = [cl.pago_ate or '', cl.cortesia_ate or ''] | max %}
+        <div class="cad-assinatura small mb-3">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <strong>Assinatura:</strong> {{ cl.plano_nome or 'sem plano escolhido' }}
+                <span class="text-muted">· {{ cl.status or '—' }}</span>
+                {% if fim and fim >= hoje %}<span class="badge bg-success">liberado</span>{% else %}<span class="badge bg-secondary">bloqueado</span>{% endif %}
+                <span class="text-muted">· pago até {{ cl.pago_ate | data_br if cl.pago_ate else '—' }} · {{ cl.n_pontos }} lavoura{{ '' if cl.n_pontos == 1 else 's' }}</span>
+            </div>
+            <form method="post" action="{{ url_for('admin_cliente_cortesia', user_id=cl.id) }}" class="d-flex flex-wrap align-items-center gap-1">
+                <label class="text-muted me-1" for="cortesia_{{ cl.id }}">Cortesia até</label>
+                <input class="form-control form-control-sm" style="max-width: 160px;" type="date" name="cortesia_ate" id="cortesia_{{ cl.id }}" value="{{ cl.cortesia_ate or '' }}">
+                <select class="form-select form-select-sm" style="max-width: 190px;" name="plano_id" aria-label="Plano">
+                    <option value="">(mesmo plano)</option>
+                    {% for p in planos %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-outline-success btn-sm" type="submit">OK</button>
+            </form>
+        </div>
+        {% endif %}
+
         <div class="border rounded p-2 mb-3" style="background:#f8f9fa;">
             {% for nome, sinal in c.sinal_locais %}
             <div class="{% if not loop.last %}mb-2{% endif %}">{{ sinal_cel.quadro(sinal, "📶 Sinal de celular em " ~ nome ~ " (Anatel)") }}</div>
@@ -42,14 +77,34 @@
             <div class="small text-muted">📶 Sinal de celular: aparece quando a pessoa marcar uma lavoura no app ou você liberar uma fazenda para ela (é preciso a coordenada).</div>
             {% endfor %}
         </div>
-        {% if c.conta_existe %}
-            {% if c.tipo == 'cliente' %}
-            <a href="{{ url_for('admin_planos') }}" class="btn btn-sm btn-outline-secondary">Ver em Planos e clientes</a>
-            {% else %}
-            <a href="{{ url_for('admin_user_permissions', user_id=c.user_id) }}" class="btn btn-sm btn-outline-primary">Liberar fazendas</a>
+
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('admin_user_permissions', user_id=c.user_id) }}" class="btn btn-sm btn-outline-primary"
+               title="{{ 'Fazendas que o cliente vê nas abas do site: as estimadas das lavouras dele e, no Premium + Estação, a fazenda real da estação dele' if cl else 'Fazendas que essa pessoa passa a ver' }}">Liberar fazendas</a>
+            {% if cl %}
+            <form method="post" action="{{ url_for('admin_cliente_excluir', user_id=cl.id) }}" onsubmit="return confirm('Excluir este cliente? A cobrança no Asaas é cancelada.');">
+                <button class="btn btn-sm btn-outline-danger" type="submit">Excluir cliente</button>
+            </form>
             {% endif %}
-        {% endif %}
+        </div>
     </div>
 </div>
 {% endfor %}
+
+<script>
+(function () {
+    var botoes = document.querySelectorAll('#filtro-pessoas [data-filtro]');
+    var cartoes = document.querySelectorAll('.cad-card');
+    botoes.forEach(function (b) {
+        b.addEventListener('click', function () {
+            botoes.forEach(function (x) { x.classList.toggle('active', x === b); });
+            var f = b.dataset.filtro;
+            cartoes.forEach(function (c) {
+                var mostra = f === 'todos' || (f === 'novo' ? c.dataset.novo === '1' : c.dataset.tipo === f);
+                c.classList.toggle('d-none', !mostra);
+            });
+        });
+    });
+})();
+</script>
 {% endblock %}
