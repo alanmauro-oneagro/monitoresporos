@@ -1,10 +1,13 @@
 """Esquema do banco (SQLite) e funcoes de acesso a usuarios/permissoes/fazendas."""
+import copy
+import functools
 import json
 import os
 import sqlite3
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from flask import g, has_app_context
 from werkzeug.security import generate_password_hash
 
 import data_reader
@@ -105,15 +108,53 @@ DB_PATH = Path(os.environ.get("BIOSCOUT_DB_PATH", str(Path(__file__).parent / "b
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
+class _Conexao(sqlite3.Connection):
+    """Toda gravacao passa por commit(): limpa o cache por requisicao
+    (`_cache_requisicao`) pra leitura seguinte na mesma tela ver o dado novo."""
+
+    def commit(self):
+        super().commit()
+        limpar_cache_requisicao()
+
+
+def limpar_cache_requisicao():
+    if has_app_context():
+        g.pop("_models_cache", None)
+
+
+def _cache_requisicao(func):
+    """Leituras "busca tudo" chamadas varias vezes na mesma tela (ex.:
+    Recomendacoes relia as fazendas virtuais e as estacoes escolhidas uma
+    vez por fazenda): guarda o resultado em `flask.g` durante a requisicao
+    (mesmo padrao do CLAUDE.md, "Cache por requisicao via flask.g"). Devolve
+    copia -- quem chama pode alterar a lista/dict a vontade."""
+    @functools.wraps(func)
+    def wrapped():
+        if not has_app_context():
+            return func()
+        cache = g.setdefault("_models_cache", {})
+        if func.__name__ not in cache:
+            cache[func.__name__] = func()
+        return copy.deepcopy(cache[func.__name__])
+    return wrapped
+
+
+_wal_ligado = False
+
+
 def get_db():
-    conn = sqlite3.connect(DB_PATH, timeout=10)
+    global _wal_ligado
+    conn = sqlite3.connect(DB_PATH, timeout=10, factory=_Conexao)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     # WAL deixa leitura (paineis, mapa, etc) rolar junto com escrita
     # (autosave, agendador de WhatsApp) sem uma travar a outra -- sem isso,
     # duas conexoes gravando quase ao mesmo tempo podem colidir com
-    # "database is locked" e a edicao do usuario se perde sem retry.
-    conn.execute("PRAGMA journal_mode = WAL")
+    # "database is locked" e a edicao do usuario se perde sem retry. O modo
+    # WAL fica gravado no arquivo: basta ligar uma vez por processo.
+    if not _wal_ligado:
+        conn.execute("PRAGMA journal_mode = WAL")
+        _wal_ligado = True
     return conn
 
 
@@ -153,6 +194,9 @@ def restaurar_banco(origem):
             alvo.close()
     finally:
         fonte.close()
+    global _wal_ligado
+    _wal_ligado = False  # arquivo restaurado: liga o WAL de novo na proxima conexao
+    limpar_cache_requisicao()
     init_db()  # backup de versao anterior do site ganha as colunas novas
 
 
@@ -1310,6 +1354,7 @@ def _disease_info_row_to_dict(r):
     }
 
 
+@_cache_requisicao
 def get_all_disease_translations():
     """chave: display_name_en -> {nome_pt, nome_cientifico, germ_temp_min,
     germ_temp_max, germ_ur_min, germ_molhamento_horas, germ_agua_livre_inibe}
@@ -2000,6 +2045,7 @@ def set_farm_cultura(site_name, safra, cultura):
     conn.close()
 
 
+@_cache_requisicao
 def get_all_weather_station_overrides():
     """site_name -> {"codigo": ..., "country_code": ...} da estacao
     escolhida na aba Fazendas pra alimentar a previsao (Open-Meteo passa a
@@ -2037,6 +2083,7 @@ def set_weather_station_override(site_name, estacao_codigo, country_code="BR"):
     conn.close()
 
 
+@_cache_requisicao
 def get_all_site_countries():
     """site_name -> codigo do pais (ISO 3166-1 alpha-2, ex. 'BR'/'CL')
     escolhido na aba Fazendas -- decide qual fronteira/estacoes aparecem
@@ -2072,6 +2119,7 @@ def set_site_country(site_name, country_code):
     conn.close()
 
 
+@_cache_requisicao
 def get_all_site_solos():
     """site_name -> {"classe":, "ordem":, "fonte":} (tipo de solo
     RESOLVIDO SOZINHO pela coordenada da fazenda -- Embrapa/PronaSolos
@@ -2797,6 +2845,7 @@ def get_all_sites():
     return rows
 
 
+@_cache_requisicao
 def get_deactivated_site_names():
     """Nomes das fazendas (reais ou virtuais) marcadas como desativadas
     -- usado pra subtrair de qualquer lista de fazendas montada direto
@@ -2821,6 +2870,7 @@ def set_site_ativo(site_name, ativo):
     conn.close()
 
 
+@_cache_requisicao
 def get_all_virtual_farms():
     """Lista de fazendas virtuais/estimadas (ver `virtual_farms.py`) --
     cada uma vira `{"site_name", "nome", "lat", "lon", "raio_km",
@@ -3436,7 +3486,7 @@ RECURSOS_PLANO = [
     ("site_graficos", "Site: Gráficos"),
     ("site_manejos", "Site: Manejos"),
     ("site_recomendacoes", "Site: Recomendações"),
-    ("fazenda_estimada", "Cada lavoura vira uma fazenda estimada no site (como no Mapa Interpolado)"),
+    ("fazenda_estimada", "Cada lavoura vira uma fazenda estimada no site (como no Mapa de Estudos)"),
     ("esporos", "Esporos estimados na região (por doença)"),
     ("risco", "Risco de infecção pelo clima (agora e próximos 5 dias)"),
     ("fungicidas", "Recomendação de fungicidas químicos e biológicos"),

@@ -2446,11 +2446,10 @@ ABAS_CONFIG = [
     ("usuarios", "Usuários", "admin_users"),
     ("doencas", "Doenças", "admin_doencas"),
     ("fungicidas", "Fungicidas", "admin_fungicidas"),
-    ("mapa_interpolado", "Mapa Interpolado", "mapa_interpolado"),
+    ("mapa_interpolado", "Mapa de Estudos", "mapa_interpolado"),
     ("solo", "Mapa de Solos", "solo"),
     ("ndvi", "NDVI", "ndvi"),
     ("envios", "Envios", "whatsapp_gerenciamento"),
-    ("sinal_telefonia", "Sinal telefonia", "sinal_telefonia"),
 ]
 _ACESSOS_KEY = "acessos_por_nivel"
 ACESSOS_PADRAO = {"admin": ["usuarios", "mapa_interpolado"], "usuario": []}
@@ -3513,10 +3512,15 @@ def mapa_interpolado():
     # do registro (baixaria ~14MB de contorno por visita a toa). Pinos de
     # estacao sairam daqui (pedido do usuario, 16/10/2026).
     active_interpolado = countries.active_country_codes(site_countries) | countries.paises_com_estacoes()
+    info_cobertura = sinal_celular.info()
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
+        # Sinal de celular (ex-aba Sinal telefonia): camada por operadora
+        info_cobertura=info_cobertura,
+        versao_cobertura=int(os.path.getmtime(sinal_celular.COBERTURA_PATH)) if info_cobertura.get("baixado_em") else 0,
+        operadoras_sinal=[{"nome": o, "cor": sinal_celular.cor(o)} for o in sinal_celular.operadoras()],
         **_country_map_context(),
     )
 
@@ -3617,35 +3621,15 @@ def chuva_grade():
 
 
 @app.route("/sinal-telefonia")
-@aba_required("sinal_telefonia")
+@login_required
 def sinal_telefonia():
-    """Mapa de cobertura de celular por operadora (mapas da Anatel, ver
-    `sinal_celular.py`): uma caixa por operadora, cor mais forte onde o
-    sinal e' melhor. Clicar no mapa mostra o quadro do ponto."""
-    info = sinal_celular.info()
-    versao = int(os.path.getmtime(sinal_celular.COBERTURA_PATH)) if info.get("baixado_em") else 0
-    # Fazendas no mapa (pedido do Alan, 01/11/2026): as mesmas que a pessoa
-    # ja' enxerga no site, sem as desativadas.
-    if current_user.is_admin:
-        visiveis = _sites_ativos_para_admin()
-    else:
-        visiveis = set(models.get_user_permitted_site_names(current_user.id)) - models.get_deactivated_site_names()
-    paises = models.get_all_site_countries()
-    visiveis = {s for s in visiveis if paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY}
-    virtuais = models.virtual_farm_site_names()
-    fazendas = sorted(
-        ({"nome": _nome_exibicao(s), "lat": lat, "lon": lon, "virtual": s in virtuais}
-         for s, (lat, lon) in _coords_all().items() if s in visiveis),
-        key=lambda f: f["nome"].lower(),
-    )
-    return render_template(
-        "sinal_telefonia.html", info_cobertura=info, versao=versao, fazendas=fazendas,
-        operadoras=[{"nome": o, "cor": sinal_celular.cor(o)} for o in sinal_celular.operadoras()],
-    )
+    """A aba Sinal telefonia virou camada do Mapa de Estudos (pedido do
+    Alan, 01/11/2026) -- link antigo cai la'."""
+    return redirect(url_for("mapa_interpolado"))
 
 
 @app.route("/sinal-telefonia/tile/<operadora>/<int:z>/<int:x>/<int:y>.png")
-@aba_required("sinal_telefonia")
+@aba_required("mapa_interpolado")
 def sinal_telefonia_tile(operadora, z, x, y):
     if operadora not in sinal_celular.PRINCIPAIS or not (0 <= z <= 18 and 0 <= x < 2 ** z and 0 <= y < 2 ** z):
         abort(404)
@@ -3661,14 +3645,12 @@ def atualizar_cobertura_anatel():
     sozinho uma vez por mes)."""
     sinal_celular.atualizar_em_segundo_plano(forcar=True)
     flash("Baixando os mapas de cobertura da Anatel -- leva alguns minutos. Recarregue a página para acompanhar.", "success")
-    return redirect(url_for("sinal_telefonia"))
+    return redirect(url_for("mapa_interpolado"))
 
 
 @app.route("/sinal-celular")
-@login_required
+@aba_required("mapa_interpolado")
 def sinal_celular_ponto():
-    if not (pode_acessar_aba("mapa_interpolado") or pode_acessar_aba("sinal_telefonia")):
-        abort(403)
     try:
         lat, lon = float(request.args.get("lat")), float(request.args.get("lon"))
     except (TypeError, ValueError):
