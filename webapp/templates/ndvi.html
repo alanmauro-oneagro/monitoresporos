@@ -2,6 +2,7 @@
 {% block title %}NDVI - OneAgro App{% endblock %}
 {% block content %}
 <h4 class="mb-2">NDVI (Sentinel-2)</h4>
+{% include "_aviso_whatsapp.html" %}
 
 {% if not credenciais_ok %}
 <div class="alert alert-warning">
@@ -130,8 +131,8 @@
                     {% endfor %}
                 </div>
                 <button type="submit" form="ndvi_whats_{{ site_idx }}" class="btn btn-sm btn-outline-success mt-2"
-                        {% if not site_group.ndvi_destinatarios %}disabled{% endif %}
-                        title="{% if site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Envios){% endif %}">
+                        {% if not site_group.ndvi_destinatarios or not whatsapp_conectado() %}disabled{% endif %}
+                        title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Conexão WhatsApp{% elif site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Envios){% endif %}">
                     📲 Enviar selecionadas por WhatsApp
                 </button>
                 {% else %}

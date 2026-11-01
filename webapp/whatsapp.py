@@ -87,6 +87,24 @@ def get_status():
     return _get_status_bridge()
 
 
+# Telas com botao de envio perguntam se o WhatsApp esta' conectado
+# (pedido do Alan, 01/11/2026: desconectado = botoes desativados). Guarda a
+# resposta por alguns segundos pra nao consultar o servico a cada pagina.
+STATUS_CACHE_S = 30
+_status_cache = {"em": 0.0, "conectado": False}
+
+
+def conectado():
+    agora = time.time()
+    if agora - _status_cache["em"] > STATUS_CACHE_S:
+        _status_cache["em"] = agora
+        try:
+            _status_cache["conectado"] = bool(get_status().get("connected"))
+        except Exception:
+            _status_cache["conectado"] = False
+    return _status_cache["conectado"]
+
+
 def _get_status_bridge():
     try:
         with urllib.request.urlopen(f"{BRIDGE_URL}/status", timeout=5) as resp:

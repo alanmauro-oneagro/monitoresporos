@@ -3813,6 +3813,8 @@ def _pontos_clima():
 @master_required
 def alertas_clima_whatsapp(site_name):
     _get_clima_virtual_farm_or_404(site_name)
+    if (volta := _whatsapp_desconectado(url_for("recommendations_default") + "#pontos-clima")):
+        return volta
     enviar_texto = bool(request.form.get("enviar_texto"))
     ok_texto, _, message = _enviar_whatsapp_manual_escalonado(site_name, None, enviar_texto, False)
     ok = ok_texto if enviar_texto else True
@@ -3989,6 +3991,8 @@ def send_site_whatsapp(site_name):
         allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
         if site_name not in allowed:
             abort(403)
+    if (volta := _whatsapp_desconectado(url_for("recommendations_default"))):
+        return volta
     safra = _safra_or_default(request.form)
     # checkboxes "enviar_texto"/"enviar_pdf" na frente dos botoes de PDF/
     # Copiar (recommendations.html) -- deixam a pessoa escolher, nesse
@@ -4741,6 +4745,8 @@ def enviar_ndvi_historico_whatsapp():
     aqui, nao so' confiado no que veio do form). "Enviar agrupadas" aqui
     significa "escolher varias de uma vez e mandar tudo numa acao so'",
     nao uma unica mensagem com varias fotos dentro."""
+    if (volta := _whatsapp_desconectado(url_for("ndvi"))):
+        return volta
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
     historico_ids = [int(v) for v in request.form.getlist("historico_ids") if v.isdigit()]
@@ -5993,7 +5999,10 @@ def admin_edit_user(user_id):
                 niveis=NIVEIS_ACESSO,
             )
         models.set_user_contato(user_id, email, telefone, is_admin=nivel != "usuario", is_master=nivel == "master")
-        if action == "test":
+        if action == "test" and not whatsapp.conectado():
+            flash(f"Cadastro de '{user_row['username']}' atualizado. " + _AVISO_WHATSAPP_DESCONECTADO, "error")
+            return redirect(url_for("admin_users"))
+        elif action == "test":
             ok, message = whatsapp.send_whatsapp(
                 telefone, "OneAgro: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
             )
@@ -7252,6 +7261,26 @@ def admin_solicitacoes():
             [(lat, lon) for _n, lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])
     return render_template("admin_solicitacoes.html", pessoas=pessoas, perfis=PERFIS_CADASTRO,
                            planos=models.get_planos(), hoje=_hoje_cuiaba().isoformat())
+
+
+@app.context_processor
+def _inject_whatsapp_conectado():
+    """`whatsapp_conectado()` nos templates: so' consulta o servico quando a
+    tela usa (botoes de envio)."""
+    return {"whatsapp_conectado": whatsapp.conectado}
+
+
+_AVISO_WHATSAPP_DESCONECTADO = ("WhatsApp desconectado -- nada foi enviado. Conecte de novo em "
+                                "Configurações > Conexão WhatsApp.")
+
+
+def _whatsapp_desconectado(destino):
+    """Envio pedido com o WhatsApp desconectado (botao desativado na tela,
+    mas a pagina pode estar aberta de antes): avisa e volta, sem enviar."""
+    if whatsapp.conectado():
+        return None
+    flash(_AVISO_WHATSAPP_DESCONECTADO, "error")
+    return redirect(request.referrer or destino)
 
 
 @app.context_processor
