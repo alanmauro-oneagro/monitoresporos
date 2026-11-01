@@ -301,7 +301,12 @@ site tem que entrar la'.
   (`CORES_OPERADORA`), mais forte onde o sinal e' melhor (como o mapa de
   chuva); zoom <= 7 usa a media de quadrados de 10/40 celulas
   (`_visao`, montada na 1a vez, em memoria). Clicar no mapa mostra o
-  quadro do ponto. O "Baixar agora" (Master) fica nessa aba. Substituiu a
+  quadro do ponto. O "Baixar agora" (Master) fica nessa aba. Mostra as
+  fazendas que a pessoa ja' ve no site (admin: todas ativas; Usuario: so'
+  as liberadas), clicar mostra o sinal nelas. **5G so' conta onde a
+  operadora tem 4G** (`_sem_5g_isolado` / `_grade`): o mapa
+  5G_SA_NSA_VIVO -110 da Anatel tem um poligono grosseiro cobrindo o
+  Sudeste inteiro (onde o 4G da Vivo cobre ~6%). Substituiu a
   1a versao por distancia de antena (ERBs, tabela `erbs` apagada).
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver

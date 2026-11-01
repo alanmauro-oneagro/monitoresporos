@@ -318,6 +318,17 @@ def _nivel_operadora(tecs):
     return "fraco"
 
 
+def _sem_5g_isolado(melhor):
+    """5G so' conta onde a mesma operadora tem 4G: o 5G NSA depende da rede
+    4G e o 5G alcanca menos que o 4G. Alguns mapas de 5G da Anatel vem com
+    poligonos grosseiros (ex.: 5G_SA_NSA_VIVO -110 dBm cobre o Sudeste
+    inteiro, onde o 4G da Vivo cobre ~6% da area) -- sem essa regra a
+    fazenda apareceria com sinal onde nao tem."""
+    for operadora, tec in list(melhor):
+        if tec == "5G" and (operadora, "4G") not in melhor:
+            del melhor[(operadora, tec)]
+
+
 def estimar(lat, lon):
     """Por operadora (melhor primeiro): [{"operadora", "nivel"
     (otimo/bom/fraco/sem), "tecnologias": [{"tecnologia", "nivel" (bom/fraco)}]}]
@@ -352,6 +363,7 @@ def estimar(lat, lon):
         atual = melhor.get((operadora, tec))
         if atual is None or NIVEIS.index(nivel) < NIVEIS.index(atual):
             melhor[(operadora, tec)] = nivel
+    _sem_5g_isolado(melhor)
     por_operadora = {}
     for (operadora, tec), nivel in melhor.items():
         por_operadora.setdefault(operadora, []).append({"tecnologia": tec, "nivel": nivel})
@@ -430,7 +442,7 @@ def _grade(conn, operadora, bx, by, forte_por_tec):
     chave = (_versao(), operadora, bx, by)
     if chave in _grades:
         return _grades[chave]
-    grade = None
+    grade, grade_5g, tem_4g = None, None, None
     for tec, dbm, cheio, dados in conn.execute(
             "SELECT c.tecnologia, c.dbm, b.cheio, b.dados FROM blocos b JOIN camadas c ON c.id = b.camada "
             "WHERE b.bx = ? AND b.by = ? AND c.operadora = ?", (bx, by, operadora)):
@@ -440,7 +452,17 @@ def _grade(conn, operadora, bx, by, forte_por_tec):
         else:
             bits = np.unpackbits(np.frombuffer(zlib.decompress(dados), np.uint8))[:BLOCO * BLOCO]
             camada = bits.reshape(BLOCO, BLOCO) * np.uint8(codigo)
+        if tec == "5G":
+            grade_5g = camada if grade_5g is None else np.maximum(grade_5g, camada)
+            continue
+        if tec == "4G":
+            tem_4g = camada > 0 if tem_4g is None else tem_4g | (camada > 0)
         grade = camada if grade is None else np.maximum(grade, camada)
+    if grade_5g is not None and tem_4g is not None:  # 5G so' onde a operadora tem 4G (ver _sem_5g_isolado)
+        grade_5g = np.where(tem_4g, grade_5g, 0).astype(np.uint8)
+        grade = grade_5g if grade is None else np.maximum(grade, grade_5g)
+    if grade is not None and not grade.any():
+        grade = None
     if len(_grades) > 400:
         _grades.clear()
     _grades[chave] = grade
