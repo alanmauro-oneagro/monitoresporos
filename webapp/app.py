@@ -2447,7 +2447,7 @@ ABAS_CONFIG = [
     ("doencas", "Doenças", "admin_doencas"),
     ("fungicidas", "Fungicidas", "admin_fungicidas"),
     ("mapa_interpolado", "Mapa de Estudos", "mapa_interpolado"),
-    ("solo", "Mapa de Solos", "solo"),
+    ("solo", "Mapas de Solo", "solo"),
     ("ndvi", "Mapas NDVI", "ndvi"),
     ("envios", "Programação de Envios", "whatsapp_gerenciamento"),
 ]
@@ -7273,7 +7273,7 @@ MENU_CONFIG = [
     ("doencas", "Doenças", "admin_doencas", "doencas"),
     ("fungicidas", "Fungicidas", "admin_fungicidas", "fungicidas"),
     ("mapa_interpolado", "Mapa de Estudos", "mapa_interpolado", "mapa_interpolado"),
-    ("solo", "Mapa de Solos", "solo", "solo"),
+    ("solo", "Mapas de Solo", "solo", "solo"),
     ("ndvi", "Mapas NDVI", "ndvi", "ndvi"),
     ("envios", "Programação de Envios", "whatsapp_gerenciamento", "envios"),
     ("acessos", "Gerenciar Acessos", "admin_acessos", "master"),
