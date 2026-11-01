@@ -1,0 +1,4 @@
+{# WhatsApp desconectado = botoes de envio desativados (pedido do Alan, 01/11/2026). #}
+{% if not whatsapp_conectado() %}
+<div class="alert alert-warning small py-2">⚠ WhatsApp desconectado: os botões de envio estão desativados{% if current_user.is_master %} -- <a href="{{ url_for('admin_whatsapp') }}">conectar de novo</a>{% else %} até a OneAgro reconectar{% endif %}.</div>
+{% endif %}

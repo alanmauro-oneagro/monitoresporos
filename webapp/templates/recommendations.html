@@ -83,6 +83,8 @@ html { font-size: 14px; }
     </div>
 </div>
 
+{% set wa_ok = whatsapp_conectado() %}
+{% include "_aviso_whatsapp.html" %}
 {% if not no_access and not any_whatsapp_configured %}
 <div class="alert alert-warning small">
     Nenhum numero de WhatsApp cadastrado ainda -- um admin precisa marcar, na
@@ -114,7 +116,7 @@ html { font-size: 14px; }
             <div class="ms-auto d-flex flex-wrap align-items-center gap-2 rec-acoes">
                 {% set whatsapp_form_id = "whatsapp_form_" ~ safra ~ "_" ~ outer_loop.index0 %}
                 <div class="form-check mb-0 acao-chk-pdf" title="Incluir o PDF no envio por WhatsApp">
-                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}" id="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">
+                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}" id="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}"{% if not wa_ok %} disabled{% endif %}>
                     <label class="form-check-label small" for="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">PDF</label>
                 </div>
                 <a class="btn btn-sm btn-outline-primary acao-pdf" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
@@ -122,7 +124,7 @@ html { font-size: 14px; }
                     📄 <span class="d-none d-sm-inline">Recomendacao (PDF)</span><span class="d-sm-none">Abrir PDF</span>
                 </a>
                 <div class="form-check mb-0 acao-chk-texto" title="Incluir o texto no envio por WhatsApp">
-                    <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}" id="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">
+                    <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}" id="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}"{% if not wa_ok %} disabled{% endif %}>
                     <label class="form-check-label small" for="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">Texto</label>
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn acao-copiar"
@@ -130,6 +132,9 @@ html { font-size: 14px; }
                         title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- copia so' o clima{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
                     📋 <span class="d-none d-sm-inline">Copiar recomendacao</span><span class="d-sm-none">Copiar texto</span>
                 </button>
+                {% if not wa_ok %}
+                <button type="button" class="btn btn-sm btn-outline-success acao-whats" disabled title="WhatsApp desconectado -- conecte de novo em Configurações > Conexão WhatsApp">📲 Enviar por WhatsApp</button>
+                {% else %}
                 <details class="whatsapp-destinos acao-whats">
                     <summary class="btn btn-sm btn-outline-success"
                              title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- envia so' o clima{% else %}Escolher quem recebe e enviar os formatos marcados (texto/PDF){% endif %}">
@@ -159,6 +164,7 @@ html { font-size: 14px; }
                         <button type="submit" class="btn btn-sm btn-success mt-2">📲 Enviar</button>
                     </form>
                 </details>
+                {% endif %}
             </div>
         </div>
         <div class="d-none mt-2" id="rec-body-{{ safra }}-{{ outer_loop.index0 }}">

@@ -372,6 +372,14 @@ site tem que entrar la'.
   5G_SA_NSA_VIVO -110 da Anatel tem um poligono grosseiro cobrindo o
   Sudeste inteiro (onde o 4G da Vivo cobre ~6%). Substituiu a
   1a versao por distancia de antena (ERBs, tabela `erbs` apagada).
+- **WhatsApp desconectado = botoes de envio desativados** (pedido do Alan,
+  01/11/2026): `whatsapp.conectado()` (status do provedor guardado
+  `STATUS_CACHE_S`=30 s), `whatsapp_conectado()` nos templates. Desativa
+  "Enviar por WhatsApp" + caixas PDF/Texto (Recomendacoes), "Enviar agora"
+  dos pontos so' clima, "Enviar selecionadas" (NDVI) e "Enviar teste" (editar
+  usuario); aviso `_aviso_whatsapp.html` no topo de Recomendacoes/NDVI. As
+  rotas tambem recusam (`_whatsapp_desconectado`, flash e volta). Envios
+  (so' configuracao) e Conexao WhatsApp nao mudam.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois
@@ -420,7 +428,7 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
     Exportar (`/admin/exportar/backup`, Master, .db.gz).
-  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular tests.test_fazenda_estimada`
+  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular tests.test_fazenda_estimada tests.test_whatsapp_desconectado`
     (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
     com Master/Administrador/Usuario/Cliente (sem erro 500, rede
     desligada) e confere as regras de acesso. Rodar antes de cada PR da

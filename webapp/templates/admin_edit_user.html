@@ -30,7 +30,7 @@
                 </select>
                 {% if travado %}<input type="hidden" name="nivel" value="{{ nivel }}">{% endif %}
             </div>
-            <button type="submit" name="action" value="test" class="btn btn-success">Enviar teste por WhatsApp</button>
+            <button type="submit" name="action" value="test" class="btn btn-success"{% if not whatsapp_conectado() %} disabled title="WhatsApp desconectado -- conecte de novo em Configurações > Conexão WhatsApp"{% endif %}>Enviar teste por WhatsApp</button>
             <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Voltar</a>
             <span class="autosave-status small ms-2"></span>
         </form>
