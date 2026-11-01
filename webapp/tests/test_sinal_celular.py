@@ -66,6 +66,31 @@ PAGINA = "<html>" + "".join(
     for nome in CAMADAS) + "</html>"
 
 
+# Tabela de estacoes licenciadas da Anatel (frequencias), como o site devolve
+_CAB_LIC = ["Status", "Entidade", "Num. Serviço", "Tecnologia", "Freq. TX (MHz)", "Latitude", "Longitude"]
+ESTACOES = [
+    ["LIC", "TELEFONICA BRASIL S.A.", "010", "LTE", "788", "-12.52", "-55.70"],      # Vivo 4G 700 a ~2 km
+    ["LIC", "Telefonica Brasil S.A.", "010", "LTE", "1855", "-12.52", "-55.70"],     # mesma antena, 1800
+    ["LIC", "TELEFONICA BRASIL S.A.", "010", "LTE", "2680", "-12.60", "-55.70"],     # mais longe: nao entra
+    ["LIC", "CLARO S.A.", "010", "NR", "3350", "-12.51", "-55.71"],                  # Claro 5G 3500
+    ["LIC", "CLARO S.A.", "010", "LTE", "798", "-12.51", "-55.71"],                  # Claro 4G 700
+    ["LIC", "TIM S A", "010", "WCDMA", "2130", "-12.55", "-55.70"],                  # TIM 3G 2100
+    ["LIC", "TIM S A", "010", "GSM", "935", "-12.50", "-55.70"],                     # 2G: ignorado
+    ["LIC", "FAZENDA X", "019", "", "165.9", "-12.50", "-55.70"],                    # outro servico
+]
+
+
+def _pagina_lic(linhas):
+    th = "".join(f"<th>{c}</th>" for c in _CAB_LIC)
+    trs = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in l) + "</tr>" for l in linhas)
+    return f"<table><tr>{th}</tr>{trs}</table>"
+
+
+def _licencas_falsas(lat, lon, skip):
+    por = sinal_celular._POR_PAGINA
+    return _pagina_lic(ESTACOES[skip:skip + por])
+
+
 def _abrir_falso(url, timeout):
     if url == sinal_celular.PAGINA:
         return io.BytesIO(PAGINA.encode())
@@ -86,12 +111,16 @@ class SinalCelularTest(unittest.TestCase):
         cls.pasta = tempfile.mkdtemp()
         cls.patch = mock.patch.object(sinal_celular, "COBERTURA_PATH", Path(cls.pasta) / "cobertura_anatel.db")
         cls.patch.start()
+        # nunca consulta a Anatel de verdade nos testes
+        cls.patch_lic = mock.patch.object(sinal_celular, "_pagina_licencas", side_effect=_licencas_falsas)
+        cls.patch_lic.start()
         with mock.patch.object(sinal_celular, "_abrir", _abrir_falso):
             sinal_celular.atualizar(forcar=True)
 
     @classmethod
     def tearDownClass(cls):
         cls.patch.stop()
+        cls.patch_lic.stop()
 
     def _master(self):
         c = webapp.app.test_client()
@@ -114,7 +143,7 @@ class SinalCelularTest(unittest.TestCase):
 
     def test_cobertura_no_ponto(self):
         r = {o["operadora"]: o for o in sinal_celular.estimar(-12.5, -55.7)}
-        self.assertEqual(r["Vivo"]["tecnologias"], [{"tecnologia": "4G", "nivel": "bom"}])
+        self.assertEqual([(x["tecnologia"], x["nivel"]) for x in r["Vivo"]["tecnologias"]], [("4G", "bom")])
         self.assertEqual(r["Vivo"]["nivel"], "otimo")  # 4G forte
         self.assertEqual(r["Claro"]["nivel"], "otimo")  # 5G forte
         self.assertEqual([x["tecnologia"] for x in r["Claro"]["tecnologias"]], ["5G", "4G"])
@@ -160,6 +189,33 @@ class SinalCelularTest(unittest.TestCase):
             sinal_celular._cache.clear()
             sinal_celular._grades.clear()
         self.assertEqual(self._master().get("/sinal-telefonia/tile/Algar/10/353/541.png").status_code, 404)
+
+    def test_destaque_prefere_4g(self):
+        o = {"nivel": "otimo", "tecnologias": [{"tecnologia": "5G", "nivel": "bom"}, {"tecnologia": "4G", "nivel": "bom"}]}
+        self.assertEqual(sinal_celular._destaque(o), "4G")
+
+    def test_frequencias_da_antena_mais_proxima(self):
+        with mock.patch.object(sinal_celular, "_POR_PAGINA", 3):  # 3 paginas de 3 linhas
+            f = sinal_celular.consultar_frequencias(-12.5, -55.7)
+        self.assertEqual(f["Vivo"]["4G"]["faixas"], [700, 1800])  # so' a antena mais perto
+        self.assertEqual(f["Claro"], {"5G": {"faixas": [3500], "km": f["Claro"]["5G"]["km"]},
+                                      "4G": {"faixas": [700], "km": f["Claro"]["4G"]["km"]}})
+        self.assertEqual(list(f["TIM"]), ["3G"])  # 2G e outros servicos ficam de fora
+        self.assertEqual((sinal_celular._faixa(788), sinal_celular._faixa(874.5), sinal_celular._faixa(2680)), (700, 850, 2600))
+
+    def test_estimar_com_frequencias(self):
+        lat, lon = -12.5, -55.7
+        with mock.patch.object(sinal_celular, "buscar_frequencias_em_segundo_plano") as fila:
+            r = {o["operadora"]: o for o in sinal_celular.estimar(lat, lon)}
+            if sinal_celular.frequencias_salvas(lat, lon) is None:
+                fila.assert_called_once_with([(lat, lon)])
+        sinal_celular._buscar_fila([(lat, lon)])  # o que a thread faz
+        r = {o["operadora"]: o for o in sinal_celular.estimar(lat, lon)}
+        self.assertEqual((r["Vivo"]["tecnologia"], r["Vivo"]["faixas"]), ("4G", [700, 1800]))
+        self.assertEqual((r["Claro"]["tecnologia"], r["Claro"]["faixas"]), ("5G", [3500]))
+        self.assertEqual((r["TIM"]["tecnologia"], r["TIM"]["faixas"]), ("3G", [2100]))
+        self.assertEqual(r["Claro"]["tecnologias"][1], {"tecnologia": "4G", "nivel": "fraco", "faixas": [700]})
+        self.assertFalse(sinal_celular.frequencias_pendentes(lat, lon))
 
     def test_falha_no_download_guarda_a_base_anterior(self):
         def fora_do_ar(url, timeout):
@@ -254,8 +310,9 @@ class SinalCelularTest(unittest.TestCase):
         # Manejos: quadro em cada fazenda
         models.create_virtual_farm("Zzz Fazenda Sinal", -12.5, -55.7, 30)
         html = master.get("/fazendas").get_data(as_text=True)
-        self.assertIn("Sinal de celular (Anatel)", html)
-        self.assertIn('title="Vivo: ótimo -- 4G forte"', html)
+        self.assertIn('farm-toggle', html)
+        self.assertIn('<strong>Vivo</strong> <span class="text-muted">4G', html)  # chips ao lado do nome
+        self.assertNotIn("Sinal de celular (Anatel)</strong>", html)  # sem o quadro dentro da fazenda
         self.assertIn("#198754", html)  # verde
         # Novos cadastros: pela lavoura do cliente
         plano = models.salvar_plano(None, "Zzz Plano Sinal", "", 0, "MONTHLY", 2, 50, ["clima"], True, 9)
@@ -265,7 +322,7 @@ class SinalCelularTest(unittest.TestCase):
                                    "telefone": "5565999990000", "tipo": "cliente", "user_id": uid})
         html = master.get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("Sinal de celular em Talhao Sinal", html)
-        self.assertIn('title="TIM: fraco -- 3G mínimo"', html)
+        self.assertIn('title="TIM: fraco -- 3G mínimo', html)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
-{# Quadro "Sinal de celular" -- cobertura prevista pela Anatel, ver sinal_celular.estimar.
+{# Sinal de celular -- cobertura prevista pela Anatel (ver sinal_celular.estimar).
    Um icone de barras colorido por operadora, lado a lado, pra comparar
-   (pedido do Alan, 31/10/2026): verde otimo, amarelo bom, vermelho fraco. #}
+   (pedido do Alan, 31/10/2026): verde otimo, amarelo bom, vermelho fraco;
+   com a tecnologia e a frequencia (MHz) da antena mais proxima, quando ha'. #}
 {% macro icone(nivel) %}
 {% set cor = {'otimo': '#198754', 'bom': '#e0a800', 'fraco': '#dc3545'}.get(nivel, '#adb5bd') %}
 {% set barras = {'otimo': 4, 'bom': 3, 'fraco': 1}.get(nivel, 0) %}
@@ -9,23 +10,26 @@
     {% if nivel == 'sem' %}<path d="M1 1 L8 8 M8 1 L1 8" stroke="#dc3545" stroke-width="1.6"/>{% endif %}
 </svg>
 {% endmacro %}
-{% macro quadro(sinal, titulo="📶 Sinal de celular (Anatel)") %}
+
+{% macro chips(sinal) %}
 {% set nomes = {'otimo': 'ótimo', 'bom': 'bom', 'fraco': 'fraco', 'sem': 'sem sinal'} %}
+{% for o in sinal %}
+<span class="border rounded-pill px-2 py-1 bg-white text-nowrap small" title="{{ o.operadora }}: {{ nomes[o.nivel] }}{% if o.tecnologias %} -- {% for t in o.tecnologias %}{{ t.tecnologia }} {{ 'forte' if t.nivel == 'bom' else 'mínimo' }}{% if t.faixas %} ({{ t.faixas | join('/') }} MHz){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}">
+    {{ icone(o.nivel) }} <strong>{{ o.operadora }}</strong>{% if o.tecnologia %} <span class="text-muted">{{ o.tecnologia }}{% if o.faixas %} {{ o.faixas | join('/') }} MHz{% endif %}</span>{% endif %}
+</span>
+{% endfor %}
+{% endmacro %}
+
+{% macro quadro(sinal, titulo="📶 Sinal de celular (Anatel)") %}
 <div class="small">
     <strong>{{ titulo }}</strong>
     {% if sinal is none %}
     <span class="text-muted">-- mapas de cobertura da Anatel ainda não baixados.</span>
     {% else %}
-    <div class="d-flex flex-wrap gap-2 mt-1">
-        {% for o in sinal %}
-        <span class="border rounded-pill px-2 py-1 bg-white text-nowrap" title="{{ o.operadora }}: {{ nomes[o.nivel] }}{% if o.tecnologias %} -- {% for t in o.tecnologias %}{{ t.tecnologia }} {{ 'forte' if t.nivel == 'bom' else 'mínimo' }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}">
-            {{ icone(o.nivel) }} <strong>{{ o.operadora }}</strong>
-        </span>
-        {% endfor %}
-    </div>
+    <div class="d-flex flex-wrap gap-2 mt-1">{{ chips(sinal) }}</div>
     <div class="text-muted mt-1" style="font-size: 0.75rem;">
         {{ icone('otimo') }} ótimo (4G/5G forte) &nbsp; {{ icone('bom') }} bom &nbsp; {{ icone('fraco') }} fraco &nbsp; {{ icone('sem') }} sem sinal
-        -- previsão da Anatel no ponto exato; relevo e mata mudam o sinal real.
+        -- previsão da Anatel no ponto exato; MHz = faixas da antena mais próxima. Relevo e mata mudam o sinal real.
     </div>
     {% endif %}
 </div>

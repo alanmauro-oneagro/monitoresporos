@@ -300,7 +300,18 @@ site tem que entrar la'.
   pedido do Alan): um icone de barras por operadora, lado a lado --
   verde otimo (4G/5G forte), amarelo bom (4G/5G minimo ou 3G forte),
   vermelho fraco (so' 3G minimo), cinza com X sem sinal (Vivo/Claro/TIM
-  sempre aparecem, pra comparar); detalhe por tecnologia no `title`. O
+  sempre aparecem, pra comparar); detalhe por tecnologia no `title`.
+  **Frequencia** (pedido do Alan, 01/11/2026): os mapas nao tem MHz -- vem
+  da tabela de estacoes licenciadas da Anatel (`lic_table.php`, busca
+  centro+raio de `RAIO_ANTENAS_KM`=20, 250 linhas por pagina, servico
+  "010" = SMP): faixas da antena mais proxima de cada operadora/tecnologia
+  (`consultar_frequencias`), consultada em SEGUNDO PLANO (uma por vez,
+  `buscar_frequencias_em_segundo_plano`; falha = nova tentativa em 6h) e
+  guardada por ponto na tabela `frequencias` do `cobertura_anatel.db`
+  (some e e' refeita quando a base e' baixada de novo). Chip = icone +
+  operadora + tecnologia que da' o nivel (empate: 4G antes do 5G) + MHz.
+  Manejos mostra SO' os chips ao lado do nome da fazenda (sem quadro);
+  `/sinal-celular` devolve `pendente` e as telas perguntam de novo. O
   Mapa Interpolado recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
   Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. Aba propria
   **Sinal telefonia** (Configuracoes, `/sinal-telefonia`, chave

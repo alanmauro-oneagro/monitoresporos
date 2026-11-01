@@ -792,6 +792,8 @@
                 var html = d.html;
                 sinalBox.innerHTML = html;
                 sinalBox.classList.remove('d-none');
+                // frequencias ainda chegando da Anatel: consulta de novo
+                if (d.pendente) setTimeout(function () { if (sinalUltimo === chave) sinalUltimo = ''; }, 4000);
             })
             .catch(function () {});
     }, 1000);

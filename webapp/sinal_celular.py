@@ -11,11 +11,15 @@ agendador) e transforma cada mapa numa grade de bits (`RESOLUCAO` graus,
 banco (fora do banco principal: nao entra no backup). A consulta de uma
 coordenada (`estimar`) le um bit por mapa.
 """
+import html
 import io
+import json
+import math
 import os
 import re
 import sqlite3
 import threading
+import time
 import urllib.request
 import zipfile
 import zlib
@@ -162,6 +166,7 @@ def _criar_tabelas(conn):
         CREATE TABLE IF NOT EXISTS blocos (bx INTEGER, by INTEGER, camada INTEGER, cheio INTEGER, dados BLOB,
                                            PRIMARY KEY (bx, by, camada)) WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS info (chave TEXT PRIMARY KEY, valor TEXT);
+        CREATE TABLE IF NOT EXISTS frequencias (ponto TEXT PRIMARY KEY, dados TEXT, em TEXT);
     """)
 
 
@@ -337,7 +342,7 @@ def _sem_5g_isolado(melhor):
             del melhor[(operadora, tec)]
 
 
-def estimar(lat, lon):
+def _estimar_cobertura(lat, lon):
     """Por operadora (melhor primeiro): [{"operadora", "nivel"
     (otimo/bom/fraco/sem), "tecnologias": [{"tecnologia", "nivel" (bom/fraco)}]}]
     -- quem tem cobertura no ponto, mais Vivo/Claro/TIM como "sem" se nao
@@ -388,6 +393,202 @@ def estimar(lat, lon):
         _cache.clear()
     _cache[chave] = resultado
     return resultado
+
+
+def _destaque(o):
+    """Tecnologia que da' o nivel da operadora (ex.: otimo = o 4G/5G forte)."""
+    alvo = {"otimo": 3, "bom": 2, "fraco": 1}.get(o["nivel"])
+    # empate: 4G antes do 5G (no campo o 4G 700 MHz e' o que alcanca)
+    for t in sorted(o["tecnologias"], key=lambda t: ["4G", "5G", "3G"].index(t["tecnologia"])):
+        if _codigo(t["tecnologia"], t["nivel"] == "bom") == alvo:
+            return t["tecnologia"]
+    return None
+
+
+def estimar(lat, lon, buscar_frequencias=True):
+    """Por operadora (melhor primeiro): [{"operadora", "nivel"
+    (otimo/bom/fraco/sem), "tecnologia" (a que da' o nivel), "faixas" (MHz
+    da antena mais proxima dessa operadora/tecnologia, se ja' consultada),
+    "tecnologias": [{"tecnologia", "nivel" (bom/fraco), "faixas"}]}] --
+    sempre Vivo, Claro e TIM. None se os mapas da Anatel ainda nao foram
+    baixados. Frequencias que faltam sao buscadas em segundo plano
+    (`buscar_frequencias`)."""
+    base = _estimar_cobertura(lat, lon)
+    if base is None:
+        return None
+    freqs = frequencias_salvas(lat, lon)
+    if freqs is None and buscar_frequencias and any(o["nivel"] != "sem" for o in base):
+        buscar_frequencias_em_segundo_plano([(lat, lon)])
+    resultado = []
+    for o in base:
+        tecs = [{**t, "faixas": ((freqs or {}).get(o["operadora"], {}).get(t["tecnologia"]) or {}).get("faixas", [])}
+                for t in o["tecnologias"]]
+        tec = _destaque(o)
+        faixas = next((t["faixas"] for t in tecs if t["tecnologia"] == tec), [])
+        resultado.append({**o, "tecnologias": tecs, "tecnologia": tec, "faixas": faixas})
+    return resultado
+
+
+def frequencias_pendentes(lat, lon):
+    return _chave_ponto(lat, lon) in _buscando
+
+
+# ---------------------------------------------------------------- frequencias (estacoes licenciadas)
+# Os mapas de cobertura nao dizem a frequencia. Ela vem da lista de
+# estacoes licenciadas da Anatel (Mosaico > Emissoes licenciadas, busca por
+# centro e raio): pra cada operadora/tecnologia, as faixas da antena mais
+# proxima do ponto (pedido do Alan, 01/11/2026). Consulta lenta (250
+# linhas por pagina) -- feita em segundo plano e guardada por ponto em
+# `frequencias` (renovada quando a base de cobertura e' baixada de novo).
+LICENCAS_URL = SITE + "/se/public/view/b/lic_table.php"
+RAIO_ANTENAS_KM = 20
+_MAX_PAGINAS = 12
+_POR_PAGINA = 250
+_RETENTATIVA_S = 6 * 3600
+_TEC_LICENCA = {"WCDMA": "3G", "UMTS": "3G", "LTE": "4G", "NR": "5G"}
+# Freq. TX da antena (MHz) -> faixa conhecida
+_FAIXAS = [(810, 700), (900, 850), (960, 900), (1900, 1800), (2200, 2100), (2400, 2300), (2700, 2600), (3900, 3500)]
+
+_buscando = set()
+_falhas = {}
+_fila_lock = threading.Lock()
+_consulta_lock = threading.Lock()  # uma consulta a' Anatel por vez
+
+
+def _chave_ponto(lat, lon):
+    return f"{lat:.4f},{lon:.4f}"
+
+
+def _operadora_licenca(entidade):
+    e = (entidade or "").upper()
+    if e.startswith("TELEFONICA") or e.startswith("TELEFÔNICA") or "VIVO" in e:
+        return "Vivo"
+    if e.startswith("CLARO"):
+        return "Claro"
+    if e.startswith("TIM "):
+        return "TIM"
+    return None
+
+
+def _faixa(mhz):
+    return next((faixa for limite, faixa in _FAIXAS if mhz < limite), None)
+
+
+def _km(lat1, lon1, lat2, lon2):
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 6371 * 2 * math.asin(math.sqrt(a))
+
+
+def _texto(celula):
+    return html.unescape(re.sub(r"<[^>]+>", "", celula)).strip()
+
+
+def _pagina_licencas(lat, lon, skip):
+    corpo, limite = [], "----oneagro"
+    for nome, valor in (("wfid", "licencas"), ("view", "0"), ("fa_gsearch", "1"), ("fa_lat", lat), ("fa_lon", lon),
+                        ("fa_dist", RAIO_ANTENAS_KM), ("skip", skip), ("filter", "1"), ("rpp", _POR_PAGINA)):
+        corpo.append(f'--{limite}\r\nContent-Disposition: form-data; name="{nome}"\r\n\r\n{valor}\r\n')
+    corpo.append(f"--{limite}--\r\n")
+    req = urllib.request.Request(LICENCAS_URL, data="".join(corpo).encode(), method="POST", headers={
+        **_CABECALHOS, "Content-Type": f"multipart/form-data; boundary={limite}"})
+    with urllib.request.urlopen(req, timeout=90) as resp:
+        return resp.read().decode("utf-8", "replace")
+
+
+def _ler_licencas(pagina):
+    """Linhas da tabela como dicts {cabecalho: valor}."""
+    cab = [_texto(c) for c in re.findall(r"<th[^>]*>(.*?)</th>", pagina, flags=re.S)]
+    linhas = []
+    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", pagina, flags=re.S):
+        celulas = [_texto(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", tr, flags=re.S)]
+        if cab and len(celulas) == len(cab):
+            linhas.append(dict(zip(cab, celulas)))
+    return linhas
+
+
+def consultar_frequencias(lat, lon):
+    """{operadora: {tecnologia: {"faixas": [MHz...], "km"}}} da antena mais
+    proxima de cada operadora/tecnologia (ate' `RAIO_ANTENAS_KM`)."""
+    estacoes = {}  # (operadora, tec, lat, lon) -> faixas
+    for pagina in range(_MAX_PAGINAS):
+        linhas = _ler_licencas(_pagina_licencas(lat, lon, pagina * _POR_PAGINA))
+        for l in linhas:
+            if l.get("Num. Serviço") != "010":
+                continue
+            operadora, tec = _operadora_licenca(l.get("Entidade")), _TEC_LICENCA.get((l.get("Tecnologia") or "").upper())
+            try:
+                mhz, elat, elon = float(l["Freq. TX (MHz)"]), float(l["Latitude"]), float(l["Longitude"])
+            except (KeyError, ValueError):
+                continue
+            faixa = _faixa(mhz)
+            if operadora and tec and faixa:
+                estacoes.setdefault((operadora, tec, elat, elon), set()).add(faixa)
+        if len(linhas) < _POR_PAGINA:
+            break
+    resultado = {}
+    for (operadora, tec, elat, elon), faixas in estacoes.items():
+        km = _km(lat, lon, elat, elon)
+        atual = resultado.setdefault(operadora, {}).get(tec)
+        if atual is None or km < atual["km"]:
+            resultado[operadora][tec] = {"faixas": sorted(faixas), "km": round(km, 1)}
+    return resultado
+
+
+def frequencias_salvas(lat, lon):
+    if not COBERTURA_PATH.exists():
+        return None
+    try:
+        conn = _conectar()
+        try:
+            row = conn.execute("SELECT dados FROM frequencias WHERE ponto = ?", (_chave_ponto(lat, lon),)).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:  # base antiga, sem a tabela ainda
+        return None
+    return json.loads(row[0]) if row else None
+
+
+def _salvar_frequencias(lat, lon, dados):
+    conn = sqlite3.connect(COBERTURA_PATH, timeout=30)
+    try:
+        _criar_tabelas(conn)
+        conn.execute("INSERT OR REPLACE INTO frequencias (ponto, dados, em) VALUES (?, ?, ?)",
+                     (_chave_ponto(lat, lon), json.dumps(dados), _agora().isoformat()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _buscar_fila(pontos):
+    for lat, lon in pontos:
+        chave = _chave_ponto(lat, lon)
+        try:
+            with _consulta_lock:
+                if frequencias_salvas(lat, lon) is None and COBERTURA_PATH.exists():
+                    _salvar_frequencias(lat, lon, consultar_frequencias(lat, lon))
+        except Exception:
+            _falhas[chave] = time.time()
+        finally:
+            with _fila_lock:
+                _buscando.discard(chave)
+
+
+def buscar_frequencias_em_segundo_plano(pontos):
+    """Consulta as frequencias dos pontos que ainda nao tem (uma thread,
+    um ponto por vez). Ponto que falhou so' e' tentado de novo depois de
+    `_RETENTATIVA_S`."""
+    agora = time.time()
+    novos = []
+    with _fila_lock:
+        for lat, lon in pontos:
+            chave = _chave_ponto(lat, lon)
+            if chave in _buscando or agora - _falhas.get(chave, 0) < _RETENTATIVA_S:
+                continue
+            _buscando.add(chave)
+            novos.append((lat, lon))
+    if novos:
+        threading.Thread(target=_buscar_fila, args=(novos,), daemon=True).start()
 
 
 # ---------------------------------------------------------------- mapa (aba Sinal telefonia)
