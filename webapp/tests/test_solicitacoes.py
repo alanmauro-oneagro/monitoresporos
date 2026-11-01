@@ -1,5 +1,5 @@
 """Cadastro publico (/solicitar-acesso): conta criada na hora, tela
-"Clientes e cadastros" do Master e CPF/CNPJ so' na hora de assinar.
+"Gerenciar Clientes" do Master e CPF/CNPJ so' na hora de assinar.
 
 Rodar a partir de webapp/:  python -m unittest tests.test_solicitacoes
 """
@@ -156,14 +156,14 @@ class CadastroTest(unittest.TestCase):
         self.assertNotIn(">Novo<", master.get("/admin/solicitacoes").get_data(as_text=True))
 
     def test_clientes_e_cadastros_numa_aba_so(self):
-        """Novos cadastros + Clientes do app viraram "Clientes e cadastros";
+        """Novos cadastros + Clientes do app viraram "Gerenciar Clientes";
         Planos so' edita os planos (pedido do Alan, 01/11/2026)."""
         webapp.app.test_client().post("/solicitar-acesso", data=_form(
             username="Zzz Cad Cliente Junto", modalidade="plano", numero_telefone="65999990013"))
         antigo = models.criar_cliente("Zzz Cliente Antigo", "segredo1", "", "5565999990014", "", self.plano)
         master = self._logado("Zzz Teste Master Cad")
         html = master.get("/admin/solicitacoes").get_data(as_text=True)
-        self.assertIn("<h4 class=\"mb-2\">Clientes e cadastros</h4>", html)
+        self.assertIn("<h4 class=\"mb-2\">Gerenciar Clientes</h4>", html)
         self.assertEqual(html.count("<dd>Zzz Cad Cliente Junto</dd>"), 1)  # uma vez so', com a assinatura junto
         self.assertIn("Zzz Cliente Antigo", html)  # cliente sem registro de cadastro tambem aparece
         self.assertIn("Zzz Plano Cad", html)  # plano do cliente antigo
@@ -172,13 +172,13 @@ class CadastroTest(unittest.TestCase):
         self.assertIn('class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle"', html)  # recolhido
         self.assertIn('class="d-none mt-3" id="cad-body-0"', html)
         self.assertNotIn("Todas as contas criadas", html)  # texto do topo saiu
-        self.assertIn(">Clientes e cadastros", html)  # menu
+        self.assertIn(">Gerenciar Clientes", html)  # menu
         self.assertIn(">Planos e Valores</a>", html)
         planos = master.get("/admin/planos").get_data(as_text=True)
         self.assertIn("<h4 class=\"mb-2\">Planos e Valores</h4>", planos)
         self.assertNotIn("Zzz Cliente Antigo", planos)
         self.assertNotIn("Cortesia até", planos)
-        # acoes de cliente voltam pra Clientes e cadastros
+        # acoes de cliente voltam pra Gerenciar Clientes
         resp = master.post(f"/admin/clientes/{antigo}/cortesia", data={"cortesia_ate": "2030-01-01", "plano_id": ""})
         self.assertTrue(resp.headers["Location"].endswith("/admin/solicitacoes"))
 

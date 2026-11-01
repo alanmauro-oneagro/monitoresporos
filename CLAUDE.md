@@ -72,7 +72,7 @@ app com assinatura sem plano e sem CPF (escolhe o plano e informa o
 CPF/CNPJ na tela "Minha assinatura", `cliente_assinar` valida); "fazenda"
 vira Usuario sem nenhuma fazenda ate' o Master liberar. Cada cadastro fica
 registrado em `solicitacoes_acesso` (status 'cadastrado') pra tela
-Configuracoes -> **Clientes e cadastros** (`/admin/solicitacoes`, Master;
+Configuracoes -> **Gerenciar Clientes** (`/admin/solicitacoes`, Master; ex-"Clientes e cadastros",
 ex-"Novos cadastros" + a lista "Clientes do app" que ficava em Planos e
 clientes -- juntadas pelo Alan, 01/11/2026; contador vermelho = nao
 vistos, abrir a tela marca como visto): UM cartao por pessoa com data,
@@ -113,7 +113,7 @@ esporos ESTIMADOS por IDW das fazendas reais (nunca nome/leitura de
 fazenda real), clima, risco e fungicidas conforme o plano. Planos e
 precos: Configuracoes -> **Planos** (`/admin/planos`, Master; so' os planos,
 "Abas liberadas no app" = `RECURSOS_PLANO`); cortesia/plano de cada
-cliente: Configuracoes -> Clientes e cadastros. Planos padrao
+cliente: Configuracoes -> Gerenciar Clientes. Planos padrao
 (`models.PLANOS_PADRAO`, criados pelo `init_db` so' se faltar o nome --
 pedido do Alan, 31/10/2026): **Free** (valor 0, a venda), Basico, Premium e
 Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o
