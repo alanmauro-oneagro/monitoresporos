@@ -3885,7 +3885,6 @@ def recommendations(safra):
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
     virtual_names = models.virtual_farm_site_names()
     whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
-    sinal_por_site = _sinal_das_fazendas(cards_by_site.keys())
     sites_data = []
     for site, cards in cards_by_site.items():
         cultura_info = culturas_by_site.get((site, safra), {})
@@ -3967,7 +3966,6 @@ def recommendations(safra):
             "plantio_linhas": plantio_linhas,
             "aplicacoes_linhas": aplicacoes_linhas,
             "vento_dia": _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]),
-            "sinal_celular": sinal_por_site.get(site),
         })
     sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
     any_whatsapp_configured = any(s["whatsapp_destinos"] > 0 for s in sites_data)

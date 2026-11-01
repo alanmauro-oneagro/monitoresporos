@@ -232,11 +232,14 @@ class SinalCelularTest(unittest.TestCase):
         # fazenda cadastrada no Chile (mesmo com o ponto dentro da grade) nao mostra sinal
         cl = nomes.get("Zzz Sinal CL") or models.create_virtual_farm("Zzz Sinal CL", lat + 0.02, lon + 0.02, 30, country_code="CL")
         master = self._master()
-        for url in ("/recommendations/safra1", "/fazendas"):
-            with self.subTest(url=url):
-                html = master.get(url, follow_redirects=True).get_data(as_text=True)
-                self.assertIn("<strong>Vivo</strong>", self._card(html, br))
-                self.assertNotIn("<strong>Vivo</strong>", self._card(html, cl))
+        html = master.get("/fazendas").get_data(as_text=True)
+        self.assertIn('class="sinal-linha"', self._card(html, br))
+        self.assertNotIn('class="sinal-linha"', self._card(html, cl))
+        # Recomendacoes nao mostra sinal (pedido do Alan, 01/11/2026)
+        html = master.get("/recommendations/safra1", follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Zzz Sinal BR", html)
+        self.assertNotIn("sinal-linha", html)
+        self.assertNotIn("<strong>Vivo</strong>", html)
         html = master.get("/sinal-telefonia").get_data(as_text=True)
         self.assertIn("Zzz Sinal BR", html)
         self.assertNotIn("Zzz Sinal CL", html)
@@ -338,7 +341,7 @@ class SinalCelularTest(unittest.TestCase):
         models.create_virtual_farm("Zzz Fazenda Sinal", -12.5, -55.7, 30)
         html = master.get("/fazendas").get_data(as_text=True)
         self.assertIn('farm-toggle', html)
-        self.assertIn('<strong>Vivo</strong> <span class="text-muted">4G', html)  # chips ao lado do nome
+        self.assertIn('<b>Vivo</b><span class="sinal-det">4G', html)  # linha discreta abaixo do nome
         self.assertNotIn("Sinal de celular (Anatel)</strong>", html)  # sem o quadro dentro da fazenda
         self.assertIn("#198754", html)  # verde
         # Novos cadastros: pela lavoura do cliente

@@ -310,8 +310,11 @@ site tem que entrar la'.
   guardada por ponto na tabela `frequencias` do `cobertura_anatel.db`
   (some e e' refeita quando a base e' baixada de novo). Chip = icone +
   operadora + tecnologia que da' o nivel (empate: 4G antes do 5G) + MHz.
-  Manejos e Recomendacoes mostram SO' os chips ao lado do nome da fazenda
-  (`app._sinal_das_fazendas`). **So' Brasil** (pedido do Alan,
+  Manejos mostra SO' uma linha discreta abaixo do nome da fazenda
+  (`_sinal_celular.linha`, estilo `.sinal-linha` em fazendas.html: sem
+  bordas, letra/icone menores, operadora sem sinal esmaecida, nenhuma com
+  sinal = "Sem sinal previsto"; `app._sinal_das_fazendas`). Recomendacoes
+  NAO mostra sinal (pedido do Alan, 01/11/2026). **So' Brasil** (pedido do Alan,
   01/11/2026): fazenda com outro pais cadastrado nao mostra sinal (nem no
   mapa da aba Sinal telefonia); ponto solto (clique, lavoura de cliente)
   pelo contorno dos paises (`app._no_brasil`, `/sinal-celular` devolve
