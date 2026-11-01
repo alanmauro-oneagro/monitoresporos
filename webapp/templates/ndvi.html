@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}NDVI - OneAgro App{% endblock %}
+{% block title %}Mapas NDVI - OneAgro App{% endblock %}
 {% block content %}
-<h4 class="mb-2">NDVI (Sentinel-2)</h4>
+<h4 class="mb-2">Mapas NDVI <span class="fs-6 text-muted fw-normal">(Sentinel-2)</span></h4>
 {% include "_aviso_whatsapp.html" %}
 
 {% if not credenciais_ok %}
@@ -99,7 +99,7 @@
                     {% for destinatario in site_group.ndvi_destinatarios %}<strong>{{ destinatario.rotulo }}</strong>{% if not loop.last %}, {% endif %}
                     <input type="hidden" form="ndvi_whats_{{ site_idx }}" name="destino_telefones" value="{{ destinatario.telefone }}">
                     {% else %}ninguem marcado{% endfor %}
-                    -- muda em <a href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>.
+                    -- muda em <a href="{{ url_for('whatsapp_gerenciamento') }}">Programação de Envios</a>.
                 </div>
                 {% if site_group.historico %}
                 <form method="post" action="{{ url_for('enviar_ndvi_historico_whatsapp') }}" id="ndvi_whats_{{ site_idx }}">
@@ -132,7 +132,7 @@
                 </div>
                 <button type="submit" form="ndvi_whats_{{ site_idx }}" class="btn btn-sm btn-outline-success mt-2"
                         {% if not site_group.ndvi_destinatarios or not whatsapp_conectado() %}disabled{% endif %}
-                        title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Conexão WhatsApp{% elif site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Envios){% endif %}">
+                        title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Conexão WhatsApp{% elif site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Programação de Envios){% endif %}">
                     📲 Enviar selecionadas por WhatsApp
                 </button>
                 {% else %}

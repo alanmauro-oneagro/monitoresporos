@@ -173,9 +173,9 @@ class CadastroTest(unittest.TestCase):
         self.assertIn('class="d-none mt-3" id="cad-body-0"', html)
         self.assertNotIn("Todas as contas criadas", html)  # texto do topo saiu
         self.assertIn(">Clientes e cadastros", html)  # menu
-        self.assertIn(">Planos</a>", html)
+        self.assertIn(">Planos e Valores</a>", html)
         planos = master.get("/admin/planos").get_data(as_text=True)
-        self.assertIn("<h4 class=\"mb-2\">Planos</h4>", planos)
+        self.assertIn("<h4 class=\"mb-2\">Planos e Valores</h4>", planos)
         self.assertNotIn("Zzz Cliente Antigo", planos)
         self.assertNotIn("Cortesia até", planos)
         # acoes de cliente voltam pra Clientes e cadastros
