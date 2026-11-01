@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Clientes e cadastros - OneAgro App{% endblock %}
+{% block title %}Gerenciar Clientes - OneAgro App{% endblock %}
 {% block content %}
 {% import "_sinal_celular.html" as sinal_cel %}
 <style>
@@ -17,7 +17,7 @@
 .sinal-sem { color: #6c757d; opacity: 0.6; }
 .cad-assinatura { background: #f3faf5; border: 1px solid #cfe8d6; border-radius: 0.5rem; padding: 0.5rem 0.65rem; }
 </style>
-<h4 class="mb-2">Clientes e cadastros</h4>
+<h4 class="mb-2">Gerenciar Clientes</h4>
 
 {% set n_novos = pessoas | selectattr('visto', 'equalto', 0) | list | length %}
 {% set n_clientes = pessoas | selectattr('tipo', 'equalto', 'cliente') | list | length %}

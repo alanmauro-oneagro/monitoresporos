@@ -7227,7 +7227,7 @@ def asaas_webhook():
 @app.route("/admin/solicitacoes")
 @master_required
 def admin_solicitacoes():
-    """Clientes e cadastros (pedido do Alan, 01/11/2026 -- junta as antigas
+    """Gerenciar Clientes (ex-"Clientes e cadastros"; pedido do Alan, 01/11/2026 -- junta as antigas
     "Novos cadastros" e a lista "Clientes do app" de Planos e clientes):
     uma pessoa por cartao, com os dados do cadastro (/solicitar-acesso) e,
     se for cliente do app, plano/situacao/pago ate'/cortesia/lavouras.
@@ -7277,7 +7277,7 @@ MENU_CONFIG = [
     ("ndvi", "Mapas NDVI", "ndvi", "ndvi"),
     ("envios", "Programação de Envios", "whatsapp_gerenciamento", "envios"),
     ("acessos", "Gerenciar Acessos", "admin_acessos", "master"),
-    ("cadastros", "Clientes e cadastros", "admin_solicitacoes", "master"),
+    ("cadastros", "Gerenciar Clientes", "admin_solicitacoes", "master"),
     ("planos", "Planos e Valores", "admin_planos", "master"),
     ("whatsapp", "Conexão WhatsApp", "admin_whatsapp", "master"),
     ("exportar", "Exportar", "admin_exportar", "master"),
