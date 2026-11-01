@@ -2448,7 +2448,7 @@ ABAS_CONFIG = [
     ("fungicidas", "Fungicidas", "admin_fungicidas"),
     ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo"),
-    ("ndvi", "Mapas NDVI", "ndvi"),
+    ("ndvi", "Mapas de NDVI", "ndvi"),
     ("envios", "Programação de Envios", "whatsapp_gerenciamento"),
 ]
 _ACESSOS_KEY = "acessos_por_nivel"
@@ -7274,7 +7274,7 @@ MENU_CONFIG = [
     ("fungicidas", "Fungicidas", "admin_fungicidas", "fungicidas"),
     ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo", "solo"),
-    ("ndvi", "Mapas NDVI", "ndvi", "ndvi"),
+    ("ndvi", "Mapas de NDVI", "ndvi", "ndvi"),
     ("envios", "Programação de Envios", "whatsapp_gerenciamento", "envios"),
     ("acessos", "Gerenciar Acessos", "admin_acessos", "master"),
     ("cadastros", "Gerenciar Clientes", "admin_solicitacoes", "master"),
