@@ -102,7 +102,7 @@
                 <form method="post" action="{{ url_for('alertas_clima_whatsapp', site_name=ponto.site_name) }}" class="d-flex align-items-center gap-2 mb-0">
                     <input type="hidden" name="enviar_texto" value="1">
                     <button type="submit" class="btn btn-sm btn-outline-success" {% if not ponto.whatsapp_destinos or not whatsapp_conectado() %}disabled{% endif %}
-                            title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Conexão WhatsApp{% elif ponto.whatsapp_destinos %}Enviar o texto para {{ ponto.whatsapp_destinos }} numero(s){% else %}Nenhum numero cadastrado pra esse ponto ainda (aba Programação de Envios){% endif %}">
+                            title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp{% elif ponto.whatsapp_destinos %}Enviar o texto para {{ ponto.whatsapp_destinos }} numero(s){% else %}Nenhum numero cadastrado pra esse ponto ainda (aba Programação de Envios){% endif %}">
                         📲 Enviar agora{% if ponto.whatsapp_destinos %} ({{ ponto.whatsapp_destinos }}){% endif %}
                     </button>
                 </form>

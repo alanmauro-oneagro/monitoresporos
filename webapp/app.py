@@ -7279,7 +7279,7 @@ MENU_CONFIG = [
     ("acessos", "Gerenciar Acessos", "admin_acessos", "master"),
     ("cadastros", "Gerenciar Clientes", "admin_solicitacoes", "master"),
     ("planos", "Planos e Valores", "admin_planos", "master"),
-    ("whatsapp", "Conexão WhatsApp", "admin_whatsapp", "master"),
+    ("whatsapp", "Gerenciar WhatsApp", "admin_whatsapp", "master"),
     ("exportar", "Exportar", "admin_exportar", "master"),
     ("ocultas", "Gerenciar Fazendas Ocultas", "fazendas_ocultas", "master"),
 ]
@@ -7335,7 +7335,7 @@ def _inject_whatsapp_conectado():
 
 
 _AVISO_WHATSAPP_DESCONECTADO = ("WhatsApp desconectado -- nada foi enviado. Conecte de novo em "
-                                "Configurações > Conexão WhatsApp.")
+                                "Configurações > Gerenciar WhatsApp.")
 
 
 def _whatsapp_desconectado(destino):
