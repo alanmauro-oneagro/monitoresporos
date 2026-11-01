@@ -144,7 +144,7 @@
         <button type="button" class="navbar-toggler" id="navToggleBtn" aria-label="Abrir menu">
             <span class="navbar-toggler-icon"></span>
         </button>
-        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'ndvi', 'whatsapp_gerenciamento', 'admin_whatsapp', 'admin_exportar', 'admin_exportar_download', 'fazendas_ocultas', 'solo', 'admin_acessos', 'admin_planos', 'admin_solicitacoes'] %}
+        {% set _admin_dropdown_endpoints = ['admin_users', 'admin_doencas', 'admin_fungicidas', 'mapa_interpolado', 'ndvi', 'whatsapp_gerenciamento', 'admin_whatsapp', 'admin_exportar', 'admin_exportar_download', 'fazendas_ocultas', 'solo', 'admin_acessos', 'admin_planos', 'admin_solicitacoes', 'sinal_telefonia'] %}
         <div class="d-none d-lg-flex flex-column flex-lg-row gap-2 gap-lg-3 align-items-lg-center justify-content-lg-end w-100" id="mainNavMenu">
             {% if menu_site_cliente is not none %}
             {# Cliente de plano: so' as abas do site que o plano libera + volta pro app. #}
@@ -172,6 +172,7 @@
                     {% if pode_aba('mapa_interpolado') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'mapa_interpolado' %} tab-ativa{% endif %}" href="{{ url_for('mapa_interpolado') }}">Mapa Interpolado</a>{% endif %}
                     {% if pode_aba('solo') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'solo' %} tab-ativa{% endif %}" href="{{ url_for('solo') }}">Mapa de Solos</a>{% endif %}
                     {% if pode_aba('ndvi') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'ndvi' %} tab-ativa{% endif %}" href="{{ url_for('ndvi') }}">NDVI</a>{% endif %}
+                    {% if pode_aba('sinal_telefonia') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'sinal_telefonia' %} tab-ativa{% endif %}" href="{{ url_for('sinal_telefonia') }}">Sinal telefonia</a>{% endif %}
                     {% if pode_aba('envios') %}<a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'whatsapp_gerenciamento' %} tab-ativa{% endif %}" href="{{ url_for('whatsapp_gerenciamento') }}">Envios</a>{% endif %}
                     {% if current_user.is_master %}
                     <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark{% if request.endpoint == 'admin_acessos' %} tab-ativa{% endif %}" href="{{ url_for('admin_acessos') }}">Acessos</a>

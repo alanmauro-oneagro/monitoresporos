@@ -11,6 +11,7 @@ agendador) e transforma cada mapa numa grade de bits (`RESOLUCAO` graus,
 banco (fora do banco principal: nao entra no backup). A consulta de uma
 coordenada (`estimar`) le um bit por mapa.
 """
+import io
 import os
 import re
 import sqlite3
@@ -367,3 +368,179 @@ def estimar(lat, lon):
         _cache.clear()
     _cache[chave] = resultado
     return resultado
+
+
+# ---------------------------------------------------------------- mapa (aba Sinal telefonia)
+# Cada operadora vira uma camada de "tiles" do Leaflet: mesma cor, mais
+# forte onde o sinal e' otimo e mais clara onde e' fraco (como o mapa de
+# chuva). Nivel por celula: 3 otimo (4G/5G forte), 2 bom (4G/5G minimo ou
+# 2G/3G forte), 1 fraco (2G/3G minimo), 0 sem.
+CORES_OPERADORA = {
+    "Vivo": (110, 30, 160), "Claro": (215, 30, 30), "TIM": (0, 80, 170), "Algar": (0, 150, 90),
+    "Brisanet": (240, 120, 0), "Sercomtel": (0, 160, 190), "Unifique": (60, 170, 40), "IEZ!": (200, 0, 120),
+    "Ligue": (120, 90, 40), "Sumicity": (90, 90, 90), "Oi": (230, 180, 0),
+}
+_COR_PADRAO = (80, 80, 80)
+_ALFA = np.array([0, 70, 140, 215], np.uint8)  # sem, fraco, bom, otimo
+TILE = 256
+# Zooms baixos saem de visoes gerais do Brasil (nivel MEDIO de cada
+# quadrado de 10x10 / 40x40 celulas: pouca cobertura = cor fraca, como
+# densidade) -- ler as celulas uma a uma ficaria lento e pontilhado.
+# (zoom maximo, passo em celulas). Guardado em uint8 = media * _ESCALA.
+_VISOES = [(5, 40), (7, 10)]
+_ESCALA = 80
+
+_grades = {}
+_visoes = {}
+_lock_visao = threading.Lock()
+
+
+def _versao():
+    return os.path.getmtime(COBERTURA_PATH)
+
+
+def _conectar():
+    return sqlite3.connect(f"file:{COBERTURA_PATH}?mode=ro", uri=True)
+
+
+def operadoras():
+    """Operadoras com mapa baixado: Vivo, Claro, TIM primeiro."""
+    if not base_carregada():
+        return []
+    conn = _conectar()
+    try:
+        nomes = {r[0] for r in conn.execute("SELECT DISTINCT operadora FROM camadas")}
+    finally:
+        conn.close()
+    return [o for o in PRINCIPAIS if o in nomes] + sorted(nomes - set(PRINCIPAIS))
+
+
+def cor(operadora):
+    return "#%02x%02x%02x" % CORES_OPERADORA.get(operadora, _COR_PADRAO)
+
+
+def _codigo(tec, forte):
+    if tec in ("4G", "5G"):
+        return 3 if forte else 2
+    return 2 if forte else 1
+
+
+def _grade(conn, operadora, bx, by, forte_por_tec):
+    """Nivel (0-3) de cada celula de um bloco de 1 grau, ou None se vazio."""
+    chave = (_versao(), operadora, bx, by)
+    if chave in _grades:
+        return _grades[chave]
+    grade = None
+    for tec, dbm, cheio, dados in conn.execute(
+            "SELECT c.tecnologia, c.dbm, b.cheio, b.dados FROM blocos b JOIN camadas c ON c.id = b.camada "
+            "WHERE b.bx = ? AND b.by = ? AND c.operadora = ?", (bx, by, operadora)):
+        codigo = _codigo(tec, dbm == forte_por_tec[tec])
+        if cheio:
+            camada = np.full((BLOCO, BLOCO), codigo, np.uint8)
+        else:
+            bits = np.unpackbits(np.frombuffer(zlib.decompress(dados), np.uint8))[:BLOCO * BLOCO]
+            camada = bits.reshape(BLOCO, BLOCO) * np.uint8(codigo)
+        grade = camada if grade is None else np.maximum(grade, camada)
+    if len(_grades) > 400:
+        _grades.clear()
+    _grades[chave] = grade
+    return grade
+
+
+def _forte_por_tec(conn):
+    forte = {}
+    for tec, dbm in conn.execute("SELECT tecnologia, dbm FROM camadas"):
+        forte[tec] = min(dbm, forte.get(tec, dbm))
+    return forte
+
+
+def _visao(operadora, passo):
+    """Brasil inteiro em quadrados de `passo` celulas, cada um com o nivel
+    medio dentro dele (x `_ESCALA`). Montada na primeira vez e guardada
+    ate' a base mudar."""
+    chave = (_versao(), operadora)
+    with _lock_visao:
+        if chave not in _visoes:
+            ncol = round((LON_MAX - LON_MIN) / RESOLUCAO)
+            nlin = round((LAT_MAX - LAT_MIN) / RESOLUCAO)
+            fino = _VISOES[-1][1]
+            lado = BLOCO // fino
+            visao = np.zeros((nlin // fino, ncol // fino), np.uint8)
+            conn = _conectar()
+            try:
+                forte = _forte_por_tec(conn)
+                blocos = conn.execute(
+                    "SELECT DISTINCT b.bx, b.by FROM blocos b JOIN camadas c ON c.id = b.camada WHERE c.operadora = ?",
+                    (operadora,)).fetchall()
+                for bx, by in blocos:
+                    grade = _grade(conn, operadora, bx, by, forte)
+                    if grade is not None:
+                        media = grade.reshape(lado, fino, lado, fino).mean(axis=(1, 3))
+                        visao[by * lado:(by + 1) * lado, bx * lado:(bx + 1) * lado] = np.rint(media * _ESCALA)
+            finally:
+                conn.close()
+            niveis = {fino: visao}
+            for _z, p in _VISOES[:-1]:
+                k = p // fino
+                h, w = visao.shape[0] // k, visao.shape[1] // k
+                niveis[p] = np.rint(visao[:h * k, :w * k].reshape(h, k, w, k).mean(axis=(1, 3))).astype(np.uint8)
+            if any(c[0] != chave[0] for c in _visoes):
+                _visoes.clear()
+            _visoes[chave] = niveis
+        return _visoes[chave][passo]
+
+
+def _png(rgba):
+    from PIL import Image
+    saida = io.BytesIO()
+    Image.fromarray(rgba, "RGBA").save(saida, "PNG")
+    return saida.getvalue()
+
+
+_TILE_VAZIO = None
+
+
+def tile(operadora, z, x, y):
+    """PNG 256x256 (tile Web Mercator z/x/y) da cobertura da operadora."""
+    global _TILE_VAZIO
+    n = 2 ** z
+    frac = (np.arange(TILE) + 0.5) / TILE
+    lon = (x + frac) / n * 360 - 180
+    lat = np.degrees(np.arctan(np.sinh(np.pi * (1 - 2 * (y + frac) / n))))
+    col = np.floor((lon - LON_MIN) / RESOLUCAO).astype(np.int64)
+    lin = np.floor((lat - LAT_MIN) / RESOLUCAO).astype(np.int64)
+    ncol = round((LON_MAX - LON_MIN) / RESOLUCAO)
+    nlin = round((LAT_MAX - LAT_MIN) / RESOLUCAO)
+    ok_c, ok_l = (col >= 0) & (col < ncol), (lin >= 0) & (lin < nlin)
+    alfa = np.zeros((TILE, TILE), np.uint8)
+    if ok_c.any() and ok_l.any() and base_carregada():
+        L, C = np.meshgrid(lin, col, indexing="ij")
+        dentro = np.outer(ok_l, ok_c)
+        passo = next((p for zmax, p in _VISOES if z <= zmax), None)
+        if passo:
+            visao = _visao(operadora, passo)
+            media = visao[np.minimum(L[dentro] // passo, visao.shape[0] - 1),
+                          np.minimum(C[dentro] // passo, visao.shape[1] - 1)] / _ESCALA
+            alfa[dentro] = np.rint(np.interp(media, np.arange(4), _ALFA))
+        else:
+            conn = _conectar()
+            try:
+                forte = _forte_por_tec(conn)
+                bl, bc = L // BLOCO, C // BLOCO
+                for by in np.unique(bl[dentro]):
+                    for bx in np.unique(bc[dentro & (bl == by)]):
+                        grade = _grade(conn, operadora, int(bx), int(by), forte)
+                        if grade is None:
+                            continue
+                        sel = dentro & (bl == by) & (bc == bx)
+                        alfa[sel] = _ALFA[grade[L[sel] - by * BLOCO, C[sel] - bx * BLOCO]]
+            finally:
+                conn.close()
+    if not alfa.any():
+        if _TILE_VAZIO is None:
+            _TILE_VAZIO = _png(np.zeros((TILE, TILE, 4), np.uint8))
+        return _TILE_VAZIO
+    rgba = np.zeros((TILE, TILE, 4), np.uint8)
+    rgba[..., :3] = CORES_OPERADORA.get(operadora, _COR_PADRAO)
+    rgba[..., 3] = alfa
+    return _png(rgba)

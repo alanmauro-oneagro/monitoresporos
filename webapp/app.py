@@ -2393,6 +2393,7 @@ ABAS_CONFIG = [
     ("solo", "Mapa de Solos", "solo"),
     ("ndvi", "NDVI", "ndvi"),
     ("envios", "Envios", "whatsapp_gerenciamento"),
+    ("sinal_telefonia", "Sinal telefonia", "sinal_telefonia"),
 ]
 _ACESSOS_KEY = "acessos_por_nivel"
 ACESSOS_PADRAO = {"admin": ["usuarios", "mapa_interpolado"], "usuario": []}
@@ -3459,7 +3460,6 @@ def mapa_interpolado():
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
-        info_cobertura=sinal_celular.info(),
         **_country_map_context(),
     )
 
@@ -3559,19 +3559,45 @@ def chuva_grade():
     return jsonify(weather_forecast.get_rain_forecast_grid(lats, lons))
 
 
-@app.route("/mapa-interpolado/cobertura-anatel", methods=["POST"])
+@app.route("/sinal-telefonia")
+@aba_required("sinal_telefonia")
+def sinal_telefonia():
+    """Mapa de cobertura de celular por operadora (mapas da Anatel, ver
+    `sinal_celular.py`): uma caixa por operadora, cor mais forte onde o
+    sinal e' melhor. Clicar no mapa mostra o quadro do ponto."""
+    info = sinal_celular.info()
+    versao = int(os.path.getmtime(sinal_celular.COBERTURA_PATH)) if info.get("baixado_em") else 0
+    return render_template(
+        "sinal_telefonia.html", info_cobertura=info, versao=versao,
+        operadoras=[{"nome": o, "cor": sinal_celular.cor(o)} for o in sinal_celular.operadoras()],
+    )
+
+
+@app.route("/sinal-telefonia/tile/<operadora>/<int:z>/<int:x>/<int:y>.png")
+@aba_required("sinal_telefonia")
+def sinal_telefonia_tile(operadora, z, x, y):
+    if not (0 <= z <= 18 and 0 <= x < 2 ** z and 0 <= y < 2 ** z):
+        abort(404)
+    resp = app.response_class(sinal_celular.tile(operadora, z, x, y), mimetype="image/png")
+    resp.headers["Cache-Control"] = "private, max-age=86400"  # URL muda (?v=) quando a base e' baixada de novo
+    return resp
+
+
+@app.route("/sinal-telefonia/atualizar", methods=["POST"])
 @master_required
 def atualizar_cobertura_anatel():
     """Baixa de novo os mapas de cobertura da Anatel (o agendador ja' faz
     sozinho uma vez por mes)."""
     sinal_celular.atualizar_em_segundo_plano(forcar=True)
     flash("Baixando os mapas de cobertura da Anatel -- leva alguns minutos. Recarregue a página para acompanhar.", "success")
-    return redirect(url_for("mapa_interpolado"))
+    return redirect(url_for("sinal_telefonia"))
 
 
 @app.route("/sinal-celular")
-@aba_required("mapa_interpolado")
+@login_required
 def sinal_celular_ponto():
+    if not (pode_acessar_aba("mapa_interpolado") or pode_acessar_aba("sinal_telefonia")):
+        abort(403)
     try:
         lat, lon = float(request.args.get("lat")), float(request.args.get("lon"))
     except (TypeError, ValueError):
