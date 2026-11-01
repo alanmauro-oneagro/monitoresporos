@@ -71,12 +71,13 @@ class MenuConfigTest(unittest.TestCase):
 
     def test_nomes_das_abas(self):
         html = self._logado(models.MASTER_PRINCIPAL).get("/mapa").get_data(as_text=True)
-        for nome in ("Mapas de NDVI", "Planos e Valores", "Gerenciar Acessos", "Programação de Envios", "Mapas de Solo"):
+        for nome in ("Mapas de NDVI", "Planos e Valores", "Gerenciar Acessos", "Programação de Envios", "Mapas de Solo",
+                     "Gerenciar Fazendas Ocultas"):
             self.assertIn(f">{nome}</a>", html)
         alan = self._logado(models.MASTER_PRINCIPAL)
         for url, titulo in (("/ndvi", "Mapas de NDVI"), ("/admin/planos", "Planos e Valores"),
                             ("/admin/acessos", "Gerenciar Acessos"), ("/whatsapp", "Programação de Envios"),
-                            ("/solo", "Mapas de Solo")):
+                            ("/solo", "Mapas de Solo"), ("/admin/fazendas-ocultas", "Gerenciar Fazendas Ocultas")):
             with self.subTest(url=url):
                 self.assertIn(f"<title>{titulo} - OneAgro App</title>", alan.get(url).get_data(as_text=True))
 

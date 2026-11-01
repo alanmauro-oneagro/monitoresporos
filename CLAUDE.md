@@ -235,7 +235,7 @@ site tem que entrar la'.
   -- `_anotacoes_da_fazenda`, mesmas rotas `save_farm_cultura`/
   `save_recommendations`); Recomendações so' mostra e envia. Pontos "so'
   clima" tem o mesmo bloco de clima agora/previsao/vento das fazendas.
-- **Fazendas ocultas** (Configuracoes -> Fazendas ocultas, so' "Alan Mauro",
+- **Gerenciar Fazendas Ocultas** (ex-"Fazendas ocultas"; Configuracoes -> Gerenciar Fazendas Ocultas, so' "Alan Mauro",
   rota `fazendas_ocultas`): lista as desativadas e as sem leitura ha mais
   de `DADOS_BLOQUEIO_DIAS`, com botao Reativar. Reativar uma sem leitura
   grava a data da ultima leitura (setting `bloqueio_liberado`) e
