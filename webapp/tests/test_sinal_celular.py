@@ -19,8 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import shapefile  # noqa: E402
 from PIL import Image  # noqa: E402
+from markupsafe import escape  # noqa: E402
 
 import app as webapp  # noqa: E402
+import data_reader  # noqa: E402
 import models  # noqa: E402
 import sinal_celular  # noqa: E402
 
@@ -216,6 +218,31 @@ class SinalCelularTest(unittest.TestCase):
         self.assertEqual((r["TIM"]["tecnologia"], r["TIM"]["faixas"]), ("3G", [2100]))
         self.assertEqual(r["Claro"]["tecnologias"][1], {"tecnologia": "4G", "nivel": "fraco", "faixas": [700]})
         self.assertFalse(sinal_celular.frequencias_pendentes(lat, lon))
+
+    def _card(self, html, nome_site):
+        ini = html.index(f'data-site="{escape(nome_site)}"')
+        fim = html.find('<div class="card shadow-sm mb-3"', ini + 1)
+        return html[ini:fim if fim > 0 else None]
+
+    def test_recomendacoes_e_fora_do_brasil(self):
+        nomes = {vf["nome"]: vf["site_name"] for vf in models.get_all_virtual_farms()}
+        # perto de uma fazenda real com leitura (Recomendacoes so' lista fazenda com dado)
+        lat, lon = next(iter(data_reader.read_site_coordinates().values()))
+        br = nomes.get("Zzz Sinal BR") or models.create_virtual_farm("Zzz Sinal BR", lat + 0.01, lon + 0.01, 30)
+        # fazenda cadastrada no Chile (mesmo com o ponto dentro da grade) nao mostra sinal
+        cl = nomes.get("Zzz Sinal CL") or models.create_virtual_farm("Zzz Sinal CL", lat + 0.02, lon + 0.02, 30, country_code="CL")
+        master = self._master()
+        for url in ("/recommendations/safra1", "/fazendas"):
+            with self.subTest(url=url):
+                html = master.get(url, follow_redirects=True).get_data(as_text=True)
+                self.assertIn("<strong>Vivo</strong>", self._card(html, br))
+                self.assertNotIn("<strong>Vivo</strong>", self._card(html, cl))
+        html = master.get("/sinal-telefonia").get_data(as_text=True)
+        self.assertIn("Zzz Sinal BR", html)
+        self.assertNotIn("Zzz Sinal CL", html)
+        # ponto solto fora do Brasil (Santiago)
+        d = master.get("/sinal-celular?lat=-33.45&lon=-70.66").get_json()
+        self.assertEqual((d["fora_do_brasil"], d["operadoras"], d["html"]), (True, None, ""))
 
     def test_falha_no_download_guarda_a_base_anterior(self):
         def fora_do_ar(url, timeout):

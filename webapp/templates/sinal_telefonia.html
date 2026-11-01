@@ -108,6 +108,7 @@
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     if (!map.hasLayer(popup)) return;
+                    if (d.fora_do_brasil) { popup.setContent(cabeca + '<span class="small text-muted">Fora do Brasil -- sem informação de sinal.</span>'); return; }
                     popup.setContent(cabeca + d.html + (d.pendente ? '<div class="small text-muted mt-1">Buscando as frequências na Anatel...</div>' : ''));
                     if (d.pendente && ++tentativas <= 8) setTimeout(consultar, 4000);
                 })
