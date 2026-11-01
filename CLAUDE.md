@@ -310,7 +310,12 @@ site tem que entrar la'.
   guardada por ponto na tabela `frequencias` do `cobertura_anatel.db`
   (some e e' refeita quando a base e' baixada de novo). Chip = icone +
   operadora + tecnologia que da' o nivel (empate: 4G antes do 5G) + MHz.
-  Manejos mostra SO' os chips ao lado do nome da fazenda (sem quadro);
+  Manejos e Recomendacoes mostram SO' os chips ao lado do nome da fazenda
+  (`app._sinal_das_fazendas`). **So' Brasil** (pedido do Alan,
+  01/11/2026): fazenda com outro pais cadastrado nao mostra sinal (nem no
+  mapa da aba Sinal telefonia); ponto solto (clique, lavoura de cliente)
+  pelo contorno dos paises (`app._no_brasil`, `/sinal-celular` devolve
+  `fora_do_brasil`);
   `/sinal-celular` devolve `pendente` e as telas perguntam de novo. O
   Mapa Interpolado recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
   Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. Aba propria

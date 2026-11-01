@@ -1663,6 +1663,32 @@ def _farm_plantio_aplicacoes_estoque(site, safra):
     return plantio, aplicacoes
 
 
+def _no_brasil(lat, lon):
+    """Sinal de celular so' no Brasil (mapas da Anatel; pedido do Alan,
+    01/11/2026) -- ponto solto (clique no mapa, lavoura de cliente) pelo
+    contorno dos paises cadastrados."""
+    return countries.detectar_pais_por_coordenada(lat, lon) == countries.DEFAULT_COUNTRY
+
+
+def _sinal_das_fazendas(sites):
+    """site -> sinal de celular (`sinal_celular.estimar`) das fazendas
+    cadastradas no Brasil -- fazenda de outro pais fica de fora. As
+    frequencias que faltam sao consultadas em segundo plano."""
+    coords = _coords_all()
+    paises = models.get_all_site_countries()
+    resultado, faltando = {}, []
+    for site in sites:
+        if site not in coords or paises.get(site, countries.DEFAULT_COUNTRY) != countries.DEFAULT_COUNTRY:
+            continue
+        lat, lon = coords[site]
+        sinal = sinal_celular.estimar(lat, lon, buscar_frequencias=False)
+        resultado[site] = sinal
+        if sinal and any(o["nivel"] != "sem" for o in sinal) and sinal_celular.frequencias_salvas(lat, lon) is None:
+            faltando.append((lat, lon))
+    sinal_celular.buscar_frequencias_em_segundo_plano(faltando)
+    return resultado
+
+
 def _historico_doenca(site, doenca_en, dias=30):
     """Serie diaria de esporos pro grafico do PDF. Fazenda real: as
     leituras dela (`data_reader.get_site_disease_history`). Fazenda
@@ -3604,6 +3630,8 @@ def sinal_telefonia():
         visiveis = _sites_ativos_para_admin()
     else:
         visiveis = set(models.get_user_permitted_site_names(current_user.id)) - models.get_deactivated_site_names()
+    paises = models.get_all_site_countries()
+    visiveis = {s for s in visiveis if paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY}
     virtuais = models.virtual_farm_site_names()
     fazendas = sorted(
         ({"nome": _nome_exibicao(s), "lat": lat, "lon": lon, "virtual": s in virtuais}
@@ -3645,6 +3673,8 @@ def sinal_celular_ponto():
         lat, lon = float(request.args.get("lat")), float(request.args.get("lon"))
     except (TypeError, ValueError):
         abort(400)
+    if not _no_brasil(lat, lon):
+        return jsonify({"operadoras": None, "html": "", "pendente": False, "fora_do_brasil": True})
     operadoras = sinal_celular.estimar(lat, lon)
     quadro = get_template_attribute("_sinal_celular.html", "quadro")
     # pendente: frequencias sendo consultadas na Anatel -- a tela pergunta de novo
@@ -3855,6 +3885,7 @@ def recommendations(safra):
     aplicacoes_by_site = models.get_all_farm_aplicacoes()
     virtual_names = models.virtual_farm_site_names()
     whatsapp_destinos_by_site = models.get_all_sites_whatsapp_recipients()
+    sinal_por_site = _sinal_das_fazendas(cards_by_site.keys())
     sites_data = []
     for site, cards in cards_by_site.items():
         cultura_info = culturas_by_site.get((site, safra), {})
@@ -3936,6 +3967,7 @@ def recommendations(safra):
             "plantio_linhas": plantio_linhas,
             "aplicacoes_linhas": aplicacoes_linhas,
             "vento_dia": _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]),
+            "sinal_celular": sinal_por_site.get(site),
         })
     sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
     any_whatsapp_configured = any(s["whatsapp_destinos"] > 0 for s in sites_data)
@@ -4099,7 +4131,6 @@ def save_whatsapp_days_pdf():
 @login_required
 def fazendas():
     virtual_names = models.virtual_farm_site_names()
-    coords_sinal = _coords_all()
     # Fazenda desativada some daqui tambem -- reativar so' na tela
     # Fazendas ocultas (pedido do Alan, 18/10/2026).
     desativadas = models.get_deactivated_site_names()
@@ -4155,6 +4186,7 @@ def fazendas():
     estacoes_proximas_por_site = dict(zip(sites_com_coords, resultados_lote))
 
     sites_data = []
+    sinal_por_site = _sinal_das_fazendas(sites)
     for site in sites:
         existentes = produtos_by_site.get(site, {})
         plantio_existente = plantio_by_site.get(site, {})
@@ -4215,16 +4247,8 @@ def fazendas():
             "estacao_pais": escolha["country_code"] if escolha else "",
             "country_code": country_code,
             "ativo": site not in desativadas,
-            "sinal_celular": sinal_celular.estimar(*coords_sinal[site], buscar_frequencias=False) if site in coords_sinal else None,
+            "sinal_celular": sinal_por_site.get(site),
         })
-    # Frequencia do sinal (estacoes licenciadas da Anatel): as fazendas que
-    # ainda nao tem sao consultadas em segundo plano, uma por vez.
-    sinal_celular.buscar_frequencias_em_segundo_plano([
-        coords_sinal[s["site"]] for s in sites_data
-        if s["sinal_celular"] and s["site"] in coords_sinal
-        and any(o["nivel"] != "sem" and not o["faixas"] for o in s["sinal_celular"])
-        and sinal_celular.frequencias_salvas(*coords_sinal[s["site"]]) is None
-    ])
 
     return render_template(
         "fazendas.html", sites_data=sites_data, no_access=False,
@@ -7209,13 +7233,16 @@ def admin_solicitacoes():
     cadastros = models.get_cadastros()
     models.marcar_cadastros_vistos()
     # Sinal de celular estimado em cada local com coordenada da pessoa:
-    # lavouras (cliente do app) e fazendas ja' liberadas pra ela.
+    # lavouras (cliente do app) e fazendas ja' liberadas pra ela -- so' no
+    # Brasil.
     coords = _coords_all()
+    paises = models.get_all_site_countries()
     for c in cadastros:
         locais = []
         if c["user_id"] and c["conta_existe"]:
-            locais += [(p["nome"], p["lat"], p["lon"]) for p in models.get_cliente_pontos(c["user_id"])]
-            locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(c["user_id"]) if s in coords]
+            locais += [(p["nome"], p["lat"], p["lon"]) for p in models.get_cliente_pontos(c["user_id"]) if _no_brasil(p["lat"], p["lon"])]
+            locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(c["user_id"])
+                       if s in coords and paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY]
         c["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon, buscar_frequencias=False)) for nome, lat, lon in locais]
         sinal_celular.buscar_frequencias_em_segundo_plano(
             [(lat, lon) for _n, lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])

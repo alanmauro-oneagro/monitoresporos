@@ -74,6 +74,7 @@ html { font-size: 14px; }
 </style>
 {% endblock %}
 {% block content %}
+{% import "_sinal_celular.html" as sinal_cel %}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
     <h4 class="mb-0 me-1">Recomendações</h4>
     <div class="btn-group btn-group-sm" role="group" aria-label="Safra">
@@ -106,6 +107,7 @@ html { font-size: 14px; }
             </button>
             <a href="{{ url_for('fazendas') }}" class="badge rounded-pill text-decoration-none {{ 'bg-success-subtle text-success-emphasis' if site_group.cultura else 'bg-secondary-subtle text-secondary-emphasis' }} fw-normal"
                title="Cultura da safra -- muda na aba Manejos">{{ site_group.cultura or 'sem cultura' }}</a>
+            {% if site_group.sinal_celular %}<span class="d-inline-flex flex-wrap gap-1" title="Sinal de celular (previsão da Anatel)">{{ sinal_cel.chips(site_group.sinal_celular) }}</span>{% endif %}
             {% if site_group.dias_desde_atualizacao is not none and site_group.dias_desde_atualizacao > 120 %}
             <span class="badge bg-warning text-dark" title="Cultura definida ha {{ site_group.dias_desde_atualizacao }} dias -- confirme se ainda esta certa">
                 ⚠ ha {{ site_group.dias_desde_atualizacao }}d
