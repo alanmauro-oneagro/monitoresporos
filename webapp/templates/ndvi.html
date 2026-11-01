@@ -132,7 +132,7 @@
                 </div>
                 <button type="submit" form="ndvi_whats_{{ site_idx }}" class="btn btn-sm btn-outline-success mt-2"
                         {% if not site_group.ndvi_destinatarios or not whatsapp_conectado() %}disabled{% endif %}
-                        title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Conexão WhatsApp{% elif site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Programação de Envios){% endif %}">
+                        title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp{% elif site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Programação de Envios){% endif %}">
                     📲 Enviar selecionadas por WhatsApp
                 </button>
                 {% else %}

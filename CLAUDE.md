@@ -388,7 +388,7 @@ site tem que entrar la'.
   dos pontos so' clima, "Enviar selecionadas" (NDVI) e "Enviar teste" (editar
   usuario); aviso `_aviso_whatsapp.html` no topo de Recomendacoes/NDVI. As
   rotas tambem recusam (`_whatsapp_desconectado`, flash e volta). Envios
-  (so' configuracao) e Conexao WhatsApp nao mudam.
+  (so' configuracao) e Gerenciar WhatsApp (ex-"Conexao WhatsApp") nao mudam.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois
