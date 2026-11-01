@@ -32,6 +32,12 @@
     .mapa-tt-normal .mapa-tt-dot { background: #51cf66; }
     .mapa-tt-doenca { flex: 1 1 auto; }
     .mapa-tt-valor { font-weight: 700; margin-left: 0.5rem; }
+    .mapa-tt-sinal { border-top: 1px solid rgba(0,0,0,0.12); margin-top: 0.3rem; padding-top: 0.25rem; }
+    .sinal-linha { display: flex; flex-wrap: wrap; gap: 0.1rem 0.7rem; font-size: 0.72rem; line-height: 1.35; }
+    .sinal-item { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
+    .sinal-item b { font-weight: 600; }
+    .sinal-det { color: #6c757d; }
+    .sinal-sem { color: #6c757d; opacity: 0.6; }
     .op-check { border: 2px solid var(--op-cor); border-radius: 999px; padding: 0.1rem 0.6rem; cursor: pointer; user-select: none; background: #fff; }
     .op-check input { accent-color: var(--op-cor); }
     .op-escala { display: inline-flex; vertical-align: middle; border-radius: 3px; overflow: hidden; margin-left: 0.3rem; }
@@ -269,7 +275,13 @@
         });
     }
 
+    // Balao da fazenda + linha de sinal de celular (mesma de Manejos).
     function buildTooltipHtml(site) {
+        var html = buildTooltipBase(site);
+        if (!site.sinal_html) return html;
+        return html.slice(0, -'</div>'.length) + '<div class="mapa-tt-sinal">' + site.sinal_html + '</div></div>';
+    }
+    function buildTooltipBase(site) {
         if (site.tipo === 'clima') {
             // Ponto so' de clima -- nao monitora doenca nenhuma, entao nao
             // faz sentido mostrar "Leitura de -" nem uma lista vazia.

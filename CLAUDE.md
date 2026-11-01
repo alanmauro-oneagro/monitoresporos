@@ -347,7 +347,9 @@ site tem que entrar la'.
   (`CORES_OPERADORA`), mais forte onde o sinal e' melhor (como o mapa de
   chuva); zoom <= 7 usa a media de quadrados de 10/40 celulas
   (`_visao`, montada na 1a vez, em memoria). Clicar no mapa mostra o
-  quadro do ponto marcado (`#sinal-ponto`). O cartao da base da Anatel
+  quadro do ponto marcado (`#sinal-ponto`). O balao (tooltip) de cada
+  fazenda/ponto do Mapa de Estudos tem a mesma linha de sinal de Manejos
+  (`sinal_html`, montado na rota com `_sinal_das_fazendas`; so' Brasil). O cartao da base da Anatel
   com "Baixar agora" (Master) fica no Mapa de Estudos, antes de Pontos
   Criados. **5G so' conta onde a
   operadora tem 4G** (`_sem_5g_isolado` / `_grade`): o mapa

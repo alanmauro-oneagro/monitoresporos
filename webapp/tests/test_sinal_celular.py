@@ -5,6 +5,7 @@ Rodar a partir de webapp/:  python -m unittest tests.test_sinal_celular
 import io
 import json
 import math
+import re
 import os
 import sqlite3
 import sys
@@ -238,6 +239,20 @@ class SinalCelularTest(unittest.TestCase):
         # ponto solto fora do Brasil (Santiago)
         d = master.get("/sinal-celular?lat=-33.45&lon=-70.66").get_json()
         self.assertEqual((d["fora_do_brasil"], d["operadoras"], d["html"]), (True, None, ""))
+
+    def test_fazendas_no_mapa_de_estudos_com_sinal(self):
+        nomes = {vf["nome"] for vf in models.get_all_virtual_farms()}
+        if "Zzz Clima Sinal BR" not in nomes:
+            models.create_virtual_farm("Zzz Clima Sinal BR", -12.5, -55.7, 30, tipo="clima")
+        if "Zzz Clima Sinal CL" not in nomes:
+            models.create_virtual_farm("Zzz Clima Sinal CL", -12.5, -55.7, 30, tipo="clima", country_code="CL")
+        html = self._master().get("/mapa-interpolado").get_data(as_text=True)
+        sites = json.loads(re.search(r"var sites = (\[.*?\]);\n", html).group(1))
+        por_nome = {s["nome_exibicao"]: s for s in sites}
+        self.assertIn("sinal-linha", por_nome["Zzz Clima Sinal BR"]["sinal_html"])
+        self.assertIn("<b>Vivo</b>", por_nome["Zzz Clima Sinal BR"]["sinal_html"])
+        self.assertNotIn("sinal_html", por_nome["Zzz Clima Sinal CL"])  # fora do Brasil: sem sinal
+        self.assertIn("buildTooltipBase(site)", html)
 
     def test_falha_no_download_guarda_a_base_anterior(self):
         def fora_do_ar(url, timeout):
