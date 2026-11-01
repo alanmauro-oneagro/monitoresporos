@@ -22,10 +22,16 @@ Mantido por: Alan Mauro (OneAgro, alan.mauro@outlook.com), unico responsavel pel
 **Niveis de acesso (pedido do Alan, 19/10/2026): Usuario, Administrador
 e Master.** Usuario (`is_admin=0`) ve so' as fazendas liberadas; Administrador
 (`is_admin=1`) ve todas as fazendas. Quais abas do menu Configuracoes
-(Usuarios, Doencas, Fungicidas, Mapa Interpolado, Mapa de Solos, NDVI,
+(Usuarios, Doencas, Fungicidas, Mapa de Estudos, Mapa de Solos, NDVI,
 Envios) cada um desses dois niveis abre e' o Master que decide na aba
 **Acessos** (`/admin/acessos`, `ABAS_CONFIG`, setting `acessos_por_nivel`;
-padrao: Administrador = Usuarios + Mapa Interpolado, Usuario = nenhuma).
+padrao: Administrador = Usuarios + Mapa de Estudos, Usuario = nenhuma).
+**Mapa de Estudos = ex-"Mapa Interpolado"** (renomeado pelo Alan,
+01/11/2026): rota `/mapa-interpolado`, endpoint/chave `mapa_interpolado`
+e template `mapa_interpolado.html` continuam com o nome antigo; onde este
+arquivo diz "Mapa Interpolado", e' essa aba. Sem previsao de chuva e sem
+limites de municipio (so' pais/estados); tem as camadas de sinal de
+celular (abaixo).
 Rotas dessas abas usam `@aba_required("<chave>")`; aba nova do menu
 Configuracoes deve entrar em `ABAS_CONFIG`. Ninguem cria, exclui ou
 redefine senha de usuario com nivel acima do proprio. Master
@@ -116,6 +122,15 @@ site tem que entrar la'.
   aba varria as ~14 mil linhas varias vezes (Recomendações relia uma vez
   por fazenda na rosa dos ventos). Menu tem `speculationrules` (prerender
   "moderate" dos links, menos "Sair") pra trocar de aba mais rapido.
+- **Cache por requisicao em `models.py`** (`@_cache_requisicao`, 01/11/2026):
+  `get_all_virtual_farms`, `get_all_weather_station_overrides`,
+  `get_all_site_countries`, `get_all_disease_translations`,
+  `get_deactivated_site_names`, `get_all_site_solos` sao lidos 1x por
+  requisicao (copia em `g._models_cache`); TODO `commit()` limpa o cache
+  (`_Conexao.commit`) -- gravar sempre com `conn.commit()`, nunca `with
+  conn:`. Recomendacoes caiu de 68 pra 32 conexoes (o resto e' fixo, nao
+  cresce com o numero de fazendas). `PRAGMA journal_mode = WAL` so' na 1a
+  conexao do processo (`_wal_ligado`, religado apos `restaurar_banco`).
 - **Cache por requisicao via `flask.g`**: uma funcao wrapper checa
   `getattr(g, "_cache_key", None) is None` antes de chamar a funcao cara
   `models.get_all_*()`, guardando o resultado em `g` (reseta sozinho a cada
@@ -320,19 +335,21 @@ site tem que entrar la'.
   pelo contorno dos paises (`app._no_brasil`, `/sinal-celular` devolve
   `fora_do_brasil`);
   `/sinal-celular` devolve `pendente` e as telas perguntam de novo. O
-  Mapa Interpolado recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
-  Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. Aba propria
-  **Sinal telefonia** (Configuracoes, `/sinal-telefonia`, chave
-  `sinal_telefonia` em `ABAS_CONFIG` -- padrao so' Master; pedido do Alan,
-  01/11/2026): caixa por operadora (lembra a escolha no navegador), cada
+  Mapa de Estudos recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
+  Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. A aba
+  **Sinal telefonia** foi criada e depois ACABOU (pedido do Alan,
+  01/11/2026): virou camada do **Mapa de Estudos** (`/sinal-telefonia`
+  so' redireciona; tiles `/sinal-telefonia/tile/...` e `/sinal-celular`
+  usam `@aba_required("mapa_interpolado")`): caixa por operadora acima do
+  mapa (lembra a escolha no navegador, `mapaEstudos.operadoras`), cada
   uma uma camada de tiles PNG (`sinal_celular.tile`, rota
   `/sinal-telefonia/tile/<operadora>/z/x/y.png`) na cor da operadora
   (`CORES_OPERADORA`), mais forte onde o sinal e' melhor (como o mapa de
   chuva); zoom <= 7 usa a media de quadrados de 10/40 celulas
   (`_visao`, montada na 1a vez, em memoria). Clicar no mapa mostra o
-  quadro do ponto. O "Baixar agora" (Master) fica nessa aba. Mostra as
-  fazendas que a pessoa ja' ve no site (admin: todas ativas; Usuario: so'
-  as liberadas), clicar mostra o sinal nelas. **5G so' conta onde a
+  quadro do ponto marcado (`#sinal-ponto`). O cartao da base da Anatel
+  com "Baixar agora" (Master) fica no Mapa de Estudos, antes de Pontos
+  Criados. **5G so' conta onde a
   operadora tem 4G** (`_sem_5g_isolado` / `_grade`): o mapa
   5G_SA_NSA_VIVO -110 da Anatel tem um poligono grosseiro cobrindo o
   Sudeste inteiro (onde o 4G da Vivo cobre ~6%). Substituiu a

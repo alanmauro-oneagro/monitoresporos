@@ -99,11 +99,6 @@ def _abrir_falso(url, timeout):
     return io.BytesIO(CAMADAS[url.rsplit("/", 1)[-1]])
 
 
-def _fazenda_mapa():
-    if not any(vf["nome"] == "Zzz Fazenda Mapa Sinal" for vf in models.get_all_virtual_farms()):
-        models.create_virtual_farm("Zzz Fazenda Mapa Sinal", -12.4, -55.6, 30)
-
-
 class SinalCelularTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -240,9 +235,6 @@ class SinalCelularTest(unittest.TestCase):
         self.assertIn("Zzz Sinal BR", html)
         self.assertNotIn("sinal-linha", html)
         self.assertNotIn("<strong>Vivo</strong>", html)
-        html = master.get("/sinal-telefonia").get_data(as_text=True)
-        self.assertIn("Zzz Sinal BR", html)
-        self.assertNotIn("Zzz Sinal CL", html)
         # ponto solto fora do Brasil (Santiago)
         d = master.get("/sinal-celular?lat=-33.45&lon=-70.66").get_json()
         self.assertEqual((d["fora_do_brasil"], d["operadoras"], d["html"]), (True, None, ""))
@@ -280,54 +272,48 @@ class SinalCelularTest(unittest.TestCase):
         self.assertEqual(self._pixel("Vivo", -12.5, -55.7, z=6)[3], 215)
         self.assertTrue(0 < self._pixel("Vivo", -12.5, -55.7, z=4)[3] < 215)
 
-    def test_acesso_a_aba(self):
+    def test_acesso_ao_mapa_de_estudos(self):
+        """A aba Sinal telefonia virou camada do Mapa de Estudos (ex-Mapa
+        Interpolado) -- mesma regra de acesso dele."""
         master = self._master()
         resp = master.get("/sinal-telefonia/tile/Vivo/10/353/541.png")
         self.assertEqual((resp.status_code, resp.mimetype), (200, "image/png"))
         self.assertEqual(master.get("/sinal-telefonia/tile/Vivo/3/99/0.png").status_code, 404)
-        if not models.get_user_by_username("Zzz Admin Sinal"):
-            models.create_user("Zzz Admin Sinal", "x", is_admin=True)
-        admin = webapp.app.test_client()
-        with admin.session_transaction() as s:
-            s["_user_id"] = str(models.get_user_by_username("Zzz Admin Sinal")["id"])
+        self.assertTrue(master.get("/sinal-telefonia").headers["Location"].endswith("/mapa-interpolado"))
+        self.assertNotIn("sinal_telefonia", [c for c, _r, _e in webapp.ABAS_CONFIG])
+        if not models.get_user_by_username("Zzz Usuario Sinal"):
+            models.create_user("Zzz Usuario Sinal", "x")
+        usuario = webapp.app.test_client()
+        with usuario.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Usuario Sinal")["id"])
             s["_fresh"] = True
         anterior = models.get_setting("acessos_por_nivel")
         try:
-            self.assertEqual(admin.get("/sinal-telefonia").status_code, 403)  # padrao: so' Master
-            models.set_setting("acessos_por_nivel", json.dumps({"admin": ["sinal_telefonia"], "usuario": []}))
-            html = admin.get("/sinal-telefonia").get_data(as_text=True)
-            self.assertIn("Sinal telefonia", html)
-            self.assertIn("var fazendas = [", html)
+            models.set_setting("acessos_por_nivel", json.dumps({"admin": [], "usuario": []}))
+            self.assertEqual(usuario.get("/sinal-telefonia/tile/Vivo/10/353/541.png").status_code, 403)
+            self.assertEqual(usuario.get("/sinal-celular?lat=-12.5&lon=-55.7").status_code, 403)
+            models.set_setting("acessos_por_nivel", json.dumps({"admin": [], "usuario": ["mapa_interpolado"]}))
+            self.assertEqual(usuario.get("/sinal-telefonia/tile/Vivo/10/353/541.png").status_code, 200)
+            html = usuario.get("/mapa-interpolado").get_data(as_text=True)
+            self.assertIn('id="operadoras-sinal"', html)
             self.assertNotIn("Baixar agora", html)  # botao so' do Master
-            self.assertEqual(admin.post("/sinal-telefonia/atualizar").status_code, 403)
-            self.assertEqual(admin.get("/sinal-celular?lat=-12.5&lon=-55.7").status_code, 200)
-            # Usuario: so' as fazendas liberadas pra ele aparecem no mapa
-            _fazenda_mapa()
-            self.assertIn("Zzz Fazenda Mapa Sinal", admin.get("/sinal-telefonia").get_data(as_text=True))
-            if not models.get_user_by_username("Zzz Usuario Sinal"):
-                models.create_user("Zzz Usuario Sinal", "x")
-            usuario = webapp.app.test_client()
-            with usuario.session_transaction() as s:
-                s["_user_id"] = str(models.get_user_by_username("Zzz Usuario Sinal")["id"])
-                s["_fresh"] = True
-            models.set_setting("acessos_por_nivel", json.dumps({"admin": [], "usuario": ["sinal_telefonia"]}))
-            html = usuario.get("/sinal-telefonia").get_data(as_text=True)
-            self.assertIn("var fazendas = []", html)
+            self.assertEqual(usuario.post("/sinal-telefonia/atualizar").status_code, 403)
         finally:
             models.set_setting("acessos_por_nivel", anterior or "")
 
     def test_telas(self):
         master = self._master()
-        self.assertNotIn("Mapas de cobertura de celular", master.get("/mapa-interpolado").get_data(as_text=True))
-        html = master.get("/sinal-telefonia").get_data(as_text=True)
+        html = master.get("/mapa-interpolado").get_data(as_text=True)
+        self.assertIn("<h4 class=\"mb-2\">Mapa de Estudos</h4>", html)
+        self.assertIn(">Mapa de Estudos</a>", html)  # menu
+        self.assertNotIn("Sinal telefonia</a>", html)  # aba antiga saiu do menu
         self.assertIn("Mapas de cobertura de celular (Anatel)", html)
-        self.assertIn("6 mapas", html)
         self.assertIn("Baixar agora", html)
+        self.assertIn('id="operadoras-sinal"', html)
         self.assertIn('value="Vivo"', html)
-        self.assertIn('href="/sinal-telefonia"', html)  # no menu Configuracoes
-        _fazenda_mapa()
-        html = master.get("/sinal-telefonia").get_data(as_text=True)
-        self.assertIn('"nome": "Zzz Fazenda Mapa Sinal"', html)
+        # chuva e municipios sairam do mapa
+        self.assertNotIn("chuva-toggle", html)
+        self.assertNotIn("intrarregiao=municipio", html)
         with mock.patch.object(sinal_celular, "atualizar_em_segundo_plano") as baixar:
             resp = master.post("/sinal-telefonia/atualizar", follow_redirects=True)
         baixar.assert_called_once_with(forcar=True)

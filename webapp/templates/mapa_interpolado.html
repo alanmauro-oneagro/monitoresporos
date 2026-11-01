@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Mapa Interpolado - OneAgro App{% endblock %}
+{% block title %}Mapa de Estudos - OneAgro App{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
@@ -32,16 +32,15 @@
     .mapa-tt-normal .mapa-tt-dot { background: #51cf66; }
     .mapa-tt-doenca { flex: 1 1 auto; }
     .mapa-tt-valor { font-weight: 700; margin-left: 0.5rem; }
+    .op-check { border: 2px solid var(--op-cor); border-radius: 999px; padding: 0.1rem 0.6rem; cursor: pointer; user-select: none; background: #fff; }
+    .op-check input { accent-color: var(--op-cor); }
+    .op-escala { display: inline-flex; vertical-align: middle; border-radius: 3px; overflow: hidden; margin-left: 0.3rem; }
+    .op-escala span { width: 10px; height: 10px; display: inline-block; }
     .ponto-virtual-card { border: 1px solid #e2d9fb; border-radius: 0.5rem; padding: 0.9rem; margin-bottom: 0.9rem; background: #faf8ff; }
-    /* Legenda da camada de chuva -- mesmo padrao visual de solo.html. */
-    .solo-legend { background: rgba(20, 24, 28, 0.55); color: #fff; padding: 0.5rem 0.7rem; border-radius: 0.4rem; box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 0.75rem; max-height: 60vh; overflow-y: auto; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
-    .solo-legend .solo-legend-swatch { border: 1px solid rgba(255,255,255,0.5); }
-    .solo-legend-item { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; }
-    .solo-legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; display: inline-block; }
 </style>
 {% endblock %}
 {% block content %}
-<h4 class="mb-2">Mapa Interpolado</h4>
+<h4 class="mb-2">Mapa de Estudos</h4>
 
 <div class="row g-3 mt-2 mb-3">
     <div class="col-mapa-interpolado-mapa">
@@ -54,14 +53,19 @@
                 </div>
                 <div id="busca-local-resultados" class="list-group position-absolute w-100" style="z-index: 1000; top: 100%;"></div>
             </div>
-            <div class="d-flex align-items-center flex-wrap gap-2 mt-2 pt-2 border-top">
-                <div class="form-check form-switch mb-0">
-                    <input class="form-check-input" type="checkbox" role="switch" id="chuva-toggle">
-                    <label class="form-check-label small fw-bold" for="chuva-toggle">🌧️ Previsao de chuva (acumulado 24h)</label>
-                </div>
-                <div id="chuva-dias" class="btn-group btn-group-sm d-none" role="group"></div>
-                <span id="chuva-status" class="small text-muted d-none"></span>
+            {% if operadoras_sinal %}
+            <div class="d-flex align-items-center flex-wrap gap-2 mt-2 pt-2 border-top" id="operadoras-sinal">
+                <span class="small fw-bold">📶 Sinal de celular:</span>
+                {% for o in operadoras_sinal %}
+                <label class="op-check small" style="--op-cor: {{ o.cor }};">
+                    <input type="checkbox" class="form-check-input me-1" value="{{ o.nome }}">
+                    <strong>{{ o.nome }}</strong>
+                    <span class="op-escala" title="fraco · bom · ótimo"><span style="background: {{ o.cor }}; opacity: 0.27;"></span><span style="background: {{ o.cor }}; opacity: 0.55;"></span><span style="background: {{ o.cor }}; opacity: 0.85;"></span></span>
+                </label>
+                {% endfor %}
+                <span class="small text-muted">cor mais forte = sinal melhor (previsão da Anatel)</span>
             </div>
+            {% endif %}
         </div>
         <div id="farm-map"></div>
     </div>
@@ -116,6 +120,20 @@
     </div>
 </div>
 
+
+<div class="card shadow-sm mt-3"><div class="card-body small">
+    <strong>📶 Mapas de cobertura de celular (Anatel)</strong>
+    {% if info_cobertura.rodando %}-- baixando agora{% if info_cobertura.progresso.total %} ({{ info_cobertura.progresso.feitos }} de {{ info_cobertura.progresso.total }}){% endif %}...
+    {% elif info_cobertura.baixado_em %}-- baixados em {{ info_cobertura.baixado_em[:10] | data_br }}.
+    {% else %}-- ainda não baixados.{% endif %}
+    {% if info_cobertura.erro and not info_cobertura.rodando %}<div class="text-danger">Última tentativa falhou: {{ info_cobertura.erro }}</div>{% endif %}
+    <div class="text-muted">Vivo, Claro e TIM, 3G a 5G (Mosaico SMP da Anatel). Também aparece em Manejos e em Novos cadastros. O servidor baixa sozinho uma vez por mês.</div>
+    {% if current_user.is_master and not info_cobertura.rodando %}
+    <form method="post" action="{{ url_for('atualizar_cobertura_anatel') }}" class="mt-2">
+        <button type="submit" class="btn btn-sm btn-outline-primary">Baixar agora</button>
+    </form>
+    {% endif %}
+</div></div>
 
 <h6 class="fw-bold mt-4 mb-2">Pontos Criados</h6>
 {% if not pontos_virtuais %}
@@ -292,11 +310,10 @@
     }).addTo(map);
 
     var BOUNDARY_COLOR = '#ffe100';
-    var MUNICIPIO_COLOR = '#ffffff';
     var IBGE_BASE = 'https://servicodados.ibge.gov.br/api/v3/malhas';
 
     // Divisas do IBGE quase nunca mudam -- guarda no localStorage por 30
-    // dias pra nao rebaixar o mesmo geojson (pais/estados/municipios) toda
+    // dias pra nao rebaixar o mesmo geojson (pais/estados) toda
     // vez que a pagina abre.
     var BOUNDARY_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     function boundaryFromCache(url) {
@@ -332,39 +349,6 @@
         });
     }
 
-    // Ray casting simples (Polygon/MultiPolygon), igual o Mapa normal --
-    // descobre em qual estado cada fazenda/ponto/estacao esta, usando o
-    // mesmo geojson de estados que ja baixamos pra desenhar as divisas.
-    function pointInRing(pt, ring) {
-        var x = pt[0], y = pt[1], inside = false;
-        for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-            var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
-            var intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
-        }
-        return inside;
-    }
-    function pointInRings(pt, rings) {
-        if (!pointInRing(pt, rings[0])) return false;
-        for (var k = 1; k < rings.length; k++) {
-            if (pointInRing(pt, rings[k])) return false;
-        }
-        return true;
-    }
-    function pointInGeometry(pt, geom) {
-        if (geom.type === 'Polygon') return pointInRings(pt, geom.coordinates);
-        if (geom.type === 'MultiPolygon') return geom.coordinates.some(function (poly) { return pointInRings(pt, poly); });
-        return false;
-    }
-    function findUfCodes(ufGeojson, points) {
-        var codes = {};
-        points.forEach(function (pt) {
-            var feature = ufGeojson.features.find(function (f) { return pointInGeometry(pt, f.geometry); });
-            if (feature) codes[feature.properties.codarea] = true;
-        });
-        return Object.keys(codes);
-    }
-
     // Pais de cada fazenda/ponto (aba Fazendas > Pais), sem entrada = 'BR'
     // (padrao). Diferente do Mapa normal, aqui `activeCountries` inclui
     // tambem os paises "prioritarios" mesmo sem fazenda/ponto marcado
@@ -375,40 +359,50 @@
     // fronteira pronta, sem fazenda nenhuma, isso baixaria uns 14MB de
     // contorno a toa em toda visita).
     var COUNTRY_BOUNDARIES = {{ country_boundary_urls | tojson }};
-    var CLOUD_BBOXES = {{ cloud_bboxes | tojson }};
     var activeCountries = { BR: true };
     {{ active_country_codes_interpolado | tojson }}.forEach(function (code) { activeCountries[code] = true; });
 
-    // Divisas oficiais do IBGE, sempre em amarelo: pais (leve), estados
-    // (leve, um pedido so) e municipios (pesado -- so busca dos estados
-    // onde ha fazenda ou ponto estimado; nao usa as estacoes aqui porque
-    // agora elas sao a rede inteira do Brasil -- senao seria sempre
-    // linha de municipio em todo estado do pais). Assim que uma fazenda
-    // ou ponto entrar num estado novo, ele ja ganha as mesmas linhas de
-    // municipio automaticamente.
-    var ufReferencePoints = sites.map(function (s) { return [s.lon, s.lat]; });
-    var paisGeojsonPromises = {};
-    paisGeojsonPromises.BR = addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
-    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2)
-        .then(function (ufGeojson) {
-            if (!ufGeojson) return;
-            findUfCodes(ufGeojson, ufReferencePoints).forEach(function (codarea) {
-                addBoundaryLayer(IBGE_BASE + '/estados/' + codarea + '?formato=application/vnd.geo+json&intrarregiao=municipio', 1, MUNICIPIO_COLOR);
-            });
-        });
-
-    // Fronteiras dos demais paises ativos -- ver mapa.html (mesmo mecanismo).
+    // Divisas oficiais, sempre em amarelo: pais e estados (sem municipios
+    // -- pedido do Alan, 01/11/2026).
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json', 3);
+    addBoundaryLayer(IBGE_BASE + '/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF', 2);
     Object.keys(COUNTRY_BOUNDARIES).forEach(function (code) {
         if (!activeCountries[code]) return;
-        var urls = COUNTRY_BOUNDARIES[code];
-        paisGeojsonPromises[code] = addBoundaryLayer(urls.adm0, 3);
-        addBoundaryLayer(urls.adm1, 2);
-        // So os 10 paises "so fronteira" (sem estacao integrada ainda, ver
-        // `_pais_sem_estacoes`) nao tem adm2 (comuna/municipio) cadastrado
-        // -- sem esse if, `addBoundaryLayer(undefined, ...)` disparava um
-        // fetch pra "/undefined" (404 inofensivo, mas sujava o console).
-        if (urls.adm2) addBoundaryLayer(urls.adm2, 1, MUNICIPIO_COLOR);
+        addBoundaryLayer(COUNTRY_BOUNDARIES[code].adm0, 3);
+        addBoundaryLayer(COUNTRY_BOUNDARIES[code].adm1, 2);
     });
+
+    // Cobertura de celular por operadora (mapas da Anatel, ex-aba Sinal
+    // telefonia -- pedido do Alan, 01/11/2026): uma camada de tiles por
+    // caixa marcada; a escolha fica guardada no navegador.
+    map.createPane('cobertura');
+    map.getPane('cobertura').style.zIndex = 350;
+    var urlTileSinal = {{ url_for('sinal_telefonia_tile', operadora='OPERADORA', z=0, x=0, y=0) | tojson }}
+        .replace('/0/0/0.png', '/{z}/{x}/{y}.png') + '?v={{ versao_cobertura }}';
+    var camadasSinal = {};
+    var caixasSinal = Array.prototype.slice.call(document.querySelectorAll('#operadoras-sinal input[type=checkbox]'));
+    var GUARDADO_SINAL = 'mapaEstudos.operadoras';
+    try {
+        var salvasSinal = JSON.parse(localStorage.getItem(GUARDADO_SINAL) || '[]');
+        caixasSinal.forEach(function (c) { c.checked = salvasSinal.indexOf(c.value) >= 0; });
+    } catch (e) {}
+    function atualizarCamadasSinal() {
+        caixasSinal.forEach(function (c) {
+            if (c.checked && !camadasSinal[c.value]) {
+                camadasSinal[c.value] = L.tileLayer(urlTileSinal.replace('OPERADORA', encodeURIComponent(c.value)), {
+                    pane: 'cobertura', maxZoom: 19, maxNativeZoom: 14,
+                }).addTo(map);
+            } else if (!c.checked && camadasSinal[c.value]) {
+                map.removeLayer(camadasSinal[c.value]);
+                delete camadasSinal[c.value];
+            }
+        });
+        try {
+            localStorage.setItem(GUARDADO_SINAL, JSON.stringify(caixasSinal.filter(function (c) { return c.checked; }).map(function (c) { return c.value; })));
+        } catch (e) {}
+    }
+    caixasSinal.forEach(function (c) { c.addEventListener('change', atualizarCamadasSinal); });
+    atualizarCamadasSinal();
 
     var FAZENDAS_URL = '{{ url_for("fazendas") }}';
     // No celular nao existe hover -- so' toque. Sem esse controle, o
@@ -472,278 +466,6 @@
                 if (ev.originalEvent) L.DomEvent.preventDefault(ev.originalEvent);
                 abrirEdicaoDoPonto(site.site);
             });
-        }
-    });
-
-    // Camada opcional de previsao de chuva acumulada (24h) cobrindo o
-    // Brasil INTEIRO -- mesma regra ja usada pras divisas de municipio
-    // (recorta pelo contorno oficial do IBGE do pais, so' que aqui pra
-    // gerar uma grade de pontos em vez de desenhar linha). Uma grade
-    // regular (1.5 grau) e' recortada pelo poligono do Brasil (reaproveita
-    // pointInGeometry, ja usado pra achar em qual estado cada fazenda
-    // esta) -- so' os pontos que sobram dentro do pais vao pro backend,
-    // que busca a chuva de todos eles numa unica chamada em lote na
-    // Open-Meteo. Busca so' uma vez (a primeira vez que o interruptor
-    // liga); trocar de dia depois so' redesenha com o que ja foi baixado,
-    // sem chamada nova. Visual em manchas de cor via Leaflet.heat.
-    var DIAS_CHUVA = ['Hoje', '+1', '+2', '+3', '+4', '+5'];
-    var CHUVA_STORAGE_KEY = 'mapaInterpolado.chuvaDia';
-    var GRADE_PASSO_GRAUS = 1.5;
-    var diaSelecionado = 0;
-    var gradeChuva = null;  // null = ainda nao buscou; [] = buscou e nao achou nada
-    var chuvaLayers = [];
-
-    // Escala em mm -- topo em 90mm/dia (pedido explicito do usuario,
-    // mais util pro dia a dia agricola que a faixa ate 270+ usada antes
-    // pra eventos extremos). Cada faixa usada tanto pro gradiente do
-    // heatmap (chave = mm/CHUVA_ESCALA_MAX_MM, entre 0 e 1) quanto pra
-    // legenda fixa desenhada no mapa. Cores escolhidas pra SEGREGAR bem
-    // cada faixa (matizes bem diferentes entre si, nao so' tons de uma
-    // mesma cor) e evitar vermelho/laranja (pedido explicito).
-    var CHUVA_ESCALA_MAX_MM = 90;
-    var CHUVA_MINIMA_MM = 1; // abaixo disso nem entra no heatmap -- fica transparente (sem chuva)
-    var CHUVA_FAIXAS = [
-        { mm: 5, cor: '#e3f2a8' },
-        { mm: 15, cor: '#5fbb68' },
-        { mm: 30, cor: '#12a4a4' },
-        { mm: 45, cor: '#1f6fd6' },
-        { mm: 60, cor: '#4a3fc4' },
-        { mm: 75, cor: '#9631c9' },
-        { mm: 90, cor: '#c31f8f' },
-    ];
-    function limparCamadaChuva() {
-        chuvaLayers.forEach(function (layer) { map.removeLayer(layer); });
-        chuvaLayers = [];
-    }
-
-    function hexParaRgb(hex) {
-        var n = parseInt(hex.slice(1), 16);
-        return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-    }
-
-    // mm -> cor da faixa (lookup direto na tabela discreta CHUVA_FAIXAS,
-    // sem gradiente/mistura) -- null quando abaixo do minimo (transparente,
-    // sem chuva). Substitui o antigo CHUVA_GRADIENTE (que era plumbing
-    // especifico do Leaflet.heat).
-    function corParaMm(mm) {
-        if (mm === null || mm === undefined || mm < CHUVA_MINIMA_MM) return null;
-        for (var i = 0; i < CHUVA_FAIXAS.length; i++) {
-            if (mm <= CHUVA_FAIXAS[i].mm || i === CHUVA_FAIXAS.length - 1) return CHUVA_FAIXAS[i].cor;
-        }
-    }
-
-    // Indexa os pontos da grade (ja recortados pelo contorno do pais) pelas
-    // linha/coluna inteiras da grade regular, usando o proprio bbox do pais
-    // como origem -- os mesmos indices usados por gerarGradePais pra' gerar
-    // esses pontos (Math.round protege de deriva de ponto flutuante do
-    // "+= GRADE_PASSO_GRAUS" repetido).
-    function construirGradeIndexada(pontosPais, bbox) {
-        var grade = {};
-        pontosPais.forEach(function (ponto) {
-            var mm = (ponto.chuva_mm_por_dia || [])[diaSelecionado];
-            if (mm === null || mm === undefined) return;
-            var gi = Math.round((ponto.lat - bbox.lat_min) / GRADE_PASSO_GRAUS);
-            var gj = Math.round((ponto.lon - bbox.lon_min) / GRADE_PASSO_GRAUS);
-            grade[gi + ',' + gj] = mm;
-        });
-        return grade;
-    }
-
-    // Desenha o raster de UM pais: interpola (bilinear, SEM somar) o valor
-    // de cada pixel a partir dos 4 nos da grade mais proximos (ignorando
-    // cantos sem dado, cortados pelo contorno do pais) e converte pra cor
-    // via corParaMm. O raster e' calculado uma unica vez em coordenadas
-    // geograficas fixas (bounds = bbox do pais) e mostrado via
-    // L.imageOverlay -- o Leaflet reescala a IMAGEM (nao os dados) ao
-    // navegar/dar zoom, entao a cor em qualquer coordenada real NUNCA muda
-    // so' por causa do zoom (o bug relatado pelo usuario em Manaus).
-    function desenharRasterPais(bbox, pontosPais) {
-        var grade = construirGradeIndexada(pontosPais, bbox);
-        var giMax = Math.round((bbox.lat_max - bbox.lat_min) / GRADE_PASSO_GRAUS);
-        var gjMax = Math.round((bbox.lon_max - bbox.lon_min) / GRADE_PASSO_GRAUS);
-        if (giMax < 1 || gjMax < 1) return null;
-        var PX_POR_CELULA = 48;
-        var MAX_DIM = 1600;
-        var largura = (gjMax + 1) * PX_POR_CELULA;
-        var altura = (giMax + 1) * PX_POR_CELULA;
-        var escala = Math.min(1, MAX_DIM / Math.max(largura, altura));
-        largura = Math.max(2, Math.round(largura * escala));
-        altura = Math.max(2, Math.round(altura * escala));
-
-        var canvas = document.createElement('canvas');
-        canvas.width = largura;
-        canvas.height = altura;
-        var ctx = canvas.getContext('2d');
-        var imgData = ctx.createImageData(largura, altura);
-
-        for (var py = 0; py < altura; py++) {
-            // Linha 0 do canvas = topo = lat_max (imagem cresce pra baixo,
-            // latitude cresce pra cima -- eixo Y invertido).
-            var giFrac = (1 - py / (altura - 1)) * giMax;
-            var gi0 = Math.floor(giFrac);
-            var gi1 = Math.min(gi0 + 1, giMax);
-            var fy = giFrac - gi0;
-            for (var px = 0; px < largura; px++) {
-                var gjFrac = (px / (largura - 1)) * gjMax;
-                var gj0 = Math.floor(gjFrac);
-                var gj1 = Math.min(gj0 + 1, gjMax);
-                var fx = gjFrac - gj0;
-
-                var cantos = [
-                    { v: grade[gi0 + ',' + gj0], w: (1 - fx) * (1 - fy) },
-                    { v: grade[gi0 + ',' + gj1], w: fx * (1 - fy) },
-                    { v: grade[gi1 + ',' + gj0], w: (1 - fx) * fy },
-                    { v: grade[gi1 + ',' + gj1], w: fx * fy },
-                ];
-                var somaPeso = 0, somaValor = 0;
-                cantos.forEach(function (c) {
-                    if (c.v === undefined) return;
-                    somaPeso += c.w;
-                    somaValor += c.w * c.v;
-                });
-                var idx = (py * largura + px) * 4;
-                if (somaPeso <= 0) { imgData.data[idx + 3] = 0; continue; }
-                var cor = corParaMm(somaValor / somaPeso);
-                if (!cor) { imgData.data[idx + 3] = 0; continue; }
-                var rgb = hexParaRgb(cor);
-                imgData.data[idx] = rgb.r;
-                imgData.data[idx + 1] = rgb.g;
-                imgData.data[idx + 2] = rgb.b;
-                imgData.data[idx + 3] = 255;
-            }
-        }
-        ctx.putImageData(imgData, 0, 0);
-        var bounds = L.latLngBounds([bbox.lat_min, bbox.lon_min], [bbox.lat_max, bbox.lon_max]);
-        return L.imageOverlay(canvas.toDataURL(), bounds, { opacity: 0.75, interactive: false }).addTo(map);
-    }
-
-    function desenharCamadaChuva() {
-        limparCamadaChuva();
-        if (!gradeChuva || !gradeChuva.length) return;
-        Object.keys(activeCountries).forEach(function (code) {
-            var bbox = CLOUD_BBOXES[code];
-            if (!bbox) return;
-            var pontosPais = gradeChuva.filter(function (p) {
-                return p.lat >= bbox.lat_min - 1e-6 && p.lat <= bbox.lat_max + 1e-6 &&
-                    p.lon >= bbox.lon_min - 1e-6 && p.lon <= bbox.lon_max + 1e-6;
-            });
-            if (!pontosPais.length) return;
-            var layer = desenharRasterPais(bbox, pontosPais);
-            if (layer) chuvaLayers.push(layer);
-        });
-    }
-
-    function gerarGradePais(bbox, paisGeojson) {
-        var pontos = [];
-        for (var lat = bbox.lat_min; lat <= bbox.lat_max; lat += GRADE_PASSO_GRAUS) {
-            for (var lon = bbox.lon_min; lon <= bbox.lon_max; lon += GRADE_PASSO_GRAUS) {
-                if (pointInGeometry([lon, lat], paisGeojson.features[0].geometry)) {
-                    pontos.push([lat, lon]);
-                }
-            }
-        }
-        return pontos;
-    }
-
-    var chuvaToggle = document.getElementById('chuva-toggle');
-    var chuvaDiasWrap = document.getElementById('chuva-dias');
-    var chuvaStatus = document.getElementById('chuva-status');
-    var chuvaLegenda = null;
-
-    function mostrarLegendaChuva() {
-        if (chuvaLegenda) return;
-        chuvaLegenda = L.control({ position: 'bottomright' });
-        chuvaLegenda.onAdd = function () {
-            var div = L.DomUtil.create('div', 'solo-legend');
-            var html = '<div class="fw-bold mb-1">Chuva 24h (mm)</div>';
-            CHUVA_FAIXAS.forEach(function (faixa, i) {
-                // "<5" na primeira faixa e ">90" na ultima (pedido
-                // explicito) -- deixa claro que sao faixas abertas nas
-                // pontas, nao um limite superior/inferior exato.
-                var rotulo;
-                if (i === 0) { rotulo = '<' + faixa.mm; }
-                else if (i === CHUVA_FAIXAS.length - 1) { rotulo = '>' + faixa.mm; }
-                else { rotulo = String(faixa.mm); }
-                html += '<div class="solo-legend-item"><span class="solo-legend-swatch" style="background:' +
-                    faixa.cor + ';"></span>' + rotulo + '</div>';
-            });
-            div.innerHTML = html;
-            return div;
-        };
-        chuvaLegenda.addTo(map);
-    }
-
-    function esconderLegendaChuva() {
-        if (chuvaLegenda) { map.removeControl(chuvaLegenda); chuvaLegenda = null; }
-    }
-
-    function buscarGradeChuva() {
-        chuvaStatus.textContent = 'Carregando previsao de chuva...';
-        chuvaStatus.classList.remove('d-none');
-        var codigosAtivos = Object.keys(activeCountries);
-        Promise.all(codigosAtivos.map(function (code) { return paisGeojsonPromises[code]; })).then(function (geojsons) {
-            var pontosGrade = [];
-            codigosAtivos.forEach(function (code, i) {
-                var bbox = CLOUD_BBOXES[code];
-                if (bbox && geojsons[i]) pontosGrade = pontosGrade.concat(gerarGradePais(bbox, geojsons[i]));
-            });
-            if (!pontosGrade.length) throw new Error('sem contorno de nenhum pais ativo (fonte fora do ar?)');
-            return fetch('{{ url_for("chuva_grade") }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    lats: pontosGrade.map(function (p) { return p[0]; }),
-                    lons: pontosGrade.map(function (p) { return p[1]; }),
-                }),
-            });
-        }).then(function (r) { return r.ok ? r.json() : []; })
-            .then(function (dados) {
-                gradeChuva = dados;
-                chuvaStatus.classList.add('d-none');
-                if (chuvaToggle.checked) desenharCamadaChuva();
-            })
-            .catch(function () {
-                chuvaStatus.classList.add('d-none');
-            });
-    }
-
-    DIAS_CHUVA.forEach(function (rotulo, indice) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-outline-secondary' + (indice === 0 ? ' active' : '');
-        btn.textContent = rotulo;
-        btn.addEventListener('click', function () {
-            diaSelecionado = indice;
-            try { localStorage.setItem(CHUVA_STORAGE_KEY, String(indice)); } catch (e) { /* ignora */ }
-            chuvaDiasWrap.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
-            btn.classList.add('active');
-            desenharCamadaChuva();
-        });
-        chuvaDiasWrap.appendChild(btn);
-    });
-
-    try {
-        var diaSalvo = parseInt(localStorage.getItem(CHUVA_STORAGE_KEY), 10);
-        if (!isNaN(diaSalvo) && diaSalvo >= 0 && diaSalvo < DIAS_CHUVA.length) {
-            diaSelecionado = diaSalvo;
-            chuvaDiasWrap.querySelectorAll('button').forEach(function (b, i) {
-                b.classList.toggle('active', i === diaSalvo);
-            });
-        }
-    } catch (e) { /* localStorage indisponivel -- fica no dia 0 (Hoje) */ }
-
-    chuvaToggle.addEventListener('change', function () {
-        chuvaDiasWrap.classList.toggle('d-none', !chuvaToggle.checked);
-        if (!chuvaToggle.checked) {
-            limparCamadaChuva();
-            esconderLegendaChuva();
-            return;
-        }
-        mostrarLegendaChuva();
-        if (gradeChuva) {
-            desenharCamadaChuva();
-        } else {
-            buscarGradeChuva();
         }
     });
 

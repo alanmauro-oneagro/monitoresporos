@@ -100,7 +100,7 @@ class TelasPorNivelTest(unittest.TestCase):
 
     def test_abas_de_configuracoes_por_nivel(self):
         esperado = {
-            # padrao da aba Acessos: Administrador = Usuarios + Mapa Interpolado
+            # padrao da aba Acessos: Administrador = Usuarios + Mapa de Estudos
             "admin": {"/admin/users": 200, "/mapa-interpolado": 200, "/admin/doencas": 403,
                       "/admin/fungicidas": 403, "/solo": 403, "/ndvi": 403, "/whatsapp": 403},
             "usuario": {"/admin/users": 403, "/mapa-interpolado": 403, "/admin/doencas": 403, "/whatsapp": 403},
