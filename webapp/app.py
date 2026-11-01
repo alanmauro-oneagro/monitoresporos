@@ -2448,8 +2448,8 @@ ABAS_CONFIG = [
     ("fungicidas", "Fungicidas", "admin_fungicidas"),
     ("mapa_interpolado", "Mapa de Estudos", "mapa_interpolado"),
     ("solo", "Mapa de Solos", "solo"),
-    ("ndvi", "NDVI", "ndvi"),
-    ("envios", "Envios", "whatsapp_gerenciamento"),
+    ("ndvi", "Mapas NDVI", "ndvi"),
+    ("envios", "Programação de Envios", "whatsapp_gerenciamento"),
 ]
 _ACESSOS_KEY = "acessos_por_nivel"
 ACESSOS_PADRAO = {"admin": ["usuarios", "mapa_interpolado"], "usuario": []}
@@ -7274,11 +7274,11 @@ MENU_CONFIG = [
     ("fungicidas", "Fungicidas", "admin_fungicidas", "fungicidas"),
     ("mapa_interpolado", "Mapa de Estudos", "mapa_interpolado", "mapa_interpolado"),
     ("solo", "Mapa de Solos", "solo", "solo"),
-    ("ndvi", "NDVI", "ndvi", "ndvi"),
-    ("envios", "Envios", "whatsapp_gerenciamento", "envios"),
-    ("acessos", "Acessos", "admin_acessos", "master"),
+    ("ndvi", "Mapas NDVI", "ndvi", "ndvi"),
+    ("envios", "Programação de Envios", "whatsapp_gerenciamento", "envios"),
+    ("acessos", "Gerenciar Acessos", "admin_acessos", "master"),
     ("cadastros", "Clientes e cadastros", "admin_solicitacoes", "master"),
-    ("planos", "Planos", "admin_planos", "master"),
+    ("planos", "Planos e Valores", "admin_planos", "master"),
     ("whatsapp", "Conexão WhatsApp", "admin_whatsapp", "master"),
     ("exportar", "Exportar", "admin_exportar", "master"),
     ("ocultas", "Fazendas ocultas", "fazendas_ocultas", "master"),

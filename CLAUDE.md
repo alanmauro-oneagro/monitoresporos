@@ -26,6 +26,10 @@ e Master.** Usuario (`is_admin=0`) ve so' as fazendas liberadas; Administrador
 Envios) cada um desses dois niveis abre e' o Master que decide na aba
 **Acessos** (`/admin/acessos`, `ABAS_CONFIG`, setting `acessos_por_nivel`;
 padrao: Administrador = Usuarios + Mapa de Estudos, Usuario = nenhuma).
+**Nomes no menu (pedido do Alan, 01/11/2026)**: "Mapas NDVI" (rota `ndvi`),
+"Planos e Valores" (`admin_planos`), "Gerenciar Acessos" (`admin_acessos`)
+e "Programação de Envios" (`whatsapp_gerenciamento`, chave `envios`); onde
+este arquivo diz NDVI/Planos/Acessos/Envios, sao essas abas.
 **Mapa de Estudos = ex-"Mapa Interpolado"** (renomeado pelo Alan,
 01/11/2026): rota `/mapa-interpolado`, endpoint/chave `mapa_interpolado`
 e template `mapa_interpolado.html` continuam com o nome antigo; onde este

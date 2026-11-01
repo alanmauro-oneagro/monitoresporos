@@ -69,6 +69,16 @@ class MenuConfigTest(unittest.TestCase):
         self.assertEqual(_itens(admin), ["mapa_interpolado", "usuarios"])
         self.assertNotIn("↕ Ordenar abas", admin)
 
+    def test_nomes_das_abas(self):
+        html = self._logado(models.MASTER_PRINCIPAL).get("/mapa").get_data(as_text=True)
+        for nome in ("Mapas NDVI", "Planos e Valores", "Gerenciar Acessos", "Programação de Envios"):
+            self.assertIn(f">{nome}</a>", html)
+        alan = self._logado(models.MASTER_PRINCIPAL)
+        for url, titulo in (("/ndvi", "Mapas NDVI"), ("/admin/planos", "Planos e Valores"),
+                            ("/admin/acessos", "Gerenciar Acessos"), ("/whatsapp", "Programação de Envios")):
+            with self.subTest(url=url):
+                self.assertIn(f"<title>{titulo} - OneAgro App</title>", alan.get(url).get_data(as_text=True))
+
     def test_sem_aba_bioscout(self):
         html = self._logado(models.MASTER_PRINCIPAL).get("/mapa").get_data(as_text=True)
         self.assertNotIn("bioscout.com.au", html)

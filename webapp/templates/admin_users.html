@@ -26,7 +26,7 @@
             </td>
             <td>
                 {% if pode_aba('envios') %}
-                <a href="{{ url_for('whatsapp_gerenciamento') }}" class="text-decoration-none" title="Quem recebe cada fazenda e' marcado na aba Envios">
+                <a href="{{ url_for('whatsapp_gerenciamento') }}" class="text-decoration-none" title="Quem recebe cada fazenda e' marcado na aba Programação de Envios">
                     {{ report_counts.get(u.id, 0) }} fazenda(s)
                 </a>
                 {% else %}
@@ -34,7 +34,7 @@
                 {% endif %}
             </td>
             <td>
-                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp em TODAS as fazendas de uma vez, sem apagar quem recebe cada fazenda (aba Envios)">
+                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp em TODAS as fazendas de uma vez, sem apagar quem recebe cada fazenda (aba Programação de Envios)">
                     <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-user-id="{{ u.id }}"
                         id="pausado_user_{{ u.id }}" {% if u.whatsapp_pausado %}checked{% endif %}>
                     <label class="form-check-label small" for="pausado_user_{{ u.id }}">Pausado</label>
