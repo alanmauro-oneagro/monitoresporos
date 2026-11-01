@@ -3567,8 +3567,20 @@ def sinal_telefonia():
     sinal e' melhor. Clicar no mapa mostra o quadro do ponto."""
     info = sinal_celular.info()
     versao = int(os.path.getmtime(sinal_celular.COBERTURA_PATH)) if info.get("baixado_em") else 0
+    # Fazendas no mapa (pedido do Alan, 01/11/2026): as mesmas que a pessoa
+    # ja' enxerga no site, sem as desativadas.
+    if current_user.is_admin:
+        visiveis = _sites_ativos_para_admin()
+    else:
+        visiveis = set(models.get_user_permitted_site_names(current_user.id)) - models.get_deactivated_site_names()
+    virtuais = models.virtual_farm_site_names()
+    fazendas = sorted(
+        ({"nome": _nome_exibicao(s), "lat": lat, "lon": lon, "virtual": s in virtuais}
+         for s, (lat, lon) in _coords_all().items() if s in visiveis),
+        key=lambda f: f["nome"].lower(),
+    )
     return render_template(
-        "sinal_telefonia.html", info_cobertura=info, versao=versao,
+        "sinal_telefonia.html", info_cobertura=info, versao=versao, fazendas=fazendas,
         operadoras=[{"nome": o, "cor": sinal_celular.cor(o)} for o in sinal_celular.operadoras()],
     )
 

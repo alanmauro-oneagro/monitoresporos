@@ -52,7 +52,10 @@ CAMADAS = {
     "pred_4G_VIVO_dbm-110.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.5), _quadrado(-55.1, -12.1, 0.2, horario=False)]),
     "pred_2G_TIM_dbm-95.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.0)]),
     "pred_2G_TIM_dbm-82.zip": _zip_shp([_quadrado(-40.0, -10.0, 0.5)]),
+    # Claro 5G forte junto com 4G no minimo; o 2o quadrado de 5G nao tem 4G
+    # (como o 5G da Vivo no Sudeste) e nao pode contar
     "pred_5G_SA_NSA_CLARO_dbm-90.zip": _zip_shp([_quadrado(-55.71, -12.51, 0.02), _quadrado(-47.0, -16.0, 0.3)]),
+    "pred_4G_CLARO_dbm-110.zip": _zip_shp([_quadrado(-55.71, -12.51, 0.02)]),
 }
 PAGINA = "<html>" + "".join(
     f'<a href="/se/public/file/b/smp/{nome}">x</a> <a href="https://sistemas.anatel.gov.br/se/public/file/b/smp/{nome}">y</a>'
@@ -63,6 +66,11 @@ def _abrir_falso(url, timeout):
     if url == sinal_celular.PAGINA:
         return io.BytesIO(PAGINA.encode())
     return io.BytesIO(CAMADAS[url.rsplit("/", 1)[-1]])
+
+
+def _fazenda_mapa():
+    if not any(vf["nome"] == "Zzz Fazenda Mapa Sinal" for vf in models.get_all_virtual_farms()):
+        models.create_virtual_farm("Zzz Fazenda Mapa Sinal", -12.4, -55.6, 30)
 
 
 class SinalCelularTest(unittest.TestCase):
@@ -96,7 +104,7 @@ class SinalCelularTest(unittest.TestCase):
 
     def test_baixou_tudo(self):
         info = sinal_celular.info()
-        self.assertEqual(info["camadas"], "5")
+        self.assertEqual(info["camadas"], "6")
         self.assertTrue(info["baixado_em"])
         self.assertFalse(sinal_celular._vencida())
 
@@ -105,6 +113,9 @@ class SinalCelularTest(unittest.TestCase):
         self.assertEqual(r["Vivo"]["tecnologias"], [{"tecnologia": "4G", "nivel": "bom"}])
         self.assertEqual(r["Vivo"]["nivel"], "otimo")  # 4G forte
         self.assertEqual(r["Claro"]["nivel"], "otimo")  # 5G forte
+        self.assertEqual([x["tecnologia"] for x in r["Claro"]["tecnologias"]], ["5G", "4G"])
+        # 5G sem 4G da mesma operadora nao conta (mapa grosseiro da Anatel)
+        self.assertEqual({o["operadora"]: o["nivel"] for o in sinal_celular.estimar(-15.85, -46.85)}["Claro"], "sem")
         self.assertEqual((r["TIM"]["nivel"], r["TIM"]["tecnologias"][0]["tecnologia"]), ("fraco", "2G"))  # 2G no minimo
         self.assertEqual(sinal_celular.estimar(-12.5, -55.7)[-1]["operadora"], "TIM")  # pior por ultimo
         # fora do quadrado forte, dentro do minimo: 4G minimo = bom; Claro aparece "sem" pra comparar
@@ -144,6 +155,8 @@ class SinalCelularTest(unittest.TestCase):
         self.assertEqual(self._pixel("TIM", -12.5, -55.7)[3], 70)  # fraco (2G minimo)
         self.assertEqual(self._pixel("Vivo", -12.0, -55.0)[3], 0)  # buraco
         self.assertEqual(self._pixel("Claro", -12.3, -55.3)[3], 0)
+        self.assertEqual(self._pixel("Claro", -12.5, -55.7)[3], 215)  # 5G forte com 4G
+        self.assertEqual(self._pixel("Claro", -15.85, -46.85)[3], 0)  # 5G sem 4G
         # zoom baixo sai da visao geral (nivel medio do quadrado: quadrado
         # todo otimo = cor forte; so' um pedaco coberto = cor mais fraca)
         self.assertEqual(self._pixel("Vivo", -12.5, -55.7, z=6)[3], 215)
@@ -166,9 +179,22 @@ class SinalCelularTest(unittest.TestCase):
             models.set_setting("acessos_por_nivel", json.dumps({"admin": ["sinal_telefonia"], "usuario": []}))
             html = admin.get("/sinal-telefonia").get_data(as_text=True)
             self.assertIn("Sinal telefonia", html)
+            self.assertIn("var fazendas = [", html)
             self.assertNotIn("Baixar agora", html)  # botao so' do Master
             self.assertEqual(admin.post("/sinal-telefonia/atualizar").status_code, 403)
             self.assertEqual(admin.get("/sinal-celular?lat=-12.5&lon=-55.7").status_code, 200)
+            # Usuario: so' as fazendas liberadas pra ele aparecem no mapa
+            _fazenda_mapa()
+            self.assertIn("Zzz Fazenda Mapa Sinal", admin.get("/sinal-telefonia").get_data(as_text=True))
+            if not models.get_user_by_username("Zzz Usuario Sinal"):
+                models.create_user("Zzz Usuario Sinal", "x")
+            usuario = webapp.app.test_client()
+            with usuario.session_transaction() as s:
+                s["_user_id"] = str(models.get_user_by_username("Zzz Usuario Sinal")["id"])
+                s["_fresh"] = True
+            models.set_setting("acessos_por_nivel", json.dumps({"admin": [], "usuario": ["sinal_telefonia"]}))
+            html = usuario.get("/sinal-telefonia").get_data(as_text=True)
+            self.assertIn("var fazendas = []", html)
         finally:
             models.set_setting("acessos_por_nivel", anterior or "")
 
@@ -177,10 +203,13 @@ class SinalCelularTest(unittest.TestCase):
         self.assertNotIn("Mapas de cobertura de celular", master.get("/mapa-interpolado").get_data(as_text=True))
         html = master.get("/sinal-telefonia").get_data(as_text=True)
         self.assertIn("Mapas de cobertura de celular (Anatel)", html)
-        self.assertIn("5 mapas", html)
+        self.assertIn("6 mapas", html)
         self.assertIn("Baixar agora", html)
         self.assertIn('value="Vivo"', html)
         self.assertIn('href="/sinal-telefonia"', html)  # no menu Configuracoes
+        _fazenda_mapa()
+        html = master.get("/sinal-telefonia").get_data(as_text=True)
+        self.assertIn('"nome": "Zzz Fazenda Mapa Sinal"', html)
         with mock.patch.object(sinal_celular, "atualizar_em_segundo_plano") as baixar:
             resp = master.post("/sinal-telefonia/atualizar", follow_redirects=True)
         baixar.assert_called_once_with(forcar=True)
