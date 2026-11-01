@@ -33,7 +33,12 @@ arquivo diz "Mapa Interpolado", e' essa aba. Sem previsao de chuva e sem
 limites de municipio (so' pais/estados); tem as camadas de sinal de
 celular (abaixo).
 Rotas dessas abas usam `@aba_required("<chave>")`; aba nova do menu
-Configuracoes deve entrar em `ABAS_CONFIG`. Ninguem cria, exclui ou
+Configuracoes deve entrar em `ABAS_CONFIG` E em `app.MENU_CONFIG` (lista
+que monta o menu ⋮). **Ordem do menu Configuracoes** (pedido do Alan,
+01/11/2026): so' "Alan Mauro" ve "↕ Ordenar abas" no fim do menu (setas
+▲▼, cada clique salva via `/admin/menu-config/ordem`, setting
+`ordem_menu_config`); a ordem vale pro menu de todos (cada um so' ve o
+que pode abrir); item novo entra no fim. Ninguem cria, exclui ou
 redefine senha de usuario com nivel acima do proprio. Master
 (`users.is_master=1`, sempre com `is_admin=1`) tem acesso a tudo, inclusive
 as configuracoes gerais do site -- painel/conexao do WhatsApp, Exportar,
@@ -428,7 +433,7 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
     Exportar (`/admin/exportar/backup`, Master, .db.gz).
-  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular tests.test_fazenda_estimada tests.test_whatsapp_desconectado`
+  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular tests.test_fazenda_estimada tests.test_whatsapp_desconectado tests.test_menu_config`
     (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
     com Master/Administrador/Usuario/Cliente (sem erro 500, rede
     desligada) e confere as regras de acesso. Rodar antes de cada PR da
