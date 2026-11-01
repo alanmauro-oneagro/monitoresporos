@@ -67,7 +67,13 @@ Configuracoes -> **Novos cadastros** (`/admin/solicitacoes`, Master;
 contador vermelho = nao vistos, abrir a tela marca como visto): data,
 nome, usuario, perfil, celular (link wa.me), e-mail, fazenda, cidade,
 culturas, area, mensagem e atalho "Liberar fazendas". Todo Master com
-telefone recebe aviso no WhatsApp (`_avisar_master_cadastro`, em thread).
+telefone recebe aviso no WhatsApp (`_avisar_master_cadastro`, em thread). **Sem cadastro
+duplicado** (pedido do Alan, 01/11/2026): celular (mesmos digitos ou os
+11 ultimos) ou e-mail ja' usado por outra conta = aviso "ja' esta'
+cadastrado... entre com a sua conta" e nada e' criado
+(`models.conta_com_contato`). Conta excluida some de Novos cadastros
+(`delete_user` apaga o registro; `_apagar_cadastros_sem_conta` limpa os
+que sobraram ao abrir a tela/contar).
 
 **Cliente do app (pedido do Alan, 25/10/2026)**: 4o tipo de conta,
 `users.is_cliente=1` (nunca admin), criado pelo cadastro direto (acima,

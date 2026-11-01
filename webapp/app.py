@@ -6732,6 +6732,10 @@ def solicitar_acesso():
             erro = "Celular inválido -- informe DDD + número."
         elif email and not _is_valid_email(email):
             erro = "E-mail inválido."
+        elif (ja_cadastrado := models.conta_com_contato(telefone, email)):
+            # Mesma pessoa tentando um 2o cadastro (pedido do Alan, 01/11/2026)
+            erro = (f"Este {'celular' if ja_cadastrado == 'telefone' else 'e-mail'} já está cadastrado na OneAgro. "
+                    "Entre com a sua conta na tela de login (se não lembrar o usuário ou a senha, fale com a OneAgro).")
         elif not form.get("empresa", "").strip():
             erro = "Informe a fazenda ou empresa."
         elif not form.get("cidade", "").strip() or uf not in UFS_BR:
