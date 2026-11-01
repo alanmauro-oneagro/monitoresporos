@@ -102,10 +102,18 @@
         var cabeca = titulo ? '<div class="fw-bold mb-1">' + escapeHtml(titulo) + '</div>' : '';
         var popup = L.popup({ maxWidth: 340 }).setLatLng(latlng)
             .setContent(cabeca + '<span class="small text-muted">Consultando...</span>').openOn(map);
-        fetch({{ url_for('sinal_celular_ponto') | tojson }} + '?lat=' + lat + '&lon=' + lon)
-            .then(function (r) { return r.json(); })
-            .then(function (d) { popup.setContent(cabeca + d.html); })
-            .catch(function () { popup.setContent(cabeca + '<span class="small text-danger">Não consegui consultar.</span>'); });
+        var tentativas = 0;
+        function consultar() {
+            fetch({{ url_for('sinal_celular_ponto') | tojson }} + '?lat=' + lat + '&lon=' + lon)
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!map.hasLayer(popup)) return;
+                    popup.setContent(cabeca + d.html + (d.pendente ? '<div class="small text-muted mt-1">Buscando as frequências na Anatel...</div>' : ''));
+                    if (d.pendente && ++tentativas <= 8) setTimeout(consultar, 4000);
+                })
+                .catch(function () { popup.setContent(cabeca + '<span class="small text-danger">Não consegui consultar.</span>'); });
+        }
+        consultar();
     }
     map.on('click', function (e) { mostrarSinal(e.latlng); });
 

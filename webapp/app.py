@@ -3647,7 +3647,9 @@ def sinal_celular_ponto():
         abort(400)
     operadoras = sinal_celular.estimar(lat, lon)
     quadro = get_template_attribute("_sinal_celular.html", "quadro")
-    return jsonify({"operadoras": operadoras, "html": str(quadro(operadoras))})
+    # pendente: frequencias sendo consultadas na Anatel -- a tela pergunta de novo
+    return jsonify({"operadoras": operadoras, "html": str(quadro(operadoras)),
+                    "pendente": sinal_celular.frequencias_pendentes(lat, lon)})
 
 
 @app.route("/mapa-interpolado/adicionar", methods=["POST"])
@@ -4213,8 +4215,16 @@ def fazendas():
             "estacao_pais": escolha["country_code"] if escolha else "",
             "country_code": country_code,
             "ativo": site not in desativadas,
-            "sinal_celular": sinal_celular.estimar(*coords_sinal[site]) if site in coords_sinal else None,
+            "sinal_celular": sinal_celular.estimar(*coords_sinal[site], buscar_frequencias=False) if site in coords_sinal else None,
         })
+    # Frequencia do sinal (estacoes licenciadas da Anatel): as fazendas que
+    # ainda nao tem sao consultadas em segundo plano, uma por vez.
+    sinal_celular.buscar_frequencias_em_segundo_plano([
+        coords_sinal[s["site"]] for s in sites_data
+        if s["sinal_celular"] and s["site"] in coords_sinal
+        and any(o["nivel"] != "sem" and not o["faixas"] for o in s["sinal_celular"])
+        and sinal_celular.frequencias_salvas(*coords_sinal[s["site"]]) is None
+    ])
 
     return render_template(
         "fazendas.html", sites_data=sites_data, no_access=False,
@@ -7206,7 +7216,9 @@ def admin_solicitacoes():
         if c["user_id"] and c["conta_existe"]:
             locais += [(p["nome"], p["lat"], p["lon"]) for p in models.get_cliente_pontos(c["user_id"])]
             locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(c["user_id"]) if s in coords]
-        c["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon)) for nome, lat, lon in locais]
+        c["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon, buscar_frequencias=False)) for nome, lat, lon in locais]
+        sinal_celular.buscar_frequencias_em_segundo_plano(
+            [(lat, lon) for _n, lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])
     return render_template("admin_solicitacoes.html", cadastros=cadastros, perfis=PERFIS_CADASTRO)
 
 

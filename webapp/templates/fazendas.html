@@ -48,11 +48,13 @@
 {% set farm_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
-        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="farm-body-{{ farm_idx }}">
-            <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
-        </button>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="farm-body-{{ farm_idx }}">
+                <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
+            </button>
+            {% if site_group.sinal_celular %}<span class="d-inline-flex flex-wrap gap-1" title="Sinal de celular (previsão da Anatel)">{{ sinal_cel.chips(site_group.sinal_celular) }}</span>{% endif %}
+        </div>
         <div class="d-none mt-3" id="farm-body-{{ farm_idx }}">
-            <div class="border rounded p-2 mb-3" style="background:#f8f9fa;">{{ sinal_cel.quadro(site_group.sinal_celular) }}</div>
             <div class="d-flex gap-2 mb-3">
                 {% for safra_group in site_group.safras %}
                 <button type="button" class="btn btn-sm safra-toggle {% if loop.first %}btn-success{% else %}btn-outline-secondary{% endif %}"
