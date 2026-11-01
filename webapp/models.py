@@ -3226,6 +3226,8 @@ def delete_user(user_id):
             delete_virtual_farm(site_name)
     conn = get_db()
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    # Conta excluida sai tambem de Novos cadastros (pedido do Alan, 01/11/2026).
+    conn.execute("DELETE FROM solicitacoes_acesso WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
 
@@ -3626,10 +3628,20 @@ def registrar_cadastro(dados):
         conn.close()
 
 
+def _apagar_cadastros_sem_conta(conn):
+    """Cadastro cuja conta foi excluida some de Novos cadastros (pedido do
+    Alan, 01/11/2026) -- inclusive os que ficaram de antes da regra."""
+    conn.execute(
+        "DELETE FROM solicitacoes_acesso WHERE status = 'cadastrado'"
+        " AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users))"
+    )
+    conn.commit()
+
+
 def get_cadastros(limite=200):
-    """Mais recentes primeiro; `conta_existe` cai pra 0 se a conta foi
-    excluida depois."""
+    """Mais recentes primeiro (so' os com conta ainda existente)."""
     conn = get_db()
+    _apagar_cadastros_sem_conta(conn)
     rows = conn.execute(
         "SELECT s.*, u.id IS NOT NULL AS conta_existe FROM solicitacoes_acesso s"
         " LEFT JOIN users u ON u.id = s.user_id WHERE s.status = 'cadastrado' ORDER BY s.id DESC LIMIT ?",
@@ -3648,6 +3660,7 @@ def existe_master():
 
 def contar_cadastros_nao_vistos():
     conn = get_db()
+    _apagar_cadastros_sem_conta(conn)
     n = conn.execute("SELECT COUNT(*) FROM solicitacoes_acesso WHERE status = 'cadastrado' AND visto = 0").fetchone()[0]
     conn.close()
     return n
@@ -3658,6 +3671,25 @@ def marcar_cadastros_vistos():
     conn.execute("UPDATE solicitacoes_acesso SET visto = 1 WHERE status = 'cadastrado' AND visto = 0")
     conn.commit()
     conn.close()
+
+
+def conta_com_contato(telefone, email=""):
+    """Ja' existe conta com esse celular (mesmos digitos, ou os mesmos 11
+    ultimos -- com ou sem o 55 na frente) ou e-mail? Usado pra barrar o
+    segundo cadastro da mesma pessoa (pedido do Alan, 01/11/2026).
+    Devolve "telefone", "email" ou None."""
+    digitos = "".join(ch for ch in (telefone or "") if ch.isdigit())
+    email = (email or "").strip().lower()
+    conn = get_db()
+    rows = conn.execute("SELECT telefone, email FROM users").fetchall()
+    conn.close()
+    for r in rows:
+        outro = "".join(ch for ch in (r["telefone"] or "") if ch.isdigit())
+        if digitos and outro and len(digitos) >= 10 and (outro == digitos or outro[-11:] == digitos[-11:]):
+            return "telefone"
+        if email and (r["email"] or "").strip().lower() == email:
+            return "email"
+    return None
 
 
 def username_em_uso(username):

@@ -155,6 +155,36 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(models.contar_cadastros_nao_vistos(), 0)  # abrir a tela marca como visto
         self.assertNotIn(">Novo<", master.get("/admin/solicitacoes").get_data(as_text=True))
 
+    # Mesma pessoa nao faz 2o cadastro; conta excluida some de Novos
+    # cadastros (pedidos do Alan, 01/11/2026).
+    def test_segundo_cadastro_barrado(self):
+        c = webapp.app.test_client()
+        c.post("/solicitar-acesso", data=_form(username="Zzz Cad Dup", numero_telefone="65999990009", email="dup@t.com"))
+        self.assertIsNotNone(models.get_user_by_username("Zzz Cad Dup"))
+        for extra, aviso in ((dict(numero_telefone="65999990009"), "Este celular já está cadastrado"),
+                             # sem o 55 na frente / outro usuario, mesmo celular
+                             (dict(codigo_pais="", numero_telefone="5565999990009"), "Este celular já está cadastrado"),
+                             (dict(numero_telefone="65999990010", email="DUP@t.com"), "Este e-mail já está cadastrado")):
+            with self.subTest(extra=extra):
+                resp = webapp.app.test_client().post("/solicitar-acesso", data=_form(username="Zzz Cad Dup Dois", **extra))
+                self.assertEqual(resp.status_code, 200)
+                self.assertIn(aviso, resp.get_data(as_text=True))
+                self.assertIsNone(models.get_user_by_username("Zzz Cad Dup Dois"))
+        self.assertEqual(sum(1 for c in models.get_cadastros() if c["username"].startswith("Zzz Cad Dup")), 1)
+
+    def test_conta_excluida_sai_de_novos_cadastros(self):
+        webapp.app.test_client().post("/solicitar-acesso", data=_form(username="Zzz Cad Excluir", numero_telefone="65999990011"))
+        user = models.get_user_by_username("Zzz Cad Excluir")
+        self.assertIsNotNone(self._cadastro("Zzz Cad Excluir"))
+        models.delete_user(user["id"])
+        self.assertIsNone(self._cadastro("Zzz Cad Excluir"))
+        # registro que ficou de antes da regra (conta apagada por outro caminho)
+        models.registrar_cadastro({"username": "Zzz Cad Orfao", "nome_completo": "Zzz Orfao", "perfil": "produtor",
+                                   "telefone": "5565999990012", "tipo": "usuario", "user_id": 999999})
+        html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        self.assertNotIn("Zzz Cad Orfao", html)
+        self.assertNotIn("conta excluída", html)
+
 
 class TravaWhatsappQapTest(unittest.TestCase):
     def test_qap_so_envia_para_numeros_liberados(self):
