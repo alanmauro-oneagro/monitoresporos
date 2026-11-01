@@ -317,13 +317,11 @@ html { font-size: 14px; }
         </div>
         {% endif %}
 
-        {% if not site_group.virtual %}
         <div class="mt-3 pt-3 border-top esporos-graficos" data-site="{{ site_group.site }}"
              data-cultura="{{ site_group.cultura if site_group.cultura and site_group.cultura != 'Todos' else '' }}">
-            <div class="small fw-bold mb-2">📈 Esporos por M³ <span class="fw-normal text-muted">(últimos 30 dias)</span></div>
+            <div class="small fw-bold mb-2">📈 Esporos por M³ <span class="fw-normal text-muted">(últimos 30 dias{% if site_group.virtual %}, estimados pelas fazendas reais próximas{% endif %})</span></div>
             <div class="esporos-lista small text-muted">Carregando...</div>
         </div>
-        {% endif %}
 
         {% if site_group.produtos_folha.quimico or site_group.produtos_folha.biologico %}
         <div class="mt-3 pt-3 border-top">
@@ -408,14 +406,19 @@ function carregarGraficosEsporos(box) {
             // Os dias de previsao (fim da lista) nao tem esporo -- ficam de fora.
             var nPassado = (data.dias || []).length - (data.num_dias_previsao || 0);
             var labels = (data.dias || []).slice(0, nPassado).map(dataBr);
+            // So' a serie DESTA fazenda (a rota volta todas se o filtro nao bater).
+            var serieDaFazenda = function (d) {
+                return (d.series || []).filter(function (s) { return s.estacao === box.dataset.site; })[0];
+            };
             var doencas = (data.doencas || []).filter(function (d) {
-                return (d.series || []).some(function (s) { return s.esporos.some(function (v) { return v !== null; }); });
+                var s = serieDaFazenda(d);
+                return s && s.esporos.some(function (v) { return v !== null; });
             });
             lista.innerHTML = '';
             if (!doencas.length) { lista.textContent = 'Sem leitura de esporos nos últimos ' + ESPOROS_DIAS + ' dias.'; return; }
             var estreita = window.innerWidth < 576;
             doencas.forEach(function (d) {
-                var s = d.series[0];
+                var s = serieDaFazenda(d);
                 var bloco = document.createElement('div');
                 bloco.className = 'mb-3';
                 bloco.innerHTML = '<div class="fw-bold text-dark mb-1">' + d.doenca_pt + '</div><div style="position: relative; height: ' + (estreita ? 180 : 220) + 'px;"><canvas></canvas></div>';

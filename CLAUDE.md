@@ -161,6 +161,13 @@ site tem que entrar la'.
   `datetime('now', ...)` do proprio SQLite** para comparar com essas colunas
   (retorna UTC, 4h de diferenca) — qualquer logica de corte por data deve
   calcular em Python com a mesma formula.
+- **Graficos de esporos da fazenda estimada** (pedido do Alan, 01/11/2026):
+  igual a fazenda real em Graficos, Recomendacoes (bloco "📈 Esporos por
+  M³", que so' usa a serie da propria fazenda -- `serieDaFazenda`) e PDF
+  (`app._historico_doenca`: real = leituras dela; estimada = IDW dia a dia
+  das fazendas reais no raio, `virtual_farms.interpolar_serie_diaria`,
+  terminando na leitura mais recente das vizinhas; ponto so' clima = sem
+  grafico). Testes: `tests.test_fazenda_estimada`.
 - **Fazenda REAL vem sincronizada de `data/sites.csv`** via `_ensure_sites_synced()`
   (`models.sync_sites`, roda a cada requisicao) — so' ADICIONA linha nova na
   tabela `sites`, NUNCA remove. Uma fazenda no CSV sempre reaparece sozinha,
@@ -356,7 +363,7 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
     Exportar (`/admin/exportar/backup`, Master, .db.gz).
-  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular`
+  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular tests.test_fazenda_estimada`
     (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
     com Master/Administrador/Usuario/Cliente (sem erro 500, rede
     desligada) e confere as regras de acesso. Rodar antes de cada PR da

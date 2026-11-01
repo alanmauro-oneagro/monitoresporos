@@ -1663,6 +1663,37 @@ def _farm_plantio_aplicacoes_estoque(site, safra):
     return plantio, aplicacoes
 
 
+def _historico_doenca(site, doenca_en, dias=30):
+    """Serie diaria de esporos pro grafico do PDF. Fazenda real: as
+    leituras dela (`data_reader.get_site_disease_history`). Fazenda
+    estimada (Mapa Interpolado / lavoura de cliente): o mesmo IDW dia a
+    dia da aba Graficos, a partir das fazendas reais dentro do raio
+    (pedido do Alan, 01/11/2026), terminando no dia da leitura mais
+    recente dessas vizinhas."""
+    vf = models.get_virtual_farm(site)
+    if not vf:
+        return data_reader.get_site_disease_history(site, doenca_en, dias=dias)
+    if vf.get("tipo") == "clima":
+        return []
+    vizinhas = virtual_farms.estacoes_no_raio(vf["lat"], vf["lon"], vf["raio_km"], data_reader.read_site_coordinates())
+    lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
+    por_vizinha = {real: {h["data"]: h for h in lookup.get((real, doenca_en), [])} for real, _ in vizinhas}
+    com_dado = [(max(m), real) for real, m in por_vizinha.items() if m]
+    if not com_dado:
+        return []
+    ultima_iso, real_mais_recente = max(com_dado)
+    limites = {k: por_vizinha[real_mais_recente][ultima_iso].get(k) for k in ("warn", "danger", "maximo")}
+    ultima = datetime.fromisoformat(ultima_iso).date()
+    dias_iso = [(ultima - timedelta(days=dias - 1 - i)).isoformat() for i in range(dias)]
+    serie = virtual_farms.interpolar_serie_diaria(
+        vizinhas, dias_iso, lambda real, dia: (por_vizinha.get(real, {}).get(dia) or {}).get("concentracao"),
+    )
+    return [
+        {"data": dia, "concentracao": round(v, 1) if v is not None else None, **limites}
+        for dia, v in zip(dias_iso, serie)
+    ]
+
+
 def _build_site_pdf(
     site, diseases, weather, produtos, cultura, safra, leitura_bioscout=None,
     mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
@@ -1689,7 +1720,7 @@ def _build_site_pdf(
     if weather and rosa:
         weather = {**weather, "vento_30d": rosa}
     for d in diseases:
-        d["historico"] = data_reader.get_site_disease_history(site, d["doenca_en"], dias=30)
+        d["historico"] = _historico_doenca(site, d["doenca_en"], dias=30)
     plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
     nome_fazenda = _nome_exibicao(site)
     safra_label = SAFRA_LABELS[safra] if safra else "todas as safras"
