@@ -64,7 +64,7 @@ class MenuConfigTest(unittest.TestCase):
         self.assertEqual(ordem[:4], ["planos", "cadastros", "mapa_interpolado", "usuarios"])
         self.assertEqual(len(ordem), len(webapp.MENU_CONFIG))  # o resto vem depois, na ordem padrao
         self.assertEqual(_itens(alan.get("/mapa").get_data(as_text=True))[:4], ordem[:4])
-        # Administrador (padrao: Usuarios + Mapa de Estudos) ve so' as dele, na ordem do Alan
+        # Administrador (padrao: Usuarios + Mapas de Estudo) ve so' as dele, na ordem do Alan
         admin = self._logado("Zzz Admin Menu").get("/mapa").get_data(as_text=True)
         self.assertEqual(_itens(admin), ["mapa_interpolado", "usuarios"])
         self.assertNotIn("↕ Ordenar abas", admin)

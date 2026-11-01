@@ -22,15 +22,15 @@ Mantido por: Alan Mauro (OneAgro, alan.mauro@outlook.com), unico responsavel pel
 **Niveis de acesso (pedido do Alan, 19/10/2026): Usuario, Administrador
 e Master.** Usuario (`is_admin=0`) ve so' as fazendas liberadas; Administrador
 (`is_admin=1`) ve todas as fazendas. Quais abas do menu Configuracoes
-(Usuarios, Doencas, Fungicidas, Mapa de Estudos, Mapas de Solo, NDVI,
+(Usuarios, Doencas, Fungicidas, Mapas de Estudo, Mapas de Solo, NDVI,
 Envios) cada um desses dois niveis abre e' o Master que decide na aba
 **Acessos** (`/admin/acessos`, `ABAS_CONFIG`, setting `acessos_por_nivel`;
-padrao: Administrador = Usuarios + Mapa de Estudos, Usuario = nenhuma).
+padrao: Administrador = Usuarios + Mapas de Estudo, Usuario = nenhuma).
 **Nomes no menu (pedido do Alan, 01/11/2026)**: "Mapas NDVI" (rota `ndvi`),
 "Planos e Valores" (`admin_planos`), "Gerenciar Acessos" (`admin_acessos`)
 e "Programação de Envios" (`whatsapp_gerenciamento`, chave `envios`), "Mapas de Solo" (`solo`); onde
 este arquivo diz NDVI/Planos/Acessos/Envios, sao essas abas.
-**Mapa de Estudos = ex-"Mapa Interpolado"** (renomeado pelo Alan,
+**Mapas de Estudo = ex-"Mapa Interpolado"** (renomeado pelo Alan,
 01/11/2026): rota `/mapa-interpolado`, endpoint/chave `mapa_interpolado`
 e template `mapa_interpolado.html` continuam com o nome antigo; onde este
 arquivo diz "Mapa Interpolado", e' essa aba. Sem previsao de chuva e sem
@@ -360,10 +360,10 @@ site tem que entrar la'.
   pelo contorno dos paises (`app._no_brasil`, `/sinal-celular` devolve
   `fora_do_brasil`);
   `/sinal-celular` devolve `pendente` e as telas perguntam de novo. O
-  Mapa de Estudos recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
+  Mapas de Estudo recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
   Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. A aba
   **Sinal telefonia** foi criada e depois ACABOU (pedido do Alan,
-  01/11/2026): virou camada do **Mapa de Estudos** (`/sinal-telefonia`
+  01/11/2026): virou camada do **Mapas de Estudo** (`/sinal-telefonia`
   so' redireciona; tiles `/sinal-telefonia/tile/...` e `/sinal-celular`
   usam `@aba_required("mapa_interpolado")`): caixa por operadora acima do
   mapa (lembra a escolha no navegador, `mapaEstudos.operadoras`), cada
@@ -373,9 +373,9 @@ site tem que entrar la'.
   chuva); zoom <= 7 usa a media de quadrados de 10/40 celulas
   (`_visao`, montada na 1a vez, em memoria). Clicar no mapa mostra o
   quadro do ponto marcado (`#sinal-ponto`). O balao (tooltip) de cada
-  fazenda/ponto do Mapa de Estudos tem a mesma linha de sinal de Manejos
+  fazenda/ponto do Mapas de Estudo tem a mesma linha de sinal de Manejos
   (`sinal_html`, montado na rota com `_sinal_das_fazendas`; so' Brasil). O cartao da base da Anatel
-  com "Baixar agora" (Master) fica no Mapa de Estudos, antes de Pontos
+  com "Baixar agora" (Master) fica no Mapas de Estudo, antes de Pontos
   Criados. **5G so' conta onde a
   operadora tem 4G** (`_sem_5g_isolado` / `_grade`): o mapa
   5G_SA_NSA_VIVO -110 da Anatel tem um poligono grosseiro cobrindo o

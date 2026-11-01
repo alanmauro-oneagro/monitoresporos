@@ -2446,7 +2446,7 @@ ABAS_CONFIG = [
     ("usuarios", "Usuários", "admin_users"),
     ("doencas", "Doenças", "admin_doencas"),
     ("fungicidas", "Fungicidas", "admin_fungicidas"),
-    ("mapa_interpolado", "Mapa de Estudos", "mapa_interpolado"),
+    ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo"),
     ("ndvi", "Mapas NDVI", "ndvi"),
     ("envios", "Programação de Envios", "whatsapp_gerenciamento"),
@@ -3630,7 +3630,7 @@ def chuva_grade():
 @app.route("/sinal-telefonia")
 @login_required
 def sinal_telefonia():
-    """A aba Sinal telefonia virou camada do Mapa de Estudos (pedido do
+    """A aba Sinal telefonia virou camada do Mapas de Estudo (pedido do
     Alan, 01/11/2026) -- link antigo cai la'."""
     return redirect(url_for("mapa_interpolado"))
 
@@ -7272,7 +7272,7 @@ MENU_CONFIG = [
     ("usuarios", "Usuários", "admin_users", "usuarios"),
     ("doencas", "Doenças", "admin_doencas", "doencas"),
     ("fungicidas", "Fungicidas", "admin_fungicidas", "fungicidas"),
-    ("mapa_interpolado", "Mapa de Estudos", "mapa_interpolado", "mapa_interpolado"),
+    ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo", "solo"),
     ("ndvi", "Mapas NDVI", "ndvi", "ndvi"),
     ("envios", "Programação de Envios", "whatsapp_gerenciamento", "envios"),
