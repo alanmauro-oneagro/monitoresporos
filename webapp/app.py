@@ -3504,6 +3504,13 @@ def mapa_interpolado():
 
     sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
     pontos_virtuais.sort(key=lambda p: _ordem_fazenda(p["site_name"]))
+    # Sinal de celular no balao de cada fazenda (pedido do Alan, 01/11/2026);
+    # fazenda fora do Brasil fica sem.
+    linha_sinal = get_template_attribute("_sinal_celular.html", "linha")
+    sinal_por_site = _sinal_das_fazendas([s["site"] for s in sites_data])
+    for s in sites_data:
+        if sinal_por_site.get(s["site"]):
+            s["sinal_html"] = str(linha_sinal(sinal_por_site[s["site"]]))
 
     # Todo pais ativo (com fazenda/ponto marcado) MAIS todo pais que ja'
     # tem integracao de estacao oficial (`paises_com_estacoes`) -- a tela
