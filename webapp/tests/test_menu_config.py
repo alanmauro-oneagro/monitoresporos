@@ -69,6 +69,11 @@ class MenuConfigTest(unittest.TestCase):
         self.assertEqual(_itens(admin), ["mapa_interpolado", "usuarios"])
         self.assertNotIn("↕ Ordenar abas", admin)
 
+    def test_sem_aba_bioscout(self):
+        html = self._logado(models.MASTER_PRINCIPAL).get("/mapa").get_data(as_text=True)
+        self.assertNotIn("bioscout.com.au", html)
+        self.assertNotIn(">BioScout</a>", html)
+
     def test_setting_estragado_cai_na_ordem_padrao(self):
         models.set_setting("ordem_menu_config", "{nao e json")
         html = self._logado(models.MASTER_PRINCIPAL).get("/mapa").get_data(as_text=True)
