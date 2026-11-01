@@ -4924,7 +4924,7 @@ def save_site_ativo():
     if ativo:
         msg = f"'{_nome_exibicao(site_name)}' reativada -- volta a aparecer em todas as telas."
     else:
-        msg = f"'{_nome_exibicao(site_name)}' oculta -- deixa de aparecer no site (Mapa, Graficos, Recomendacoes, NDVI, Envios). Pra reativar: Configuracoes > Fazendas ocultas."
+        msg = f"'{_nome_exibicao(site_name)}' oculta -- deixa de aparecer no site (Mapa, Gráficos, Recomendações, Mapas de NDVI, Programação de Envios). Pra reativar: Configurações > Gerenciar Fazendas Ocultas."
     return _save_response(msg)
 
 
@@ -7281,7 +7281,7 @@ MENU_CONFIG = [
     ("planos", "Planos e Valores", "admin_planos", "master"),
     ("whatsapp", "Conexão WhatsApp", "admin_whatsapp", "master"),
     ("exportar", "Exportar", "admin_exportar", "master"),
-    ("ocultas", "Fazendas ocultas", "fazendas_ocultas", "master"),
+    ("ocultas", "Gerenciar Fazendas Ocultas", "fazendas_ocultas", "master"),
 ]
 _ORDEM_MENU_KEY = "ordem_menu_config"
 

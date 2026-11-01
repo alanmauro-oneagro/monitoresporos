@@ -216,14 +216,14 @@
 
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0"
-                      data-msg="Ocultar {{ site_group.nome_exibicao }}? Ela some de todo o site (nada e' apagado) -- pra reativar: Configuracoes > Fazendas ocultas."
+                      data-msg="Ocultar {{ site_group.nome_exibicao }}? Ela some de todo o site (nada e' apagado) -- pra reativar: Configuracoes > Gerenciar Fazendas Ocultas."
                       onsubmit="return confirm(this.dataset.msg);">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <input type="hidden" name="ativo" value="0">
                     <button type="submit" class="btn btn-sm btn-outline-secondary">🙈 Ocultar fazenda</button>
                 </form>
                 <div class="text-muted small mt-1">
-                    Some de todo o site, sem apagar nada. Reativar: Configurações &gt; Fazendas ocultas.
+                    Some de todo o site, sem apagar nada. Reativar: Configurações &gt; Gerenciar Fazendas Ocultas.
                 </div>
             </div>
 

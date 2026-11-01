@@ -154,7 +154,7 @@
         <span class="badge bg-info text-dark">☁️ So clima</span>
         {% endif %}
         {% if not ponto.ativo %}
-        <span class="badge bg-secondary" title="Reativar em Configurações > Fazendas ocultas">Oculto</span>
+        <span class="badge bg-secondary" title="Reativar em Configurações > Gerenciar Fazendas Ocultas">Oculto</span>
         {% endif %}
         <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
         <div class="ms-auto d-flex gap-2">
@@ -163,7 +163,7 @@
             <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0">
                 <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
                 <input type="hidden" name="ativo" value="0">
-                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Esconder este ponto do site (Mapa, Recomendações, Programação de Envios), sem apagar nada -- reativar em Configurações > Fazendas ocultas">🙈 Ocultar</button>
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Esconder este ponto do site (Mapa, Recomendações, Programação de Envios), sem apagar nada -- reativar em Configurações > Gerenciar Fazendas Ocultas">🙈 Ocultar</button>
             </form>
             {% endif %}
             <form method="post" action="{{ url_for('remover_ponto_virtual') }}" class="mb-0"
