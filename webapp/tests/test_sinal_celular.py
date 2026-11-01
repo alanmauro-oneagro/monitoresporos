@@ -6,6 +6,7 @@ import io
 import json
 import math
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -50,8 +51,11 @@ CAMADAS = {
     # quadrado maior com um "buraco" em (-12.0, -55.0)
     "pred_4G_VIVO_dbm-90.zip": _zip_shp([_quadrado(-55.75, -12.55, 0.1)]),
     "pred_4G_VIVO_dbm-110.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.5), _quadrado(-55.1, -12.1, 0.2, horario=False)]),
-    "pred_2G_TIM_dbm-95.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.0)]),
-    "pred_2G_TIM_dbm-82.zip": _zip_shp([_quadrado(-40.0, -10.0, 0.5)]),
+    "pred_3G_TIM_dbm-102.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.0)]),
+    "pred_3G_TIM_dbm-82.zip": _zip_shp([_quadrado(-40.0, -10.0, 0.5)]),
+    # 2G e operadoras fora de Vivo/Claro/TIM: nem sao baixados
+    "pred_2G_TIM_dbm-82.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.0)]),
+    "pred_4G_ALGAR_dbm-90.zip": _zip_shp([_quadrado(-56.0, -13.0, 1.0)]),
     # Claro 5G forte junto com 4G no minimo; o 2o quadrado de 5G nao tem 4G
     # (como o 5G da Vivo no Sudeste) e nao pode contar
     "pred_5G_SA_NSA_CLARO_dbm-90.zip": _zip_shp([_quadrado(-55.71, -12.51, 0.02), _quadrado(-47.0, -16.0, 0.3)]),
@@ -104,7 +108,7 @@ class SinalCelularTest(unittest.TestCase):
 
     def test_baixou_tudo(self):
         info = sinal_celular.info()
-        self.assertEqual(info["camadas"], "6")
+        self.assertEqual(info["camadas"], "6")  # 8 na pagina, sem o 2G e a Algar
         self.assertTrue(info["baixado_em"])
         self.assertFalse(sinal_celular._vencida())
 
@@ -116,7 +120,9 @@ class SinalCelularTest(unittest.TestCase):
         self.assertEqual([x["tecnologia"] for x in r["Claro"]["tecnologias"]], ["5G", "4G"])
         # 5G sem 4G da mesma operadora nao conta (mapa grosseiro da Anatel)
         self.assertEqual({o["operadora"]: o["nivel"] for o in sinal_celular.estimar(-15.85, -46.85)}["Claro"], "sem")
-        self.assertEqual((r["TIM"]["nivel"], r["TIM"]["tecnologias"][0]["tecnologia"]), ("fraco", "2G"))  # 2G no minimo
+        self.assertEqual((r["TIM"]["nivel"], r["TIM"]["tecnologias"][0]["tecnologia"]), ("fraco", "3G"))  # 3G no minimo
+        self.assertEqual(len(r["TIM"]["tecnologias"]), 1)  # 2G forte da TIM nao conta
+        self.assertNotIn("Algar", r)
         self.assertEqual(sinal_celular.estimar(-12.5, -55.7)[-1]["operadora"], "TIM")  # pior por ultimo
         # fora do quadrado forte, dentro do minimo: 4G minimo = bom; Claro aparece "sem" pra comparar
         r = {o["operadora"]: o["nivel"] for o in sinal_celular.estimar(-12.3, -55.3)}
@@ -128,6 +134,32 @@ class SinalCelularTest(unittest.TestCase):
         self.assertEqual(sinal_celular._nivel_operadora([{"tecnologia": "3G", "nivel": "bom"}]), "bom")
         with mock.patch.object(sinal_celular, "COBERTURA_PATH", Path(self.pasta) / "nao_existe.db"):
             self.assertIsNone(sinal_celular.estimar(-12.5, -55.7))
+
+    def test_base_antiga_com_2g_e_outras_operadoras(self):
+        """Base baixada antes da regra (servidor so' baixa de novo em 30
+        dias): o que sobrou de 2G / outras operadoras e' ignorado."""
+        lin, col = int((-12.5 - sinal_celular.LAT_MIN) // sinal_celular.RESOLUCAO), int((-55.7 - sinal_celular.LON_MIN) // sinal_celular.RESOLUCAO)
+        bx, by = col // sinal_celular.BLOCO, lin // sinal_celular.BLOCO
+        conn = sqlite3.connect(sinal_celular.COBERTURA_PATH)
+        try:
+            ids = [conn.execute("INSERT INTO camadas (arquivo, tecnologia, operadora, dbm) VALUES (?, ?, ?, ?)", c).lastrowid
+                   for c in (("velho1", "4G", "Algar", 90), ("velho2", "2G", "Claro", 82))]
+            conn.executemany("INSERT INTO blocos (bx, by, camada, cheio, dados) VALUES (?, ?, ?, 1, NULL)", [(bx, by, i) for i in ids])
+            conn.commit()
+            sinal_celular._cache.clear()
+            sinal_celular._grades.clear()
+            r = {o["operadora"]: o for o in sinal_celular.estimar(-12.5, -55.7)}
+            self.assertNotIn("Algar", r)
+            self.assertNotIn("2G", [x["tecnologia"] for x in r["Claro"]["tecnologias"]])
+            self.assertEqual(sinal_celular.operadoras(), ["Vivo", "Claro", "TIM"])
+        finally:
+            conn.execute("DELETE FROM blocos WHERE camada IN (%s)" % ",".join("?" * len(ids)), ids)
+            conn.execute("DELETE FROM camadas WHERE arquivo IN ('velho1', 'velho2')")
+            conn.commit()
+            conn.close()
+            sinal_celular._cache.clear()
+            sinal_celular._grades.clear()
+        self.assertEqual(self._master().get("/sinal-telefonia/tile/Algar/10/353/541.png").status_code, 404)
 
     def test_falha_no_download_guarda_a_base_anterior(self):
         def fora_do_ar(url, timeout):
@@ -152,7 +184,7 @@ class SinalCelularTest(unittest.TestCase):
         self.assertEqual(vivo[:3], sinal_celular.CORES_OPERADORA["Vivo"])
         self.assertEqual(vivo[3], 215)  # otimo: cor mais forte
         self.assertEqual(self._pixel("Vivo", -12.3, -55.3)[3], 140)  # bom (4G minimo)
-        self.assertEqual(self._pixel("TIM", -12.5, -55.7)[3], 70)  # fraco (2G minimo)
+        self.assertEqual(self._pixel("TIM", -12.5, -55.7)[3], 70)  # fraco (3G minimo)
         self.assertEqual(self._pixel("Vivo", -12.0, -55.0)[3], 0)  # buraco
         self.assertEqual(self._pixel("Claro", -12.3, -55.3)[3], 0)
         self.assertEqual(self._pixel("Claro", -12.5, -55.7)[3], 215)  # 5G forte com 4G
@@ -233,7 +265,7 @@ class SinalCelularTest(unittest.TestCase):
                                    "telefone": "5565999990000", "tipo": "cliente", "user_id": uid})
         html = master.get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("Sinal de celular em Talhao Sinal", html)
-        self.assertIn('title="TIM: fraco -- 2G mínimo"', html)
+        self.assertIn('title="TIM: fraco -- 3G mínimo"', html)
 
 
 if __name__ == "__main__":
