@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Planos e clientes - OneAgro App{% endblock %}
+{% block title %}Planos - OneAgro App{% endblock %}
 {% block content %}
-<h4 class="mb-2">Planos e clientes</h4>
+<h4 class="mb-2">Planos</h4>
 <p class="text-muted small mb-3">
     Planos que o cliente do app pode assinar em <a href="{{ url_for('planos_publico') }}" target="_blank">{{ url_for('planos_publico', _external=True) }}</a>.
     O cliente marca as lavouras dele no mapa e vê, em cada uma, o que o plano libera. Os esporos são sempre
@@ -62,43 +62,5 @@
     </div>
 </form>
 
-<h5>Clientes do app</h5>
-{% if not clientes %}
-<p class="text-muted small">Nenhum cliente cadastrado ainda.</p>
-{% else %}
-<div class="table-responsive">
-<table class="table table-sm align-middle small bg-white">
-    <thead><tr><th>Cliente</th><th>Contato</th><th>Plano</th><th>Situação</th><th>Pago até</th><th>Lavouras</th><th>Cortesia até / plano</th><th>Fazendas no site</th><th></th></tr></thead>
-    <tbody>
-    {% for c in clientes %}
-    {% set fim = [c.pago_ate or '', c.cortesia_ate or ''] | max %}
-    <tr>
-        <td>{{ c.username }}<div class="text-muted">desde {{ c.criado_em | data_br }}</div></td>
-        <td>{{ c.email or '' }}<div>{{ c.telefone | telefone_br if c.telefone else '' }}</div></td>
-        <td>{{ c.plano_nome or '—' }}</td>
-        <td>{{ c.status or '—' }} {% if fim and fim >= hoje %}<span class="badge bg-success">liberado</span>{% else %}<span class="badge bg-secondary">bloqueado</span>{% endif %}</td>
-        <td>{{ c.pago_ate | data_br if c.pago_ate else '—' }}</td>
-        <td>{{ c.n_pontos }}</td>
-        <td>
-            <form method="post" action="{{ url_for('admin_cliente_cortesia', user_id=c.id) }}" class="d-flex gap-1">
-                <input class="form-control form-control-sm" type="date" name="cortesia_ate" value="{{ c.cortesia_ate or '' }}" aria-label="Cortesia até">
-                <select class="form-select form-select-sm" name="plano_id" aria-label="Plano">
-                    <option value="">(mesmo plano)</option>
-                    {% for p in planos %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}
-                </select>
-                <button class="btn btn-outline-success btn-sm" type="submit">OK</button>
-            </form>
-        </td>
-        <td><a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin_user_permissions', user_id=c.id) }}" title="Fazendas que o cliente vê nas abas do site: as estimadas das lavouras dele e, no Premium + Estação, a fazenda real da estação dele">Liberar fazendas</a></td>
-        <td>
-            <form method="post" action="{{ url_for('admin_cliente_excluir', user_id=c.id) }}" onsubmit="return confirm('Excluir este cliente? A cobrança no Asaas é cancelada.');">
-                <button class="btn btn-outline-danger btn-sm" type="submit">Excluir</button>
-            </form>
-        </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
-</div>
-{% endif %}
+<p class="small text-muted">Os clientes (plano, situação, pago até, cortesia, lavouras) ficam em <a href="{{ url_for('admin_solicitacoes') }}">Clientes e cadastros</a>.</p>
 {% endblock %}

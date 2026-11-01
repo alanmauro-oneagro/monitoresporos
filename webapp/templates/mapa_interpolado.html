@@ -133,7 +133,7 @@
     {% elif info_cobertura.baixado_em %}-- baixados em {{ info_cobertura.baixado_em[:10] | data_br }}.
     {% else %}-- ainda não baixados.{% endif %}
     {% if info_cobertura.erro and not info_cobertura.rodando %}<div class="text-danger">Última tentativa falhou: {{ info_cobertura.erro }}</div>{% endif %}
-    <div class="text-muted">Vivo, Claro e TIM, 3G a 5G (Mosaico SMP da Anatel). Também aparece em Manejos e em Novos cadastros. O servidor baixa sozinho uma vez por mês.</div>
+    <div class="text-muted">Vivo, Claro e TIM, 3G a 5G (Mosaico SMP da Anatel). Também aparece em Manejos e em Clientes e cadastros. O servidor baixa sozinho uma vez por mês.</div>
     {% if current_user.is_master and not info_cobertura.rodando %}
     <form method="post" action="{{ url_for('atualizar_cobertura_anatel') }}" class="mt-2">
         <button type="submit" class="btn btn-sm btn-outline-primary">Baixar agora</button>

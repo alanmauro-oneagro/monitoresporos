@@ -7218,26 +7218,40 @@ def asaas_webhook():
 @app.route("/admin/solicitacoes")
 @master_required
 def admin_solicitacoes():
-    """Novos cadastros feitos em /solicitar-acesso -- data e contatos de
-    quem se cadastrou. Abrir a tela marca todos como vistos (zera o
-    contador do menu)."""
+    """Clientes e cadastros (pedido do Alan, 01/11/2026 -- junta as antigas
+    "Novos cadastros" e a lista "Clientes do app" de Planos e clientes):
+    uma pessoa por cartao, com os dados do cadastro (/solicitar-acesso) e,
+    se for cliente do app, plano/situacao/pago ate'/cortesia/lavouras.
+    Cliente sem registro de cadastro (criado antes do cadastro direto)
+    entra so' com o que a conta tem. Abrir a tela marca os cadastros como
+    vistos (zera o contador do menu)."""
     cadastros = models.get_cadastros()
     models.marcar_cadastros_vistos()
-    # Sinal de celular estimado em cada local com coordenada da pessoa:
-    # lavouras (cliente do app) e fazendas ja' liberadas pra ela -- so' no
-    # Brasil.
+    clientes = {c["id"]: c for c in models.get_all_clientes()}
+    pessoas = []
+    for c in cadastros:
+        cliente = clientes.pop(c["user_id"], None)
+        pessoas.append({**c, "cliente": cliente, "data": c["criado_em"]})
+    for cliente in clientes.values():  # clientes de antes do cadastro direto
+        pessoas.append({
+            "user_id": cliente["id"], "username": cliente["username"], "nome_completo": "", "email": cliente["email"],
+            "telefone": cliente["telefone"], "tipo": "cliente", "perfil": "", "visto": 1, "conta_existe": 1,
+            "cliente": cliente, "data": cliente["criado_em"] or "",
+        })
+    pessoas.sort(key=lambda p: p["data"] or "", reverse=True)
+    # Sinal de celular em cada local com coordenada da pessoa: lavouras
+    # (cliente do app) e fazendas ja' liberadas pra ela -- so' no Brasil.
     coords = _coords_all()
     paises = models.get_all_site_countries()
-    for c in cadastros:
-        locais = []
-        if c["user_id"] and c["conta_existe"]:
-            locais += [(p["nome"], p["lat"], p["lon"]) for p in models.get_cliente_pontos(c["user_id"]) if _no_brasil(p["lat"], p["lon"])]
-            locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(c["user_id"])
-                       if s in coords and paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY]
-        c["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon, buscar_frequencias=False)) for nome, lat, lon in locais]
+    for p in pessoas:
+        locais = [(l["nome"], l["lat"], l["lon"]) for l in models.get_cliente_pontos(p["user_id"]) if _no_brasil(l["lat"], l["lon"])]
+        locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(p["user_id"])
+                   if s in coords and paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY]
+        p["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon, buscar_frequencias=False)) for nome, lat, lon in locais]
         sinal_celular.buscar_frequencias_em_segundo_plano(
             [(lat, lon) for _n, lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])
-    return render_template("admin_solicitacoes.html", cadastros=cadastros, perfis=PERFIS_CADASTRO)
+    return render_template("admin_solicitacoes.html", pessoas=pessoas, perfis=PERFIS_CADASTRO,
+                           planos=models.get_planos(), hoje=_hoje_cuiaba().isoformat())
 
 
 @app.context_processor
@@ -7252,7 +7266,7 @@ def _inject_cadastros_novos():
 def admin_planos():
     return render_template(
         "admin_planos.html", planos=models.get_planos(), recursos=models.RECURSOS_PLANO,
-        ciclos=models.CICLOS_PLANO, clientes=models.get_all_clientes(),
+        ciclos=models.CICLOS_PLANO,
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
         hoje=_hoje_cuiaba().isoformat(),
@@ -7317,7 +7331,7 @@ def admin_cliente_cortesia(user_id):
         campos["plano_id"] = int(plano_id)
     models.atualizar_assinatura(user_id, **campos)
     flash(f"Acesso de {row['username']} atualizado.", "success")
-    return redirect(url_for("admin_planos"))
+    return redirect(url_for("admin_solicitacoes"))
 
 
 @app.route("/admin/clientes/<int:user_id>/excluir", methods=["POST"])
@@ -7331,7 +7345,7 @@ def admin_cliente_excluir(user_id):
         flash(f"Não foi possível cancelar a cobrança no Asaas ({erro}) -- nada foi excluído.", "error")
     else:
         flash(f"Cliente {row['username']} excluído.", "success")
-    return redirect(url_for("admin_planos"))
+    return redirect(url_for("admin_solicitacoes"))
 
 
 def _bootstrap_once():
