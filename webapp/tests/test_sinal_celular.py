@@ -288,7 +288,7 @@ class SinalCelularTest(unittest.TestCase):
         self.assertTrue(0 < self._pixel("Vivo", -12.5, -55.7, z=4)[3] < 215)
 
     def test_acesso_ao_mapa_de_estudos(self):
-        """A aba Sinal telefonia virou camada do Mapa de Estudos (ex-Mapa
+        """A aba Sinal telefonia virou camada do Mapas de Estudo (ex-Mapa
         Interpolado) -- mesma regra de acesso dele."""
         master = self._master()
         resp = master.get("/sinal-telefonia/tile/Vivo/10/353/541.png")
@@ -319,8 +319,8 @@ class SinalCelularTest(unittest.TestCase):
     def test_telas(self):
         master = self._master()
         html = master.get("/mapa-interpolado").get_data(as_text=True)
-        self.assertIn("<h4 class=\"mb-2\">Mapa de Estudos</h4>", html)
-        self.assertIn(">Mapa de Estudos</a>", html)  # menu
+        self.assertIn("<h4 class=\"mb-2\">Mapas de Estudo</h4>", html)
+        self.assertIn(">Mapas de Estudo</a>", html)  # menu
         self.assertNotIn("Sinal telefonia</a>", html)  # aba antiga saiu do menu
         self.assertIn("Mapas de cobertura de celular (Anatel)", html)
         self.assertIn("Baixar agora", html)

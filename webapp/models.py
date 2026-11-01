@@ -3488,7 +3488,7 @@ RECURSOS_PLANO = [
     ("site_graficos", "Site: Gráficos"),
     ("site_manejos", "Site: Manejos"),
     ("site_recomendacoes", "Site: Recomendações"),
-    ("fazenda_estimada", "Cada lavoura vira uma fazenda estimada no site (como no Mapa de Estudos)"),
+    ("fazenda_estimada", "Cada lavoura vira uma fazenda estimada no site (como no Mapas de Estudo)"),
     ("esporos", "Esporos estimados na região (por doença)"),
     ("risco", "Risco de infecção pelo clima (agora e próximos 5 dias)"),
     ("fungicidas", "Recomendação de fungicidas químicos e biológicos"),
