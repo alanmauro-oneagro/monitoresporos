@@ -3,6 +3,8 @@
 Rodar a partir de webapp/:  python -m unittest tests.test_sinal_celular
 """
 import io
+import json
+import math
 import os
 import sys
 import tempfile
@@ -15,6 +17,7 @@ os.environ.setdefault("BIOSCOUT_DB_PATH", os.path.join(tempfile.mkdtemp(), "test
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import shapefile  # noqa: E402
+from PIL import Image  # noqa: E402
 
 import app as webapp  # noqa: E402
 import models  # noqa: E402
@@ -124,13 +127,62 @@ class SinalCelularTest(unittest.TestCase):
         self.assertIn("fora do ar", info["erro"])
         self.assertTrue(sinal_celular.estimar(-12.5, -55.7))
 
+    def _pixel(self, operadora, lat, lon, z=10):
+        n = 2 ** z
+        fx = (lon + 180) / 360 * n
+        fy = (1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * n
+        png = sinal_celular.tile(operadora, z, int(fx), int(fy))
+        img = Image.open(io.BytesIO(png))
+        return img.getpixel((int((fx % 1) * 256), int((fy % 1) * 256)))
+
+    def test_tiles_por_operadora(self):
+        self.assertEqual(sinal_celular.operadoras(), ["Vivo", "Claro", "TIM"])
+        vivo = self._pixel("Vivo", -12.5, -55.7)
+        self.assertEqual(vivo[:3], sinal_celular.CORES_OPERADORA["Vivo"])
+        self.assertEqual(vivo[3], 215)  # otimo: cor mais forte
+        self.assertEqual(self._pixel("Vivo", -12.3, -55.3)[3], 140)  # bom (4G minimo)
+        self.assertEqual(self._pixel("TIM", -12.5, -55.7)[3], 70)  # fraco (2G minimo)
+        self.assertEqual(self._pixel("Vivo", -12.0, -55.0)[3], 0)  # buraco
+        self.assertEqual(self._pixel("Claro", -12.3, -55.3)[3], 0)
+        # zoom baixo sai da visao geral (nivel medio do quadrado: quadrado
+        # todo otimo = cor forte; so' um pedaco coberto = cor mais fraca)
+        self.assertEqual(self._pixel("Vivo", -12.5, -55.7, z=6)[3], 215)
+        self.assertTrue(0 < self._pixel("Vivo", -12.5, -55.7, z=4)[3] < 215)
+
+    def test_acesso_a_aba(self):
+        master = self._master()
+        resp = master.get("/sinal-telefonia/tile/Vivo/10/353/541.png")
+        self.assertEqual((resp.status_code, resp.mimetype), (200, "image/png"))
+        self.assertEqual(master.get("/sinal-telefonia/tile/Vivo/3/99/0.png").status_code, 404)
+        if not models.get_user_by_username("Zzz Admin Sinal"):
+            models.create_user("Zzz Admin Sinal", "x", is_admin=True)
+        admin = webapp.app.test_client()
+        with admin.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Admin Sinal")["id"])
+            s["_fresh"] = True
+        anterior = models.get_setting("acessos_por_nivel")
+        try:
+            self.assertEqual(admin.get("/sinal-telefonia").status_code, 403)  # padrao: so' Master
+            models.set_setting("acessos_por_nivel", json.dumps({"admin": ["sinal_telefonia"], "usuario": []}))
+            html = admin.get("/sinal-telefonia").get_data(as_text=True)
+            self.assertIn("Sinal telefonia", html)
+            self.assertNotIn("Baixar agora", html)  # botao so' do Master
+            self.assertEqual(admin.post("/sinal-telefonia/atualizar").status_code, 403)
+            self.assertEqual(admin.get("/sinal-celular?lat=-12.5&lon=-55.7").status_code, 200)
+        finally:
+            models.set_setting("acessos_por_nivel", anterior or "")
+
     def test_telas(self):
         master = self._master()
-        html = master.get("/mapa-interpolado").get_data(as_text=True)
+        self.assertNotIn("Mapas de cobertura de celular", master.get("/mapa-interpolado").get_data(as_text=True))
+        html = master.get("/sinal-telefonia").get_data(as_text=True)
         self.assertIn("Mapas de cobertura de celular (Anatel)", html)
         self.assertIn("5 mapas", html)
+        self.assertIn("Baixar agora", html)
+        self.assertIn('value="Vivo"', html)
+        self.assertIn('href="/sinal-telefonia"', html)  # no menu Configuracoes
         with mock.patch.object(sinal_celular, "atualizar_em_segundo_plano") as baixar:
-            resp = master.post("/mapa-interpolado/cobertura-anatel", follow_redirects=True)
+            resp = master.post("/sinal-telefonia/atualizar", follow_redirects=True)
         baixar.assert_called_once_with(forcar=True)
         self.assertIn("Baixando os mapas de cobertura", resp.get_data(as_text=True))
         # consulta ao clicar no mapa

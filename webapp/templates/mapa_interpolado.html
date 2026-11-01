@@ -116,21 +116,6 @@
     </div>
 </div>
 
-{% if current_user.is_master %}
-<div class="card shadow-sm mt-3"><div class="card-body small">
-    <strong>📶 Mapas de cobertura de celular (Anatel)</strong>
-    {% if info_cobertura.rodando %}-- baixando agora{% if info_cobertura.progresso.total %} ({{ info_cobertura.progresso.feitos }} de {{ info_cobertura.progresso.total }}){% endif %}...
-    {% elif info_cobertura.baixado_em %}-- {% if info_cobertura.camadas %}{{ info_cobertura.camadas }} mapas, {% endif %}baixados em {{ info_cobertura.baixado_em[:10] | data_br }}.
-    {% else %}-- ainda não baixados.{% endif %}
-    {% if info_cobertura.erro and not info_cobertura.rodando %}<div class="text-danger">Última tentativa falhou: {{ info_cobertura.erro }}</div>{% endif %}
-    <div class="text-muted">Cobertura prevista por operadora e tecnologia (2G a 5G), do Mosaico SMP da Anatel. Usada em Manejos, aqui no mapa e em Novos cadastros. O servidor baixa sozinho uma vez por mês.</div>
-    {% if not info_cobertura.rodando %}
-    <form method="post" action="{{ url_for('atualizar_cobertura_anatel') }}" class="mt-2">
-        <button type="submit" class="btn btn-sm btn-outline-primary">Baixar agora</button>
-    </form>
-    {% endif %}
-</div></div>
-{% endif %}
 
 <h6 class="fw-bold mt-4 mb-2">Pontos Criados</h6>
 {% if not pontos_virtuais %}

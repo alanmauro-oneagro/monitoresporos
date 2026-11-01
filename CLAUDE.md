@@ -292,7 +292,16 @@ site tem que entrar la'.
   vermelho fraco (so' 2G/3G minimo), cinza com X sem sinal (Vivo/Claro/TIM
   sempre aparecem, pra comparar); detalhe por tecnologia no `title`. O
   Mapa Interpolado recebe o HTML pronto do `/sinal-celular`. Aparece em Manejos, no
-  Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. Substituiu a
+  Mapa Interpolado (`/sinal-celular`) e em Novos cadastros. Aba propria
+  **Sinal telefonia** (Configuracoes, `/sinal-telefonia`, chave
+  `sinal_telefonia` em `ABAS_CONFIG` -- padrao so' Master; pedido do Alan,
+  01/11/2026): caixa por operadora (lembra a escolha no navegador), cada
+  uma uma camada de tiles PNG (`sinal_celular.tile`, rota
+  `/sinal-telefonia/tile/<operadora>/z/x/y.png`) na cor da operadora
+  (`CORES_OPERADORA`), mais forte onde o sinal e' melhor (como o mapa de
+  chuva); zoom <= 7 usa a media de quadrados de 10/40 celulas
+  (`_visao`, montada na 1a vez, em memoria). Clicar no mapa mostra o
+  quadro do ponto. O "Baixar agora" (Master) fica nessa aba. Substituiu a
   1a versao por distancia de antena (ERBs, tabela `erbs` apagada).
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
