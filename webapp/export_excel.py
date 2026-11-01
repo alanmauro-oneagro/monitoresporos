@@ -673,6 +673,59 @@ def _add_whatsapp_sheet(wb):
         ws.column_dimensions[col[0].column_letter].width = min(max(length + 2, 10), 50)
 
 
+def _sim_nao(valor):
+    return "Sim" if valor else "Não"
+
+
+def _cortesia_excel(valor):
+    return "Sem prazo" if valor == models.SEM_PRAZO else _data_excel(valor)
+
+
+def _clientes_rows():
+    """Abas "Clientes" e "Planos" (pedido do Alan, 01/11/2026): um cliente do
+    app por linha, com os dados do cadastro (/solicitar-acesso) e a
+    assinatura -- mesma informacao da tela Gerenciar Clientes."""
+    planos = {p["id"]: p for p in models.get_planos()}
+    cadastros = {c["user_id"]: c for c in models.get_cadastros()}
+    hoje = models._hoje_cuiaba()
+    rows = []
+    for c in sorted(models.get_all_clientes(), key=lambda c: (c["criado_em"] or ""), reverse=True):
+        cad = cadastros.get(c["id"], {})
+        plano = planos.get(c["plano_id"])
+        perfil = ", ".join({"produtor": "Produtor", "tecnico": "Técnico do setor"}.get(p, p)
+                           for p in (cad.get("perfil") or "").split(",") if p)
+        cidade = (cad.get("cidade") or "") + (f"/{cad['uf']}" if cad.get("uf") else "")
+        fim = models.acesso_ate(c)
+        rows.append([
+            cad.get("nome_completo") or c["username"], c["username"], models.fmt_telefone_br(c["telefone"]) or "",
+            c["email"] or "", perfil, cad.get("empresa") or "", cidade, cad.get("culturas") or "",
+            cad.get("area_ha") or "", _data_excel((cad.get("criado_em") or c["criado_em"] or "")[:10]),
+            plano["nome"] if plano else "Sem plano escolhido",
+            plano["valor"] if plano else "",
+            models.CICLOS_PLANO.get(plano["ciclo"], (plano["ciclo"],))[0] if plano else "",
+            {"pendente": "Aguardando pagamento", "ativa": "Ativa"}.get(c["status"], (c["status"] or "").capitalize()),
+            _sim_nao(fim and fim >= hoje), _data_excel(c["pago_ate"]), _cortesia_excel(c["cortesia_ate"]),
+            c["n_pontos"],
+        ])
+    return rows
+
+
+def _planos_rows():
+    rotulos = dict(models.RECURSOS_PLANO)
+    clientes = models.get_all_clientes()
+    hoje = models._hoje_cuiaba()
+    rows = []
+    for p in models.get_planos():
+        do_plano = [c for c in clientes if c["plano_id"] == p["id"]]
+        liberados = sum(1 for c in do_plano if (models.acesso_ate(c) or "") >= hoje)
+        rows.append([
+            p["nome"], p["valor"], models.CICLOS_PLANO.get(p["ciclo"], (p["ciclo"],))[0], _sim_nao(p["ativo"]),
+            p["max_pontos"], p["raio_km"], ", ".join(rotulos.get(r, r) for r in p["recursos"]),
+            len(do_plano), liberados,
+        ])
+    return rows
+
+
 def build_workbook(completar_clima=None):
     wb = Workbook()
     wb.remove(wb.active)
@@ -705,6 +758,23 @@ def build_workbook(completar_clima=None):
         ["Usuário", "Tipo", "Dono (se subordinado)", "Email", "Telefone", "Admin", "Fazendas liberadas", "Recebe relatório"],
         _usuarios_rows,
     )
+    _try_sheet(
+        wb, "Clientes",
+        ["Cliente", "Usuário", "Celular", "E-mail", "Perfil", "Fazenda/empresa", "Cidade", "Culturas", "Área (ha)",
+         "Cadastrado em", "Plano", "Valor do plano (R$)", "Ciclo", "Situação", "Acesso liberado", "Pago até",
+         "Cortesia até", "Lavouras"],
+        _clientes_rows, date_columns=(9, 15, 16),
+    )
+    _try_sheet(
+        wb, "Planos",
+        ["Plano", "Valor (R$)", "Ciclo", "À venda", "Lavouras (máx.)", "Raio (km)", "Abas liberadas",
+         "Clientes no plano", "Clientes com acesso liberado"],
+        _planos_rows,
+    )
+    for aba, coluna in (("Clientes", "L"), ("Planos", "B")):  # valores em R$
+        for celula in wb[aba][coluna][1:]:
+            if isinstance(celula.value, (int, float)):
+                celula.number_format = '"R$" #,##0.00'
     buffer = io.BytesIO()
     wb.save(buffer)
     buffer.seek(0)

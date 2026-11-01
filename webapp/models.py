@@ -3816,7 +3816,7 @@ def get_pagamentos(user_id):
 def get_all_clientes():
     conn = get_db()
     rows = conn.execute(
-        "SELECT u.id, u.username, u.email, u.telefone, a.status, a.pago_ate, a.cortesia_ate, a.criado_em,"
+        "SELECT u.id, u.username, u.email, u.telefone, a.plano_id, a.status, a.pago_ate, a.cortesia_ate, a.criado_em,"
         " p.nome AS plano_nome, (SELECT COUNT(*) FROM cliente_pontos cp WHERE cp.user_id = u.id) AS n_pontos"
         " FROM users u LEFT JOIN assinaturas a ON a.user_id = u.id LEFT JOIN planos p ON p.id = a.plano_id"
         " WHERE u.is_cliente = 1 ORDER BY u.username COLLATE NOCASE"

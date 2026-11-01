@@ -174,5 +174,42 @@ class PlanosTest(unittest.TestCase):
         self.assertIsNone(models.get_virtual_farm(site_name))
 
 
+class ExcelClientesPlanosTest(unittest.TestCase):
+    """Abas "Clientes" e "Planos" no Excel de Exportar (pedido do Alan, 01/11/2026)."""
+
+    def test_abas_clientes_e_planos(self):
+        import datetime as dt
+        import export_excel
+        from openpyxl import load_workbook
+        plano = models.salvar_plano(None, "Zzz Plano Excel", "", 79.9, "MONTHLY", 3, 50, ["clima", "esporos"], True, 9)
+        uid = models.criar_cliente("Zzz Cliente Excel", "segredo1", "excel@t.com", "5565999990055", "", plano)
+        models.atualizar_assinatura(uid, plano_id=plano, status="ativa", cortesia_ate=models.SEM_PRAZO)
+        models.registrar_cadastro({"username": "Zzz Cliente Excel", "nome_completo": "Zzz Cliente Excel da Silva",
+                                   "perfil": "produtor,tecnico", "telefone": "5565999990055", "empresa": "Fazenda Zzz",
+                                   "cidade": "Sorriso", "uf": "MT", "culturas": "Soja", "area_ha": 1500,
+                                   "tipo": "cliente", "user_id": uid})
+        wb = load_workbook(export_excel.build_workbook())
+        self.assertIn("Clientes", wb.sheetnames)
+        self.assertIn("Planos", wb.sheetnames)
+        clientes = list(wb["Clientes"].iter_rows(values_only=True))
+        self.assertEqual(clientes[0][:3], ("Cliente", "Usuário", "Celular"))
+        linha = next(r for r in clientes if r[1] == "Zzz Cliente Excel")
+        cab = clientes[0]
+        valor = dict(zip(cab, linha))
+        self.assertEqual(valor["Cliente"], "Zzz Cliente Excel da Silva")
+        self.assertEqual(valor["Perfil"], "Produtor, Técnico do setor")
+        self.assertEqual((valor["Cidade"], valor["Plano"], valor["Valor do plano (R$)"], valor["Ciclo"]),
+                         ("Sorriso/MT", "Zzz Plano Excel", 79.9, "Mensal"))
+        self.assertEqual((valor["Situação"], valor["Acesso liberado"], valor["Cortesia até"]), ("Ativa", "Sim", "Sem prazo"))
+        self.assertIsInstance(valor["Cadastrado em"], dt.datetime)  # data de verdade, nao texto
+        self.assertNotIn("Erro ao gerar", str(clientes))
+        planos = list(wb["Planos"].iter_rows(values_only=True))
+        p = dict(zip(planos[0], next(r for r in planos if r[0] == "Zzz Plano Excel")))
+        self.assertEqual((p["Valor (R$)"], p["À venda"], p["Clientes no plano"], p["Clientes com acesso liberado"]),
+                         (79.9, "Sim", 1, 1))
+        self.assertIn("Esporos", p["Abas liberadas"])
+        self.assertIn("R$", wb["Planos"]["B2"].number_format)
+
+
 if __name__ == "__main__":
     unittest.main()
