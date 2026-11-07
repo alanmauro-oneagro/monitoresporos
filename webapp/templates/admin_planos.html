@@ -7,20 +7,6 @@
 .tabela-preco input[type=number] { -moz-appearance: textfield; }
 </style>
 <h4 class="mb-2">Planos e Valores</h4>
-<p class="text-muted small mb-3">
-    Planos que o cliente do app pode assinar em <a href="{{ url_for('planos_publico') }}" target="_blank">{{ url_for('planos_publico', _external=True) }}</a>.
-    O cliente marca as lavouras dele no mapa e vê, em cada uma, o que o plano libera. Os esporos são sempre
-    <strong>estimados</strong> pelas fazendas reais dentro do raio do plano (nunca aparece nome nem leitura de fazenda real).
-    Mudar o valor de um plano só vale para assinaturas novas.
-</p>
-
-<div class="alert {{ 'alert-success' if asaas_configurado and asaas_webhook_ok else 'alert-warning' }} small">
-    <strong>Cobrança (Asaas):</strong>
-    {% if asaas_configurado %}chave configurada, ambiente <strong>{{ 'PRODUÇÃO' if asaas_producao else 'SANDBOX (teste, não cobra)' }}</strong>.{% else %}<strong>não configurada</strong> -- falta a variável <code>ASAAS_API_KEY</code> no Railway; quem se cadastrar fica aguardando liberação manual.{% endif %}
-    {% if not asaas_webhook_ok %}Falta <code>ASAAS_WEBHOOK_TOKEN</code> -- sem ela o pagamento não libera o acesso sozinho.{% endif %}
-    Webhook no Asaas: <code>{{ url_for('asaas_webhook', _external=True) }}</code> (eventos de cobrança e de assinatura).
-</div>
-
 {% macro campos_plano(p) %}
 {% set k = p.id if p else 'novo' %}
 <div class="row g-2 align-items-end">
@@ -131,4 +117,18 @@
 </script>
 
 <p class="small text-muted">Os clientes (plano, situação, pago até, cortesia, lavouras) ficam em <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>.</p>
+
+<p class="text-muted small mb-3">
+    Planos que o cliente do app pode assinar em <a href="{{ url_for('planos_publico') }}" target="_blank">{{ url_for('planos_publico', _external=True) }}</a>.
+    O cliente marca as lavouras dele no mapa e vê, em cada uma, o que o plano libera. Os esporos são sempre
+    <strong>estimados</strong> pelas fazendas reais dentro do raio do plano (nunca aparece nome nem leitura de fazenda real).
+    Mudar o valor de um plano só vale para assinaturas novas.
+</p>
+
+<div class="alert {{ 'alert-success' if asaas_configurado and asaas_webhook_ok else 'alert-warning' }} small">
+    <strong>Cobrança (Asaas):</strong>
+    {% if asaas_configurado %}chave configurada, ambiente <strong>{{ 'PRODUÇÃO' if asaas_producao else 'SANDBOX (teste, não cobra)' }}</strong>.{% else %}<strong>não configurada</strong> -- falta a variável <code>ASAAS_API_KEY</code> no Railway; quem se cadastrar fica aguardando liberação manual.{% endif %}
+    {% if not asaas_webhook_ok %}Falta <code>ASAAS_WEBHOOK_TOKEN</code> -- sem ela o pagamento não libera o acesso sozinho.{% endif %}
+    Webhook no Asaas: <code>{{ url_for('asaas_webhook', _external=True) }}</code> (eventos de cobrança e de assinatura).
+</div>
 {% endblock %}
