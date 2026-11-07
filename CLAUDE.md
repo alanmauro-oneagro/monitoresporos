@@ -123,7 +123,7 @@ valor no setting `cotacao_dolar`; sem cotacao nenhuma = assinatura recusada
 com aviso) -- `_iniciar_cobranca`. Telas mostram "U$ 20,00 (≈ R$ 110,03)"
 (filtro `preco_plano`); a cobranca recorrente fica no valor em reais do dia
 da assinatura. **Tabela de apoio** (Planos e Valores, pedido do Alan,
-07/11/2026): 10 colunas pra precificar em U$ pela area monitorada -- o
+07/11/2026): 10 linhas (uma por faixa; colunas Area, Raio, U$/ha, Total U$, ≈ Total R$ -- invertida a pedido do Alan pra caber no celular) pra precificar em U$ pela area monitorada -- o
 Master digita area (ha) e U$/ha; raio monitorado = raio do circulo com
 essa area (`app._raio_km`, r = raiz(A/pi)), total em U$ e ≈ R$ (cotacao do
 dia), recalculado ao digitar; setting `tabela_precificacao`, rota
