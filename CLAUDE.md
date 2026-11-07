@@ -28,7 +28,8 @@ Envios) cada um desses dois niveis abre e' o Master que decide na aba
 padrao: Administrador = Usuarios + Mapas de Estudo, Usuario = nenhuma).
 **Nomes no menu (pedido do Alan, 01/11/2026)**: "Mapas de NDVI" (rota `ndvi`),
 "Planos e Valores" (`admin_planos`), "Gerenciar Acessos" (`admin_acessos`)
-e "Programação de Envios" (`whatsapp_gerenciamento`, chave `envios`), "Mapas de Solo" (`solo`); onde
+e "Programação de Envios" (`whatsapp_gerenciamento`, chave `envios`), "Mapas de Solo" (`solo`),
+"Gerenciar Exportações" (`admin_exportar`, ex-"Exportar"); onde
 este arquivo diz NDVI/Planos/Acessos/Envios, sao essas abas.
 **Mapas de Estudo = ex-"Mapa Interpolado"** (renomeado pelo Alan,
 01/11/2026): rota `/mapa-interpolado`, endpoint/chave `mapa_interpolado`
@@ -113,7 +114,15 @@ esporos ESTIMADOS por IDW das fazendas reais (nunca nome/leitura de
 fazenda real), clima, risco e fungicidas conforme o plano. Planos e
 precos: Configuracoes -> **Planos** (`/admin/planos`, Master; so' os planos,
 "Abas liberadas no app" = `RECURSOS_PLANO`); cortesia/plano de cada
-cliente: Configuracoes -> Gerenciar Clientes. Planos padrao
+cliente: Configuracoes -> Gerenciar Clientes. **Moeda do plano** (pedido do
+Alan, 07/11/2026): cada plano tem `moeda` BRL (R$) ou USD (U$)
+(`models.MOEDAS`, select ao lado do valor); o Asaas so' cobra em reais,
+entao plano em U$ e' convertido na hora de assinar pela PTAX de venda do
+Banco Central (`cotacao.dolar()`: olinda.bcb.gov.br, 6 h em memoria, ultimo
+valor no setting `cotacao_dolar`; sem cotacao nenhuma = assinatura recusada
+com aviso) -- `_iniciar_cobranca`. Telas mostram "U$ 20,00 (≈ R$ 110,03)"
+(filtro `preco_plano`); a cobranca recorrente fica no valor em reais do dia
+da assinatura. Planos padrao
 (`models.PLANOS_PADRAO`, criados pelo `init_db` so' se faltar o nome --
 pedido do Alan, 31/10/2026): **Free** (valor 0, a venda), Basico, Premium e
 Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o

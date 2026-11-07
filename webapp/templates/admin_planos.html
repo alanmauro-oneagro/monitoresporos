@@ -21,7 +21,13 @@
 <div class="row g-2 align-items-end">
     {% if p %}<input type="hidden" name="plano_ids" value="{{ p.id }}">{% endif %}
     <div class="col-12 col-md-3"><label class="form-label small mb-0">Nome</label><input class="form-control form-control-sm" name="nome__{{ k }}" value="{{ p.nome if p else '' }}" {% if p %}required{% endif %} {% if not p %}placeholder="Preencha só se quiser criar um plano novo"{% endif %}></div>
-    <div class="col-6 col-md-2"><label class="form-label small mb-0" title="0 = plano grátis (libera na hora, sem cobrança nem CPF)">Valor (R$) -- 0 = grátis</label><input class="form-control form-control-sm" name="valor__{{ k }}" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal"></div>
+    <div class="col-6 col-md-2"><label class="form-label small mb-0" title="0 = plano grátis (libera na hora, sem cobrança nem CPF)">Valor -- 0 = grátis</label>
+        <div class="input-group input-group-sm">
+            <select class="form-select form-select-sm flex-grow-0" style="width: 5.6rem;" name="moeda__{{ k }}" aria-label="Moeda" title="Plano em dólar é cobrado em reais pela cotação do dia (Banco Central)">{% for cod, simb in moedas.items() %}<option value="{{ cod }}" {% if (p.moeda if p else 'BRL') == cod %}selected{% endif %}>{{ simb }}</option>{% endfor %}</select>
+            <input class="form-control form-control-sm" name="valor__{{ k }}" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" aria-label="Valor">
+        </div>
+        {% if p and p.moeda == 'USD' and p.valor > 0 and cotacao_dolar %}<div class="text-muted" style="font-size: 0.75rem;">≈ {{ (p.valor * cotacao_dolar.valor) | dinheiro }} hoje</div>{% endif %}
+    </div>
     <div class="col-6 col-md-2"><label class="form-label small mb-0">Ciclo</label>
         <select class="form-select form-select-sm" name="ciclo__{{ k }}">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }}</option>{% endfor %}</select></div>
     <div class="col-4 col-md-1"><label class="form-label small mb-0">Lavouras</label><input class="form-control form-control-sm" name="max_pontos__{{ k }}" value="{{ p.max_pontos if p else 1 }}" inputmode="numeric"></div>
@@ -46,6 +52,9 @@
 <form method="post" action="{{ url_for('admin_planos_excluir', plano_id=p.id) }}" id="excluir_plano_{{ p.id }}" class="d-none"
       onsubmit="return confirm('Excluir o plano {{ p.nome|e }}?');"></form>
 {% endfor %}
+<p class="small text-muted mb-2">💵 Dólar hoje: {% if cotacao_dolar %}<strong>R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}</strong>
+    <span>(PTAX de venda do Banco Central, {{ cotacao_dolar.data | data_br }})</span>{% else %}cotação indisponível no momento{% endif %}
+    -- plano em U$ é cobrado em reais por essa cotação na hora da assinatura.</p>
 <form method="post" action="{{ url_for('admin_planos_salvar') }}">
     {% for p in planos %}
     <div class="card shadow-sm mb-2"><div class="card-body">

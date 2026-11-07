@@ -36,9 +36,10 @@
                 <input class="form-check-input mt-0" type="radio" name="plano_id" id="plano_{{ p.id }}" value="{{ p.id }}"
                        data-gratis="{{ 1 if p.valor <= 0 else 0 }}" {% if not disponivel %}disabled{% elif plano and plano.id == p.id %}checked{% endif %} required>
                 <strong>{{ p.nome }}</strong>
-                <span class="ms-auto fw-bold {{ 'text-success' if disponivel else 'text-muted' }}">{% if not disponivel %}Em breve{% elif p.valor <= 0 %}Grátis{% else %}R$ {{ '%.2f' | format(p.valor) | replace('.', ',') }}<span class="small text-muted fw-normal"> / {{ p.ciclo_label | lower }}</span>{% endif %}</span>
+                <span class="ms-auto fw-bold {{ 'text-success' if disponivel else 'text-muted' }}">{% if not disponivel %}Em breve{% elif p.valor <= 0 %}Grátis{% else %}{{ p | preco_plano }}<span class="small text-muted fw-normal"> / {{ p.ciclo_label | lower }}</span>{% endif %}</span>
             </div>
             {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
+            {% if p.moeda == 'USD' and p.valor > 0 and disponivel %}<div class="small text-muted">Cobrado em reais, pela cotação do dólar do dia (Banco Central).</div>{% endif %}
             <ul class="small mb-0 ps-4 mt-1">
                 <li>Até {{ p.max_pontos }} lavoura{{ 's' if p.max_pontos > 1 }}</li>
                 {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}

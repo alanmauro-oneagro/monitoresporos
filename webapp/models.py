@@ -757,6 +757,11 @@ def init_db():
         conn.execute("ALTER TABLE cliente_pontos ADD COLUMN site_name TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
+    try:
+        # Moeda do valor do plano: BRL ou USD (pedido do Alan, 07/11/2026).
+        conn.execute("ALTER TABLE planos ADD COLUMN moeda TEXT NOT NULL DEFAULT 'BRL'")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
     # Planos padrao (pedido do Alan, 31/10/2026) -- so' cria o que ainda nao
     # existe pelo nome; os pagos nascem fora de venda ate' o Master por o
     # preco em Configuracoes > Planos e clientes.
@@ -3512,8 +3517,15 @@ DIAS_TOLERANCIA_PAGAMENTO = 5
 PAGAMENTO_CONFIRMADO = ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH")
 
 
+# Moeda do valor do plano (pedido do Alan, 07/11/2026). Plano em dolar e'
+# cobrado em reais no Asaas, convertido pela cotacao do dia (`cotacao.py`).
+MOEDAS = {"BRL": "R$", "USD": "U$"}
+
+
 def _plano_row_to_dict(r):
     d = dict(r)
+    d["moeda"] = d.get("moeda") if d.get("moeda") in MOEDAS else "BRL"
+    d["simbolo"] = MOEDAS[d["moeda"]]
     try:
         d["recursos"] = [c for c in json.loads(d["recursos"] or "[]") if c in dict(RECURSOS_PLANO)]
     except ValueError:
@@ -3537,26 +3549,28 @@ def get_plano(plano_id):
     return _plano_row_to_dict(row) if row else None
 
 
-def salvar_plano(plano_id, nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem):
+def salvar_plano(plano_id, nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, moeda="BRL"):
     """Cria (plano_id None) ou atualiza um plano. Mudar o valor aqui NAO
     muda a cobranca de quem ja assinou (fica a do Asaas) -- so' vale pra
     assinatura nova."""
     if ciclo not in CICLOS_PLANO:
         raise ValueError("ciclo invalido")
+    if moeda not in MOEDAS:
+        raise ValueError("moeda invalida")
     valores = (
         nome, descricao, float(valor), ciclo, int(max_pontos), float(raio_km),
-        json.dumps([c for c in recursos if c in dict(RECURSOS_PLANO)]), 1 if ativo else 0, int(ordem),
+        json.dumps([c for c in recursos if c in dict(RECURSOS_PLANO)]), 1 if ativo else 0, int(ordem), moeda,
     )
     conn = get_db()
     if plano_id:
         conn.execute(
-            "UPDATE planos SET nome=?, descricao=?, valor=?, ciclo=?, max_pontos=?, raio_km=?, recursos=?, ativo=?, ordem=?"
-            " WHERE id = ?", valores + (plano_id,),
+            "UPDATE planos SET nome=?, descricao=?, valor=?, ciclo=?, max_pontos=?, raio_km=?, recursos=?, ativo=?, ordem=?,"
+            " moeda=? WHERE id = ?", valores + (plano_id,),
         )
     else:
         cur = conn.execute(
-            "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", valores,
+            "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, moeda)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", valores,
         )
         plano_id = cur.lastrowid
     conn.commit()
