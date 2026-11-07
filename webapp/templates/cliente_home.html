@@ -25,10 +25,7 @@
     </div>
 </a>
 {% endfor %}
-{% if pontos | length < plano.max_pontos %}
 <a class="btn btn-success w-100 mt-2" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar lavoura</a>
-{% endif %}
-<p class="small text-muted mt-3">Plano {{ plano.nome }}: até {{ plano.max_pontos }} lavoura{{ 's' if plano.max_pontos > 1 }}.</p>
 {% endblock %}
 {% block extra_scripts %}
 <script>

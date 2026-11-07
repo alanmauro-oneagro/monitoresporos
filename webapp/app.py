@@ -7003,10 +7003,7 @@ def cliente_home():
 @cliente_required
 def cliente_ponto_novo():
     user_id = int(current_user.id)
-    plano = g.cliente_plano
-    if len(models.get_cliente_pontos(user_id)) >= plano["max_pontos"]:
-        flash(f"Seu plano permite até {plano['max_pontos']} lavoura(s).", "error")
-        return redirect(url_for("cliente_home"))
+    plano = g.cliente_plano  # sem limite de lavouras: o plano libera acessos ao site (pedido do Alan, 07/11/2026)
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()[:60]
         try:

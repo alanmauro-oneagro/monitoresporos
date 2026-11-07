@@ -41,7 +41,6 @@
             {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
             {% if p.moeda == 'USD' and p.valor > 0 and disponivel %}<div class="small text-muted">Cobrado em reais, pela cotação do dólar do dia (Banco Central).</div>{% endif %}
             <ul class="small mb-0 ps-4 mt-1">
-                <li>Até {{ p.max_pontos }} lavoura{{ 's' if p.max_pontos > 1 }}</li>
                 {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}
             </ul>
         </div>

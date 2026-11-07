@@ -131,7 +131,12 @@ linha, com uma caixa por plano; mesmos nomes de campo (`nome__<id>`,
 Alan, 07/11/2026): Lavouras, Raio e as abas fazenda_estimada/esporos/
 risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na
 tabela, mas o plano continua com elas (campos escondidos no formulario --
-salvar nao apaga; teste `PlanosLinhasForaDaTelaTest`). **Tabela de apoio** (Planos e
+salvar nao apaga; teste `PlanosLinhasForaDaTelaTest`). **Sem limite de lavouras** (pedido do
+Alan, 07/11/2026: "nao teremos limites de lavoura e sim acessos ao
+site"): o cliente marca quantas lavouras quiser (`cliente_ponto_novo`
+nao confere `max_pontos`; "Ate' X lavouras" saiu de Minha assinatura,
+/planos e da home do app; coluna "Lavouras (max.)" saiu da aba Planos do
+Excel). A coluna `planos.max_pontos` ficou no banco, sem uso. **Tabela de apoio** (Planos e
 Valores, pedido do Alan, 07/11/2026): faixas FIXAS de area
 (`app.FAIXAS_PRECO`: ate' 100, 250, 500, 1.000, 2.000, 3.000, 5.000,
 10.000 ha e acima de 10.000), o Master digita so' o U$/ha de cada faixa;
