@@ -5,38 +5,21 @@
 /* tabela de apoio: sem as setinhas do campo numerico (economiza espaco no celular) */
 .tabela-preco input[type=number]::-webkit-inner-spin-button, .tabela-preco input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .tabela-preco input[type=number] { -moz-appearance: textfield; }
+/* Planos lado a lado (pedido do Alan, 07/11/2026): 1a coluna fixa com o nome do campo. */
+.tabela-planos { font-size: 0.82rem; }
+.tabela-planos th:first-child, .tabela-planos td:first-child { position: sticky; left: 0; z-index: 2; background: #f8f9fa; font-weight: 600; width: 15rem; min-width: 15rem; line-height: 1.2; }
+.tabela-planos td.plano-col, .tabela-planos th.plano-col { min-width: 8rem; }
+@media (max-width: 575.98px) {
+    .tabela-planos { font-size: 0.75rem; }
+    .tabela-planos th:first-child, .tabela-planos td:first-child { width: 6.5rem; min-width: 6.5rem; }
+    .tabela-planos td.plano-col, .tabela-planos th.plano-col { min-width: 7rem; }
+}
+.tabela-planos .plano-novo { background: #f3faf5; }
+.tabela-planos tr.secao td { background: #e9ecef; font-weight: 600; }
+.tabela-planos td.rec { text-align: center; }
+.tabela-planos td.rec .form-check-input { float: none; margin: 0; width: 1.15em; height: 1.15em; }
 </style>
 <h4 class="mb-2">Planos e Valores</h4>
-{% macro campos_plano(p) %}
-{% set k = p.id if p else 'novo' %}
-<div class="row g-2 align-items-end">
-    {% if p %}<input type="hidden" name="plano_ids" value="{{ p.id }}">{% endif %}
-    <div class="col-12 col-md-3"><label class="form-label small mb-0">Nome</label><input class="form-control form-control-sm" name="nome__{{ k }}" value="{{ p.nome if p else '' }}" {% if p %}required{% endif %} {% if not p %}placeholder="Preencha só se quiser criar um plano novo"{% endif %}></div>
-    <div class="col-6 col-md-2"><label class="form-label small mb-0" title="0 = plano grátis (libera na hora, sem cobrança nem CPF)">Valor -- 0 = grátis</label>
-        <div class="input-group input-group-sm">
-            <select class="form-select form-select-sm flex-grow-0" style="width: 5.6rem;" name="moeda__{{ k }}" aria-label="Moeda" title="Plano em dólar é cobrado em reais pela cotação do dia (Banco Central)">{% for cod, simb in moedas.items() %}<option value="{{ cod }}" {% if (p.moeda if p else 'BRL') == cod %}selected{% endif %}>{{ simb }}</option>{% endfor %}</select>
-            <input class="form-control form-control-sm" name="valor__{{ k }}" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" aria-label="Valor">
-        </div>
-        {% if p and p.moeda == 'USD' and p.valor > 0 and cotacao_dolar %}<div class="text-muted" style="font-size: 0.75rem;">≈ {{ (p.valor * cotacao_dolar.valor) | dinheiro }} hoje</div>{% endif %}
-    </div>
-    <div class="col-6 col-md-2"><label class="form-label small mb-0">Ciclo</label>
-        <select class="form-select form-select-sm" name="ciclo__{{ k }}">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }}</option>{% endfor %}</select></div>
-    <div class="col-4 col-md-1"><label class="form-label small mb-0">Lavouras</label><input class="form-control form-control-sm" name="max_pontos__{{ k }}" value="{{ p.max_pontos if p else 1 }}" inputmode="numeric"></div>
-    <div class="col-4 col-md-1"><label class="form-label small mb-0">Raio (km)</label><input class="form-control form-control-sm" name="raio_km__{{ k }}" value="{{ (p.raio_km | round | int) if p else 50 }}" inputmode="decimal"></div>
-    <div class="col-4 col-md-1"><label class="form-label small mb-0">Ordem</label><input class="form-control form-control-sm" name="ordem__{{ k }}" value="{{ p.ordem if p else 0 }}" inputmode="numeric"></div>
-    <div class="col-12 col-md-2 form-check ms-2"><input class="form-check-input" type="checkbox" name="ativo__{{ k }}" id="ativo_{{ k }}" {% if not p or p.ativo %}checked{% endif %}><label class="form-check-label small" for="ativo_{{ k }}">À venda</label></div>
-    <div class="col-12"><label class="form-label small mb-0">Descrição</label><input class="form-control form-control-sm" name="descricao__{{ k }}" value="{{ p.descricao if p else '' }}"></div>
-    <div class="col-12 small">
-        <span class="fw-semibold me-2">Abas liberadas no app:</span>
-        {% for chave, rotulo in recursos %}
-        <span class="form-check form-check-inline">
-            <input class="form-check-input" type="checkbox" name="recursos__{{ k }}" value="{{ chave }}" id="rec_{{ k }}_{{ chave }}" {% if p and chave in p.recursos %}checked{% endif %}>
-            <label class="form-check-label" for="rec_{{ k }}_{{ chave }}">{{ rotulo }}</label>
-        </span>
-        {% endfor %}
-    </div>
-</div>
-{% endmacro %}
 
 {# Um formulario so' pra todos os planos, com um unico botao Salvar (pedido do Alan, 31/10/2026). #}
 {% for p in planos %}
@@ -46,17 +29,68 @@
 <p class="small text-muted mb-2">💵 Dólar hoje: {% if cotacao_dolar %}<strong>R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}</strong>
     <span>(PTAX de venda do Banco Central, {{ cotacao_dolar.data | data_br }})</span>{% else %}cotação indisponível no momento{% endif %}
     -- plano em U$ é cobrado em reais por essa cotação na hora da assinatura.</p>
+{% set colunas = planos + [none] %}
 <form method="post" action="{{ url_for('admin_planos_salvar') }}">
-    {% for p in planos %}
-    <div class="card shadow-sm mb-2"><div class="card-body">
-        {{ campos_plano(p) }}
-        <button class="btn btn-link btn-sm text-danger p-0 mt-1" type="submit" form="excluir_plano_{{ p.id }}">Excluir plano</button>
-    </div></div>
-    {% endfor %}
-    <div class="card shadow-sm mb-2 border-success"><div class="card-body">
-        <h6>Novo plano <span class="small text-muted fw-normal">(opcional)</span></h6>
-        {{ campos_plano(none) }}
-    </div></div>
+    {% for p in planos %}<input type="hidden" name="plano_ids" value="{{ p.id }}">{% endfor %}
+    <div class="table-responsive mb-2">
+    <table class="table table-sm table-bordered align-middle mb-0 tabela-planos">
+        <thead class="table-light"><tr>
+            <th>Plano</th>
+            {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+            <th class="plano-col{{ ' plano-novo' if not p }}">
+                <input class="form-control form-control-sm fw-bold" name="nome__{{ k }}" value="{{ p.nome if p else '' }}" aria-label="Nome do plano"
+                       {% if p %}required{% else %}placeholder="Novo plano (opcional)"{% endif %}>
+            </th>
+            {% endfor %}
+        </tr></thead>
+        <tbody>
+            <tr><td title="0 = plano grátis (libera na hora, sem cobrança nem CPF)">Valor <span class="fw-normal text-muted">(0 = grátis)</span></td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col{{ ' plano-novo' if not p }}">
+                    <div class="input-group input-group-sm flex-nowrap">
+                        <select class="form-select form-select-sm flex-grow-0" style="width: 4.6rem;" name="moeda__{{ k }}" aria-label="Moeda" title="Plano em dólar é cobrado em reais pela cotação do dia (Banco Central)">{% for cod, simb in moedas.items() %}<option value="{{ cod }}" {% if (p.moeda if p else 'BRL') == cod %}selected{% endif %}>{{ simb }}</option>{% endfor %}</select>
+                        <input class="form-control form-control-sm" style="min-width: 4rem;" name="valor__{{ k }}" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" aria-label="Valor">
+                    </div>
+                    {% if p and p.moeda == 'USD' and p.valor > 0 and cotacao_dolar %}<div class="text-muted" style="font-size: 0.72rem;">≈ {{ (p.valor * cotacao_dolar.valor) | dinheiro }} hoje</div>{% endif %}
+                </td>{% endfor %}</tr>
+            <tr><td>Ciclo</td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col{{ ' plano-novo' if not p }}"><select class="form-select form-select-sm" name="ciclo__{{ k }}" aria-label="Ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }}</option>{% endfor %}</select></td>
+                {% endfor %}</tr>
+            <tr><td>Lavouras</td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col{{ ' plano-novo' if not p }}"><input class="form-control form-control-sm" name="max_pontos__{{ k }}" value="{{ p.max_pontos if p else 1 }}" inputmode="numeric" aria-label="Lavouras"></td>
+                {% endfor %}</tr>
+            <tr><td>Raio (km)</td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col{{ ' plano-novo' if not p }}"><input class="form-control form-control-sm" name="raio_km__{{ k }}" value="{{ (p.raio_km | round | int) if p else 50 }}" inputmode="decimal" aria-label="Raio (km)"></td>
+                {% endfor %}</tr>
+            <tr><td>Ordem</td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col{{ ' plano-novo' if not p }}"><input class="form-control form-control-sm" name="ordem__{{ k }}" value="{{ p.ordem if p else 0 }}" inputmode="numeric" aria-label="Ordem"></td>
+                {% endfor %}</tr>
+            <tr><td>À venda</td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col rec{{ ' plano-novo' if not p }}"><input class="form-check-input" type="checkbox" name="ativo__{{ k }}" id="ativo_{{ k }}" aria-label="À venda" {% if not p or p.ativo %}checked{% endif %}></td>
+                {% endfor %}</tr>
+            <tr><td>Descrição</td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col{{ ' plano-novo' if not p }}"><textarea class="form-control form-control-sm" rows="2" name="descricao__{{ k }}" aria-label="Descrição">{{ p.descricao if p else '' }}</textarea></td>
+                {% endfor %}</tr>
+            <tr class="secao"><td>Abas liberadas no app</td>{% for p in colunas %}<td class="{{ 'plano-novo' if not p }}"></td>{% endfor %}</tr>
+            {% for chave, rotulo in recursos %}
+            <tr><td class="fw-normal">{{ rotulo }}</td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col rec{{ ' plano-novo' if not p }}"><input class="form-check-input" type="checkbox" name="recursos__{{ k }}" value="{{ chave }}" id="rec_{{ k }}_{{ chave }}" aria-label="{{ rotulo }}" {% if p and chave in p.recursos %}checked{% endif %}></td>
+                {% endfor %}</tr>
+            {% endfor %}
+            <tr><td></td>
+                {% for p in colunas %}
+                <td class="plano-col text-center{{ ' plano-novo' if not p }}">{% if p %}<button class="btn btn-link btn-sm text-danger p-0" type="submit" form="excluir_plano_{{ p.id }}">Excluir plano</button>{% endif %}</td>
+                {% endfor %}</tr>
+        </tbody>
+    </table>
+    </div>
     <div class="position-sticky bottom-0 bg-white border-top py-2 mb-4" style="z-index: 5;">
         <button class="btn btn-success" type="submit">Salvar</button>
     </div>
@@ -64,55 +98,70 @@
 
 <div class="card shadow-sm mb-4" id="tabela-precificacao"><div class="card-body px-2 px-sm-3">
     <h6 class="mb-1">Tabela de apoio: preço em U$ pela área monitorada</h6>
-    <p class="small text-muted mb-2">Só para ajudar a montar os preços -- não muda nenhum plano. Digite a área e o valor por hectare;
-        o raio é o do círculo com essa área e o total em reais usa o dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.</p>
+    <p class="small text-muted mb-2">Digite o valor por hectare de cada faixa. A área do cadastro do cliente busca a faixa dela
+        (valor intermediário fica na faixa de cima: 300 ha usa a de "até 500 ha") e o preço aparece em
+        <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>. Raio = círculo com a área; R$ pelo dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.
+        Não muda nenhum plano nem cobrança.</p>
     <form method="post" action="{{ url_for('admin_planos_tabela') }}">
         <div class="table-responsive">
-        <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}">
+        <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem; max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}">
             <thead class="table-light"><tr>
-                <th class="text-center d-none d-sm-table-cell">#</th><th title="Área monitorada">Área (ha)</th><th title="Raio monitorado">Raio (km)</th>
-                <th title="Valor por hectare">U$/ha</th><th title="Valor total em dólar">Total U$</th><th title="Valor total em reais, pela cotação de hoje">≈ Total R$</th>
+                <th title="Área monitorada">Área</th><th title="Raio monitorado no limite da faixa">Raio (km)</th>
+                <th title="Valor por hectare">U$/ha</th><th title="Valor total em dólar no limite da faixa">Total U$</th><th title="Valor total em reais, pela cotação de hoje">≈ Total R$</th>
             </tr></thead>
             <tbody>
-                {% for c in tabela_preco %}
-                <tr>
-                    <td class="text-center text-muted d-none d-sm-table-cell">{{ loop.index }}</td>
-                    <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 4.4rem;" name="area_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="area" value="{{ c.area_ha if c.area_ha is not none else '' }}" aria-label="Área da faixa {{ loop.index }}"></td>
-                    <td class="text-end text-muted" data-saida="raio" data-col="{{ loop.index0 }}">{{ ('%.2f' | format(c.raio_km)) | replace('.', ',') if c.raio_km else '-' }}</td>
-                    <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 3.2rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ c.usd_ha if c.usd_ha is not none else '' }}" aria-label="Valor por hectare da faixa {{ loop.index }}"></td>
-                    <td class="text-end fw-bold text-nowrap" data-saida="usd" data-col="{{ loop.index0 }}">{{ c.total_usd | dinheiro('U$') if c.total_usd is not none else '-' }}</td>
-                    <td class="text-end text-nowrap" data-saida="brl" data-col="{{ loop.index0 }}">{{ (c.total_usd * cotacao_dolar.valor) | dinheiro if c.total_usd is not none and cotacao_dolar else '-' }}</td>
+                {% for f in tabela_preco %}
+                <tr data-ate="{{ f.ate_ha if f.ate_ha else '' }}">
+                    <td class="text-nowrap">{{ f.rotulo }}</td>
+                    <td class="text-end text-muted">{{ ('%.2f' | format(f.raio_km)) | replace('.', ',') if f.raio_km else '-' }}</td>
+                    <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 3.6rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ f.usd_ha if f.usd_ha is not none else '' }}" aria-label="Valor por hectare {{ f.rotulo }}"></td>
+                    <td class="text-end fw-bold text-nowrap" data-saida="usd" data-col="{{ loop.index0 }}">{{ f.total_usd | dinheiro('U$') if f.total_usd is not none else '-' }}</td>
+                    <td class="text-end text-nowrap" data-saida="brl" data-col="{{ loop.index0 }}">{{ (f.total_usd * cotacao_dolar.valor) | dinheiro if f.total_usd is not none and cotacao_dolar else '-' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         </div>
+        <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
+            <label for="simular-area" class="text-muted">Simular área do cliente (ha)</label>
+            <input type="number" min="0" step="any" id="simular-area" class="form-control form-control-sm" style="max-width: 7rem;">
+            <span id="simular-resultado" class="fw-semibold"></span>
+        </div>
         <button class="btn btn-outline-success btn-sm" type="submit">Salvar tabela</button>
     </form>
 </div></div>
 <script>
-// Recalcula a tabela de apoio enquanto digita (mesmas contas do servidor, app._tabela_precificacao).
+// Recalcula a tabela de apoio enquanto digita (mesmas contas do servidor,
+// app._tabela_precificacao / app.preco_pela_area).
 (function () {
     var tabela = document.querySelector('.tabela-preco');
     if (!tabela) return;
     var cotacao = parseFloat(tabela.dataset.cotacao);
+    var linhas = Array.prototype.slice.call(tabela.querySelectorAll('tbody tr'));
     function dinheiro(v, simbolo) {
         return simbolo + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    function campo(col, nome) {
-        var v = parseFloat(tabela.querySelector('[data-col="' + col + '"][data-campo="' + nome + '"]').value);
-        return isNaN(v) ? null : v;
+    function usdHa(tr) { var v = parseFloat(tr.querySelector('[data-campo="usd_ha"]').value); return isNaN(v) ? null : v; }
+    function simular() {
+        var area = parseFloat(document.getElementById('simular-area').value), saida = document.getElementById('simular-resultado');
+        if (!(area > 0)) { saida.textContent = ''; return; }
+        var tr = linhas.filter(function (l) { return !l.dataset.ate || area <= parseFloat(l.dataset.ate); })[0];
+        var v = usdHa(tr), raio = Math.sqrt(area * 0.01 / Math.PI).toFixed(2).replace('.', ',');
+        var faixa = tr.cells[0].textContent;
+        if (v === null) { saida.textContent = faixa + ' -- sem U$/ha na faixa · raio ' + raio + ' km'; return; }
+        var total = area * v;
+        saida.textContent = faixa + ': ' + dinheiro(total, 'U$') + (isNaN(cotacao) ? '' : ' (≈ ' + dinheiro(total * cotacao, 'R$') + ')') + ' · raio ' + raio + ' km';
     }
-    function saida(col, nome) { return tabela.querySelector('[data-col="' + col + '"][data-saida="' + nome + '"]'); }
     tabela.addEventListener('input', function (e) {
         var col = e.target.dataset.col;
         if (col === undefined) return;
-        var area = campo(col, 'area'), usdHa = campo(col, 'usd_ha');
-        saida(col, 'raio').textContent = area > 0 ? Math.sqrt(area * 0.01 / Math.PI).toFixed(2).replace('.', ',') : '-';
-        var total = area !== null && usdHa !== null ? area * usdHa : null;
-        saida(col, 'usd').textContent = total !== null ? dinheiro(total, 'U$') : '-';
-        saida(col, 'brl').textContent = total !== null && !isNaN(cotacao) ? dinheiro(total * cotacao, 'R$') : '-';
+        var tr = linhas[col], ate = parseFloat(tr.dataset.ate), v = usdHa(tr);
+        var total = !isNaN(ate) && v !== null ? ate * v : null;
+        tabela.querySelector('[data-col="' + col + '"][data-saida="usd"]').textContent = total !== null ? dinheiro(total, 'U$') : '-';
+        tabela.querySelector('[data-col="' + col + '"][data-saida="brl"]').textContent = total !== null && !isNaN(cotacao) ? dinheiro(total * cotacao, 'R$') : '-';
+        simular();
     });
+    document.getElementById('simular-area').addEventListener('input', simular);
 })();
 </script>
 

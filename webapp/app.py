@@ -3402,6 +3402,7 @@ def mapa():
     cards_by_site = _cards_by_site_all(permitted, _load_translations())
     coords = _coords_all()
     virtual_names = models.virtual_farm_site_names()
+    sites_plano = models.sites_de_clientes()
     site_countries = models.get_all_site_countries()
     active_countries = countries.active_country_codes(site_countries)
     sites_data = []
@@ -3419,6 +3420,7 @@ def mapa():
             "lat": lat,
             "lon": lon,
             "virtual": site in virtual_names,
+            "de_plano": site in sites_plano,
             "tipo": tipo,
             "cards": sorted(cards, key=lambda c: c["doenca"]),
             "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
@@ -3472,6 +3474,7 @@ def mapa_interpolado():
     # (IDW) dos pontos virtuais logo abaixo (nao pode encolher so' porque
     # uma fazenda vizinha foi desativada).
     desativadas = models.get_deactivated_site_names()
+    sites_plano = models.sites_de_clientes()
 
     sites_data = []
     for site, cards in cards_reais.items():
@@ -3518,6 +3521,7 @@ def mapa_interpolado():
         if (cards or tipo == "clima") and vf["site_name"] not in desativadas:
             sites_data.append({
                 "site": vf["site_name"], "nome_exibicao": vf["nome"], "lat": vf["lat"], "lon": vf["lon"], "virtual": True,
+                "de_plano": vf["site_name"] in sites_plano,
                 "tipo": tipo,
                 "cards": cards,
                 "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
@@ -7284,7 +7288,10 @@ def admin_solicitacoes():
     # (cliente do app) e fazendas ja' liberadas pra ela -- so' no Brasil.
     coords = _coords_all()
     paises = models.get_all_site_countries()
+    cot = cotacao.dolar()
     for p in pessoas:
+        # Preco pela area do cadastro, na faixa da tabela de apoio (Planos e Valores).
+        p["preco_area"] = preco_pela_area(p.get("area_ha"), cot) if p.get("tipo") == "cliente" else None
         locais = [(l["nome"], l["lat"], l["lon"]) for l in models.get_cliente_pontos(p["user_id"]) if _no_brasil(l["lat"], l["lon"])]
         locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(p["user_id"])
                    if s in coords and paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY]
@@ -7400,13 +7407,14 @@ def admin_planos():
 
 
 # Tabela de apoio pra precificar em dolar pela area monitorada (pedido do
-# Alan, 07/11/2026): 10 colunas; o Master digita a area (ha) e o valor por
-# hectare (U$/ha); o raio monitorado e' o do circulo com essa area e o
-# total sai em U$ e em R$ (cotacao do dia). Fica no setting
-# `tabela_precificacao`; so' apoio -- nao muda plano nem cobranca.
+# Alan, 07/11/2026): faixas FIXAS de area (ate' 100, 250, 500, 1.000,
+# 2.000, 3.000, 5.000, 10.000 ha e acima de 10.000), o Master digita so' o
+# U$/ha de cada faixa. A area do cadastro do cliente busca a faixa dela
+# (valor intermediario cai na faixa de cima: 300 ha -> "ate' 500") e da'
+# o preco e o raio (`preco_pela_area`, mostrado em Gerenciar Clientes).
+# Setting `tabela_precificacao`; so' apoio -- nao muda plano nem cobranca.
 _TABELA_PRECO_KEY = "tabela_precificacao"
-TABELA_PRECO_COLUNAS = 10
-_TABELA_PRECO_AREAS = [100, 250, 500, 1000, 2000, 3000, 5000, 7500, 10000, 20000]
+FAIXAS_PRECO = [100, 250, 500, 1000, 2000, 3000, 5000, 10000, None]  # None = acima de 10.000 ha
 
 
 def _raio_km(area_ha):
@@ -7414,19 +7422,65 @@ def _raio_km(area_ha):
     return math.sqrt(float(area_ha) * 0.01 / math.pi) if area_ha and area_ha > 0 else None
 
 
-def _tabela_precificacao():
+def _rotulo_faixa(ate_ha):
+    if ate_ha is None:
+        return f"acima de {FAIXAS_PRECO[-2]:,} ha".replace(",", ".")
+    return f"até {ate_ha:,} ha".replace(",", ".")
+
+
+def _usd_ha_por_faixa():
+    """{ate_ha (None = acima): U$/ha} do setting. Aceita o formato antigo
+    (10 colunas de area livre): aproveita o valor das areas iguais a uma faixa."""
     try:
         salvo = json.loads(models.get_setting(_TABELA_PRECO_KEY) or "[]")
     except ValueError:
         salvo = []
-    colunas = []
-    for i in range(TABELA_PRECO_COLUNAS):
-        item = salvo[i] if i < len(salvo) and isinstance(salvo[i], dict) else {}
-        area = item.get("area_ha", _TABELA_PRECO_AREAS[i] if not salvo else None)
-        usd_ha = item.get("usd_ha")
-        colunas.append({"area_ha": area, "usd_ha": usd_ha, "raio_km": _raio_km(area) if area else None,
-                        "total_usd": (area * usd_ha) if area and usd_ha is not None else None})
-    return colunas
+    valores = {}
+    for item in salvo if isinstance(salvo, list) else []:
+        if not isinstance(item, dict) or item.get("usd_ha") is None:
+            continue
+        if "ate_ha" in item:
+            valores[item["ate_ha"]] = item["usd_ha"]
+        elif item.get("area_ha") in FAIXAS_PRECO:
+            valores.setdefault(item["area_ha"], item["usd_ha"])
+    return valores
+
+
+def _tabela_precificacao():
+    valores = _usd_ha_por_faixa()
+    faixas = []
+    for ate in FAIXAS_PRECO:
+        usd_ha = valores.get(ate)
+        faixas.append({"ate_ha": ate, "rotulo": _rotulo_faixa(ate), "usd_ha": usd_ha,
+                       "raio_km": _raio_km(ate) if ate else None,
+                       "total_usd": ate * usd_ha if ate and usd_ha is not None else None})
+    return faixas
+
+
+def _faixa_da_area(area_ha):
+    for ate in FAIXAS_PRECO:
+        if ate is None or area_ha <= ate:
+            return ate
+
+
+def preco_pela_area(area_ha, cot=None):
+    """Faixa da tabela de apoio pra essa area e o preco dela: {"area_ha",
+    "faixa", "usd_ha", "total_usd", "total_brl", "raio_km"} (preco None se
+    a faixa ainda nao tem U$/ha) ou None sem area."""
+    try:
+        area = float(area_ha)
+    except (TypeError, ValueError):
+        return None
+    if area <= 0:
+        return None
+    ate = _faixa_da_area(area)
+    usd_ha = _usd_ha_por_faixa().get(ate)
+    total = area * usd_ha if usd_ha is not None else None
+    if cot is None:
+        cot = cotacao.dolar()
+    return {"area_ha": area, "faixa": _rotulo_faixa(ate), "usd_ha": usd_ha, "total_usd": total,
+            "total_brl": total * cot["valor"] if total is not None and cot else None,
+            "raio_km": _raio_km(area)}
 
 
 @app.route("/admin/planos/tabela", methods=["POST"])
@@ -7439,16 +7493,15 @@ def admin_planos_tabela():
         valor = float(texto)
         if valor < 0:
             raise ValueError
-        return int(valor) if valor.is_integer() else valor  # 1500, nao 1500.0
-    colunas = []
+        return int(valor) if valor.is_integer() else valor
+    faixas = []
     try:
-        for i in range(TABELA_PRECO_COLUNAS):
-            colunas.append({"area_ha": numero(request.form.get(f"area_{i}")),
-                            "usd_ha": numero(request.form.get(f"usd_ha_{i}"))})
+        for i, ate in enumerate(FAIXAS_PRECO):
+            faixas.append({"ate_ha": ate, "usd_ha": numero(request.form.get(f"usd_ha_{i}"))})
     except ValueError:
-        flash("Tabela de apoio: área e valor por hectare precisam ser números (sem negativos).", "error")
+        flash("Tabela de apoio: o valor por hectare precisa ser um número (sem negativos).", "error")
         return redirect(url_for("admin_planos") + "#tabela-precificacao")
-    models.set_setting(_TABELA_PRECO_KEY, json.dumps(colunas))
+    models.set_setting(_TABELA_PRECO_KEY, json.dumps(faixas))
     flash("Tabela de apoio salva.", "success")
     return redirect(url_for("admin_planos") + "#tabela-precificacao")
 

@@ -56,6 +56,10 @@
             <dt>Cidade</dt><dd>{{ c.cidade or '-' }}{% if c.uf %}/{{ c.uf }}{% endif %}</dd>
             <dt>Culturas</dt><dd>{{ c.culturas or '-' }}</dd>
             <dt>Área</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
+            {% set pr = c.preco_area %}
+            {% if pr %}<dt>Preço pela área</dt><dd>{% if pr.total_usd is not none %}<strong>{{ pr.total_usd | dinheiro('U$') }}</strong>{% if pr.total_brl is not none %} (≈ {{ pr.total_brl | dinheiro }}){% endif %}
+                <span class="text-muted">· {{ pr.faixa }}, U$ {{ ('%.2f' | format(pr.usd_ha)) | replace('.', ',') }}/ha</span>{% else %}<span class="text-muted">{{ pr.faixa }} -- sem U$/ha na <a href="{{ url_for('admin_planos') }}#tabela-precificacao">tabela de apoio</a></span>{% endif %}
+                <span class="text-muted">· raio {{ ('%.1f' | format(pr.raio_km)) | replace('.', ',') }} km</span></dd>{% endif %}
             <dt>Mensagem</dt><dd>{{ c.mensagem or '-' }}</dd>
             {% endif %}
         </dl>

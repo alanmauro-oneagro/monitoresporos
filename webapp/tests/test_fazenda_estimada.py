@@ -93,3 +93,36 @@ class FazendaEstimadaTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PinoDoPlanoTest(unittest.TestCase):
+    """Fazenda criada pelo plano (lavoura de cliente) = pino verde-claro no
+    Mapa e no Mapas de Estudo (pedido do Alan, 07/11/2026)."""
+
+    def test_flag_de_plano_nos_mapas_e_rename(self):
+        webapp.app.config["TESTING"] = True
+        lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
+        real = max((v[-1]["data"], s) for (s, d), v in lookup.items() if d == DOENCA and v)[1]
+        lat, lon = data_reader.read_site_coordinates()[real]
+        site = _virtual("Zzz Lavoura Plano Pino", lat, lon)
+        uid = models.criar_cliente("Zzz Cliente Pino", "segredo1", "", "5565999990777", "", None)
+        models.ligar_ponto_a_fazenda(models.criar_cliente_ponto(uid, "Talhao Pino", lat, lon), site)
+        self.assertIn(site, models.sites_de_clientes())
+        if not models.get_user_by_username("Zzz Teste Master Pino"):
+            models.create_user("Zzz Teste Master Pino", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Teste Master Pino")["id"])
+            s["_fresh"] = True
+        for url in ("/mapa", "/mapa-interpolado"):
+            html = c.get(url).get_data(as_text=True)
+            self.assertIn("PIN_COR_PLANO = '#b2f2bb'", html, url)
+            dados = html.split("var sites = ", 1)[1].split(";\n", 1)[0]
+            import json
+            por_site = {d["site"]: d for d in json.loads(dados)}
+            self.assertTrue(por_site[site]["de_plano"], url)
+            self.assertFalse(por_site[real].get("de_plano"), url)
+        # renomear a fazenda (Manejos/Mapas de Estudo) nao perde a ligacao com a lavoura
+        novo = models.update_virtual_farm(site, "Zzz Lavoura Plano Pino 2", lat + 0.05, lon + 0.05, 30)
+        self.assertIn(novo, models.sites_de_clientes())
+        self.assertEqual(models.get_cliente_pontos(uid)[0]["site_name"], novo)
