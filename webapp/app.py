@@ -13,6 +13,7 @@ import functools
 import gzip
 import io
 import json
+import math
 import os
 import re
 import secrets
@@ -7391,10 +7392,65 @@ def admin_planos():
     return render_template(
         "admin_planos.html", planos=models.get_planos(), recursos=models.RECURSOS_PLANO,
         ciclos=models.CICLOS_PLANO, moedas=models.MOEDAS, cotacao_dolar=cotacao.dolar(),
+        tabela_preco=_tabela_precificacao(),
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
         hoje=_hoje_cuiaba().isoformat(),
     )
+
+
+# Tabela de apoio pra precificar em dolar pela area monitorada (pedido do
+# Alan, 07/11/2026): 10 colunas; o Master digita a area (ha) e o valor por
+# hectare (U$/ha); o raio monitorado e' o do circulo com essa area e o
+# total sai em U$ e em R$ (cotacao do dia). Fica no setting
+# `tabela_precificacao`; so' apoio -- nao muda plano nem cobranca.
+_TABELA_PRECO_KEY = "tabela_precificacao"
+TABELA_PRECO_COLUNAS = 10
+_TABELA_PRECO_AREAS = [100, 250, 500, 1000, 2000, 3000, 5000, 7500, 10000, 20000]
+
+
+def _raio_km(area_ha):
+    """Raio (km) do circulo com essa area: A = pi r^2 (1 ha = 0,01 km2)."""
+    return math.sqrt(float(area_ha) * 0.01 / math.pi) if area_ha and area_ha > 0 else None
+
+
+def _tabela_precificacao():
+    try:
+        salvo = json.loads(models.get_setting(_TABELA_PRECO_KEY) or "[]")
+    except ValueError:
+        salvo = []
+    colunas = []
+    for i in range(TABELA_PRECO_COLUNAS):
+        item = salvo[i] if i < len(salvo) and isinstance(salvo[i], dict) else {}
+        area = item.get("area_ha", _TABELA_PRECO_AREAS[i] if not salvo else None)
+        usd_ha = item.get("usd_ha")
+        colunas.append({"area_ha": area, "usd_ha": usd_ha, "raio_km": _raio_km(area) if area else None,
+                        "total_usd": (area * usd_ha) if area and usd_ha is not None else None})
+    return colunas
+
+
+@app.route("/admin/planos/tabela", methods=["POST"])
+@master_required
+def admin_planos_tabela():
+    def numero(texto):
+        texto = (texto or "").strip().replace(",", ".")  # campos type=number: "1500", "0.35"
+        if not texto:
+            return None
+        valor = float(texto)
+        if valor < 0:
+            raise ValueError
+        return int(valor) if valor.is_integer() else valor  # 1500, nao 1500.0
+    colunas = []
+    try:
+        for i in range(TABELA_PRECO_COLUNAS):
+            colunas.append({"area_ha": numero(request.form.get(f"area_{i}")),
+                            "usd_ha": numero(request.form.get(f"usd_ha_{i}"))})
+    except ValueError:
+        flash("Tabela de apoio: área e valor por hectare precisam ser números (sem negativos).", "error")
+        return redirect(url_for("admin_planos") + "#tabela-precificacao")
+    models.set_setting(_TABELA_PRECO_KEY, json.dumps(colunas))
+    flash("Tabela de apoio salva.", "success")
+    return redirect(url_for("admin_planos") + "#tabela-precificacao")
 
 
 @app.route("/admin/planos/salvar", methods=["POST"])

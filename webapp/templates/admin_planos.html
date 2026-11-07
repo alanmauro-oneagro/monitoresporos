@@ -71,5 +71,51 @@
     </div>
 </form>
 
+<div class="card shadow-sm mb-4" id="tabela-precificacao"><div class="card-body">
+    <h6 class="mb-1">Tabela de apoio: preço em U$ pela área monitorada</h6>
+    <p class="small text-muted mb-2">Só para ajudar a montar os preços -- não muda nenhum plano. Digite a área e o valor por hectare;
+        o raio é o do círculo com essa área e o total em reais usa o dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.</p>
+    <form method="post" action="{{ url_for('admin_planos_tabela') }}">
+        <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}">
+            <thead class="table-light"><tr><th style="min-width: 9.5rem;"></th>{% for c in tabela_preco %}<th class="text-center">{{ loop.index }}</th>{% endfor %}</tr></thead>
+            <tbody>
+                <tr><th>Área monitorada (ha)</th>{% for c in tabela_preco %}<td><input type="number" min="0" step="any" class="form-control form-control-sm text-end" style="min-width: 5.5rem;" name="area_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="area" value="{{ c.area_ha if c.area_ha is not none else '' }}" aria-label="Área da coluna {{ loop.index }}"></td>{% endfor %}</tr>
+                <tr><th>Raio monitorado (km)</th>{% for c in tabela_preco %}<td class="text-end text-muted" data-saida="raio" data-col="{{ loop.index0 }}">{{ ('%.2f' | format(c.raio_km)) | replace('.', ',') if c.raio_km else '-' }}</td>{% endfor %}</tr>
+                <tr><th>Valor por hectare (U$/ha)</th>{% for c in tabela_preco %}<td><input type="number" min="0" step="any" class="form-control form-control-sm text-end" style="min-width: 5.5rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ c.usd_ha if c.usd_ha is not none else '' }}" aria-label="Valor por hectare da coluna {{ loop.index }}"></td>{% endfor %}</tr>
+                <tr><th>Valor total (U$)</th>{% for c in tabela_preco %}<td class="text-end fw-bold" data-saida="usd" data-col="{{ loop.index0 }}">{{ c.total_usd | dinheiro('U$') if c.total_usd is not none else '-' }}</td>{% endfor %}</tr>
+                <tr><th>Valor total (≈ R$)</th>{% for c in tabela_preco %}<td class="text-end" data-saida="brl" data-col="{{ loop.index0 }}">{{ (c.total_usd * cotacao_dolar.valor) | dinheiro if c.total_usd is not none and cotacao_dolar else '-' }}</td>{% endfor %}</tr>
+            </tbody>
+        </table>
+        </div>
+        <button class="btn btn-outline-success btn-sm" type="submit">Salvar tabela</button>
+    </form>
+</div></div>
+<script>
+// Recalcula a tabela de apoio enquanto digita (mesmas contas do servidor, app._tabela_precificacao).
+(function () {
+    var tabela = document.querySelector('.tabela-preco');
+    if (!tabela) return;
+    var cotacao = parseFloat(tabela.dataset.cotacao);
+    function dinheiro(v, simbolo) {
+        return simbolo + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function campo(col, nome) {
+        var v = parseFloat(tabela.querySelector('[data-col="' + col + '"][data-campo="' + nome + '"]').value);
+        return isNaN(v) ? null : v;
+    }
+    function saida(col, nome) { return tabela.querySelector('[data-col="' + col + '"][data-saida="' + nome + '"]'); }
+    tabela.addEventListener('input', function (e) {
+        var col = e.target.dataset.col;
+        if (col === undefined) return;
+        var area = campo(col, 'area'), usdHa = campo(col, 'usd_ha');
+        saida(col, 'raio').textContent = area > 0 ? Math.sqrt(area * 0.01 / Math.PI).toFixed(2).replace('.', ',') : '-';
+        var total = area !== null && usdHa !== null ? area * usdHa : null;
+        saida(col, 'usd').textContent = total !== null ? dinheiro(total, 'U$') : '-';
+        saida(col, 'brl').textContent = total !== null && !isNaN(cotacao) ? dinheiro(total * cotacao, 'R$') : '-';
+    });
+})();
+</script>
+
 <p class="small text-muted">Os clientes (plano, situação, pago até, cortesia, lavouras) ficam em <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>.</p>
 {% endblock %}
