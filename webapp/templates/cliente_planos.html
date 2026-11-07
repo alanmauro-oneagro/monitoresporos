@@ -22,7 +22,6 @@
         </div>
         {% if p.descricao %}<p class="small text-muted mb-2">{{ p.descricao }}</p>{% endif %}
         <ul class="small mb-3 ps-3">
-            <li>Até {{ p.max_pontos }} lavoura{{ 's' if p.max_pontos > 1 }}</li>
             {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}
         </ul>
         <a class="btn btn-success w-100" href="{{ url_for('solicitar_acesso', modalidade='plano') }}">Assinar</a>

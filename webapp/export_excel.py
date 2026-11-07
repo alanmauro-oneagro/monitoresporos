@@ -720,7 +720,7 @@ def _planos_rows():
         liberados = sum(1 for c in do_plano if (models.acesso_ate(c) or "") >= hoje)
         rows.append([
             p["nome"], p["valor"], p["simbolo"], models.CICLOS_PLANO.get(p["ciclo"], (p["ciclo"],))[0], _sim_nao(p["ativo"]),
-            p["max_pontos"], p["raio_km"], ", ".join(rotulos.get(r, r) for r in p["recursos"]),
+            p["raio_km"], ", ".join(rotulos.get(r, r) for r in p["recursos"]),
             len(do_plano), liberados,
         ])
     return rows
@@ -767,7 +767,7 @@ def build_workbook(completar_clima=None):
     )
     _try_sheet(
         wb, "Planos",
-        ["Plano", "Valor", "Moeda", "Ciclo", "À venda", "Lavouras (máx.)", "Raio (km)", "Abas liberadas",
+        ["Plano", "Valor", "Moeda", "Ciclo", "À venda", "Raio (km)", "Abas liberadas",
          "Clientes no plano", "Clientes com acesso liberado"],
         _planos_rows,
     )

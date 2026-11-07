@@ -183,13 +183,14 @@ class AssinaturasTest(unittest.TestCase):
         for nome_real in data_reader.read_sites():
             self.assertNotIn(nome_real, html, f"nome de fazenda real vazou: {nome_real}")
         self.assertEqual(self.client.get("/app").status_code, 200)
-        # plano Pro: ate' 3 lavouras
-        for i in range(2):
+        # sem limite de lavouras (pedido do Alan, 07/11/2026): o plano libera acessos ao site
+        for i in range(4):
             self.client.post("/app/pontos/novo", data={"nome": f"Extra {i}", "lat": lat, "lon": lon})
         user = models.get_user_by_username("Zzz Teste Lavoura")
-        self.assertEqual(len(models.get_cliente_pontos(user["id"])), 3)
-        resp = self.client.post("/app/pontos/novo", data={"nome": "Demais", "lat": lat, "lon": lon})
-        self.assertEqual(len(models.get_cliente_pontos(user["id"])), 3)
+        self.assertEqual(len(models.get_cliente_pontos(user["id"])), 5)
+        home = self.client.get("/app").get_data(as_text=True)
+        self.assertIn("+ Adicionar lavoura", home)
+        self.assertNotIn("lavouras.</p>", home)
 
     def test_plano_basico_bloqueia_recursos(self):
         self._cadastrar("Zzz Teste Basico", plano_id=self.plano_basico)
