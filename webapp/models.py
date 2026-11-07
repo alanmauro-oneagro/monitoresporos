@@ -2913,7 +2913,7 @@ _VIRTUAL_FARM_RENAME_TABLES = (
     "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
     "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_car", "farm_ndvi_historico",
     "site_country_overrides", "site_climate_notes", "ndvi_agendamento", "ndvi_whatsapp_ativos",
-    "whatsapp_schedule_horarios", "site_solo_cache",
+    "whatsapp_schedule_horarios", "site_solo_cache", "cliente_pontos",
 )
 
 
@@ -3217,6 +3217,15 @@ def get_all_sites_report_user_ids():
     for r in rows:
         por_site.setdefault(r["site_name"], set()).add(r["user_id"])
     return por_site
+
+
+def sites_de_clientes():
+    """Fazendas estimadas criadas pelas lavouras dos clientes do app (plano)."""
+    conn = get_db()
+    nomes = {r["site_name"] for r in conn.execute(
+        "SELECT site_name FROM cliente_pontos WHERE site_name IS NOT NULL").fetchall()}
+    conn.close()
+    return nomes
 
 
 def delete_user(user_id):

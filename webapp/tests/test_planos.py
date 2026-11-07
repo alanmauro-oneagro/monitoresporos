@@ -324,31 +324,65 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         self.assertAlmostEqual(webapp._raio_km(31415.93), 10.0, places=3)
         self.assertIsNone(webapp._raio_km(0))
 
-    def test_tabela_padrao_e_salvar(self):
+    def test_faixas_fixas_e_salvar(self):
         master = self._logado("Zzz Teste Master Tabela")
         html = master.get("/admin/planos").get_data(as_text=True)
         self.assertIn("Tabela de apoio: preço em U$ pela área monitorada", html)
-        self.assertEqual(html.count('data-campo="area"'), 10)  # 10 colunas
-        self.assertIn('name="area_0" data-col="0" data-campo="area" value="100"', html)
+        self.assertEqual(html.count(" data-campo=\"usd_ha\" value="), 9)  # 9 faixas fixas
+        for rotulo in ("até 100 ha", "até 250 ha", "até 1.000 ha", "até 10.000 ha", "acima de 10.000 ha"):
+            self.assertIn(f">{rotulo}<", html)
         self.assertIn(">0,56<", html)  # raio de 100 ha
-        dados = {f"area_{i}": "" for i in range(10)}
-        dados.update({f"usd_ha_{i}": "" for i in range(10)})
-        dados.update({"area_0": "1000", "usd_ha_0": "0.5", "area_1": "2500,5", "usd_ha_1": ""})
+        dados = {f"usd_ha_{i}": "" for i in range(9)}
+        dados.update({"usd_ha_3": "0.5", "usd_ha_8": "0.2"})
         resp = master.post("/admin/planos/tabela", data=dados)
         self.assertIn("#tabela-precificacao", resp.headers["Location"])
         tabela = webapp._tabela_precificacao()
-        self.assertEqual(len(tabela), 10)
-        self.assertEqual((tabela[0]["area_ha"], tabela[0]["usd_ha"], tabela[0]["total_usd"]), (1000, 0.5, 500))
-        self.assertAlmostEqual(tabela[0]["raio_km"], 1.784, places=3)
-        self.assertEqual((tabela[1]["area_ha"], tabela[1]["total_usd"]), (2500.5, None))
-        self.assertIsNone(tabela[2]["area_ha"])  # coluna apagada continua vazia (nao volta o padrao)
+        self.assertEqual([f["ate_ha"] for f in tabela], [100, 250, 500, 1000, 2000, 3000, 5000, 10000, None])
+        self.assertEqual((tabela[3]["usd_ha"], tabela[3]["total_usd"]), (0.5, 500))
+        self.assertEqual((tabela[8]["usd_ha"], tabela[8]["total_usd"]), (0.2, None))  # acima de 10.000: depende da area
         html = master.get("/admin/planos").get_data(as_text=True)
         self.assertIn("U$ 500,00", html)
-        self.assertIn('name="area_0" data-col="0" data-campo="area" value="1000"', html)  # sem ".0"
         self.assertIn("R$ 2.500,00", html)  # 500 x 5,00
         ruim = master.post("/admin/planos/tabela", data={**dados, "usd_ha_0": "-1"}, follow_redirects=True)
         self.assertIn("sem negativos", ruim.get_data(as_text=True))
         self.assertEqual(self._logado("Zzz Teste Admin Tabela").post("/admin/planos/tabela", data=dados).status_code, 403)
+
+    def test_preco_pela_area_busca_a_faixa_de_cima(self):
+        import json
+        models.set_setting("tabela_precificacao", json.dumps(
+            [{"ate_ha": a, "usd_ha": v} for a, v in ((100, 1), (250, 0.9), (500, 0.8), (1000, 0.7), (None, 0.1))]))
+        p = webapp.preco_pela_area(300)
+        self.assertEqual((p["faixa"], p["usd_ha"], p["total_usd"], p["total_brl"]), ("até 500 ha", 0.8, 240, 1200))
+        self.assertAlmostEqual(p["raio_km"], webapp._raio_km(300))
+        self.assertEqual(webapp.preco_pela_area(100)["faixa"], "até 100 ha")  # limite fica na propria faixa
+        self.assertEqual(webapp.preco_pela_area("100.5")["faixa"], "até 250 ha")
+        p = webapp.preco_pela_area(1500)  # faixa ate' 2.000 sem valor
+        self.assertEqual((p["faixa"], p["usd_ha"], p["total_usd"]), ("até 2.000 ha", None, None))
+        self.assertEqual(webapp.preco_pela_area(25000)["total_usd"], 2500)
+        self.assertEqual(webapp.preco_pela_area(25000)["faixa"], "acima de 10.000 ha")
+        self.assertIsNone(webapp.preco_pela_area(None))
+        self.assertIsNone(webapp.preco_pela_area(0))
+
+    def test_formato_antigo_aproveita_areas_iguais(self):
+        import json
+        models.set_setting("tabela_precificacao", json.dumps(
+            [{"area_ha": 100, "usd_ha": 2}, {"area_ha": 7500, "usd_ha": 9}, {"area_ha": 1000, "usd_ha": None}]))
+        tabela = {f["ate_ha"]: f["usd_ha"] for f in webapp._tabela_precificacao()}
+        self.assertEqual(tabela[100], 2)
+        self.assertIsNone(tabela[1000])
+        self.assertNotIn(7500, tabela)
+
+    def test_planos_em_tabela_comparativa(self):
+        master = self._logado("Zzz Teste Master Tabela")
+        html = master.get("/admin/planos").get_data(as_text=True)
+        self.assertIn('class="table table-sm table-bordered align-middle mb-0 tabela-planos"', html)
+        planos = models.get_planos()
+        # uma coluna por plano + "Novo": cada aba liberada vira uma linha com uma caixa por plano
+        chave = models.RECURSOS_PLANO[0][0]
+        self.assertEqual(html.count(f'value="{chave}" id="rec_'), len(planos) + 1)
+        self.assertIn('name="nome__novo"', html)
+        self.assertIn(">Abas liberadas no app<", html)
+
 
 
 if __name__ == "__main__":

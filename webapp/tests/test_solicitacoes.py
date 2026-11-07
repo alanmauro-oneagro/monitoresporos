@@ -182,6 +182,22 @@ class CadastroTest(unittest.TestCase):
         resp = master.post(f"/admin/clientes/{antigo}/cortesia", data={"cortesia_ate": "2030-01-01", "plano_id": ""})
         self.assertTrue(resp.headers["Location"].endswith("/admin/solicitacoes"))
 
+    def test_preco_pela_area_no_cartao_do_cliente(self):
+        """Area do cadastro busca a faixa da tabela de apoio (1.500 ha -> ate' 2.000)."""
+        import json
+        import cotacao
+        webapp.app.test_client().post("/solicitar-acesso", data=_form(
+            username="Zzz Cad Preco Area", modalidade="plano", numero_telefone="65999990021"))
+        models.set_setting("tabela_precificacao", json.dumps([{"ate_ha": 2000, "usd_ha": 0.4}]))
+        try:
+            with mock.patch.object(cotacao, "dolar", return_value={"valor": 5.0, "data": "2026-11-06"}):
+                html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        finally:
+            models.set_setting("tabela_precificacao", "")
+        self.assertIn("<dt>Preço pela área</dt>", html)
+        self.assertIn("<strong>U$ 600,00</strong> (≈ R$ 3.000,00)", html)
+        self.assertIn("até 2.000 ha, U$ 0,40/ha", html)
+
     # Mesma pessoa nao faz 2o cadastro; conta excluida some de Novos
     # cadastros (pedidos do Alan, 01/11/2026).
     def test_segundo_cadastro_barrado(self):

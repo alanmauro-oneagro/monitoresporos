@@ -122,12 +122,29 @@ Banco Central (`cotacao.dolar()`: olinda.bcb.gov.br, 6 h em memoria, ultimo
 valor no setting `cotacao_dolar`; sem cotacao nenhuma = assinatura recusada
 com aviso) -- `_iniciar_cobranca`. Telas mostram "U$ 20,00 (≈ R$ 110,03)"
 (filtro `preco_plano`); a cobranca recorrente fica no valor em reais do dia
-da assinatura. **Tabela de apoio** (Planos e Valores, pedido do Alan,
-07/11/2026): 10 linhas (uma por faixa; colunas Area, Raio, U$/ha, Total U$, ≈ Total R$ -- invertida a pedido do Alan pra caber no celular) pra precificar em U$ pela area monitorada -- o
-Master digita area (ha) e U$/ha; raio monitorado = raio do circulo com
-essa area (`app._raio_km`, r = raiz(A/pi)), total em U$ e ≈ R$ (cotacao do
-dia), recalculado ao digitar; setting `tabela_precificacao`, rota
-`admin_planos_tabela`. So' apoio: nao muda plano nem cobranca. Planos padrao
+da assinatura. **Planos lado a lado** (pedido do Alan, 07/11/2026): Planos e Valores e'
+UMA tabela comparativa (`.tabela-planos`): uma coluna por plano + "Novo
+plano", 1a coluna fixa com o campo (Nome, Valor, Ciclo, Lavouras, Raio,
+Ordem, A' venda, Descricao) e cada aba liberada (`RECURSOS_PLANO`) numa
+linha, com uma caixa por plano; mesmos nomes de campo (`nome__<id>`,
+`recursos__<id>`...) e um Salvar so'. **Tabela de apoio** (Planos e
+Valores, pedido do Alan, 07/11/2026): faixas FIXAS de area
+(`app.FAIXAS_PRECO`: ate' 100, 250, 500, 1.000, 2.000, 3.000, 5.000,
+10.000 ha e acima de 10.000), o Master digita so' o U$/ha de cada faixa;
+raio e total no limite da faixa, ≈ R$ pela cotacao do dia, campo "Simular
+area do cliente". A area do cadastro do cliente busca a faixa
+(`app.preco_pela_area`; valor intermediario vai pra faixa de CIMA: 300 ha
+-> "ate' 500 ha"; limite exato fica na propria faixa) e o cartao do
+cliente em Gerenciar Clientes mostra "Preco pela area" (U$, ≈ R$, faixa,
+U$/ha, raio da area). Setting `tabela_precificacao` = lista
+{ate_ha (null = acima), usd_ha}; o formato antigo (10 areas livres)
+aproveita so' as areas iguais a uma faixa. Rota `admin_planos_tabela`.
+So' apoio: nao muda plano nem cobranca. **Pino verde-claro**
+(`PIN_COR_PLANO` `#b2f2bb`, pedido do Alan, 07/11/2026): fazenda criada
+pelo plano (lavoura de cliente, `models.sites_de_clientes()` =
+`cliente_pontos.site_name`) no Mapa e no Mapas de Estudo (`de_plano` no
+`sites_data`); `cliente_pontos` entra na cascata de rename da fazenda
+virtual (`_VIRTUAL_FARM_RENAME_TABLES`). Planos padrao
 (`models.PLANOS_PADRAO`, criados pelo `init_db` so' se faltar o nome --
 pedido do Alan, 31/10/2026): **Free** (valor 0, a venda), Basico, Premium e
 Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o

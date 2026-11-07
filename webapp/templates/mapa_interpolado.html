@@ -235,6 +235,9 @@
     // 'clima'), pra distinguir de relance do amarelo (ponto que interpola
     // doenca de verdade, tipo 'doenca').
     var PIN_COR_CLIMA = '#a5d8ff';
+    // Verde claro -- fazenda criada pelo plano de um cliente do app (lavoura
+    // dele, `_criar_fazenda_estimada_da_lavoura`; pedido do Alan, 07/11/2026).
+    var PIN_COR_PLANO = '#b2f2bb';
     // Mesmo padrao do Mapa normal (mapa.html): fazenda/ponto sem leitura
     // nova ha mais de 15 dias (site.inativo, ver
     // app._nivel_dados_defasados/DADOS_BLOQUEIO_DIAS) usa pino reduzido a
@@ -451,7 +454,7 @@
                 }).addTo(map);
             }
         } else {
-            var cor = site.virtual ? PIN_COR_VIRTUAL : PIN_COR_NORMAL;
+            var cor = site.de_plano ? PIN_COR_PLANO : (site.virtual ? PIN_COR_VIRTUAL : PIN_COR_NORMAL);
             icone = buildPinIcon(cor, site.inativo ? PIN_ESCALA_INATIVO : 1);
         }
         var marcador = L.marker([site.lat, site.lon], { icon: icone })
