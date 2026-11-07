@@ -290,5 +290,66 @@ class PlanoEmDolarTest(unittest.TestCase):
             self.assertEqual(self.cotacao.dolar(), {"valor": 5.5, "data": "2026-11-06"})
 
 
+class TabelaPrecificacaoTest(unittest.TestCase):
+    """Tabela de apoio em U$ pela area monitorada, 10 colunas, raio calculado
+    (pedido do Alan, 07/11/2026)."""
+
+    @classmethod
+    def setUpClass(cls):
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Teste Master Tabela"):
+            models.create_user("Zzz Teste Master Tabela", "x", is_master=True)
+        if not models.get_user_by_username("Zzz Teste Admin Tabela"):
+            models.create_user("Zzz Teste Admin Tabela", "x", is_admin=True)
+
+    def setUp(self):
+        import cotacao
+        self.patch = mock.patch.object(cotacao, "dolar", return_value={"valor": 5.0, "data": "2026-11-06"})
+        self.patch.start()
+        models.set_setting("tabela_precificacao", "")
+
+    def tearDown(self):
+        self.patch.stop()
+        models.set_setting("tabela_precificacao", "")
+
+    def _logado(self, nome):
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username(nome)["id"])
+            s["_fresh"] = True
+        return c
+
+    def test_raio_pela_area(self):
+        self.assertAlmostEqual(webapp._raio_km(100), 0.5642, places=3)  # 1 km2 = 100 ha
+        self.assertAlmostEqual(webapp._raio_km(31415.93), 10.0, places=3)
+        self.assertIsNone(webapp._raio_km(0))
+
+    def test_tabela_padrao_e_salvar(self):
+        master = self._logado("Zzz Teste Master Tabela")
+        html = master.get("/admin/planos").get_data(as_text=True)
+        self.assertIn("Tabela de apoio: preço em U$ pela área monitorada", html)
+        self.assertEqual(html.count('data-campo="area"'), 10)  # 10 colunas
+        self.assertIn('name="area_0" data-col="0" data-campo="area" value="100"', html)
+        self.assertIn(">0,56<", html)  # raio de 100 ha
+        dados = {f"area_{i}": "" for i in range(10)}
+        dados.update({f"usd_ha_{i}": "" for i in range(10)})
+        dados.update({"area_0": "1000", "usd_ha_0": "0.5", "area_1": "2500,5", "usd_ha_1": ""})
+        resp = master.post("/admin/planos/tabela", data=dados)
+        self.assertIn("#tabela-precificacao", resp.headers["Location"])
+        tabela = webapp._tabela_precificacao()
+        self.assertEqual(len(tabela), 10)
+        self.assertEqual((tabela[0]["area_ha"], tabela[0]["usd_ha"], tabela[0]["total_usd"]), (1000, 0.5, 500))
+        self.assertAlmostEqual(tabela[0]["raio_km"], 1.784, places=3)
+        self.assertEqual((tabela[1]["area_ha"], tabela[1]["total_usd"]), (2500.5, None))
+        self.assertIsNone(tabela[2]["area_ha"])  # coluna apagada continua vazia (nao volta o padrao)
+        html = master.get("/admin/planos").get_data(as_text=True)
+        self.assertIn("U$ 500,00", html)
+        self.assertIn('name="area_0" data-col="0" data-campo="area" value="1000"', html)  # sem ".0"
+        self.assertIn("R$ 2.500,00", html)  # 500 x 5,00
+        ruim = master.post("/admin/planos/tabela", data={**dados, "usd_ha_0": "-1"}, follow_redirects=True)
+        self.assertIn("sem negativos", ruim.get_data(as_text=True))
+        self.assertEqual(self._logado("Zzz Teste Admin Tabela").post("/admin/planos/tabela", data=dados).status_code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()

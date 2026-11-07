@@ -122,7 +122,12 @@ Banco Central (`cotacao.dolar()`: olinda.bcb.gov.br, 6 h em memoria, ultimo
 valor no setting `cotacao_dolar`; sem cotacao nenhuma = assinatura recusada
 com aviso) -- `_iniciar_cobranca`. Telas mostram "U$ 20,00 (≈ R$ 110,03)"
 (filtro `preco_plano`); a cobranca recorrente fica no valor em reais do dia
-da assinatura. Planos padrao
+da assinatura. **Tabela de apoio** (Planos e Valores, pedido do Alan,
+07/11/2026): 10 colunas pra precificar em U$ pela area monitorada -- o
+Master digita area (ha) e U$/ha; raio monitorado = raio do circulo com
+essa area (`app._raio_km`, r = raiz(A/pi)), total em U$ e ≈ R$ (cotacao do
+dia), recalculado ao digitar; setting `tabela_precificacao`, rota
+`admin_planos_tabela`. So' apoio: nao muda plano nem cobranca. Planos padrao
 (`models.PLANOS_PADRAO`, criados pelo `init_db` so' se faltar o nome --
 pedido do Alan, 31/10/2026): **Free** (valor 0, a venda), Basico, Premium e
 Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o
