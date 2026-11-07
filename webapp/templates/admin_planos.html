@@ -38,6 +38,10 @@
             <th>Plano</th>
             {% for p in colunas %}{% set k = p.id if p else 'novo' %}
             <th class="plano-col{{ ' plano-novo' if not p }}">
+                {# Fora da tela (pedido do Alan, 07/11/2026), mas o plano continua com eles. #}
+                <input type="hidden" name="max_pontos__{{ k }}" value="{{ p.max_pontos if p else 1 }}">
+                <input type="hidden" name="raio_km__{{ k }}" value="{{ p.raio_km if p else 50 }}">
+                {% if p %}{% for chave in p.recursos if chave in recursos_ocultos %}<input type="hidden" name="recursos__{{ k }}" value="{{ chave }}">{% endfor %}{% endif %}
                 <input class="form-control form-control-sm fw-bold" name="nome__{{ k }}" value="{{ p.nome if p else '' }}" aria-label="Nome do plano"
                        {% if p %}required{% else %}placeholder="Novo plano (opcional)"{% endif %}>
             </th>
@@ -57,14 +61,6 @@
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
                 <td class="plano-col{{ ' plano-novo' if not p }}"><select class="form-select form-select-sm" name="ciclo__{{ k }}" aria-label="Ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }}</option>{% endfor %}</select></td>
                 {% endfor %}</tr>
-            <tr><td>Lavouras</td>
-                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
-                <td class="plano-col{{ ' plano-novo' if not p }}"><input class="form-control form-control-sm" name="max_pontos__{{ k }}" value="{{ p.max_pontos if p else 1 }}" inputmode="numeric" aria-label="Lavouras"></td>
-                {% endfor %}</tr>
-            <tr><td>Raio (km)</td>
-                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
-                <td class="plano-col{{ ' plano-novo' if not p }}"><input class="form-control form-control-sm" name="raio_km__{{ k }}" value="{{ (p.raio_km | round | int) if p else 50 }}" inputmode="decimal" aria-label="Raio (km)"></td>
-                {% endfor %}</tr>
             <tr><td>Ordem</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
                 <td class="plano-col{{ ' plano-novo' if not p }}"><input class="form-control form-control-sm" name="ordem__{{ k }}" value="{{ p.ordem if p else 0 }}" inputmode="numeric" aria-label="Ordem"></td>
@@ -78,7 +74,7 @@
                 <td class="plano-col{{ ' plano-novo' if not p }}"><textarea class="form-control form-control-sm" rows="2" name="descricao__{{ k }}" aria-label="Descrição">{{ p.descricao if p else '' }}</textarea></td>
                 {% endfor %}</tr>
             <tr class="secao"><td>Abas liberadas no app</td>{% for p in colunas %}<td class="{{ 'plano-novo' if not p }}"></td>{% endfor %}</tr>
-            {% for chave, rotulo in recursos %}
+            {% for chave, rotulo in recursos if chave not in recursos_ocultos %}
             <tr><td class="fw-normal">{{ rotulo }}</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
                 <td class="plano-col rec{{ ' plano-novo' if not p }}"><input class="form-check-input" type="checkbox" name="recursos__{{ k }}" value="{{ chave }}" id="rec_{{ k }}_{{ chave }}" aria-label="{{ rotulo }}" {% if p and chave in p.recursos %}checked{% endif %}></td>
