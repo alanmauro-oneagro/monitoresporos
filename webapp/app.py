@@ -48,6 +48,7 @@ import whatsapp
 import weather_forecast
 import inmet_stations
 import virtual_farms
+import cotacao
 import sinal_celular
 import ndvi_service
 import countries
@@ -566,6 +567,28 @@ app = Flask(__name__)
 app.secret_key = _load_or_create_secret_key()
 app.jinja_env.filters["data_br"] = models.fmt_data_br
 app.jinja_env.filters["telefone_br"] = models.fmt_telefone_br
+
+
+def _dinheiro(valor, simbolo="R$"):
+    """"R$ 1.234,50" / "U$ 20,00"."""
+    texto = f"{float(valor or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{simbolo} {texto}"
+
+
+def _preco_plano(plano):
+    """Preco pra mostrar: "R$ 49,90", ou "U$ 20,00 (≈ R$ 110,03)" pro plano
+    em dolar (cobrado em reais pela cotacao do dia -- pedido do Alan,
+    07/11/2026)."""
+    texto = _dinheiro(plano["valor"], plano.get("simbolo") or "R$")
+    if plano.get("moeda") == "USD" and plano["valor"] > 0:
+        reais = cotacao.em_reais(plano["valor"])
+        if reais is not None:
+            texto += f" (≈ {_dinheiro(reais)})"
+    return texto
+
+
+app.jinja_env.filters["dinheiro"] = _dinheiro
+app.jinja_env.filters["preco_plano"] = _preco_plano
 
 # A aba Fungicidas (autosave) manda o form inteiro (todas as doencas) a
 # cada edicao -- com os checkboxes de "Registrado para" (uma por
@@ -6285,7 +6308,7 @@ def _restaurar_backup_enviado(arquivo):
         except OSError:
             conteudo = b""
     if not conteudo.startswith(b"SQLite format 3\x00"):
-        return "Arquivo invalido -- use o .db.gz do botao \"Baixar backup do banco\" (Exportar) da producao."
+        return "Arquivo invalido -- use o .db.gz do botao \"Baixar backup do banco\" (Gerenciar Exportações) da produção."
     with tempfile.TemporaryDirectory() as pasta:
         caminho = Path(pasta) / "restaurar.db"
         caminho.write_bytes(conteudo)
@@ -6643,9 +6666,17 @@ def _iniciar_cobranca(user_id, plano):
             user["username"], assinatura["cpf_cnpj"], user["email"], user["telefone"], referencia,
         )
         models.atualizar_assinatura(user_id, asaas_customer_id=customer_id)
+    valor, descricao = plano["valor"], f"OneAgro Monitor - plano {plano['nome']}"
+    if plano["moeda"] == "USD":
+        # Asaas so' cobra em reais: converte pela cotacao do dia (pedido do Alan, 07/11/2026).
+        cot = cotacao.dolar()
+        if not cot:
+            raise asaas.AsaasErro("cotação do dólar indisponível no momento")
+        valor = round(plano["valor"] * cot["valor"], 2)
+        descricao += (f" (U$ {plano['valor']:.2f} x R$ {cot['valor']:.4f}, cotação de "
+                      f"{models.fmt_data_br(cot['data'])})").replace(".", ",")
     subscription_id = asaas.criar_assinatura(
-        customer_id, plano["valor"], plano["ciclo"], f"OneAgro Monitor - plano {plano['nome']}",
-        _hoje_cuiaba().isoformat(), referencia,
+        customer_id, valor, plano["ciclo"], descricao, _hoje_cuiaba().isoformat(), referencia,
     )
     models.atualizar_assinatura(user_id, asaas_subscription_id=subscription_id, plano_id=plano["id"], status="pendente")
     link = None
@@ -7280,7 +7311,7 @@ MENU_CONFIG = [
     ("cadastros", "Gerenciar Clientes", "admin_solicitacoes", "master"),
     ("planos", "Planos e Valores", "admin_planos", "master"),
     ("whatsapp", "Gerenciar WhatsApp", "admin_whatsapp", "master"),
-    ("exportar", "Exportar", "admin_exportar", "master"),
+    ("exportar", "Gerenciar Exportações", "admin_exportar", "master"),
     ("ocultas", "Gerenciar Fazendas Ocultas", "fazendas_ocultas", "master"),
 ]
 _ORDEM_MENU_KEY = "ordem_menu_config"
@@ -7359,7 +7390,7 @@ def _inject_cadastros_novos():
 def admin_planos():
     return render_template(
         "admin_planos.html", planos=models.get_planos(), recursos=models.RECURSOS_PLANO,
-        ciclos=models.CICLOS_PLANO,
+        ciclos=models.CICLOS_PLANO, moedas=models.MOEDAS, cotacao_dolar=cotacao.dolar(),
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
         hoje=_hoje_cuiaba().isoformat(),
@@ -7391,8 +7422,11 @@ def admin_planos_salvar():
         if not nome or valor < 0 or max_pontos < 1 or raio_km <= 0 or ciclo not in models.CICLOS_PLANO:
             flash(f"Plano \"{nome or 'novo'}\": preencha nome, valor (0 = plano grátis), ciclo, lavouras e raio.", "error")
             return redirect(url_for("admin_planos"))
+        moeda = form.get(f"moeda__{k}", "BRL")
+        if moeda not in models.MOEDAS:
+            moeda = "BRL"
         planos.append((None if k == "novo" else int(k), nome, form.get(f"descricao__{k}", "").strip(), valor, ciclo,
-                       max_pontos, raio_km, form.getlist(f"recursos__{k}"), bool(form.get(f"ativo__{k}")), ordem))
+                       max_pontos, raio_km, form.getlist(f"recursos__{k}"), bool(form.get(f"ativo__{k}")), ordem, moeda))
     for dados in planos:
         models.salvar_plano(*dados)
     flash("Planos salvos.", "success")

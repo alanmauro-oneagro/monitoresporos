@@ -701,7 +701,7 @@ def _clientes_rows():
             c["email"] or "", perfil, cad.get("empresa") or "", cidade, cad.get("culturas") or "",
             cad.get("area_ha") or "", _data_excel((cad.get("criado_em") or c["criado_em"] or "")[:10]),
             plano["nome"] if plano else "Sem plano escolhido",
-            plano["valor"] if plano else "",
+            plano["valor"] if plano else "", plano["simbolo"] if plano else "",
             models.CICLOS_PLANO.get(plano["ciclo"], (plano["ciclo"],))[0] if plano else "",
             {"pendente": "Aguardando pagamento", "ativa": "Ativa"}.get(c["status"], (c["status"] or "").capitalize()),
             _sim_nao(fim and fim >= hoje), _data_excel(c["pago_ate"]), _cortesia_excel(c["cortesia_ate"]),
@@ -719,7 +719,7 @@ def _planos_rows():
         do_plano = [c for c in clientes if c["plano_id"] == p["id"]]
         liberados = sum(1 for c in do_plano if (models.acesso_ate(c) or "") >= hoje)
         rows.append([
-            p["nome"], p["valor"], models.CICLOS_PLANO.get(p["ciclo"], (p["ciclo"],))[0], _sim_nao(p["ativo"]),
+            p["nome"], p["valor"], p["simbolo"], models.CICLOS_PLANO.get(p["ciclo"], (p["ciclo"],))[0], _sim_nao(p["ativo"]),
             p["max_pontos"], p["raio_km"], ", ".join(rotulos.get(r, r) for r in p["recursos"]),
             len(do_plano), liberados,
         ])
@@ -761,20 +761,21 @@ def build_workbook(completar_clima=None):
     _try_sheet(
         wb, "Clientes",
         ["Cliente", "Usuário", "Celular", "E-mail", "Perfil", "Fazenda/empresa", "Cidade", "Culturas", "Área (ha)",
-         "Cadastrado em", "Plano", "Valor do plano (R$)", "Ciclo", "Situação", "Acesso liberado", "Pago até",
+         "Cadastrado em", "Plano", "Valor do plano", "Moeda", "Ciclo", "Situação", "Acesso liberado", "Pago até",
          "Cortesia até", "Lavouras"],
-        _clientes_rows, date_columns=(9, 15, 16),
+        _clientes_rows, date_columns=(9, 16, 17),
     )
     _try_sheet(
         wb, "Planos",
-        ["Plano", "Valor (R$)", "Ciclo", "À venda", "Lavouras (máx.)", "Raio (km)", "Abas liberadas",
+        ["Plano", "Valor", "Moeda", "Ciclo", "À venda", "Lavouras (máx.)", "Raio (km)", "Abas liberadas",
          "Clientes no plano", "Clientes com acesso liberado"],
         _planos_rows,
     )
-    for aba, coluna in (("Clientes", "L"), ("Planos", "B")):  # valores em R$
-        for celula in wb[aba][coluna][1:]:
+    for aba, col_valor in (("Clientes", 12), ("Planos", 2)):  # valor no formato da moeda do plano (coluna seguinte)
+        for linha in wb[aba].iter_rows(min_row=2):
+            celula, moeda = linha[col_valor - 1], linha[col_valor].value
             if isinstance(celula.value, (int, float)):
-                celula.number_format = '"R$" #,##0.00'
+                celula.number_format = f'"{moeda or "R$"}" #,##0.00'
     buffer = io.BytesIO()
     wb.save(buffer)
     buffer.seek(0)

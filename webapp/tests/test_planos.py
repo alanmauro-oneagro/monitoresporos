@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 os.environ.setdefault("BIOSCOUT_DB_PATH", os.path.join(tempfile.mkdtemp(), "teste.db"))
 os.environ.pop("ASAAS_API_KEY", None)
@@ -198,17 +199,95 @@ class ExcelClientesPlanosTest(unittest.TestCase):
         valor = dict(zip(cab, linha))
         self.assertEqual(valor["Cliente"], "Zzz Cliente Excel da Silva")
         self.assertEqual(valor["Perfil"], "Produtor, Técnico do setor")
-        self.assertEqual((valor["Cidade"], valor["Plano"], valor["Valor do plano (R$)"], valor["Ciclo"]),
-                         ("Sorriso/MT", "Zzz Plano Excel", 79.9, "Mensal"))
+        self.assertEqual((valor["Cidade"], valor["Plano"], valor["Valor do plano"], valor["Moeda"], valor["Ciclo"]),
+                         ("Sorriso/MT", "Zzz Plano Excel", 79.9, "R$", "Mensal"))
         self.assertEqual((valor["Situação"], valor["Acesso liberado"], valor["Cortesia até"]), ("Ativa", "Sim", "Sem prazo"))
         self.assertIsInstance(valor["Cadastrado em"], dt.datetime)  # data de verdade, nao texto
         self.assertNotIn("Erro ao gerar", str(clientes))
         planos = list(wb["Planos"].iter_rows(values_only=True))
         p = dict(zip(planos[0], next(r for r in planos if r[0] == "Zzz Plano Excel")))
-        self.assertEqual((p["Valor (R$)"], p["À venda"], p["Clientes no plano"], p["Clientes com acesso liberado"]),
-                         (79.9, "Sim", 1, 1))
+        self.assertEqual((p["Valor"], p["Moeda"], p["À venda"], p["Clientes no plano"], p["Clientes com acesso liberado"]),
+                         (79.9, "R$", "Sim", 1, 1))
         self.assertIn("Esporos", p["Abas liberadas"])
         self.assertIn("R$", wb["Planos"]["B2"].number_format)
+
+
+class PlanoEmDolarTest(unittest.TestCase):
+    """Plano com valor em U$, cobrado em reais pela cotacao do dia (pedido do
+    Alan, 07/11/2026)."""
+
+    @classmethod
+    def setUpClass(cls):
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Teste Master Dolar"):
+            models.create_user("Zzz Teste Master Dolar", "x", is_master=True)
+
+    def setUp(self):
+        import cotacao
+        self.cotacao = cotacao
+        cotacao._cache.update(em=0.0, valor=None)
+        self.patch = mock.patch.object(cotacao, "_buscar", return_value=(5.5, "2026-11-06"))
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        self.cotacao._cache.update(em=0.0, valor=None)
+
+    def _logado(self, user_id):
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(user_id)
+            s["_fresh"] = True
+        return c
+
+    def test_master_escolhe_dolar_e_preco_aparece_convertido(self):
+        plano = models.salvar_plano(None, "Zzz Plano Dolar", "", 1, "MONTHLY", 3, 50, ["clima"], True, 9)
+        master = self._logado(models.get_user_by_username("Zzz Teste Master Dolar")["id"])
+        master.post("/admin/planos/salvar", data={
+            "plano_ids": [str(plano)], f"nome__{plano}": "Zzz Plano Dolar", f"valor__{plano}": "20,00",
+            f"moeda__{plano}": "USD", f"ciclo__{plano}": "MONTHLY", f"max_pontos__{plano}": "3",
+            f"raio_km__{plano}": "50", f"ordem__{plano}": "9", f"recursos__{plano}": ["clima"], f"ativo__{plano}": "on",
+        })
+        p = models.get_plano(plano)
+        self.assertEqual((p["valor"], p["moeda"], p["simbolo"]), (20.0, "USD", "U$"))
+        html = master.get("/admin/planos").get_data(as_text=True)
+        self.assertIn("Dólar hoje: <strong>R$ 5,5000</strong>", html)
+        self.assertIn("≈ R$ 110,00 hoje", html)
+        self.assertEqual(webapp._preco_plano(p), "U$ 20,00 (≈ R$ 110,00)")
+        uid = models.criar_cliente("Zzz Cliente Dolar", "segredo1", "", "5565999990066", "", None)
+        tela = self._logado(uid).get("/app/assinatura").get_data(as_text=True)
+        self.assertIn("U$ 20,00 (≈ R$ 110,00)", tela)
+        self.assertIn("Cobrado em reais, pela cotação do dólar do dia", tela)
+        # cobranca sai em reais no Asaas
+        with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                mock.patch.object(webapp.asaas, "criar_cliente", return_value="cus_zzz"), \
+                mock.patch.object(webapp.asaas, "criar_assinatura", return_value="sub_zzz") as criar, \
+                mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[]):
+            self._logado(uid).post("/app/assinatura/assinar", data={"plano_id": str(plano), "cpf_cnpj": CPF_VALIDO})
+        valor_cobrado, descricao = criar.call_args[0][1], criar.call_args[0][3]
+        self.assertEqual(valor_cobrado, 110.0)
+        self.assertIn("U$ 20,00 x R$ 5,5000", descricao)
+
+    def test_sem_cotacao_nao_cobra(self):
+        plano = models.salvar_plano(None, "Zzz Plano Dolar 2", "", 20, "MONTHLY", 3, 50, ["clima"], True, 9, moeda="USD")
+        uid = models.criar_cliente("Zzz Cliente Dolar 2", "segredo1", "", "5565999990067", "", None)
+        models.set_setting("cotacao_dolar", "")
+        self.patch.stop()
+        with mock.patch.object(self.cotacao, "_buscar", side_effect=OSError("fora do ar")), \
+                mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                mock.patch.object(webapp.asaas, "criar_cliente", return_value="cus_zzz2"), \
+                mock.patch.object(webapp.asaas, "criar_assinatura") as criar:
+            resp = self._logado(uid).post("/app/assinatura/assinar", data={"plano_id": str(plano), "cpf_cnpj": CPF_VALIDO},
+                                          follow_redirects=True)
+        self.patch.start()
+        criar.assert_not_called()
+        self.assertIn("cotação do dólar indisponível", resp.get_data(as_text=True))
+
+    def test_cotacao_guardada_vale_quando_o_banco_central_cai(self):
+        self.assertEqual(self.cotacao.dolar()["valor"], 5.5)  # busca e guarda
+        self.cotacao._cache.update(em=0.0, valor=None)
+        with mock.patch.object(self.cotacao, "_buscar", side_effect=OSError("fora do ar")):
+            self.assertEqual(self.cotacao.dolar(), {"valor": 5.5, "data": "2026-11-06"})
 
 
 if __name__ == "__main__":
