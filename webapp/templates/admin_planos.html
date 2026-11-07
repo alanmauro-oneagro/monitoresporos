@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Planos e Valores - OneAgro App{% endblock %}
 {% block content %}
+<style>
+/* tabela de apoio: sem as setinhas do campo numerico (economiza espaco no celular) */
+.tabela-preco input[type=number]::-webkit-inner-spin-button, .tabela-preco input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.tabela-preco input[type=number] { -moz-appearance: textfield; }
+</style>
 <h4 class="mb-2">Planos e Valores</h4>
 <p class="text-muted small mb-3">
     Planos que o cliente do app pode assinar em <a href="{{ url_for('planos_publico') }}" target="_blank">{{ url_for('planos_publico', _external=True) }}</a>.
@@ -71,20 +76,28 @@
     </div>
 </form>
 
-<div class="card shadow-sm mb-4" id="tabela-precificacao"><div class="card-body">
+<div class="card shadow-sm mb-4" id="tabela-precificacao"><div class="card-body px-2 px-sm-3">
     <h6 class="mb-1">Tabela de apoio: preço em U$ pela área monitorada</h6>
     <p class="small text-muted mb-2">Só para ajudar a montar os preços -- não muda nenhum plano. Digite a área e o valor por hectare;
         o raio é o do círculo com essa área e o total em reais usa o dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.</p>
     <form method="post" action="{{ url_for('admin_planos_tabela') }}">
         <div class="table-responsive">
-        <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}">
-            <thead class="table-light"><tr><th style="min-width: 9.5rem;"></th>{% for c in tabela_preco %}<th class="text-center">{{ loop.index }}</th>{% endfor %}</tr></thead>
+        <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}">
+            <thead class="table-light"><tr>
+                <th class="text-center d-none d-sm-table-cell">#</th><th title="Área monitorada">Área (ha)</th><th title="Raio monitorado">Raio (km)</th>
+                <th title="Valor por hectare">U$/ha</th><th title="Valor total em dólar">Total U$</th><th title="Valor total em reais, pela cotação de hoje">≈ Total R$</th>
+            </tr></thead>
             <tbody>
-                <tr><th>Área monitorada (ha)</th>{% for c in tabela_preco %}<td><input type="number" min="0" step="any" class="form-control form-control-sm text-end" style="min-width: 5.5rem;" name="area_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="area" value="{{ c.area_ha if c.area_ha is not none else '' }}" aria-label="Área da coluna {{ loop.index }}"></td>{% endfor %}</tr>
-                <tr><th>Raio monitorado (km)</th>{% for c in tabela_preco %}<td class="text-end text-muted" data-saida="raio" data-col="{{ loop.index0 }}">{{ ('%.2f' | format(c.raio_km)) | replace('.', ',') if c.raio_km else '-' }}</td>{% endfor %}</tr>
-                <tr><th>Valor por hectare (U$/ha)</th>{% for c in tabela_preco %}<td><input type="number" min="0" step="any" class="form-control form-control-sm text-end" style="min-width: 5.5rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ c.usd_ha if c.usd_ha is not none else '' }}" aria-label="Valor por hectare da coluna {{ loop.index }}"></td>{% endfor %}</tr>
-                <tr><th>Valor total (U$)</th>{% for c in tabela_preco %}<td class="text-end fw-bold" data-saida="usd" data-col="{{ loop.index0 }}">{{ c.total_usd | dinheiro('U$') if c.total_usd is not none else '-' }}</td>{% endfor %}</tr>
-                <tr><th>Valor total (≈ R$)</th>{% for c in tabela_preco %}<td class="text-end" data-saida="brl" data-col="{{ loop.index0 }}">{{ (c.total_usd * cotacao_dolar.valor) | dinheiro if c.total_usd is not none and cotacao_dolar else '-' }}</td>{% endfor %}</tr>
+                {% for c in tabela_preco %}
+                <tr>
+                    <td class="text-center text-muted d-none d-sm-table-cell">{{ loop.index }}</td>
+                    <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 4.4rem;" name="area_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="area" value="{{ c.area_ha if c.area_ha is not none else '' }}" aria-label="Área da faixa {{ loop.index }}"></td>
+                    <td class="text-end text-muted" data-saida="raio" data-col="{{ loop.index0 }}">{{ ('%.2f' | format(c.raio_km)) | replace('.', ',') if c.raio_km else '-' }}</td>
+                    <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 3.2rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ c.usd_ha if c.usd_ha is not none else '' }}" aria-label="Valor por hectare da faixa {{ loop.index }}"></td>
+                    <td class="text-end fw-bold text-nowrap" data-saida="usd" data-col="{{ loop.index0 }}">{{ c.total_usd | dinheiro('U$') if c.total_usd is not none else '-' }}</td>
+                    <td class="text-end text-nowrap" data-saida="brl" data-col="{{ loop.index0 }}">{{ (c.total_usd * cotacao_dolar.valor) | dinheiro if c.total_usd is not none and cotacao_dolar else '-' }}</td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
         </div>
