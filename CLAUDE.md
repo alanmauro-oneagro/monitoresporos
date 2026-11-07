@@ -127,7 +127,11 @@ UMA tabela comparativa (`.tabela-planos`): uma coluna por plano + "Novo
 plano", 1a coluna fixa com o campo (Nome, Valor, Ciclo, Lavouras, Raio,
 Ordem, A' venda, Descricao) e cada aba liberada (`RECURSOS_PLANO`) numa
 linha, com uma caixa por plano; mesmos nomes de campo (`nome__<id>`,
-`recursos__<id>`...) e um Salvar so'. **Tabela de apoio** (Planos e
+`recursos__<id>`...) e um Salvar so'. **Linhas fora da tela** (pedido do
+Alan, 07/11/2026): Lavouras, Raio e as abas fazenda_estimada/esporos/
+risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na
+tabela, mas o plano continua com elas (campos escondidos no formulario --
+salvar nao apaga; teste `PlanosLinhasForaDaTelaTest`). **Tabela de apoio** (Planos e
 Valores, pedido do Alan, 07/11/2026): faixas FIXAS de area
 (`app.FAIXAS_PRECO`: ate' 100, 250, 500, 1.000, 2.000, 3.000, 5.000,
 10.000 ha e acima de 10.000), o Master digita so' o U$/ha de cada faixa;

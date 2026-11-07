@@ -7393,11 +7393,17 @@ def _inject_cadastros_novos():
     return {"solicitacoes_pendentes": 0}
 
 
+# Linhas tiradas da tabela de planos (pedido do Alan, 07/11/2026): o plano
+# continua com o valor que ja' tinha (campos escondidos no formulario).
+RECURSOS_FORA_DA_TELA = {"fazenda_estimada", "esporos", "risco", "fungicidas", "regiao"}
+
+
 @app.route("/admin/planos")
 @master_required
 def admin_planos():
     return render_template(
         "admin_planos.html", planos=models.get_planos(), recursos=models.RECURSOS_PLANO,
+        recursos_ocultos=RECURSOS_FORA_DA_TELA,
         ciclos=models.CICLOS_PLANO, moedas=models.MOEDAS, cotacao_dolar=cotacao.dolar(),
         tabela_preco=_tabela_precificacao(),
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),

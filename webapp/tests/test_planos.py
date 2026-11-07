@@ -387,3 +387,46 @@ class TabelaPrecificacaoTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlanosLinhasForaDaTelaTest(unittest.TestCase):
+    """Lavouras, Raio e 5 abas sairam da tabela (pedido do Alan, 07/11/2026),
+    mas salvar a tela nao pode apagar o que o plano ja' tem."""
+
+    def test_salvar_mantem_valores_escondidos(self):
+        import re
+        import html as html_mod
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Teste Master Linhas"):
+            models.create_user("Zzz Teste Master Linhas", "x", is_master=True)
+        pid = models.salvar_plano(None, "Zzz Plano Linhas", "", 10.0, "MONTHLY", 7, 33,
+                                  ["clima", "esporos", "regiao", "site_mapa"], True, 9)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Teste Master Linhas")["id"])
+            s["_fresh"] = True
+        pagina = c.get("/admin/planos").get_data(as_text=True)
+        for rotulo in ("<td>Lavouras</td>", "<td>Raio (km)</td>", "Esporos estimados na região", "Mapa da região com as estações"):
+            self.assertNotIn(rotulo, pagina)
+        self.assertIn(">Site: Mapa<", pagina)
+        # envia o formulario exatamente como a tela monta (sem mexer em nada)
+        form = pagina.split('action="/admin/planos/salvar"', 1)[1].split("</form>", 1)[0]
+        dados = {}
+        for tag in re.findall(r"<(?:input|select|textarea)[^>]*>", form):
+            nome = re.search(r'name="([^"]+)"', tag)
+            if not nome:
+                continue
+            if 'type="checkbox"' in tag and "checked" not in tag:
+                continue
+            valor = re.search(r'value="([^"]*)"', tag)
+            valor = html_mod.unescape(valor.group(1)) if valor else ("on" if 'type="checkbox"' in tag else "")
+            if tag.startswith("<select"):
+                bloco = form.split(tag, 1)[1].split("</select>", 1)[0]
+                sel = re.search(r'<option value="([^"]+)"[^>]*selected', bloco)
+                valor = sel.group(1) if sel else ""
+            dados.setdefault(nome.group(1), []).append(valor)
+        self.assertIn("Planos salvos", c.post("/admin/planos/salvar", data=dados, follow_redirects=True).get_data(as_text=True))
+        plano = models.get_plano(pid)
+        self.assertEqual((plano["max_pontos"], plano["raio_km"]), (7, 33))
+        self.assertEqual(set(plano["recursos"]), {"clima", "esporos", "regiao", "site_mapa"})
+        models.excluir_plano(pid)
