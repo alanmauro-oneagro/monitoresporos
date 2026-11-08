@@ -534,7 +534,8 @@ site tem que entrar la'.
   `STATUS_CACHE_S`=30 s), `whatsapp_conectado()` nos templates. Desativa
   "Enviar por WhatsApp" + caixas PDF/Texto (Recomendacoes), "Enviar agora"
   dos pontos so' clima, "Enviar selecionadas" (NDVI) e "Enviar teste" (editar
-  usuario); aviso `_aviso_whatsapp.html` no topo de Recomendacoes/NDVI. As
+  usuario); aviso `_aviso_whatsapp.html` no topo de Recomendacoes/NDVI
+(cliente do app NAO ve o aviso -- pedido do Alan, 08/11/2026). As
   rotas tambem recusam (`_whatsapp_desconectado`, flash e volta). Envios
   (so' configuracao) e Gerenciar WhatsApp (ex-"Conexao WhatsApp") nao mudam.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --

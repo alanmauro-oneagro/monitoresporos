@@ -60,6 +60,21 @@ class WhatsappDesconectadoTest(unittest.TestCase):
             rec = master.get("/recommendations/safra1", follow_redirects=True).get_data(as_text=True)
             self.assertNotIn("⚠ WhatsApp desconectado", rec)
 
+    def test_cliente_nao_ve_o_aviso(self):
+        """Cliente do app nao ve o aviso do WhatsApp (pedido do Alan, 08/11/2026)."""
+        plano = models.salvar_plano(None, "Zzz Plano Aviso Whats", "", 0, "MONTHLY", 1, 30, ["clima", "site_recomendacoes"], True, 9)
+        uid = models.criar_cliente("Zzz Cli Aviso Whats", "segredo1", "", "5565999990181", "", plano)
+        models.atualizar_assinatura(uid, status="ativa", cortesia_ate="2099-01-01")
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(uid)
+            s["_fresh"] = True
+        with self._status(False):
+            resp = c.get("/recommendations/safra1", follow_redirects=True)
+            self.assertEqual(resp.status_code, 200)
+            self.assertNotIn("⚠ WhatsApp desconectado", resp.get_data(as_text=True))
+            self.assertIn("⚠ WhatsApp desconectado", self._master().get("/recommendations/safra1", follow_redirects=True).get_data(as_text=True))
+
     def test_envio_recusado_sem_conexao(self):
         master = self._master()
         with self._status(False), mock.patch.object(whatsapp, "send_whatsapp") as enviar:
