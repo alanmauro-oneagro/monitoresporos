@@ -811,7 +811,9 @@ def init_db():
                    "codigo_tentativas INTEGER NOT NULL DEFAULT 0", "codigo_reenvios INTEGER NOT NULL DEFAULT 0",
                    "nome_completo TEXT", "perfil TEXT", "visto INTEGER NOT NULL DEFAULT 0",
                    # Grupo de culturas (cereais/hf/cana) e area que conta pro preco (08/11/2026)
-                   "grupo_cultura TEXT", "area_preco_ha REAL"):
+                   "grupo_cultura TEXT", "area_preco_ha REAL",
+                   # Nome do grupo economico, antes do nome de cada fazenda no relatorio (08/11/2026)
+                   "grupo_economico TEXT"):
         try:
             conn.execute(f"ALTER TABLE solicitacoes_acesso ADD COLUMN {coluna}")
         except sqlite3.OperationalError:
@@ -3757,7 +3759,7 @@ def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id, passw
 
 _CAMPOS_SOLICITACAO = (
     "username", "nome_completo", "perfil", "email", "telefone", "tipo", "empresa",
-    "cidade", "uf", "culturas", "area_ha", "mensagem", "user_id", "grupo_cultura", "area_preco_ha",
+    "cidade", "uf", "culturas", "area_ha", "mensagem", "user_id", "grupo_cultura", "area_preco_ha", "grupo_economico",
 )
 
 

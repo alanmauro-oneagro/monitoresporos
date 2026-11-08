@@ -59,6 +59,7 @@
         <div class="d-none mt-3" id="cad-body-{{ loop.index0 }}">
         <dl class="mb-3">
             <dt>Usuário</dt><dd>{{ c.username }}</dd>
+            {% if c.grupo_economico %}<dt>Grupo econômico</dt><dd>{{ c.grupo_economico }}</dd>{% endif %}
             <dt>Celular</dt><dd>{% if c.telefone %}{{ c.telefone | telefone_br }}{% if telefone_digitos %} -- <a href="https://wa.me/{{ telefone_digitos }}" target="_blank" rel="noopener">abrir no WhatsApp</a>{% endif %}{% else %}-{% endif %}</dd>
             <dt>E-mail</dt><dd>{% if c.email %}<a href="mailto:{{ c.email }}">{{ c.email }}</a>{% else %}-{% endif %}</dd>
             {% if c.empresa or c.cidade or c.culturas or c.area_ha or c.mensagem %}

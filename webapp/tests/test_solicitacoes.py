@@ -300,6 +300,30 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("🟢 no Mapas de Estudo", html)
         self.assertNotIn(" lavoura", html.split("Gerenciar Clientes</h4>", 1)[1])
 
+    def test_grupo_economico_antes_do_nome_da_fazenda(self):
+        """Nome do grupo economico no cadastro vai antes do nome de cada fazenda
+        no relatorio: "Grupo Zzz - Sede" (pedido do Alan, 08/11/2026)."""
+        dados = _form(username="Zzz Cad Grupo", numero_telefone="65999990251", modalidade="plano", grupo_cultura=["cereais"],
+                      grupo_economico="  Grupo   Zzz ")
+        for k in ("cultura_outra", "area_outra"):
+            dados.pop(k)
+        dados.update({"local_idx": ["0"], "local_nome__0": "Sede", "local_cidade__0": "Sinop", "local_uf__0": "MT",
+                      "culturas__0": ["Soja"], "area_cultura__0__Soja": "500", "local_lat__0": "-12,5", "local_lon__0": "-55,7"})
+        self.assertIn('name="grupo_economico"', webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True))
+        resp = webapp.app.test_client().post("/solicitar-acesso", data=dados)
+        self.assertEqual(resp.status_code, 302, resp.get_data(as_text=True)[-600:])
+        self.assertEqual(self._cadastro("Zzz Cad Grupo")["grupo_economico"], "Grupo Zzz")
+        uid = models.get_user_by_username("Zzz Cad Grupo")["id"]
+        site = models.get_cliente_pontos(uid)[0]["site_name"]
+        self.assertEqual(models.get_virtual_farm(site)["nome"], "Grupo Zzz - Sede")
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._nome_exibicao(site), "Grupo Zzz - Sede")
+        import export_excel
+        from openpyxl import load_workbook
+        linhas = list(load_workbook(export_excel.build_workbook())["Clientes"].iter_rows(values_only=True))
+        linha = dict(zip(linhas[0], next(r for r in linhas if r[1] == "Zzz Cad Grupo")))
+        self.assertEqual(linha["Grupo econômico"], "Grupo Zzz")
+
     def test_varios_locais_e_pessoas_extras(self):
         """Locais de plantio (cada um com culturas/area e ponto no mapa) e ate' 2
         pessoas que recebem o relatorio, escolhendo os locais (pedido do Alan, 08/11/2026)."""

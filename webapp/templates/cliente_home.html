@@ -4,6 +4,7 @@
 <h1 class="titulo">Minha conta</h1>
 <div class="card shadow-sm mb-3"><div class="card-body py-2" style="font-size: 1rem;">
     <div><span class="text-muted">Usuário:</span> <strong>{{ user.username }}</strong></div>
+    {% if cadastro.grupo_economico %}<div><span class="text-muted">Grupo:</span> <strong>{{ cadastro.grupo_economico }}</strong></div>{% endif %}
     <div><span class="text-muted">E-mail:</span> <strong>{{ user.email or '—' }}</strong></div>
     <div><span class="text-muted">Celular:</span> <strong>{{ user.telefone | telefone_br if user.telefone else '—' }}</strong></div>
 </div></div>
