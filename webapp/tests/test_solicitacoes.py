@@ -376,6 +376,19 @@ class CadastroTest(unittest.TestCase):
         self.assertTrue(r.headers["Location"].endswith("/app"))
         self.assertEqual(recebe(sede), ["Zzz Cad Locais", "Zzz Novo"])
         self.assertEqual(recebe(retiro), ["Zzz Cad Locais"])
+        # aba Conta salva sozinha (pedido do Alan, 08/11/2026): JSON, sem botao
+        self.assertNotIn("Salvar quem recebe", home)
+        r = c.post("/app/destinatarios", headers={"X-Autosave": "1"},
+                   data={"extra_nome__1": "Zzz Auto", "codigo_pais__extra1": "55", "numero_telefone__extra1": "65999990250"})
+        self.assertEqual(r.get_json(), {"ok": True})
+        self.assertEqual([s["nome"] for s in models.get_owner_subordinados(uid)], ["Zzz Auto"])
+        r = c.post("/app/destinatarios", headers={"X-Autosave": "1"}, data={"extra_nome__1": "Zzz Pela Metade"})
+        self.assertFalse(r.get_json()["ok"])
+        self.assertEqual([s["nome"] for s in models.get_owner_subordinados(uid)], ["Zzz Auto"])  # nao apaga
+        # senha: conferida enquanto digita, botao mostrar senha
+        self.assertIn('class="btn btn-outline-secondary mostrar-senha"', home)
+        self.assertTrue(c.post("/app/conta/conferir-senha", data={"senha": dados["senha"]}).get_json()["ok"])
+        self.assertFalse(c.post("/app/conta/conferir-senha", data={"senha": "errada"}).get_json()["ok"])
         # local sem coordenada: nao segue
         ruim = dict(dados, username="Zzz Cad Locais 2", numero_telefone="65999990244", local_lat__3="")
         ruim.pop("extra_nome__1"); ruim.pop("numero_telefone__extra1"); ruim.pop("extra_nome__2"); ruim.pop("numero_telefone__extra2")

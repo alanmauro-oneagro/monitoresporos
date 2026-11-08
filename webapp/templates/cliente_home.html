@@ -48,8 +48,8 @@
 
 {# Ate' 2 pessoas que tambem recebem o relatorio, por area (pedido do Alan, 08/11/2026). #}
 <h6 class="mt-4 mb-1">Quem mais recebe o relatório</h6>
-<p class="small text-muted mb-2">Até {{ max_extras }} pessoas recebem o relatório no WhatsApp, das fazendas que você marcar.</p>
-<form method="post" action="{{ url_for('cliente_destinatarios') }}" class="mb-3">
+<p class="small text-muted mb-2">Até {{ max_extras }} pessoas recebem o relatório no WhatsApp, das fazendas que você marcar. Salva sozinho. <span id="statusDest" class="fw-semibold"></span></p>
+<form method="post" action="{{ url_for('cliente_destinatarios') }}" class="mb-3" id="formDest">
     <input type="hidden" name="voltar" value="{{ voltar }}">
     {% for k in range(1, max_extras + 1) %}
     {% set e = extras[k - 1] if extras | length >= k else none %}
@@ -69,18 +69,100 @@
         {% endif %}
     </div></div>
     {% endfor %}
-    <button class="btn btn-outline-success w-100" type="submit">Salvar quem recebe</button>
 </form>
 
-<form method="post" action="{{ url_for('cliente_conta') }}" class="card shadow-sm mb-3"><div class="card-body">
+<form method="post" action="{{ url_for('cliente_conta') }}" class="card shadow-sm mb-3" id="formSenha"><div class="card-body">
     <h6>Trocar senha</h6>
-    <input class="form-control mb-2" type="password" name="senha_atual" placeholder="Senha atual" autocomplete="current-password" required>
-    <input class="form-control mb-2" type="password" name="senha_nova" placeholder="Nova senha" minlength="6" autocomplete="new-password" required>
-    <input class="form-control mb-2" type="password" name="senha_confirmar" placeholder="Confirmar nova senha" minlength="6" autocomplete="new-password" required>
-    <button class="btn btn-success w-100" type="submit">Salvar senha</button>
+    {% for campo, rotulo, auto in [('senha_atual', 'Senha atual', 'current-password'), ('senha_nova', 'Nova senha (mínimo 6)', 'new-password'), ('senha_confirmar', 'Confirmar nova senha', 'new-password')] %}
+    <div class="input-group">
+        <input class="form-control" type="password" name="{{ campo }}" id="{{ campo }}" placeholder="{{ rotulo }}" aria-label="{{ rotulo }}" autocomplete="{{ auto }}" {% if campo != 'senha_atual' %}minlength="6"{% endif %} required>
+        <button class="btn btn-outline-secondary mostrar-senha" type="button" data-alvo="{{ campo }}" aria-label="Mostrar senha">👁</button>
+    </div>
+    <div class="small mb-2" id="aviso_{{ campo }}">&nbsp;</div>
+    {% endfor %}
+    <button class="btn btn-success w-100" type="submit" id="botaoSenha" disabled>Salvar senha</button>
 </div></form>
 {% endblock %}
 {% block extra_scripts %}
+<script>
+// Quem mais recebe: salva sozinho (texto ao sair do campo, caixas na hora).
+(function () {
+    var form = document.getElementById('formDest'), status = document.getElementById('statusDest');
+    if (!form) { return; }
+    var timer = null, ultimo = null;
+    function salvar() {
+        var dados = new FormData(form), chave = new URLSearchParams(dados).toString();
+        if (chave === ultimo) { return; }
+        status.className = 'fw-semibold text-muted'; status.textContent = 'Salvando...';
+        fetch(form.action, { method: 'POST', body: dados, credentials: 'same-origin', headers: { 'X-Autosave': '1' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.ok) { ultimo = chave; status.className = 'fw-semibold text-success'; status.textContent = '✓ Salvo'; }
+                else { status.className = 'fw-semibold text-danger'; status.textContent = d.erro; }
+            })
+            .catch(function () { status.className = 'fw-semibold text-danger'; status.textContent = 'Sem conexão -- não salvou.'; });
+    }
+    ultimo = new URLSearchParams(new FormData(form)).toString();
+    form.addEventListener('submit', function (e) { e.preventDefault(); salvar(); });
+    form.addEventListener('change', function (e) {
+        clearTimeout(timer);
+        timer = setTimeout(salvar, e.target.type === 'checkbox' ? 300 : 0);
+    });
+    form.addEventListener('focusout', function (e) {
+        if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') { clearTimeout(timer); timer = setTimeout(salvar, 0); }
+    });
+})();
+
+// Trocar senha: mostrar senha, confere a atual no servidor e se as novas batem.
+(function () {
+    var form = document.getElementById('formSenha');
+    if (!form) { return; }
+    var atual = form.senha_atual, nova = form.senha_nova, conf = form.senha_confirmar;
+    var botao = document.getElementById('botaoSenha'), atualOk = false, timer = null, pedido = 0;
+    form.querySelectorAll('.mostrar-senha').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var campo = document.getElementById(b.dataset.alvo), ver = campo.type === 'password';
+            campo.type = ver ? 'text' : 'password';
+            b.textContent = ver ? '🙈' : '👁';
+            b.setAttribute('aria-label', ver ? 'Esconder senha' : 'Mostrar senha');
+        });
+    });
+    function aviso(campo, ok, texto) {
+        var el = document.getElementById('aviso_' + campo.name);
+        el.className = 'small mb-2 ' + (ok === null ? 'text-muted' : ok ? 'text-success' : 'text-danger');
+        el.innerHTML = texto || '&nbsp;';
+        campo.classList.toggle('is-valid', ok === true);
+        campo.classList.toggle('is-invalid', ok === false);
+    }
+    function atualizar() {
+        var novaOk = nova.value.length >= 6, confOk = novaOk && conf.value === nova.value;
+        if (!nova.value) { aviso(nova, null); }
+        else { aviso(nova, novaOk, novaOk ? '✓ Nova senha válida' : '✗ Mínimo de 6 caracteres'); }
+        if (!conf.value) { aviso(conf, null); }
+        else { aviso(conf, confOk, confOk ? '✓ As senhas são iguais' : '✗ As senhas não são iguais'); }
+        botao.disabled = !(atualOk && confOk);
+    }
+    function conferirAtual() {
+        var n = ++pedido;
+        atualOk = false; atualizar();
+        if (!atual.value) { aviso(atual, null); return; }
+        aviso(atual, null, 'Conferindo...');
+        var dados = new FormData(); dados.append('senha', atual.value);
+        fetch('{{ url_for("cliente_conferir_senha") }}', { method: 'POST', body: dados, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (n !== pedido) { return; }
+                atualOk = !!d.ok;
+                aviso(atual, atualOk, atualOk ? '✓ Senha atual correta' : '✗ Senha atual incorreta');
+                atualizar();
+            })
+            .catch(function () { if (n === pedido) { aviso(atual, false, 'Sem conexão para conferir.'); } });
+    }
+    atual.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(conferirAtual, 500); });
+    nova.addEventListener('input', atualizar);
+    conf.addEventListener('input', atualizar);
+})();
+</script>
 <script>
 // Abre cada lavoura e a regiao em segundo plano pra ficarem salvas no
 // celular (offline) -- no maximo uma vez a cada 30 minutos, a menos que

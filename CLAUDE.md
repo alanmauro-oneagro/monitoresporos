@@ -207,7 +207,12 @@ total vindos do cadastro, as "Fazendas monitoradas" (as antigas lavouras;
 ex-"Areas monitoradas", nome trocado pelo Alan em 08/11/2026 no app e em
 Gerenciar Clientes),
 quem mais recebe e "Trocar senha" (`cliente_conta` so' recebe o POST;
-GET volta pra `/app`). **Sem "Excluir conta"** no app (pedido do Alan,
+GET volta pra `/app`). "Quem mais recebe" salva sozinho, sem botao
+(texto ao sair do campo, caixas na hora; header `X-Autosave` -> JSON,
+pessoa incompleta nao apaga o que ja' estava salvo). Trocar senha (unico
+botao Salvar): botao 👁 mostrar senha em cada campo, senha atual conferida
+ao digitar (`/app/conta/conferir-senha`), nova >= 6 e confirmacao igual;
+"Salvar senha" so' libera com tudo certo (pedidos do Alan, 08/11/2026). **Sem "Excluir conta"** no app (pedido do Alan,
 08/11/2026; rota `/app/conta/excluir` retirada) -- o Master exclui em
 Gerenciar Clientes. Depois do login o
 cliente entra direto no Site (`_inicio_cliente`: 1a aba do Site que o plano
