@@ -205,7 +205,7 @@ se o plano liberar (recursos "site_*" em `RECURSOS_PLANO`, logo depois de
 Graficos/Manejos/Recomendacoes (`ABAS_SITE_CLIENTE` em `_restringir_cliente`;
 menu do `base.html` so' com essas abas + "📱 App"; no app, aba "🌐 Site").
 **App do cliente** (pedido do Alan, 08/11/2026): a barra de baixo
-(`_abas_cliente.html`: Alertas (ex-"Site"), Graficos (ex-"Regiao"), Assinatura, Conta -- nomes trocados pelo Alan em 08/11/2026) e' fixa
+(`_abas_cliente.html`: Alertas (ex-"Site"), Graficos (ex-"Regiao"), Relatorios, Assinatura, Conta -- nomes trocados pelo Alan em 08/11/2026) e' fixa
 no rodape e aparece TAMBEM nas abas do Site (incluida em base.html e
 cliente_base.html); a aba aberta fica numa caixa verde-clara. **Conta**
 (`cliente_home`, `/app`; Culturas + Conta juntas, pedido do Alan,
@@ -228,7 +228,18 @@ muda; trocar o grupo renomeia as fazendas estimadas,
 mesma tela da "Nova fazenda" ja' preenchida: nome, cidade/UF, tipo,
 culturas/areas e local; renomeia/move a fazenda estimada e refaz o total do
 cadastro pela soma das fazendas, `_recalcular_cadastro`; "Excluir fazenda"
-ficou nessa tela). Editar area NAO gera nem ajusta cobranca. Na lista "Fazendas monitoradas" o "✏️ Editar" fica
+ficou nessa tela; edicao SALVA SOZINHA, sem botao --
+`_autosave_cliente.html`, header `X-Autosave` -> JSON {ok, erro}). Editar area NAO gera nem ajusta cobranca.
+**Topo do cliente** (`_topo_cliente.html`, pedido do Alan, 08/11/2026): o
+MESMO no app (cliente_base) e nas abas do Site (base.html troca o navbar da
+equipe por ele): logo + menu ☰ com as abas do Site que o plano libera e as do
+app (Graficos, Relatorios, Assinatura, Conta) + Sair (`#linkSair`, limpa o
+cache offline). **Aba Relatorios** (`/app/relatorios`, `cliente_relatorios`):
+escolhe UMA fazenda e mostra o texto do relatorio (`_texto_relatorio`, o
+mesmo do WhatsApp -- `_preparar_relatorio` monta os dados pros dois) com
+cabecalho destacado ("📋 *RELATÓRIO ONEAGRO*", nome da fazenda, data/hora;
+`_texto_relatorio_cliente`) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
+"Copiar texto" e "Baixar .txt" (`/app/relatorios/<id>.txt`). Na lista "Fazendas monitoradas" o "✏️ Editar" fica
 logo na frente do nome; a pagina da fazenda (`cliente_ponto`) mostra SO'
 culturas/areas, area total, municipio, estado, coordenadas e o mapa
 (clima/risco/esporos sairam -- pedido do Alan, 08/11/2026). **Sem "Excluir conta"** no app (pedido do Alan,

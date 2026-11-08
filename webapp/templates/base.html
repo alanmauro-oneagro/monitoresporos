@@ -138,6 +138,7 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+{% if current_user.is_authenticated and current_user.is_cliente %}{% include '_topo_cliente.html' %}{% else %}
 <nav class="navbar navbar-expand-lg" style="background:#ffffff; border-bottom: 3px solid #63b445; position: sticky; top: 0; z-index: 1030;">
     <div class="container">
         <a class="navbar-brand" href="https://www.oneagro.com.br/" target="_blank" rel="noopener"><img src="{{ url_for('static', filename='oneagro-logo.png') }}" alt="OneAgro"></a>
@@ -184,6 +185,7 @@
         {% endif %}
     </div>
 </nav>
+{% endif %}
 {% if pode_ordenar_menu %}
 <script>
 // Ordem das abas do menu Configuracoes -- so' o Alan (pedido dele, 01/11/2026):

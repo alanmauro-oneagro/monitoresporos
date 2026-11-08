@@ -1,0 +1,45 @@
+{# Topo do cliente -- o MESMO nas telas do app e nas abas do Site (pedido do
+   Alan, 08/11/2026): logo + menu ☰ com todas as abas pra navegar. #}
+<style>
+    .topo-cliente { position: sticky; top: 0; z-index: 1035; background: #fff; border-bottom: 3px solid #63b445;
+                    padding: calc(0.45rem + env(safe-area-inset-top)) 1rem 0.45rem; }
+    .topo-cliente img { height: 30px; }
+    .topo-cliente .menu-cliente { position: absolute; right: 0.75rem; top: 100%; min-width: 220px; z-index: 1036; }
+    .topo-cliente .menu-cliente a { display: block; padding: 0.55rem 1rem; color: #0a1f44; text-decoration: none; }
+    .topo-cliente .menu-cliente a.ativa { background: #d8f3d0; font-weight: 600; color: #2b6a1a; }
+    .topo-cliente .menu-cliente .grupo { font-size: 0.75rem; color: #6c757d; padding: 0.4rem 1rem 0.1rem; }
+</style>
+{% set ep = request.endpoint %}
+<div class="topo-cliente d-flex align-items-center justify-content-between">
+    <img src="{{ url_for('static', filename='oneagro-logo.png') }}" alt="OneAgro">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="botaoMenuCliente" aria-label="Abrir menu" aria-expanded="false">☰</button>
+    <div class="menu-cliente bg-white shadow rounded py-1 d-none" id="menuCliente">
+        {% if menu_site_cliente %}
+        <div class="grupo">Site</div>
+        {% for rotulo, ep_site in menu_site_cliente %}
+        <a href="{{ url_for(ep_site) }}" class="{% if ep == ep_site or (ep_site == 'recommendations_default' and ep == 'recommendations') %}ativa{% endif %}">{{ rotulo }}</a>
+        {% endfor %}
+        <div class="grupo">App</div>
+        {% endif %}
+        {% if not cliente_bloqueado %}
+        <a href="{{ url_for('cliente_regiao') }}" class="{% if ep == 'cliente_regiao' %}ativa{% endif %}">📈 Gráficos</a>
+        <a href="{{ url_for('cliente_relatorios') }}" class="{% if ep == 'cliente_relatorios' %}ativa{% endif %}">📄 Relatórios</a>
+        {% endif %}
+        <a href="{{ url_for('cliente_assinatura') }}" class="{% if ep == 'cliente_assinatura' %}ativa{% endif %}">⭐ Assinatura</a>
+        <a href="{{ url_for('cliente_home') }}" class="{% if ep in ('cliente_home', 'cliente_conta_editar', 'cliente_ponto', 'cliente_ponto_novo', 'cliente_ponto_editar') %}ativa{% endif %}">👤 Conta</a>
+        <a href="{{ url_for('logout') }}" id="linkSair" class="border-top">Sair</a>
+    </div>
+</div>
+<script>
+(function () {
+    var botao = document.getElementById('botaoMenuCliente'), menu = document.getElementById('menuCliente');
+    botao.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var aberto = menu.classList.toggle('d-none') === false;
+        botao.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (e) {
+        if (!menu.contains(e.target)) { menu.classList.add('d-none'); botao.setAttribute('aria-expanded', 'false'); }
+    });
+})();
+</script>

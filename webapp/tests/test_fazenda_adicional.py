@@ -205,5 +205,38 @@ class FazendaAdicionalTest(unittest.TestCase):
         cad = models.get_cadastro_do_usuario(uid)
         self.assertEqual((cad["culturas"], cad["area_ha"], cad["empresa"]), ("Soja (250 ha)", 250.0, "Faz Mourão II"))
 
+    def test_relatorio_txt_e_edicao_automatica(self):
+        """Aba Relatorios (texto da fazenda com cabecalho, pra WhatsApp) e
+        edicao salva sozinha (X-Autosave -> JSON) -- pedido do Alan, 08/11/2026."""
+        uid = self._cliente_pagante("Zzz Adic Relat")
+        c = self._logado(uid)
+        with mock.patch.object(webapp.asaas, "configurado", return_value=False):
+            self._nova(c)
+        ponto = models.get_cliente_pontos(uid)[0]
+        with mock.patch.object(webapp, "_texto_relatorio", return_value="*Faz Mourão*\nClima ok"):
+            tela = c.get("/app/relatorios").get_data(as_text=True)
+            txt = c.get(f"/app/relatorios/{ponto['id']}.txt")
+        self.assertIn("📋 *RELATÓRIO ONEAGRO*", tela)
+        self.assertIn("https://wa.me/?text=", tela)
+        self.assertIn("Clima ok", tela)
+        self.assertEqual(txt.mimetype, "text/plain")
+        self.assertIn("attachment", txt.headers["Content-Disposition"])
+        self.assertTrue(txt.get_data(as_text=True).startswith("━"))
+        # edicao automatica: sem botao Salvar, devolve JSON
+        tela = c.get(f"/app/pontos/{ponto['id']}/editar").get_data(as_text=True)
+        self.assertNotIn("Salvar alterações", tela)
+        self.assertIn("salvas automaticamente", tela)
+        r = c.post(f"/app/pontos/{ponto['id']}/editar", headers={"X-Autosave": "1"}, data={
+            "nome": "Faz Auto", "grupo_cultura": "cereais", "culturas": ["Soja"], "area_cultura__Soja": "120",
+            "lat": "-12.5", "lon": "-55.7"})
+        self.assertEqual(r.get_json(), {"ok": True})
+        self.assertEqual(models.get_cliente_ponto(uid, ponto["id"])["nome"], "Faz Auto")
+        r = c.post(f"/app/pontos/{ponto['id']}/editar", headers={"X-Autosave": "1"}, data={"nome": "", "lat": "-12.5", "lon": "-55.7"})
+        self.assertFalse(r.get_json()["ok"])
+        r = c.post("/app/conta/editar", headers={"X-Autosave": "1"}, data={
+            "nome_completo": "Zzz Auto Nome", "grupo_economico": "", "codigo_pais": "55", "numero_telefone": "65999991400"})
+        self.assertEqual(r.get_json(), {"ok": True})
+        self.assertNotIn("Salvar alterações", c.get("/app/conta/editar").get_data(as_text=True))
+
 if __name__ == "__main__":
     unittest.main()

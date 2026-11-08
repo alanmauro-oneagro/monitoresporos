@@ -3,7 +3,7 @@
 {% block content %}
 {# Corrigir os dados do cadastro (pedido do Alan, 08/11/2026). #}
 <h1 class="titulo">Editar meus dados</h1>
-<form method="post" class="card shadow-sm mb-3"><div class="card-body">
+<form method="post" class="card shadow-sm mb-3" id="formConta"><div class="card-body">
     <label class="form-label small mb-1" for="nome_completo">Nome completo</label>
     <input class="form-control mb-3" name="nome_completo" id="nome_completo" value="{{ form.get('nome_completo') if form else (cadastro.nome_completo or '') }}" autocomplete="name" required>
     <label class="form-label small mb-1" for="grupo_economico">Nome do grupo econômico</label>
@@ -18,7 +18,11 @@
     <label class="form-label small mb-1" for="email">E-mail (opcional)</label>
     <input class="form-control mb-3" type="email" name="email" id="email" value="{{ form.get('email') if form else (user.email or '') }}" autocomplete="email">
     <div class="small text-muted mb-3">Usuário: <strong>{{ user.username }}</strong> (não muda). As culturas e áreas se corrigem em cada fazenda, em "Fazendas monitoradas".</div>
-    <button class="btn btn-success w-100" type="submit">Salvar alterações</button>
-    <a class="btn btn-link w-100 mt-1" href="{{ url_for('cliente_home') }}">Cancelar</a>
+    <div class="small text-muted text-center" id="statusAutosave">As alterações são salvas automaticamente.</div>
+    <a class="btn btn-outline-success w-100 mt-2" href="{{ url_for('cliente_home') }}">Voltar para a conta</a>
 </div></form>
+{% endblock %}
+{% block extra_scripts %}
+{% include '_autosave_cliente.html' %}
+<script>window.autosaveCliente(document.getElementById('formConta'), document.getElementById('statusAutosave'));</script>
 {% endblock %}

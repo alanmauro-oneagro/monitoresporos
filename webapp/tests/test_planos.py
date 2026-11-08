@@ -255,7 +255,10 @@ class PlanosTest(unittest.TestCase):
             with self.subTest(rota=fora):
                 self.assertTrue(c.get(fora).headers["Location"].endswith("/app"))
         menu = c.get("/mapa").get_data(as_text=True)
-        self.assertIn("📱 App", menu)
+        # topo do cliente igual no Site e no app, com as abas no menu ☰ (08/11/2026)
+        self.assertIn('id="menuCliente"', menu)
+        self.assertIn("📄 Relatórios", menu)
+        self.assertIn('id="menuCliente"', c.get("/app").get_data(as_text=True))
         self.assertNotIn(">Graficos<", menu)
         self.assertIn("🔔", c.get("/app").get_data(as_text=True))
 
