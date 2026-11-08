@@ -136,7 +136,14 @@ Alan, 07/11/2026: "nao teremos limites de lavoura e sim acessos ao
 site"): o cliente marca quantas lavouras quiser (`cliente_ponto_novo`
 nao confere `max_pontos`; "Ate' X lavouras" saiu de Minha assinatura,
 /planos e da home do app; coluna "Lavouras (max.)" saiu da aba Planos do
-Excel). A coluna `planos.max_pontos` ficou no banco, sem uso. **Tabela de apoio** (Planos e
+Excel). A coluna `planos.max_pontos` ficou no banco, sem uso. **Parcelas pelo ciclo** (pedido do
+Alan, 08/11/2026): o valor do plano e' o TOTAL de 12 meses ("Valor
+total" em Planos e Valores) e o ciclo divide: Mensal 12x, Trimestral 4x,
+Semestral 2x, Anual 1x (`plano["parcelas"]`/`plano["valor_parcela"]` em
+`models._plano_row_to_dict`). O Asaas cobra UMA parcela por ciclo
+(`_iniciar_cobranca`; plano em U$ converte a parcela). Telas do cliente
+(Minha assinatura, /planos) mostram "12x de R$ 99,90" em destaque e
+"Total R$ 1.198,80" por ultimo em letra menor (filtro `parcelas_plano`). **Tabela de apoio** (Planos e
 Valores, pedido do Alan, 07/11/2026): faixas FIXAS de area
 (`app.FAIXAS_PRECO`: ate' 100, 250, 500, 1.000, 2.000, 3.000, 5.000,
 10.000 ha e acima de 10.000), o Master digita so' o U$/ha de cada faixa;

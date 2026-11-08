@@ -245,7 +245,7 @@ class PlanoEmDolarTest(unittest.TestCase):
         master = self._logado(models.get_user_by_username("Zzz Teste Master Dolar")["id"])
         master.post("/admin/planos/salvar", data={
             "plano_ids": [str(plano)], f"nome__{plano}": "Zzz Plano Dolar", f"valor__{plano}": "20,00",
-            f"moeda__{plano}": "USD", f"ciclo__{plano}": "MONTHLY", f"max_pontos__{plano}": "3",
+            f"moeda__{plano}": "USD", f"ciclo__{plano}": "QUARTERLY", f"max_pontos__{plano}": "3",
             f"raio_km__{plano}": "50", f"ordem__{plano}": "9", f"recursos__{plano}": ["clima"], f"ativo__{plano}": "on",
         })
         p = models.get_plano(plano)
@@ -256,7 +256,8 @@ class PlanoEmDolarTest(unittest.TestCase):
         self.assertEqual(webapp._preco_plano(p), "U$ 20,00 (≈ R$ 110,00)")
         uid = models.criar_cliente("Zzz Cliente Dolar", "segredo1", "", "5565999990066", "", None)
         tela = self._logado(uid).get("/app/assinatura").get_data(as_text=True)
-        self.assertIn("U$ 20,00 (≈ R$ 110,00)", tela)
+        self.assertIn("4x de U$ 5,00 (≈ R$ 27,50)", tela)  # trimestral = 4 parcelas
+        self.assertIn("Total U$ 20,00 (≈ R$ 110,00)", tela)
         self.assertIn("Cobrado em reais, pela cotação do dólar do dia", tela)
         # cobranca sai em reais no Asaas
         with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
@@ -265,8 +266,23 @@ class PlanoEmDolarTest(unittest.TestCase):
                 mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[]):
             self._logado(uid).post("/app/assinatura/assinar", data={"plano_id": str(plano), "cpf_cnpj": CPF_VALIDO})
         valor_cobrado, descricao = criar.call_args[0][1], criar.call_args[0][3]
-        self.assertEqual(valor_cobrado, 110.0)
-        self.assertIn("U$ 20,00 x R$ 5,5000", descricao)
+        self.assertEqual(valor_cobrado, 27.5)  # 1 parcela de U$ 5,00 x 5,50
+        self.assertIn("U$ 5,00 x R$ 5,5000", descricao)
+        self.assertIn("4x de U$ 5,00", descricao)
+
+    def test_parcelas_pelo_ciclo(self):
+        """Valor do plano = total; Mensal 12x, Trimestral 4x, Semestral 2x, Anual 1x (pedido do Alan, 08/11/2026)."""
+        for ciclo, parcelas, parcela in (("MONTHLY", 12, 100.0), ("QUARTERLY", 4, 300.0), ("SEMIANNUALLY", 2, 600.0), ("YEARLY", 1, 1200.0)):
+            pid = models.salvar_plano(None, f"Zzz Parcelas {ciclo}", "", 1200, ciclo, 1, 50, ["clima"], True, 9)
+            p = models.get_plano(pid)
+            self.assertEqual((p["parcelas"], p["valor_parcela"]), (parcelas, parcela), ciclo)
+            models.excluir_plano(pid)
+        pid = models.salvar_plano(None, "Zzz Parcelas Tela", "", 1200, "MONTHLY", 1, 50, ["clima"], True, 9)
+        tela = webapp.app.test_client().get("/planos").get_data(as_text=True)
+        self.assertIn('<span class="plano-parcela">12x de R$ 100,00</span>', tela)
+        self.assertIn(">Total R$ 1.200,00</span>", tela)
+        self.assertLess(tela.index("12x de R$ 100,00"), tela.index("Total R$ 1.200,00"))  # total por ultimo
+        models.excluir_plano(pid)
 
     def test_sem_cotacao_nao_cobra(self):
         plano = models.salvar_plano(None, "Zzz Plano Dolar 2", "", 20, "MONTHLY", 3, 50, ["clima"], True, 9, moeda="USD")

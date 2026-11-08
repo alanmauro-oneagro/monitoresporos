@@ -145,7 +145,7 @@ class AssinaturasTest(unittest.TestCase):
             resp = self.client.post("/app/assinatura/assinar", data={"plano_id": str(self.plano_pro)})
         self.assertEqual(resp.headers["Location"], "https://asaas/fatura/1")
         self.assertEqual(criar_cliente.call_args[0][1], CPF_VALIDO)
-        self.assertEqual(criar_assinatura.call_args[0][1:3], (99.9, "MONTHLY"))
+        self.assertEqual(criar_assinatura.call_args[0][1:3], (8.33, "MONTHLY"))  # 99,90 / 12 parcelas
         user = models.get_user_by_username("Zzz Teste Asaas")
         self.assertEqual(models.get_assinatura(user["id"])["asaas_subscription_id"], "sub_1")
 

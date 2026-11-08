@@ -3539,7 +3539,11 @@ def _plano_row_to_dict(r):
         d["recursos"] = [c for c in json.loads(d["recursos"] or "[]") if c in dict(RECURSOS_PLANO)]
     except ValueError:
         d["recursos"] = []
-    d["ciclo_label"] = CICLOS_PLANO.get(d["ciclo"], (d["ciclo"], 1))[0]
+    d["ciclo_label"], meses = CICLOS_PLANO.get(d["ciclo"], (d["ciclo"], 12))
+    # Valor do plano = total de 12 meses, dividido em parcelas pelo ciclo
+    # (pedido do Alan, 08/11/2026): Mensal 12x, Trimestral 4x, Semestral 2x, Anual 1x.
+    d["parcelas"] = max(1, 12 // meses)
+    d["valor_parcela"] = round(float(d["valor"] or 0) / d["parcelas"], 2)
     return d
 
 

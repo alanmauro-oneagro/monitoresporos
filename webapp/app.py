@@ -8,6 +8,7 @@ API do BioScout, chamada site a site). O clique NAO espera o fim da busca
 antes nesse projeto); a pagina volta na hora avisando que a busca comecou,
 e os dados novos aparecem quando a pessoa atualizar a pagina de novo.
 """
+from markupsafe import Markup
 import concurrent.futures
 import functools
 import gzip
@@ -588,7 +589,23 @@ def _preco_plano(plano):
     return texto
 
 
+def _parcelas_plano(plano):
+    """Pras telas do cliente (pedido do Alan, 08/11/2026): parcelas e valor
+    da parcela em destaque, o total por ultimo em letra menor. Plano em
+    dolar mostra tambem o ≈ R$ da parcela."""
+    simbolo = plano.get("simbolo") or "R$"
+    parcela = f"{plano['parcelas']}x de {_dinheiro(plano['valor_parcela'], simbolo)}"
+    total = f"Total {_dinheiro(plano['valor'], simbolo)}"
+    if plano.get("moeda") == "USD":
+        cot = cotacao.dolar()
+        if cot:
+            parcela += f" (≈ {_dinheiro(plano['valor_parcela'] * cot['valor'])})"
+            total += f" (≈ {_dinheiro(plano['valor'] * cot['valor'])})"
+    return Markup('<span class="plano-parcela">{}</span> <span class="plano-total small text-muted fw-normal d-block">{}</span>').format(parcela, total)
+
+
 app.jinja_env.filters["dinheiro"] = _dinheiro
+app.jinja_env.filters["parcelas_plano"] = _parcelas_plano
 app.jinja_env.filters["preco_plano"] = _preco_plano
 
 # A aba Fungicidas (autosave) manda o form inteiro (todas as doencas) a
@@ -6671,14 +6688,18 @@ def _iniciar_cobranca(user_id, plano):
             user["username"], assinatura["cpf_cnpj"], user["email"], user["telefone"], referencia,
         )
         models.atualizar_assinatura(user_id, asaas_customer_id=customer_id)
-    valor, descricao = plano["valor"], f"OneAgro Monitor - plano {plano['nome']}"
+    # Cada cobranca do ciclo e' uma parcela do total (pedido do Alan, 08/11/2026).
+    valor = plano["valor_parcela"]
+    descricao = f"OneAgro Monitor - plano {plano['nome']}"
+    if plano["parcelas"] > 1:
+        descricao += f" - {plano['parcelas']}x de {_dinheiro(valor, plano['simbolo'])}"
     if plano["moeda"] == "USD":
         # Asaas so' cobra em reais: converte pela cotacao do dia (pedido do Alan, 07/11/2026).
         cot = cotacao.dolar()
         if not cot:
             raise asaas.AsaasErro("cotação do dólar indisponível no momento")
-        valor = round(plano["valor"] * cot["valor"], 2)
-        descricao += (f" (U$ {plano['valor']:.2f} x R$ {cot['valor']:.4f}, cotação de "
+        valor = round(plano["valor_parcela"] * cot["valor"], 2)
+        descricao += (f" (U$ {plano['valor_parcela']:.2f} x R$ {cot['valor']:.4f}, cotação de "
                       f"{models.fmt_data_br(cot['data'])})").replace(".", ",")
     subscription_id = asaas.criar_assinatura(
         customer_id, valor, plano["ciclo"], descricao, _hoje_cuiaba().isoformat(), referencia,
