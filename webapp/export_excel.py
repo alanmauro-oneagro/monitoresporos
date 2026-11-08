@@ -681,6 +681,9 @@ def _cortesia_excel(valor):
     return "Sem prazo" if valor == models.SEM_PRAZO else _data_excel(valor)
 
 
+_GRUPOS_CULTURA = {"cereais": "Cereais", "hf": "HF", "cana": "Cana"}
+
+
 def _clientes_rows():
     """Abas "Clientes" e "Planos" (pedido do Alan, 01/11/2026): um cliente do
     app por linha, com os dados do cadastro (/solicitar-acesso) e a
@@ -698,7 +701,9 @@ def _clientes_rows():
         fim = models.acesso_ate(c)
         rows.append([
             cad.get("nome_completo") or c["username"], c["username"], models.fmt_telefone_br(c["telefone"]) or "",
-            c["email"] or "", perfil, cad.get("empresa") or "", cidade, cad.get("culturas") or "",
+            c["email"] or "", perfil, cad.get("empresa") or "", cidade,
+            _GRUPOS_CULTURA.get(cad.get("grupo_cultura"), ""),  # tipo de cultura (pedido do Alan, 08/11/2026)
+            cad.get("culturas") or "",
             cad.get("area_ha") or "", _data_excel((cad.get("criado_em") or c["criado_em"] or "")[:10]),
             plano["nome"] if plano else "Sem plano escolhido",
             plano["valor"] if plano else "", plano["simbolo"] if plano else "",
@@ -760,10 +765,10 @@ def build_workbook(completar_clima=None):
     )
     _try_sheet(
         wb, "Clientes",
-        ["Cliente", "Usuário", "Celular", "E-mail", "Perfil", "Fazenda/empresa", "Cidade", "Culturas", "Área (ha)",
+        ["Cliente", "Usuário", "Celular", "E-mail", "Perfil", "Fazenda/empresa", "Cidade", "Tipo de cultura", "Culturas", "Área (ha)",
          "Cadastrado em", "Plano", "Valor do plano", "Moeda", "Ciclo", "Situação", "Acesso liberado", "Pago até",
          "Cortesia até", "Lavouras"],
-        _clientes_rows, date_columns=(9, 16, 17),
+        _clientes_rows, date_columns=(10, 17, 18),
     )
     _try_sheet(
         wb, "Planos",
@@ -771,7 +776,7 @@ def build_workbook(completar_clima=None):
          "Clientes no plano", "Clientes com acesso liberado"],
         _planos_rows,
     )
-    for aba, col_valor in (("Clientes", 12), ("Planos", 2)):  # valor no formato da moeda do plano (coluna seguinte)
+    for aba, col_valor in (("Clientes", 13), ("Planos", 2)):  # valor no formato da moeda do plano (coluna seguinte)
         for linha in wb[aba].iter_rows(min_row=2):
             celula, moeda = linha[col_valor - 1], linha[col_valor].value
             if isinstance(celula.value, (int, float)):

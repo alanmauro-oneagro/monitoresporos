@@ -188,7 +188,7 @@ class ExcelClientesPlanosTest(unittest.TestCase):
         models.registrar_cadastro({"username": "Zzz Cliente Excel", "nome_completo": "Zzz Cliente Excel da Silva",
                                    "perfil": "produtor,tecnico", "telefone": "5565999990055", "empresa": "Fazenda Zzz",
                                    "cidade": "Sorriso", "uf": "MT", "culturas": "Soja", "area_ha": 1500,
-                                   "tipo": "cliente", "user_id": uid})
+                                   "tipo": "cliente", "user_id": uid, "grupo_cultura": "cereais"})
         wb = load_workbook(export_excel.build_workbook())
         self.assertIn("Clientes", wb.sheetnames)
         self.assertIn("Planos", wb.sheetnames)
@@ -199,6 +199,8 @@ class ExcelClientesPlanosTest(unittest.TestCase):
         valor = dict(zip(cab, linha))
         self.assertEqual(valor["Cliente"], "Zzz Cliente Excel da Silva")
         self.assertEqual(valor["Perfil"], "Produtor, Técnico do setor")
+        self.assertEqual((valor["Tipo de cultura"], valor["Culturas"]), ("Cereais", "Soja"))
+        self.assertIn("R$", wb["Clientes"].cell(row=clientes.index(linha) + 1, column=cab.index("Valor do plano") + 1).number_format)
         self.assertEqual((valor["Cidade"], valor["Plano"], valor["Valor do plano"], valor["Moeda"], valor["Ciclo"]),
                          ("Sorriso/MT", "Zzz Plano Excel", 79.9, "R$", "Mensal"))
         self.assertEqual((valor["Situação"], valor["Acesso liberado"], valor["Cortesia até"]), ("Ativa", "Sim", "Sem prazo"))
