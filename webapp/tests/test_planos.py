@@ -42,7 +42,11 @@ class PlanosTest(unittest.TestCase):
         for nome in ("Free", "Básico", "Premium", "Premium + Estação"):
             self.assertIn(nome, self.planos)
         free = self.planos["Free"]
-        self.assertEqual((free["valor"], free["ativo"], free["recursos"]), (0, 1, ["clima"]))
+        self.assertEqual((free["valor"], free["ativo"], free["recursos"]), (0, 1, ["clima", "whatsapp_texto"]))
+        # PDF por WhatsApp so' nos Premium (pedido do Alan, 08/11/2026)
+        self.assertIn("whatsapp_pdf", self.planos["Premium"]["recursos"])
+        self.assertIn("whatsapp_pdf", self.planos["Premium + Estação"]["recursos"])
+        self.assertNotIn("whatsapp_pdf", self.planos["Básico"]["recursos"])
         self.assertEqual(self.planos["Premium"]["ativo"], 0)  # pago nasce fora de venda ate' ter preco
         models.init_db()  # rodar de novo nao duplica
         self.assertEqual(sum(1 for p in models.get_planos() if p["nome"] == "Free"), 1)
@@ -191,11 +195,18 @@ class PlanosTest(unittest.TestCase):
         c.post(f"/app/pontos/{ponto['id']}/excluir")
         self.assertIsNone(models.get_virtual_farm(ponto["site_name"]))
 
-    def test_plano_sem_fazenda_estimada_e_free_sem_site(self):
+    def test_toda_lavoura_vira_fazenda_estimada_e_free_sem_site(self):
+        """Toda lavoura ja' vira fazenda estimada liberada, na Programacao de Envios
+        com o cliente recebendo -- sem configuracao da OneAgro (pedido do Alan, 08/11/2026)."""
         uid = self._cliente_no_plano("Estacao", ["clima", "site_mapa"])
+        models.set_user_contato(uid, "", "5565999990131")
         c = self._logado(uid)
         c.post("/app/pontos/novo", data={"nome": "Talhao Estacao", "lat": "-12.5", "lon": "-55.7"})
-        self.assertIsNone(models.get_cliente_pontos(uid)[0]["site_name"])  # Premium + Estacao: Master libera a real
+        site = models.get_cliente_pontos(uid)[0]["site_name"]
+        self.assertIsNotNone(models.get_virtual_farm(site))
+        self.assertIn(site, models.get_user_permitted_site_names(uid))
+        self.assertTrue(models.get_all_whatsapp_days().get(site))  # agenda padrao
+        self.assertIn("5565999990131", [r["telefone"] for r in models.get_site_whatsapp_recipients(site)])
         self.assertEqual(c.get("/mapa").status_code, 200)
         free = self._cliente_no_plano("Free Site", ["clima"])
         self.assertTrue(self._logado(free).get("/mapa").headers["Location"].endswith("/app"))

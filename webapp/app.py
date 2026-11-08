@@ -1967,11 +1967,27 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     # enviado" pro agendador nao mandar o texto de novo (ver retorno).
     algum_texto_ok = False
     algum_pdf_ok = False
+    formatos_cliente = _formatos_whatsapp_clientes()
     for phone, rotulo in destinos:
         erros = []
         ok_texto = True
         ok_pdf = True
-        if modelo_oficial:
+        # Cliente do app recebe so' o que o plano libera (pedido do Alan,
+        # 08/11/2026): Free = so' texto; Premium/Premium + Estacao = PDF.
+        pode_texto, pode_pdf = formatos_cliente.get(phone, (True, True))
+        texto_dest = text if pode_texto else None
+        pdf_dest = pdf_bytes if pode_pdf else None
+        if texto_dest is None and pdf_dest is None:
+            if text is not None or pdf_bytes:
+                models.log_whatsapp_envio(site, rotulo, phone, True, "Nada enviado: o plano do cliente não inclui esse formato.")
+            sucesso.append(rotulo)
+            continue
+        if modelo_oficial and pdf_dest is None:
+            ok_texto, message = whatsapp.send_whatsapp(phone, texto_dest)
+            models.log_whatsapp_envio(site, rotulo, phone, ok_texto, message)
+            if not ok_texto:
+                erros.append(message)
+        elif modelo_oficial:
             # API oficial: um envio so' pelo modelo aprovado (resumo nas
             # variaveis + PDF completo no cabecalho) -- cobre texto e PDF.
             primeiro_nome = (rotulo or "").split()[0] if rotulo else "produtor"
@@ -1982,19 +1998,19 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
             models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"Modelo oficial (resumo+PDF): {message_pdf}")
             if not ok_pdf:
                 erros.append(message_pdf)
-        elif combinar:
+        elif combinar and texto_dest is not None and pdf_dest is not None:
             ok_pdf, message_pdf = whatsapp.send_whatsapp_document(phone, pdf_bytes, pdf_filename, caption=text)
             ok_texto = ok_pdf  # combinado -- o mesmo envio carrega os dois
             models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"Texto+PDF combinado num so envio: {message_pdf}")
             if not ok_pdf:
                 erros.append(f"PDF: {message_pdf}")
         else:
-            if text is not None:
-                ok_texto, message = whatsapp.send_whatsapp(phone, text)
+            if texto_dest is not None:
+                ok_texto, message = whatsapp.send_whatsapp(phone, texto_dest)
                 models.log_whatsapp_envio(site, rotulo, phone, ok_texto, message)
                 if not ok_texto:
                     erros.append(message)
-            if pdf_bytes:
+            if pdf_dest:
                 ok_pdf, message_pdf = whatsapp.send_whatsapp_document(
                     phone, pdf_bytes, pdf_filename,
                     caption=f"📄 Relatório em PDF - {pdf_nome_fazenda} (mesmo conteudo, com grafico de concentracao)",
@@ -6671,22 +6687,42 @@ def _cliente_contexto():
     return assinatura, plano, models.assinatura_liberada(assinatura)
 
 
-def _acesso_cliente():
-    """(plano que vale agora, liberada, free_ate) do cliente logado. Plano
+def _acesso_do_cliente(user_id):
+    """(plano que vale agora, liberada, free_ate) de um cliente. Plano
     pago ainda sem pagamento aprovado usa o Free ate' o fim dos 7 dias do
-    cadastro (pedido do Alan, 08/11/2026); `free_ate` so' vem nesse caso."""
-    cache = getattr(g, "_acesso_cliente", None)
-    if cache is not None:
-        return cache
-    assinatura, plano, liberada = _cliente_contexto()
+    cadastro (pedido do Alan, 08/11/2026); `free_ate` so' vem nesse caso.
+    Nao depende de requisicao (o agendador de envios tambem usa)."""
+    assinatura = models.get_assinatura(user_id)
+    plano = models.get_plano(assinatura["plano_id"]) if assinatura and assinatura["plano_id"] else None
+    liberada = models.assinatura_liberada(assinatura)
     free_ate = None
     if plano and not liberada and (plano["valor"] > 0 or plano.get("preco_por_area")):
         fim = models.fim_free(assinatura)
         free = models.plano_free()
         if free and fim >= _hoje_cuiaba().isoformat():
             plano, liberada, free_ate = free, True, fim
-    g._acesso_cliente = (plano, liberada, free_ate)
+    return plano, liberada, free_ate
+
+
+def _acesso_cliente():
+    """`_acesso_do_cliente` do cliente logado (1x por requisicao)."""
+    if getattr(g, "_acesso_cliente", None) is None:
+        g._acesso_cliente = _acesso_do_cliente(int(current_user.id))
     return g._acesso_cliente
+
+
+def _formatos_whatsapp_clientes():
+    """{telefone: (texto, pdf)} dos clientes do app, pelo plano que vale
+    agora (`whatsapp_texto`/`whatsapp_pdf` em RECURSOS_PLANO). Cliente sem
+    acesso liberado nao recebe nada."""
+    formatos = {}
+    for c in models.get_all_clientes():
+        if not c.get("telefone"):
+            continue
+        plano, liberada, _ = _acesso_do_cliente(c["id"])
+        recursos = (plano or {}).get("recursos", []) if liberada else []
+        formatos[c["telefone"]] = ("whatsapp_texto" in recursos, "whatsapp_pdf" in recursos)
+    return formatos
 
 
 def cliente_required(view):
@@ -7134,8 +7170,7 @@ def cliente_assinar():
             return redirect(url_for("cliente_assinatura", plano=plano["id"]))
         nome = (request.form.get("nome_area") or "").strip()[:60] or "Área monitorada"
         ponto_id = models.criar_cliente_ponto(int(current_user.id), nome, lat, lon, "")
-        if "fazenda_estimada" in plano["recursos"]:
-            _criar_fazenda_estimada_da_lavoura(int(current_user.id), ponto_id, nome, lat, lon, plano)
+        _criar_fazenda_estimada_da_lavoura(int(current_user.id), ponto_id, nome, lat, lon, plano)
     if plano["valor"] <= 0:
         # Plano gratis: libera na hora, sem cobranca nem CPF/CNPJ.
         # Free vale 7 dias a partir do cadastro (pedido do Alan, 08/11/2026).
@@ -7263,8 +7298,9 @@ def cliente_ponto_novo():
         else:
             cultura = request.form.get("cultura", "")
             ponto_id = models.criar_cliente_ponto(user_id, nome, lat, lon, cultura if cultura in _culturas_cliente() else "")
-            if "fazenda_estimada" in plano["recursos"]:
-                _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano)
+            # Toda lavoura vira fazenda estimada (interpolacao da regiao), sem
+            # configuracao da OneAgro (pedido do Alan, 08/11/2026).
+            _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano)
             return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
     return render_template("cliente_ponto_novo.html", culturas=_culturas_cliente())
 
@@ -7285,6 +7321,9 @@ def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano)
             continue
         models.liberar_fazenda_para_usuario(user_id, site_name)
         models.ligar_ponto_a_fazenda(ponto_id, site_name)
+        # Ja' entra na Programacao de Envios (agenda padrao do create_virtual_farm)
+        # com o proprio cliente recebendo (pedido do Alan, 08/11/2026).
+        models.receber_relatorio_da_fazenda(user_id, site_name)
         return site_name
     return None
 

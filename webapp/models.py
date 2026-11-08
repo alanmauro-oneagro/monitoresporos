@@ -795,6 +795,18 @@ def init_db():
             conn.execute(f"ALTER TABLE solicitacoes_acesso ADD COLUMN {coluna}")
         except sqlite3.OperationalError:
             pass  # coluna ja existe
+    # Relatorio por WhatsApp por plano (pedido do Alan, 08/11/2026) -- 1 vez so':
+    # texto em todos; PDF so' no Premium e Premium + Estacao. Depois o Master muda na tela.
+    if not conn.execute("SELECT 1 FROM app_settings WHERE key = 'recursos_whatsapp_migrados'").fetchone():
+        for row in conn.execute("SELECT id, nome, recursos FROM planos").fetchall():
+            try:
+                recursos = json.loads(row["recursos"] or "[]")
+            except ValueError:
+                recursos = []
+            novos = ["whatsapp_texto"] + (["whatsapp_pdf"] if row["nome"].strip().lower().startswith("premium") else [])
+            recursos += [r for r in novos if r not in recursos]
+            conn.execute("UPDATE planos SET recursos = ? WHERE id = ?", (json.dumps(recursos), row["id"]))
+        conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('recursos_whatsapp_migrados', '1')")
     # Free "sem prazo" de antes da regra dos 7 dias passa a valer 7 dias do
     # cadastro tambem (pedido do Alan, 08/11/2026).
     conn.execute(
@@ -3550,14 +3562,20 @@ RECURSOS_PLANO = [
     ("risco", "Risco de infecção pelo clima (agora e próximos 5 dias)"),
     ("fungicidas", "Recomendação de fungicidas químicos e biológicos"),
     ("regiao", "Mapa da região com as estações próximas (sem identificar as fazendas)"),
+    # Relatorio da fazenda por WhatsApp (pedido do Alan, 08/11/2026): Free so' texto;
+    # Premium e Premium + Estacao tambem o PDF.
+    ("whatsapp_texto", "Relatório por WhatsApp (texto)"),
+    ("whatsapp_pdf", "Relatório em PDF por WhatsApp"),
 ]
 _ABAS_SITE = ["site_mapa", "site_alertas", "site_graficos", "site_manejos", "site_recomendacoes"]
 PLANOS_PADRAO = [  # (nome, recursos, lavouras, a venda ja' de inicio)
-    ("Free", ["clima"], 1, True),
-    ("Básico", ["clima", "site_mapa", "site_alertas", "fazenda_estimada", "esporos"], 3, False),
-    ("Premium", ["clima"] + _ABAS_SITE + ["fazenda_estimada", "esporos", "risco", "fungicidas", "regiao"], 10, False),
+    ("Free", ["clima", "whatsapp_texto"], 1, True),
+    ("Básico", ["clima", "site_mapa", "site_alertas", "fazenda_estimada", "esporos", "whatsapp_texto"], 3, False),
+    ("Premium", ["clima"] + _ABAS_SITE + ["fazenda_estimada", "esporos", "risco", "fungicidas", "regiao",
+                                          "whatsapp_texto", "whatsapp_pdf"], 10, False),
     # Fazenda real (estacao BioScout do cliente), liberada pelo Master -- sem fazenda estimada.
-    ("Premium + Estação", ["clima"] + _ABAS_SITE + ["esporos", "risco", "fungicidas", "regiao"], 10, False),
+    ("Premium + Estação", ["clima"] + _ABAS_SITE + ["esporos", "risco", "fungicidas", "regiao",
+                                                    "whatsapp_texto", "whatsapp_pdf"], 10, False),
 ]
 # Plano de valor zero (Free) nao tem cobranca: a assinatura fica liberada
 # "sem prazo" (cortesia_ate nessa data) ate' o cliente trocar de plano.
@@ -3961,6 +3979,17 @@ def ligar_ponto_a_fazenda(ponto_id, site_name):
     conn = get_db()
     conn.execute("UPDATE cliente_pontos SET site_name = ? WHERE id = ?", (site_name, ponto_id))
     conn.commit()
+    conn.close()
+
+
+def receber_relatorio_da_fazenda(user_id, site_name):
+    """Marca o usuario pra receber os relatorios de WhatsApp dessa fazenda
+    (sem tirar as outras marcacoes)."""
+    conn = get_db()
+    row = conn.execute("SELECT id FROM sites WHERE site_name = ?", (site_name,)).fetchone()
+    if row:
+        conn.execute("INSERT OR IGNORE INTO user_report_permissions (user_id, site_id) VALUES (?, ?)", (user_id, row["id"]))
+        conn.commit()
     conn.close()
 
 
