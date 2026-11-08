@@ -96,6 +96,9 @@ def fmt_telefone_br(value):
         return value
     ddi, ddd, numero = digitos[:2], digitos[2:4], digitos[4:]
     meio = 5 if len(numero) == 9 else 4
+    if ddi == "55":
+        # Brasil: "(66)99631-9500" em todo o site (pedido do Alan, 08/11/2026)
+        return f"({ddd}){numero[:meio]}-{numero[meio:]}"
     return f"({ddi}){ddd}-{numero[:meio]}-{numero[meio:]}"
 
 # Local (padrao): banco fica do lado do codigo, em webapp/bioscout_web.db --

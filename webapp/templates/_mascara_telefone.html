@@ -1,0 +1,39 @@
+{# Campo de celular com DDI 55: mostra "(66)99631-9500" enquanto digita (pedido do Alan,
+   08/11/2026). Vale pra todo input "numero_telefone*" com o "codigo_pais*" do mesmo
+   formulario; outro DDI fica como digitado. O servidor so' le os digitos. #}
+<script>
+(function () {
+    function brasil(digitos) {
+        var d = digitos.slice(0, 11);
+        if (!d) return '';
+        if (d.length <= 2) return '(' + d;
+        var ddd = d.slice(0, 2), n = d.slice(2);
+        var meio = n.length > 8 ? 5 : 4;
+        return '(' + ddd + ')' + (n.length > meio ? n.slice(0, meio) + '-' + n.slice(meio) : n);
+    }
+    function codigoDe(campo) {
+        var sufixo = campo.name.slice('numero_telefone'.length);
+        var form = campo.form || document;
+        return form.querySelector('[name="codigo_pais' + sufixo + '"]');
+    }
+    function formatar(campo) {
+        var cod = codigoDe(campo);
+        if (!cod || cod.value.replace(/\D/g, '') !== '55') return;
+        var novo = brasil(campo.value.replace(/\D/g, ''));
+        if (novo !== campo.value) campo.value = novo;
+    }
+    function todos() { return document.querySelectorAll('input[name^="numero_telefone"]'); }
+    todos().forEach(function (campo) {
+        if (campo.placeholder === '11999999999') campo.placeholder = '(11)99999-9999';
+        formatar(campo);
+    });
+    document.addEventListener('input', function (e) {
+        var alvo = e.target;
+        if (!alvo.name) return;
+        if (alvo.name.indexOf('numero_telefone') === 0) formatar(alvo);
+        if (alvo.name.indexOf('codigo_pais') === 0) {
+            todos().forEach(function (campo) { if (codigoDe(campo) === alvo) formatar(campo); });
+        }
+    });
+})();
+</script>

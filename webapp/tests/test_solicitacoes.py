@@ -223,6 +223,23 @@ class CadastroTest(unittest.TestCase):
         finally:
             models.set_grupos_culturas(antes)
 
+    def test_telefone_brasil_no_formato_ddd(self):
+        """DDI 55 = "(66)99616-4261" em todo o site; outro DDI fica como era (pedido do Alan, 08/11/2026)."""
+        self.assertEqual(models.fmt_telefone_br("5566996164261"), "(66)99616-4261")
+        self.assertEqual(models.fmt_telefone_br("556633221100"), "(66)3322-1100")
+        self.assertEqual(models.fmt_telefone_br("56912345678"), "56912345678")  # Chile (11 digitos): como estava
+        self.assertEqual(models.fmt_telefone_br("5691234567890"), "(56)91-23456-7890")  # outro DDI: formato antigo
+        # mascara do campo no cadastro e nas telas internas
+        self.assertIn('input[name^="numero_telefone"]', webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True))
+        self.assertIn('input[name^="numero_telefone"]', self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True))
+        # o servidor le so' os digitos do campo formatado
+        resp = webapp.app.test_client().post("/solicitar-acesso", data=_form(
+            username="Zzz Cad Fone", numero_telefone="(65)99999-0099"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(models.get_user_by_username("Zzz Cad Fone")["telefone"], "5565999990099")
+        html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        self.assertIn("(65)99999-0099", html)
+
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
                          ["cereais", "cereais", "cereais", "cereais", "outros", "outros", "hf", "hf"])
