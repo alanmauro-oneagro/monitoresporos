@@ -122,11 +122,19 @@ class AssinaturasTest(unittest.TestCase):
         user = models.get_user_by_username("Zzz Teste Cadastro")
         self.assertEqual(user["is_cliente"], 1)
         self.assertEqual(user["is_admin"], 0)
-        # sem pagamento: area /app bloqueada, e o resto do site tambem
-        self.assertIn("/app/assinatura", self.client.get("/app").headers["Location"])
+        # sem pagamento: usa o Free nos 7 dias do cadastro (pedido do Alan, 08/11/2026) --
+        # /app abre, as abas do site (que o Free nao tem) nao
+        self.assertEqual(self.client.get("/app").status_code, 200)
+        self.assertIn("você usa o plano <strong>Free</strong>", self.client.get("/app/assinatura").get_data(as_text=True))
         self.assertIn("/app", self.client.get("/mapa").headers["Location"])
         self.assertIn("/app", self.client.get("/recommendations").headers["Location"])
         self.assertEqual(self.client.get("/admin/planos").status_code, 302)
+        # passou dos 7 dias sem pagamento: bloqueado
+        conn = models.get_db()
+        conn.execute("UPDATE assinaturas SET criado_em = '2026-01-01 08:00:00' WHERE user_id = ?", (user["id"],))
+        conn.commit()
+        conn.close()
+        self.assertIn("/app/assinatura", self.client.get("/app").headers["Location"])
 
     def test_cadastro_direto_virou_solicitacao(self):
         resp = self.client.post("/cadastro", data={"username": "Zzz Teste Direto", "plano_id": str(self.plano_pro)})

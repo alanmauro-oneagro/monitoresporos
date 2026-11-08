@@ -100,7 +100,18 @@ class PlanosTest(unittest.TestCase):
                          (self.planos["Free"]["id"], "ativa", ""))
         self.assertTrue(models.assinatura_liberada(assinatura))
         self.assertEqual(c.get("/app").status_code, 200)
-        self.assertIn("Sem prazo", c.get("/app/assinatura").get_data(as_text=True))
+        # Free vale 7 dias a partir do cadastro (pedido do Alan, 08/11/2026)
+        self.assertEqual(assinatura["cortesia_ate"], models.fim_free(assinatura))
+        self.assertEqual(models.fim_free({"criado_em": "2026-11-08 10:00:00"}), "2026-11-15")
+        self.assertNotIn("Sem prazo", c.get("/app/assinatura").get_data(as_text=True))
+        # cadastro com mais de 7 dias: o Free nao ativa mais
+        conn = models.get_db()
+        conn.execute("UPDATE assinaturas SET criado_em = '2026-01-01 08:00:00', plano_id = NULL, cortesia_ate = NULL WHERE user_id = ?", (uid,))
+        conn.commit()
+        conn.close()
+        velho = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Free"]["id"])}, follow_redirects=True)
+        self.assertIn("vale 7 dias", velho.get_data(as_text=True))
+        self.assertFalse(models.assinatura_liberada(models.get_assinatura(uid)))
 
     def test_trocar_free_por_pago(self):
         basico = self.planos["Básico"]
@@ -118,6 +129,13 @@ class PlanosTest(unittest.TestCase):
         self.assertEqual((assinatura["plano_id"], assinatura["cpf_cnpj"], assinatura["cortesia_ate"]),
                          (basico["id"], CPF_VALIDO, None))
         self.assertFalse(models.assinatura_liberada(assinatura))
+        # ...mas ate' o pagamento ser aprovado ele usa o Free (nao o Basico)
+        self.assertEqual(c.get("/app").status_code, 200)
+        with webapp.app.test_request_context():
+            from flask_login import login_user
+            login_user(webapp.User(models.get_user_by_id(uid)))
+            plano, liberada, free_ate = webapp._acesso_cliente()
+            self.assertEqual((plano["nome"], liberada, free_ate), ("Free", True, models.fim_free(assinatura)))
 
 
     def _cliente_no_plano(self, nome, recursos):
