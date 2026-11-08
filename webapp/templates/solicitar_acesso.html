@@ -63,7 +63,6 @@
         <label class="btn btn-outline-success" for="grupo_{{ chave }}">{{ rotulo }}</label>
         {% endfor %}
     </div>
-    <div class="small text-muted mb-2" id="grupo-dica"></div>
     <div id="bloco-culturas" class="{{ '' if grupo_sel else 'd-none' }}">
     <div class="small mb-1">Culturas e área plantada / atendida de cada uma</div>
     <div class="mb-2" id="culturas-area">
@@ -87,13 +86,20 @@
             </div>
         </div>
     </div>
-    <div class="small text-muted mb-3">Área total: <strong id="area-total">-</strong>
-        <span id="area-preco-linha" class="d-none"> · área para o preço: <strong id="area-preco">-</strong></span></div>
+    <div class="small text-muted mb-3">Área total: <strong id="area-total">-</strong></div>
     </div>
 
     {% if modalidade_sel == 'plano' and planos %}
     {# Planos ja' no cadastro (pedido do Alan, 08/11/2026); o plano com preco pela area
        calcula na hora pela tabela de apoio (mesma conta de app._plano_para_area). #}
+    {# Tecnico do setor nao ve os planos: fala com a OneAgro (pedido do Alan, 08/11/2026). #}
+    <div id="contato-tecnico" class="alert alert-success small mt-4 d-none">
+        <strong>Entrar em contato com:</strong><br>
+        {{ contato_comercial.nome }}<br>
+        Cel: <a href="https://wa.me/{{ contato_comercial.whatsapp }}" target="_blank" rel="noopener">{{ contato_comercial.celular }}</a><br>
+        E-mail: <a href="mailto:{{ contato_comercial.email }}">{{ contato_comercial.email }}</a>
+    </div>
+    <div id="bloco-planos">
     <h6 class="mt-4 mb-2">Escolha o seu plano</h6>
     <div id="planos-cadastro" class="mb-3">
         {% for p in planos %}
@@ -110,13 +116,13 @@
                     {% endif %}
                 </div>
                 {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
-                {% if p.preco_por_area and not no_app_loja %}<div class="small text-muted">Preço pela área plantada (Cereais: área de Soja; Cana: área de Cana; HF: soma das culturas).</div>{% endif %}
                 <ul class="small mb-0 ps-4 mt-1">
                     {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}
                 </ul>
             </div>
         </label>
         {% endfor %}
+    </div>
     </div>
     {% endif %}
 
@@ -147,14 +153,12 @@
     // outra) abre o campo da area; soma a area total e calcula o preco pela area.
     var bloco = document.getElementById('culturas-area');
     var FAIXAS = {{ faixas_preco | tojson }}, COTACAO = {{ cotacao_valor | tojson }};
-    var DICAS = {cereais: 'Soja, Milho e Algodão -- o preço usa a área de Soja.', cana: 'Cana -- o preço usa a área de Cana.', hf: 'Demais culturas -- o preço usa a soma das áreas.'};
     function numero(v) { v = (v || '').trim().replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
     function dinheiro(v, s) { return s + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function grupoAtual() { var g = document.querySelector('input[name=grupo_cultura]:checked'); return g ? g.value : ''; }
     function atualizar() {
         var grupo = grupoAtual(), total = 0, soja = 0;
         document.getElementById('bloco-culturas').classList.toggle('d-none', !grupo);
-        document.getElementById('grupo-dica').textContent = DICAS[grupo] || '';
         bloco.querySelectorAll('.cultura-linha').forEach(function (linha) {
             var doGrupo = linha.dataset.grupo === grupo;
             linha.classList.toggle('d-none', !doGrupo);
@@ -173,8 +177,6 @@
         });
         var areaPreco = grupo === 'cereais' && soja > 0 ? soja : total;
         document.getElementById('area-total').textContent = total > 0 ? total.toLocaleString('pt-BR') + ' ha' : '-';
-        document.getElementById('area-preco').textContent = areaPreco > 0 ? areaPreco.toLocaleString('pt-BR') + ' ha' : '-';
-        document.getElementById('area-preco-linha').classList.toggle('d-none', !(grupo === 'cereais' && areaPreco > 0 && areaPreco !== total));
         document.querySelectorAll('.preco-plano[data-por-area]').forEach(function (el) {
             var faixa = areaPreco > 0 ? FAIXAS.filter(function (f) { return f.ate === null || areaPreco <= f.ate; })[0] : null;
             if (!faixa || faixa.usd_ha === null) {
@@ -189,6 +191,19 @@
         });
     }
     document.getElementById('grupo-cultura').addEventListener('change', atualizar);
+    // Tecnico do setor: sem planos, so' o contato da OneAgro.
+    var tecnico = document.getElementById('perfil_tecnico'), planosBloco = document.getElementById('bloco-planos');
+    function perfil() {
+        if (!planosBloco || !tecnico) return;
+        var eh = tecnico.checked;
+        planosBloco.classList.toggle('d-none', eh);
+        document.getElementById('contato-tecnico').classList.toggle('d-none', !eh);
+        planosBloco.querySelectorAll('input[name=plano_id]').forEach(function (r) {
+            if (eh) r.checked = false;
+            r.required = !eh && !{{ no_app_loja | tojson }};
+        });
+    }
+    if (tecnico) { tecnico.addEventListener('change', perfil); perfil(); }
     bloco.addEventListener('input', atualizar);
     bloco.addEventListener('change', function (e) {
         atualizar();
