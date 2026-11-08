@@ -54,8 +54,9 @@
             {% if c.empresa or c.cidade or c.culturas or c.area_ha or c.mensagem %}
             <dt>Fazenda/empresa</dt><dd>{{ c.empresa or '-' }}</dd>
             <dt>Cidade</dt><dd>{{ c.cidade or '-' }}{% if c.uf %}/{{ c.uf }}{% endif %}</dd>
-            <dt>Culturas</dt><dd>{{ c.culturas or '-' }}</dd>
-            <dt>Área</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
+            {# Area de cada cultura (pedido do Alan, 08/11/2026). #}
+            <dt>Culturas</dt><dd>{% for nome, area in c.culturas_lista %}<div class="cultura-area-linha">{{ nome }}{% if area %} <span class="text-muted">— {{ area }}</span>{% endif %}</div>{% else %}-{% endfor %}</dd>
+            <dt>Área total</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
             {% set pr = c.preco_area %}
             {% if pr %}<dt>Preço pela área</dt><dd>{% if pr.total_usd is not none %}<strong>{{ pr.total_usd | dinheiro('U$') }}</strong>{% if pr.total_brl is not none %} (≈ {{ pr.total_brl | dinheiro }}){% endif %}
                 <span class="text-muted">· {{ pr.faixa }}, U$ {{ ('%.2f' | format(pr.usd_ha)) | replace('.', ',') }}/ha</span>{% else %}<span class="text-muted">{{ pr.faixa }} -- sem U$/ha na <a href="{{ url_for('admin_planos') }}#tabela-precificacao">tabela de apoio</a></span>{% endif %}
