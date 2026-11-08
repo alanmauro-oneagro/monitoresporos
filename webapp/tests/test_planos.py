@@ -158,6 +158,38 @@ class PlanosTest(unittest.TestCase):
             self.assertEqual((plano["nome"], liberada, free_ate), ("Free", True, models.fim_free(assinatura)))
 
 
+    def test_upgrade_so_planos_acima(self):
+        """Com plano escolhido a lista some; "Fazer upgrade de plano" mostra so' os
+        planos acima do atual e troca a assinatura do Asaas (pedido do Alan, 08/11/2026)."""
+        baixo = models.salvar_plano(None, "Zzz Up Baixo", "", 120, "MONTHLY", 1, 50, ["clima"], True, 51)
+        alto = models.salvar_plano(None, "Zzz Up Alto", "", 240, "MONTHLY", 1, 50, ["clima", "site_mapa"], True, 52)
+        uid = self._cliente("Zzz Cliente Upgrade")
+        models.atualizar_assinatura(uid, plano_id=baixo, status="pendente", cpf_cnpj=CPF_VALIDO,
+                                    asaas_subscription_id="sub_antiga")
+        c = self._logado(uid)
+        tela = c.get("/app/assinatura").get_data(as_text=True)
+        self.assertNotIn('type="radio" name="plano_id"', tela)  # lista some
+        self.assertNotIn("Ver minhas lavouras", tela)
+        self.assertIn("Fazer upgrade de plano", tela)
+        up = c.get("/app/assinatura?upgrade=1").get_data(as_text=True)
+        self.assertIn(f'id="plano_{alto}"', up)
+        self.assertNotIn(f'id="plano_{baixo}"', up)
+        self.assertNotIn(f'id="plano_{self.planos["Free"]["id"]}"', up)
+        self.assertIn('name="upgrade" value="1"', up)
+        with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                mock.patch.object(webapp.asaas, "cancelar_assinatura") as cancelar, \
+                mock.patch.object(webapp.asaas, "criar_cliente", return_value="cus_up"), \
+                mock.patch.object(webapp.asaas, "criar_assinatura", return_value="sub_nova"), \
+                mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[]):
+            c.post("/app/assinatura/assinar", data={"plano_id": str(alto), "upgrade": "1"})
+        cancelar.assert_called_once_with("sub_antiga")
+        a = models.get_assinatura(uid)
+        self.assertEqual((a["plano_id"], a["asaas_subscription_id"]), (alto, "sub_nova"))
+        # sem plano acima do atual: sem botao de upgrade
+        acima = [p for p in models.get_planos() if p["ativo"] and p["ordem"] > 52]
+        if not acima:
+            self.assertNotIn("Fazer upgrade de plano", c.get("/app/assinatura").get_data(as_text=True))
+
     def _cliente_no_plano(self, nome, recursos):
         plano_id = models.salvar_plano(None, f"Zzz Plano {nome}", "", 0, "MONTHLY", 3, 40, recursos, True, 9)
         uid = self._cliente(nome)

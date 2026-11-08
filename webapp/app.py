@@ -7223,13 +7223,24 @@ def cliente_assinatura():
     plano_sel = request.args.get("plano", "")
     escolhido = [p for p in planos if str(p["id"]) == plano_sel and p["ativo"] and not p.get("sob_consulta")]
     cad = models.get_cadastro_do_usuario(int(current_user.id)) or {}
+    # Com plano ja' escolhido, a lista some; "Fazer upgrade de plano" mostra so' os
+    # planos acima do atual (Ordem maior em Planos e Valores) -- pedido do Alan, 08/11/2026.
+    superiores = _planos_superiores(plano, planos)
+    upgrade = request.args.get("upgrade") == "1" and bool(superiores)
+    tem_plano = bool(plano) and (assinatura or {}).get("status") != "cancelada"
+    if upgrade:
+        lista = superiores
+    else:
+        lista = escolhido or planos
     return render_template(
         "cliente_assinatura.html", assinatura=assinatura, plano=plano, liberada=liberada,
         acesso_ate=models.acesso_ate(assinatura), pagamentos=models.get_pagamentos(int(current_user.id)),
         # Todos os planos aparecem; os fora de venda (ou ainda sem preco, como
         # os pagos recem-criados) ficam visiveis como "Em breve", sem escolha.
         # Plano com preco pela area ja' vem com o preco da area do cliente.
-        planos=escolhido or planos, so_plano_escolhido=bool(escolhido), pode_assinar=_pode_assinar(assinatura),
+        planos=lista, so_plano_escolhido=bool(escolhido) and not upgrade,
+        pode_assinar=_pode_assinar(assinatura) or upgrade,
+        mostrar_planos=upgrade or bool(escolhido) or not tem_plano, upgrade=upgrade, superiores=superiores,
         plano_sel=plano_sel,
         # Sem nenhuma lavoura ainda: marca no mapa onde sera' a area monitorada.
         pedir_local=not models.get_cliente_pontos(int(current_user.id)), nome_area=cad.get("empresa") or "",
@@ -7237,6 +7248,14 @@ def cliente_assinatura():
         recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO, free_ate=_acesso_cliente()[2],
         dias_free=models.DIAS_FREE,
     )
+
+
+def _planos_superiores(plano, planos):
+    """Planos a venda acima do atual (Ordem maior); sem plano atual, nenhum."""
+    if not plano:
+        return []
+    return [p for p in planos if p["ativo"] and not p.get("sob_consulta") and p["id"] != plano["id"]
+            and p["ordem"] > plano["ordem"]]
 
 
 def _coordenada(texto):
@@ -7257,10 +7276,21 @@ def cliente_assinar():
     if not current_user.is_cliente or _no_app_loja():
         abort(403)
     assinatura = models.get_assinatura(int(current_user.id))
+    plano = next((p for p in models.get_planos(apenas_ativos=True) if str(p["id"]) == request.form.get("plano_id")), None)
+    atual = models.get_plano(assinatura["plano_id"]) if assinatura and assinatura.get("plano_id") else None
+    eh_upgrade = bool(request.form.get("upgrade")) and plano and atual and plano["ordem"] > atual["ordem"]
+    if eh_upgrade and assinatura.get("asaas_subscription_id") and assinatura.get("status") != "cancelada":
+        # Upgrade: a assinatura antiga no Asaas e' cancelada e a nova toma o lugar.
+        try:
+            asaas.cancelar_assinatura(assinatura["asaas_subscription_id"])
+        except asaas.AsaasErro as e:
+            flash(f"Não foi possível trocar de plano agora ({e}). Tente de novo em alguns minutos.", "error")
+            return redirect(url_for("cliente_assinatura", upgrade=1))
+        models.atualizar_assinatura(int(current_user.id), asaas_subscription_id=None, status="pendente")
+        assinatura = models.get_assinatura(int(current_user.id))
     if not _pode_assinar(assinatura):
         flash("Você já tem uma assinatura em andamento.", "error")
         return redirect(url_for("cliente_assinatura"))
-    plano = next((p for p in models.get_planos(apenas_ativos=True) if str(p["id"]) == request.form.get("plano_id")), None)
     if not plano:
         flash("Escolha um plano.", "error")
         return redirect(url_for("cliente_assinatura"))
