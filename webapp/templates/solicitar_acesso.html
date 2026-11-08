@@ -2,21 +2,39 @@
 {% block title %}Criar conta - OneAgro App{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />{% endblock %}
 {% macro bloco_local(i, form, primeiro) %}
-<div class="card shadow-sm mb-2 local-bloco"><div class="card-body p-2">
+{# Um local de plantio (pedido do Alan, 08/11/2026): nome da fazenda, cidade/UF, culturas
+   com area e a localizacao no mapa (divisas dos estados + contorno do municipio). #}
+<div class="card shadow-sm mb-3 local-bloco"><div class="card-body p-3">
     <input type="hidden" name="local_idx" value="{{ i }}">
-    <div class="d-flex align-items-center gap-2 mb-2">
-        <span class="small fw-semibold text-nowrap local-titulo">Local</span>
-        <input class="form-control form-control-sm local-nome" name="local_nome__{{ i }}" value="{{ form.get('local_nome__' ~ i, '') if form else '' }}" maxlength="60" placeholder="Nome do local (ex.: Fazenda Sede)" aria-label="Nome do local">
-        <button type="button" class="btn btn-sm btn-outline-danger local-remover{{ ' d-none' if primeiro }}" title="Tirar este local">✕</button>
+    <div class="d-flex align-items-center mb-2">
+        <span class="fw-semibold local-titulo">Local</span>
+        <button type="button" class="btn btn-sm btn-link text-danger ms-auto p-0 local-remover{{ ' d-none' if primeiro }}">Remover</button>
     </div>
+    <label class="form-label small mb-1">Nome da fazenda</label>
+    <input class="form-control mb-2 local-nome" name="local_nome__{{ i }}" value="{{ form.get('local_nome__' ~ i, '') if form else '' }}" maxlength="60" placeholder="Ex.: Fazenda Santa Rita" aria-label="Nome da fazenda" required>
+    <div class="row g-2 mb-3">
+        <div class="col-8">
+            <label class="form-label small mb-1">Cidade</label>
+            <input class="form-control local-cidade" name="local_cidade__{{ i }}" value="{{ form.get('local_cidade__' ~ i, '') if form else '' }}" list="cidades-{{ i }}" autocomplete="off" aria-label="Cidade" required>
+            <datalist id="cidades-{{ i }}" class="local-cidades"></datalist>
+        </div>
+        <div class="col-4">
+            <label class="form-label small mb-1">Estado</label>
+            <select class="form-select local-uf" name="local_uf__{{ i }}" aria-label="Estado" required>
+                <option value=""></option>
+                {% for uf in ufs %}<option value="{{ uf }}" {% if form and form.get('local_uf__' ~ i) == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="small fw-semibold mb-1">Culturas e área plantada</div>
     {% set marcadas = form.getlist('culturas__' ~ i) if form else [] %}
     {% for c in culturas %}
     <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="{{ grupo_de[c] }}" style="min-height: 2.1rem;">
         <div class="form-check mb-0" style="min-width: 7rem;">
             <input class="form-check-input" type="checkbox" name="culturas__{{ i }}" id="cultura_{{ i }}_{{ loop.index }}" value="{{ c }}" {% if c in marcadas %}checked{% endif %}>
-            <label class="form-check-label small" for="cultura_{{ i }}_{{ loop.index }}">{{ c }}</label>
+            <label class="form-check-label" for="cultura_{{ i }}_{{ loop.index }}">{{ c }}</label>
         </div>
-        <div class="input-group input-group-sm cultura-area{{ '' if c in marcadas else ' d-none' }}" style="max-width: 11rem;">
+        <div class="input-group input-group-sm cultura-area{{ '' if c in marcadas else ' d-none' }}" style="max-width: 10rem;">
             <input class="form-control" name="area_cultura__{{ i }}__{{ c }}" value="{{ form.get('area_cultura__' ~ i ~ '__' ~ c, '') if form else '' }}" inputmode="decimal" placeholder="Área" aria-label="Área de {{ c }} (ha)">
             <span class="input-group-text">ha</span>
         </div>
@@ -24,18 +42,19 @@
     {% endfor %}
     <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="hf">
         <input class="form-control form-control-sm cultura-outra" style="max-width: 9rem;" name="cultura_outra__{{ i }}" value="{{ form.get('cultura_outra__' ~ i, '') if form else '' }}" placeholder="Outra cultura" aria-label="Outra cultura">
-        <div class="input-group input-group-sm cultura-area{{ '' if form and form.get('cultura_outra__' ~ i) else ' d-none' }}" style="max-width: 11rem;">
+        <div class="input-group input-group-sm cultura-area{{ '' if form and form.get('cultura_outra__' ~ i) else ' d-none' }}" style="max-width: 10rem;">
             <input class="form-control" name="area_outra__{{ i }}" value="{{ form.get('area_outra__' ~ i, '') if form else '' }}" inputmode="decimal" placeholder="Área" aria-label="Área da outra cultura (ha)">
             <span class="input-group-text">ha</span>
         </div>
     </div>
-    <div class="small text-muted mt-2 mb-1">Onde fica este local? Toque no mapa, use a sua localização ou digite as coordenadas.</div>
-    <div class="row g-2 mb-1">
-        <div class="col-6"><input class="form-control form-control-sm local-lat" name="local_lat__{{ i }}" value="{{ form.get('local_lat__' ~ i, '') if form else '' }}" inputmode="decimal" placeholder="Latitude (ex.: -15,6010)" aria-label="Latitude" required></div>
-        <div class="col-6"><input class="form-control form-control-sm local-lon" name="local_lon__{{ i }}" value="{{ form.get('local_lon__' ~ i, '') if form else '' }}" inputmode="decimal" placeholder="Longitude (ex.: -56,0970)" aria-label="Longitude" required></div>
+    <div class="small fw-semibold mt-3 mb-1">Localização da fazenda</div>
+    <div class="small text-muted mb-2">Toque no mapa sobre a lavoura, use a sua localização ou digite as coordenadas.</div>
+    <div class="local-mapa mb-2" style="height: 240px; border-radius: 0.5rem;"></div>
+    <div class="row g-2 mb-2">
+        <div class="col-6"><label class="form-label small text-muted mb-0">Latitude</label><input class="form-control form-control-sm local-lat" name="local_lat__{{ i }}" value="{{ form.get('local_lat__' ~ i, '') if form else '' }}" inputmode="decimal" placeholder="-15,6010" aria-label="Latitude" required></div>
+        <div class="col-6"><label class="form-label small text-muted mb-0">Longitude</label><input class="form-control form-control-sm local-lon" name="local_lon__{{ i }}" value="{{ form.get('local_lon__' ~ i, '') if form else '' }}" inputmode="decimal" placeholder="-56,0970" aria-label="Longitude" required></div>
     </div>
-    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-1 local-gps">📍 Usar minha localização</button>
-    <div class="local-mapa" style="height: 220px; border-radius: 0.5rem;"></div>
+    <button type="button" class="btn btn-outline-success btn-sm w-100 local-gps">📍 Usar minha localização</button>
 </div></div>
 {% endmacro %}
 {% block content %}
@@ -72,28 +91,13 @@
     <label class="form-label small mb-1" for="email">E-mail (opcional)</label>
     <input class="form-control mb-3" type="email" name="email" id="email" value="{{ form.get('email', '') }}" autocomplete="email">
 
-    <h6 class="mt-4 mb-2">Fazenda ou empresa</h6>
-    <label class="form-label small mb-1" for="empresa">Nome da fazenda/empresa</label>
-    <input class="form-control mb-3" name="empresa" id="empresa" value="{{ form.get('empresa', '') }}" autocomplete="organization" required>
-    <div class="row g-2 mb-3">
-        <div class="col-8">
-            <label class="form-label small mb-1" for="cidade">Cidade</label>
-            <input class="form-control" name="cidade" id="cidade" value="{{ form.get('cidade', '') }}" autocomplete="address-level2" required>
-        </div>
-        <div class="col-4">
-            <label class="form-label small mb-1" for="uf">Estado</label>
-            <select class="form-select" name="uf" id="uf" required>
-                <option value=""></option>
-                {% for uf in ufs %}<option value="{{ uf }}" {% if form.get('uf') == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}
-            </select>
-        </div>
-    </div>
 
     {% set culturas_sel = form.getlist('culturas') if form else [] %}
     {# Area por cultura (pedido do Alan, 08/11/2026): marcar a cultura abre o campo da area dela. #}
     {# Grupo antes das culturas (pedido do Alan, 08/11/2026): mostra so' as culturas do grupo
        e define a area do preco (Cereais = Soja; Outros e HF = soma). #}
     {% set grupos_sel = form.getlist('grupo_cultura') if form else [] %}
+    <h6 class="mt-4 mb-2">Fazendas e culturas</h6>
     <div class="small mb-1">Tipo de cultura</div>
     <div class="btn-group w-100 mb-2" role="group" id="grupo-cultura">
         {% for chave, rotulo in grupos.items() %}
@@ -105,11 +109,10 @@
        e o ponto no mapa (ou coordenadas); cada um vira uma area monitorada. #}
     {% set idxs = (form.getlist('local_idx') if form else []) or ['0'] %}
     <div id="bloco-culturas" class="{{ '' if grupos_sel else 'd-none' }}">
-    <div class="small mb-1">Locais de plantio -- culturas e área de cada um</div>
     <div id="locais">
         {% for i in idxs %}{{ bloco_local(i, form, loop.first) }}{% endfor %}
     </div>
-    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" id="btn-add-local">+ Adicionar outro local</button>
+    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" id="btn-add-local">+ Adicionar outra fazenda</button>
     <div class="small text-muted mb-3">Área total: <strong id="area-total">-</strong></div>
     </div>
     <template id="tpl-local">{{ bloco_local('__IDX__', {}, False) }}</template>
@@ -300,11 +303,47 @@
         });
     }
     // Mapa de cada local: tocar marca, arrastar ajusta, coordenadas digitadas movem o marcador.
+    // IBGE (mesma fonte dos mapas do site): divisas dos estados, municipios da UF
+    // (sugestao da Cidade) e o contorno do municipio pra achar a fazenda.
+    var IBGE = 'https://servicodados.ibge.gov.br/api';
+    var cacheIbge = {};
+    function ibge(url) {
+        if (!cacheIbge[url]) {
+            cacheIbge[url] = fetch(url).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+        }
+        return cacheIbge[url];
+    }
+    function semAcento(t) { return (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+    function municipiosDa(uf) { return uf ? ibge(IBGE + '/v1/localidades/estados/' + uf + '/municipios') : Promise.resolve(null); }
     function iniciarMapa(b) {
         if (!window.L) return;
         var latC = b.querySelector('.local-lat'), lonC = b.querySelector('.local-lon');
+        var cidadeC = b.querySelector('.local-cidade'), ufC = b.querySelector('.local-uf'), lista = b.querySelector('.local-cidades');
         var mapa = L.map(b.querySelector('.local-mapa')).setView([-14.5, -54.5], 4);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri' }).addTo(mapa);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 }).addTo(mapa);
+        ibge(IBGE + '/v3/malhas/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF').then(function (g) {
+            if (g) L.geoJSON(g, { style: { color: '#ffe100', weight: 1.5, fill: false, opacity: 0.9 }, interactive: false }).addTo(mapa);
+        });
+        var contorno = null;
+        function municipio() {
+            var uf = ufC.value, nome = semAcento(cidadeC.value);
+            municipiosDa(uf).then(function (lst) {
+                if (!lst) return;
+                lista.innerHTML = lst.map(function (m) { return '<option value="' + m.nome + '">'; }).join('');
+                var achado = lst.filter(function (m) { return semAcento(m.nome) === nome; })[0];
+                if (!achado) return;
+                cidadeC.value = achado.nome;  // grafia oficial do IBGE
+                ibge(IBGE + '/v3/malhas/municipios/' + achado.id + '?formato=application/vnd.geo+json').then(function (g) {
+                    if (!g) return;
+                    if (contorno) mapa.removeLayer(contorno);
+                    contorno = L.geoJSON(g, { style: { color: '#ff6b00', weight: 2.5, fill: true, fillOpacity: 0.05 }, interactive: false }).addTo(mapa);
+                    if (!marcador) mapa.fitBounds(contorno.getBounds(), { padding: [10, 10] });
+                });
+            });
+        }
+        ufC.addEventListener('change', municipio);
+        cidadeC.addEventListener('change', municipio);
         var marcador = null;
         function mostrar(la, lo, centralizar) {
             if (marcador) { marcador.setLatLng([la, lo]); }
@@ -328,6 +367,7 @@
                 { enableHighAccuracy: true, timeout: 15000 });
         });
         digitadas();
+        municipio();
         b._mapa = mapa;
     }
     var proximo = blocos().reduce(function (m, b) { return Math.max(m, parseInt(b.querySelector('[name=local_idx]').value, 10) + 1); }, 0);

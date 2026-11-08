@@ -308,6 +308,7 @@ class CadastroTest(unittest.TestCase):
             dados.pop(k)
         dados.update({
             "local_idx": ["0", "3"],
+            "local_cidade__0": "Sinop", "local_uf__0": "MT", "local_cidade__3": "Sorriso", "local_uf__3": "MT",
             "local_nome__0": "Sede", "culturas__0": ["Soja", "Milho"], "area_cultura__0__Soja": "500", "area_cultura__0__Milho": "200",
             "local_lat__0": "-12,50", "local_lon__0": "-55,70",
             "local_nome__3": "Retiro", "culturas__3": ["Soja"], "area_cultura__3__Soja": "300",
@@ -322,8 +323,16 @@ class CadastroTest(unittest.TestCase):
         reg = self._cadastro("Zzz Cad Locais")
         self.assertEqual((reg["area_ha"], reg["area_preco_ha"], reg["culturas"]), (1000.0, 800.0, "Soja (800 ha), Milho (200 ha)"))
         pontos = models.get_cliente_pontos(uid)
-        self.assertEqual([(p["nome"], p["culturas"], p["area_ha"]) for p in pontos],
-                         [("Sede", "Soja (500 ha), Milho (200 ha)", 700.0), ("Retiro", "Soja (300 ha)", 300.0)])
+        self.assertEqual([(p["nome"], p["culturas"], p["area_ha"], p["cidade"], p["uf"]) for p in pontos],
+                         [("Sede", "Soja (500 ha), Milho (200 ha)", 700.0, "Sinop", "MT"),
+                          ("Retiro", "Soja (300 ha)", 300.0, "Sorriso", "MT")])
+        self.assertEqual((reg["empresa"], reg["cidade"], reg["uf"]), ("Sede", "Sinop", "MT"))  # conta = 1a fazenda
+        # fazenda sem cidade/UF: nao segue
+        sem = dict(dados, username="Zzz Cad Locais 4", numero_telefone="65999990246", local_cidade__3="")
+        for k in ("extra_nome__1", "numero_telefone__extra1", "extra_nome__2", "numero_telefone__extra2"):
+            sem.pop(k)
+        self.assertIn("Informe a cidade e o estado de: Retiro",
+                      webapp.app.test_client().post("/solicitar-acesso", data=sem).get_data(as_text=True))
         sede, retiro = pontos[0]["site_name"], pontos[1]["site_name"]
         self.assertTrue(models.get_virtual_farm(sede) and models.get_virtual_farm(retiro))
         recebe = lambda site: sorted(r["username"] for r in models.get_site_whatsapp_recipients(site))
@@ -343,7 +352,7 @@ class CadastroTest(unittest.TestCase):
         wb = load_workbook(export_excel.build_workbook())
         linhas = list(wb["Clientes"].iter_rows(values_only=True))
         linha = dict(zip(linhas[0], next(r for r in linhas if r[1] == "Zzz Cad Locais")))
-        self.assertEqual(linha["Locais de plantio"], "Sede: Soja (500 ha), Milho (200 ha); Retiro: Soja (300 ha)")
+        self.assertEqual(linha["Locais de plantio"], "Sede (Sinop/MT): Soja (500 ha), Milho (200 ha); Retiro (Sorriso/MT): Soja (300 ha)")
         self.assertIn("Zzz Gerente (65)99999-0242 -- Retiro", linha["Também recebem o relatório"])
         # cliente troca quem recebe pelo app
         models.atualizar_assinatura(uid, plano_id=models.plano_free()["id"], status="ativa", cortesia_ate="2099-01-01")

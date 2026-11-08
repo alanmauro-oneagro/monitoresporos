@@ -688,7 +688,9 @@ def _locais_e_extras(user_id):
     """("Sede: Soja (500 ha); Retiro: Soja (300 ha)", "Fulano (65)99999-0000 -- Sede")
     -- locais de plantio e quem mais recebe o relatorio (pedido do Alan, 08/11/2026)."""
     pontos = models.get_cliente_pontos(user_id)
-    locais = "; ".join(f"{p['nome']}: {p['culturas']}" if p.get("culturas") else p["nome"] for p in pontos)
+    def _nome(p):
+        return f"{p['nome']} ({p['cidade']}/{p['uf']})" if p.get("cidade") else p["nome"]
+    locais = "; ".join(f"{_nome(p)}: {p['culturas']}" if p.get("culturas") else _nome(p) for p in pontos)
     ids = models.site_ids_por_nome([p.get("site_name") for p in pontos])
     nome_por_site_id = {ids[p["site_name"]]: p["nome"] for p in pontos if p.get("site_name") in ids}
     extras = "; ".join(
