@@ -242,7 +242,11 @@ cabecalho no formato do Alan (08/11/2026, TUDO em negrito): ━━ /
 "*RELATÓRIO DE MONITORAMENTO*" / "*ONEAGRO - dd/mm/aaaa*" / (linha) /
 "*<Grupo economico> - <FAZENDA>*" / (linha) / "*Informações relevantes para
 manejo da(s) cultura(s) de: SOJA / MILHO*" / ━━
-(`_cabecalho_relatorio_cliente` + `_bloco_relatorio_fazenda`); cartao
+(`_cabecalho_relatorio_cliente` + `_whatsapp_titulo`, montado em
+`_format_whatsapp_message` -- vale TAMBEM pro WhatsApp automatico/manual de
+toda fazenda, pedido do Alan, 08/11/2026; grupo economico do cliente fica
+como digitado, resto em maiusculas; ponto so' clima/fazenda sem cultura =
+sem a linha "Informações"; o PDF nao mudou); cartao
 "Todas as fazendas (uma mensagem só)" no topo quando ha' mais de uma
 (`/app/relatorios/todos.txt`: 1 cabecalho + o bloco de cada fazenda) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
 "Copiar texto" e "Baixar .txt" (`/app/relatorios/<id>.txt`). Na lista "Fazendas monitoradas" o "✏️ Editar" fica
