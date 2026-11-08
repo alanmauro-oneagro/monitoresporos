@@ -760,6 +760,11 @@ def init_db():
         conn.execute("ALTER TABLE cliente_pontos ADD COLUMN site_name TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
+    try:
+        # De qual assinatura do Asaas e' cada pagamento (credito no upgrade -- pedido do Alan, 08/11/2026).
+        conn.execute("ALTER TABLE assinatura_pagamentos ADD COLUMN subscription_id TEXT")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
     # Culturas e area de cada local de plantio informado no cadastro (pedido do Alan, 08/11/2026).
     for coluna in ("culturas TEXT", "area_ha REAL", "cidade TEXT", "uf TEXT"):
         try:
@@ -3897,19 +3902,46 @@ def _somar_meses(data_iso, meses):
     return d.replace(year=ano, month=mes, day=min(d.day, dias_no_mes))
 
 
-def registrar_pagamento(user_id, asaas_payment_id, valor, status, vencimento, invoice_url):
+def credito_para_upgrade(user_id, subscription_id):
+    """R$ ja' pago na assinatura atual e ainda dentro da validade (1 ano do
+    pagamento) -- vira desconto no upgrade. Pagamentos de antes da coluna
+    `subscription_id` (NULL) contam como da assinatura atual."""
+    hoje = _hoje_cuiaba()
+    marcadores = ",".join("?" * len(PAGAMENTO_CONFIRMADO))
+    conn = get_db()
+    rows = conn.execute(
+        f"SELECT valor, vencimento FROM assinatura_pagamentos WHERE user_id = ? AND status IN ({marcadores})"
+        " AND vencimento IS NOT NULL AND (subscription_id IS NULL OR subscription_id = ?)",
+        (user_id,) + PAGAMENTO_CONFIRMADO + (subscription_id or "",),
+    ).fetchall()
+    conn.close()
+    return round(sum(r["valor"] or 0 for r in rows
+                     if _somar_meses(r["vencimento"], MESES_VALIDADE_PAGO).isoformat() >= hoje), 2)
+
+
+def fechar_pagamentos_sem_assinatura(user_id, subscription_id):
+    """Depois do upgrade: pagamentos sem assinatura anotada passam a ser da
+    antiga, pra o credito nao ser usado de novo num proximo upgrade."""
+    conn = get_db()
+    conn.execute("UPDATE assinatura_pagamentos SET subscription_id = ? WHERE user_id = ? AND subscription_id IS NULL",
+                 (subscription_id or "(antiga)", user_id))
+    conn.commit()
+    conn.close()
+
+
+def registrar_pagamento(user_id, asaas_payment_id, valor, status, vencimento, invoice_url, subscription_id=None):
     """Grava/atualiza um pagamento (webhook do Asaas, que pode chegar
     repetido -- idempotente) e recalcula ate' quando o cliente tem
     acesso: cada pagamento confirmado vale 1 ano a partir do vencimento
     (`MESES_VALIDADE_PAGO`). Estorno/exclusao tira o periodo."""
     conn = get_db()
     conn.execute(
-        "INSERT INTO assinatura_pagamentos (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, atualizado_em)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO assinatura_pagamentos (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, atualizado_em,"
+        " subscription_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         " ON CONFLICT(asaas_payment_id) DO UPDATE SET valor=excluded.valor, status=excluded.status,"
         " vencimento=excluded.vencimento, invoice_url=COALESCE(excluded.invoice_url, invoice_url),"
-        " atualizado_em=excluded.atualizado_em",
-        (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, _agora_cuiaba()),
+        " atualizado_em=excluded.atualizado_em, subscription_id=COALESCE(excluded.subscription_id, subscription_id)",
+        (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, _agora_cuiaba(), subscription_id),
     )
     assinatura = conn.execute("SELECT status FROM assinaturas WHERE user_id = ?", (user_id,)).fetchone()
     pago_ate = None

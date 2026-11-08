@@ -319,7 +319,17 @@ lista de planos nem "Ver minhas lavouras") e o botao "⬆ Fazer upgrade de
 plano" (`?upgrade=1`), que lista SO' os planos a venda acima do atual
 (`_planos_superiores`: Ordem maior em Planos e Valores; "sob consulta" fora).
 No `cliente_assinar` com `upgrade=1`, a assinatura antiga no Asaas e'
-cancelada e a nova toma o lugar. Sem plano acima = sem botao. Clientes nao aparecem na aba Usuarios. App Android/iOS em
+cancelada e a nova toma o lugar. Sem plano acima = sem botao. **Desconto no upgrade** (pedido do Alan, 08/11/2026): o que o
+cliente ja' pagou na assinatura atual e ainda esta' dentro do ano de
+validade (`models.credito_para_upgrade`: pagamentos confirmados com
+`assinatura_pagamentos.subscription_id` = a assinatura atual, ou sem id;
+valor cheio, sem proporcional ao tempo) sai do total do plano novo: o
+resto e' dividido pelas parcelas do ciclo e a nova assinatura no Asaas
+para nessas parcelas (`maxPayments`; renovacao depois e' no valor cheio).
+Credito >= total = troca na hora, sem cobranca. Pagamentos antigos ficam
+presos a' assinatura velha (`fechar_pagamentos_sem_assinatura`), o credito
+nao e' reaproveitado. A tela do upgrade mostra "Com o desconto: ..." em
+cada plano. Clientes nao aparecem na aba Usuarios. App Android/iOS em
 `mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
 app nao aparece preco nem link de pagamento (regra das lojas).
 Recurso de plano "regiao" (`/app/regiao`, pedido do Alan, 26/10/2026):
