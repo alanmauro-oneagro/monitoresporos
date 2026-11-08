@@ -249,21 +249,28 @@ class AssinaturasTest(unittest.TestCase):
         doencas = {"Rust Zzz": {"nome_pt": "Ferrugem Zzz", "nome_cientifico": "Phakopsora zzz", "germ_temp_min": 15,
                                 "germ_temp_max": 28, "germ_umidade_min": 80, "germ_horas_molhamento": 6},
                    "Mold Zzz": {"nome_pt": "Mofo Zzz", "nome_cientifico": "Sclerotinia zzz", "germ_temp_min": 10,
+                                "germ_temp_max": 25, "germ_umidade_min": 85, "germ_horas_molhamento": 10},
+                   "Gray Zzz": {"nome_pt": "Mofo Cinzento Zzz", "nome_cientifico": "Botrytis zzz", "germ_temp_min": 10,
                                 "germ_temp_max": 25, "germ_umidade_min": 85, "germ_horas_molhamento": 10}}
         with mock.patch.object(webapp, "_disease_info_cached", return_value=doencas), \
-                mock.patch.object(models, "get_doenca_culturas", return_value={"Mold Zzz": {"Milho"}}), \
+                mock.patch.object(models, "get_doenca_culturas",
+                                  return_value={"Rust Zzz": {"Soja"}, "Mold Zzz": {"Milho", "Soja"}, "Gray Zzz": {"Uva"}}), \
                 mock.patch.object(webapp, "_weather_ponto_cliente", return_value=None), \
                 mock.patch.object(webapp, "_calc_risco_germinacao", return_value="amarelo"), \
                 mock.patch.object(webapp, "_calc_previsao_risco_germinacao",
                                   return_value=[{"data_fmt": "09/11", "risco": "vermelho"}]):
             todas = self.client.get("/app/regiao").get_data(as_text=True)
             soja = self.client.get("/app/regiao?cultura=Soja").get_data(as_text=True)
+            uva = self.client.get("/app/regiao?cultura=Uva").get_data(as_text=True)
         self.assertIn("Favorabilidade climática", todas)
         self.assertIn('id="filtroCultura"', todas)
         self.assertIn("Ferrugem Zzz", todas)
         self.assertIn("Mofo Zzz", todas)
+        # filtro previo: so' doencas das culturas do cliente (Soja) -- pedido do Alan, 08/11/2026
+        self.assertNotIn("Mofo Cinzento Zzz", todas)
         self.assertIn("Ferrugem Zzz", soja)
-        self.assertNotIn("Mofo Zzz", soja)  # doenca so' do milho sai no filtro de soja
+        self.assertNotIn("Mofo Cinzento Zzz", uva)  # cultura que o cliente nao marcou nao vale como filtro
+        self.assertNotIn('<option value="Uva"', todas)
         self.assertIn('risco-vermelho">A<', todas)
         # Basico: sem graficos 7 + 5 dias, e o JSON do site fica fechado
         self.assertIn("fazem parte dos planos Premium", todas)

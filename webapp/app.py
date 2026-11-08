@@ -7900,12 +7900,13 @@ def cliente_regiao():
     plano = g.cliente_plano
     pontos = [p for p in models.get_cliente_pontos(int(current_user.id)) if models.ponto_liberado(p)]
     ponto = next((p for p in pontos if str(p["id"]) == request.args.get("fazenda")), pontos[0] if pontos else None)
-    culturas = _culturas_dos_pontos(pontos)
+    culturas = _culturas_do_cliente(int(current_user.id), pontos)
     cultura = request.args.get("cultura", "")
     cultura = cultura if cultura in culturas else ""
     riscos, datas = [], []
     if ponto:
-        riscos = _favorabilidade_ponto(ponto, _weather_ponto_cliente(ponto), cultura)
+        # Filtro previo: so' doencas das culturas do cadastro do cliente (pedido do Alan, 08/11/2026).
+        riscos = _favorabilidade_ponto(ponto, _weather_ponto_cliente(ponto), [cultura] if cultura else culturas)
         for d in riscos:
             for p in d.get("previsao_risco") or []:
                 if p["data_fmt"] not in datas:
@@ -7919,26 +7920,26 @@ def cliente_regiao():
     )
 
 
-def _culturas_dos_pontos(pontos):
-    """Culturas das fazendas do cliente (as da lista do site), pro filtro."""
+def _culturas_do_cliente(user_id, pontos):
+    """Culturas que o cliente marcou (cadastro + fazendas), so' as da lista do site."""
     ativas = models.get_culturas_ativas()
-    vistas = set()
+    vistas = {c for c, _a in _culturas_com_area((models.get_cadastro_do_usuario(user_id) or {}).get("culturas"))}
     for p in pontos:
         vistas |= {c for c, _a in _pares_cultura_area(p)}
-    return [c for c in ativas if c in vistas] or ativas
+    return [c for c in ativas if c in vistas]
 
 
-def _favorabilidade_ponto(ponto, weather, cultura=""):
-    """Favorabilidade climatica (hoje + 5 dias) de TODAS as doencas cadastradas
-    com germinacao, do pais da fazenda; com `cultura`, so' as dela (doenca sem
-    cultura marcada sempre entra). Na ordem da aba Doencas."""
+def _favorabilidade_ponto(ponto, weather, culturas=None):
+    """Favorabilidade climatica (hoje + 5 dias) das doencas cadastradas com
+    germinacao, do pais da fazenda; com `culturas`, so' as doencas marcadas
+    pra alguma delas (sem nenhuma cultura do cliente, todas). Na ordem da aba Doencas."""
     info = _disease_info_cached()
     doenca_culturas = models.get_doenca_culturas()
     doenca_paises = models.get_doenca_paises()
     pais = countries.get_country(countries.detectar_pais_por_coordenada(ponto["lat"], ponto["lon"]))["nome"]
     cards = [
         {"doenca_en": en, "doenca": d["nome_pt"]} for en, d in info.items()
-        if (not cultura or not doenca_culturas.get(en) or cultura in doenca_culturas[en])
+        if (not culturas or doenca_culturas.get(en, set()) & set(culturas))
         and (not doenca_paises.get(en) or pais in doenca_paises[en])
     ]
     riscos = _build_riscos_climaticos_sem_leitura(cards)
