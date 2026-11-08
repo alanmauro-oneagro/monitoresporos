@@ -86,7 +86,12 @@ parcelas pelo ciclo (`app._plano_para_area`), calculado ao digitar no
 cadastro e usado em Minha assinatura, na cobranca (`cliente_assinar`) e em
 Gerenciar Clientes; faixa sem U$/ha = "Sob consulta" (nao deixa assinar).
 /planos mostra "Preço pela área plantada". Excel (aba Clientes) tem a coluna "Tipo de cultura"
-antes de "Culturas" (`export_excel._GRUPOS_CULTURA`). A pessoa escolhe **Assinar plano** ou **Ter acesso
+antes de "Culturas" (`export_excel._GRUPOS_CULTURA`). A tela de cadastro NAO explica a regra do
+preco (sem dica do grupo, sem "area para o preco", sem nota no Premium --
+pedido do Alan, 08/11/2026). **Tecnico do setor** marcado: os planos somem
+e aparece "Entrar em contato com: Alan Mauro / Cel (43) 99114-7595 /
+contato@oneagro.com.br" (`app.CONTATO_COMERCIAL`); o servidor ignora o
+plano escolhido e a conta nasce sem plano (aviso com o mesmo contato). A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
 (tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao

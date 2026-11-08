@@ -148,6 +148,23 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("Cereais <span class=\"text-muted\">-- área para o preço: 1.000 ha</span>", html)
         self.assertEqual(webapp._culturas_com_area("Soja, Milho (2.000 ha)"), [("Soja", None), ("Milho", "2.000 ha")])
 
+    def test_tecnico_nao_escolhe_plano_e_ve_contato(self):
+        """Tecnico do setor: sem planos no cadastro, so' o contato (pedido do Alan, 08/11/2026)."""
+        html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
+        self.assertIn('id="contato-tecnico"', html)
+        for trecho in ("Alan Mauro", "(43) 99114-7595", "wa.me/5543991147595", "mailto:contato@oneagro.com.br"):
+            self.assertIn(trecho, html)
+        self.assertNotIn("área para o preço", html)
+        self.assertNotIn("o preço usa a área de Soja", html)
+        plano = models.get_planos(apenas_ativos=True)[0]
+        c = webapp.app.test_client()
+        resp = c.post("/solicitar-acesso", data=_form(username="Zzz Cad Tecnico", numero_telefone="65999990061",
+                                                      modalidade="plano", perfil=["tecnico"], plano_id=str(plano["id"])),
+                      follow_redirects=True)
+        self.assertIn("entre em contato com Alan Mauro", resp.get_data(as_text=True))
+        user = models.get_user_by_username("Zzz Cad Tecnico")
+        self.assertIsNone(models.get_assinatura(user["id"])["plano_id"])  # nenhum plano escolhido
+
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
                          ["cereais", "cereais", "cereais", "cereais", "cana", "cana", "hf", "hf"])

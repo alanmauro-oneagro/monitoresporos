@@ -6830,6 +6830,11 @@ def verificar_usuario_cadastro():
     })
 
 
+# Contato mostrado pro Tecnico do setor no cadastro (pedido do Alan, 08/11/2026).
+CONTATO_COMERCIAL = {"nome": "Alan Mauro", "celular": "(43) 99114-7595", "whatsapp": "5543991147595",
+                     "email": "contato@oneagro.com.br"}
+
+
 def _contexto_cadastro(culturas):
     """Culturas por grupo e planos (com o que a tela precisa pra calcular o
     preco pela area enquanto a pessoa digita)."""
@@ -6839,7 +6844,7 @@ def _contexto_cadastro(culturas):
         "grupo_de": {c: _grupo_da_cultura(c) for c in culturas},
         "planos": models.get_planos(apenas_ativos=True), "recursos": models.RECURSOS_PLANO,
         "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"]} for f in _tabela_precificacao()],
-        "cotacao_valor": cot["valor"] if cot else None,
+        "cotacao_valor": cot["valor"] if cot else None, "contato_comercial": CONTATO_COMERCIAL,
     }
 
 
@@ -6867,7 +6872,9 @@ def solicitar_acesso():
         culturas_sel = [c for c in form.getlist("culturas") if c in culturas and _grupo_da_cultura(c) == grupo]
         outra = form.get("cultura_outra", "").strip() if grupo == "hf" else ""
         planos_venda = models.get_planos(apenas_ativos=True)
-        plano_escolhido = next((p for p in planos_venda if str(p["id"]) == form.get("plano_id")), None)
+        # Tecnico do setor nao escolhe plano: fala com a OneAgro (pedido do Alan, 08/11/2026).
+        plano_escolhido = None if "tecnico" in perfis else next(
+            (p for p in planos_venda if str(p["id"]) == form.get("plano_id")), None)
 
         def _area(texto):
             try:
@@ -6937,6 +6944,11 @@ def solicitar_acesso():
             models.registrar_cadastro(registro)
             _avisar_master_cadastro(registro)
             login_user(User(models.get_user_by_id(user_id)), remember=True)
+            if modalidade == "plano" and "tecnico" in perfis:
+                c = CONTATO_COMERCIAL
+                flash(f"Conta criada! Para o plano, entre em contato com {c['nome']} -- cel. {c['celular']}, "
+                      f"e-mail {c['email']}.", "success")
+                return redirect(url_for("cliente_assinatura"))
             if modalidade == "plano":
                 if plano_escolhido and not plano_escolhido["preco_por_area"] and plano_escolhido["valor"] <= 0:
                     # Plano gratis escolhido no cadastro: ja' libera (mesmo caminho de cliente_assinar).
