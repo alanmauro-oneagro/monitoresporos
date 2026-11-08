@@ -48,19 +48,19 @@
 {% if plano %}<a class="btn btn-success w-100 mt-2" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar fazenda monitorada</a>{% endif %}
 
 {# Ate' 2 pessoas que tambem recebem o relatorio, por area (pedido do Alan, 08/11/2026). #}
-<h6 class="mt-4 mb-1">Quem mais recebe o relatório</h6>
+<h6 class="mt-4 mb-1">Receber relatório</h6>
 <p class="small text-muted mb-2">Até {{ max_extras }} pessoas recebem o relatório no WhatsApp, das fazendas que você marcar. Salva sozinho. <span id="statusDest" class="fw-semibold"></span></p>
 <form method="post" action="{{ url_for('cliente_destinatarios') }}" class="mb-3" id="formDest">
     <input type="hidden" name="voltar" value="{{ voltar }}">
     {% for k in range(1, max_extras + 1) %}
     {% set e = extras[k - 1] if extras | length >= k else none %}
     <div class="card shadow-sm mb-2"><div class="card-body p-2">
-        <div class="small fw-semibold mb-1">Pessoa {{ k }}</div>
-        <input class="form-control form-control-sm mb-1" name="extra_nome__{{ k }}" value="{{ e.nome if e else '' }}" placeholder="Nome" aria-label="Nome da pessoa {{ k }}">
+        <div class="small fw-semibold mb-1">Contato {{ k }}</div>
+        <input class="form-control form-control-sm mb-1" name="extra_nome__{{ k }}" value="{{ e.nome if e else '' }}" placeholder="Nome" aria-label="Nome do contato {{ k }}">
         <div class="input-group input-group-sm mb-1">
             <span class="input-group-text">+</span>
-            <input class="form-control" style="max-width: 4rem;" name="codigo_pais__extra{{ k }}" value="{{ e.telefone[:2] if e else '55' }}" inputmode="numeric" aria-label="Código do país da pessoa {{ k }}">
-            <input class="form-control" name="numero_telefone__extra{{ k }}" value="{{ e.telefone[2:] if e else '' }}" placeholder="Celular (DDD + número)" inputmode="tel" aria-label="Celular da pessoa {{ k }}">
+            <input class="form-control" style="max-width: 4rem;" name="codigo_pais__extra{{ k }}" value="{{ e.telefone[:2] if e else '55' }}" inputmode="numeric" aria-label="Código do país do contato {{ k }}">
+            <input class="form-control" name="numero_telefone__extra{{ k }}" value="{{ e.telefone[2:] if e else '' }}" placeholder="Celular (DDD + número)" inputmode="tel" aria-label="Celular do contato {{ k }}">
         </div>
         {% if pontos %}
         <div class="small text-muted">Recebe das fazendas:</div>
@@ -72,10 +72,10 @@
     {% endfor %}
 </form>
 
-<form method="post" action="{{ url_for('cliente_conta') }}" class="card shadow-sm mb-3" id="formSenha"><div class="card-body">
-    <h6>Trocar senha</h6>
+<h6 class="mt-4 mb-2">Trocar senha</h6>
+<form method="post" action="{{ url_for('cliente_conta') }}" class="card shadow-sm mb-3" id="formSenha"><div class="card-body p-2">
     {% for campo, rotulo, auto in [('senha_atual', 'Senha atual', 'current-password'), ('senha_nova', 'Nova senha (mínimo 6)', 'new-password'), ('senha_confirmar', 'Confirmar nova senha', 'new-password')] %}
-    <div class="input-group">
+    <div class="input-group input-group-sm">
         <input class="form-control" type="password" name="{{ campo }}" id="{{ campo }}" placeholder="{{ rotulo }}" aria-label="{{ rotulo }}" autocomplete="{{ auto }}" {% if campo != 'senha_atual' %}minlength="6"{% endif %} required>
         <button class="btn btn-outline-secondary mostrar-senha" type="button" data-alvo="{{ campo }}" aria-label="Mostrar senha">👁</button>
     </div>

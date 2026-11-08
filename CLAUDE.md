@@ -654,6 +654,15 @@ site tem que entrar la'.
   5G_SA_NSA_VIVO -110 da Anatel tem um poligono grosseiro cobrindo o
   Sudeste inteiro (onde o 4G da Vivo cobre ~6%). Substituiu a
   1a versao por distancia de antena (ERBs, tabela `erbs` apagada).
+- **Tipografia padrao** (pedido do Alan, 08/11/2026): `templates/_tipografia.html`,
+  incluido em base.html e cliente_base.html (depois do CSS deles, antes do
+  `extra_head` de cada tela): titulo de pagina (h1-h4, `h1.titulo`) 1.25rem
+  negrito, subtitulo de secao (h5/h6) 1rem semi-negrito, conteudo 0.95rem
+  (body, campos, botoes, tabelas), versoes `-sm` 0.85rem. Tela nova: usar
+  h4/h1.titulo pro titulo e h6 pras secoes, sem tamanho proprio. No app,
+  "Quem mais recebe o relatorio" virou **"Receber relatório"** com
+  "Contato 1/2" (ex-"Pessoa"), tambem no cadastro; "Trocar senha" e' uma
+  secao como as outras (h6 + campos pequenos).
 - **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
   "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
   (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no

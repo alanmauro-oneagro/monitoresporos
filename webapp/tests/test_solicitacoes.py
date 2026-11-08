@@ -358,7 +358,7 @@ class CadastroTest(unittest.TestCase):
         models.atualizar_assinatura(uid, plano_id=models.plano_free()["id"], status="ativa", cortesia_ate="2099-01-01")
         c = self._logado("Zzz Cad Locais")
         home = c.get("/app").get_data(as_text=True)
-        self.assertIn("Quem mais recebe o relatório", home)
+        self.assertIn("Receber relatório", home)
         self.assertIn('value="Zzz Gerente"', home)
         c.post("/app/destinatarios", data={"extra_nome__1": "Zzz Novo", "codigo_pais__extra1": "55",
                                            "numero_telefone__extra1": "65999990249", "extra_pontos__1": [str(pontos[0]["id"])]})
@@ -396,7 +396,7 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("Marque no mapa (ou digite as coordenadas) de: Retiro", html)
         # pessoa extra com celular invalido: nao segue
         ruim2 = dict(dados, username="Zzz Cad Locais 3", numero_telefone="65999990245", numero_telefone__extra1="123")
-        self.assertIn("Pessoa 1 que recebe o relatório", webapp.app.test_client().post("/solicitar-acesso", data=ruim2).get_data(as_text=True))
+        self.assertIn("Contato 1 que recebe o relatório", webapp.app.test_client().post("/solicitar-acesso", data=ruim2).get_data(as_text=True))
 
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
