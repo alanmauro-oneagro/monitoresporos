@@ -6761,6 +6761,21 @@ def _area_para_preco(grupo, areas):
     return sum(a for _c, a in areas)
 
 
+def _area_preco_grupos(grupos, areas_grupo):
+    """Varios tipos marcados: soma a area de preco de cada um (Cereais pela
+    Soja, Cana pela Cana, HF pela soma das culturas dele). `areas_grupo` =
+    [(cultura, area, grupo)]."""
+    return sum(_area_para_preco(g, [(c, a) for c, a, gg in areas_grupo if gg == g]) for g in grupos)
+
+
+def rotulo_grupos(texto):
+    """"cereais,cana" -> "Cereais, Cana"."""
+    return ", ".join(GRUPOS_CULTURA.get(g, g) for g in (texto or "").split(",") if g)
+
+
+app.jinja_env.filters["grupos_cultura"] = rotulo_grupos
+
+
 def _area_preco_do_cliente(user_id):
     cad = models.get_cadastro_do_usuario(user_id) or {}
     return cad.get("area_preco_ha") or cad.get("area_ha")
@@ -6861,16 +6876,18 @@ def solicitar_acesso():
     form = request.form
     if request.method == "POST":
         modalidade = "fazenda" if form.get("modalidade") == "fazenda" else "plano"
-        perfis = [p for p in form.getlist("perfil") if p in PERFIS_CADASTRO]
+        # Um perfil so' (pedido do Alan, 08/11/2026): Produtor OU Tecnico do setor.
+        perfis = [p for p in form.getlist("perfil") if p in PERFIS_CADASTRO][:1]
         nome_completo = " ".join(form.get("nome_completo", "").split())
         username = " ".join(form.get("username", "").split())
         email = form.get("email", "").strip()
         telefone = _telefone_from_form(form)
         uf = form.get("uf", "")
-        grupo = form.get("grupo_cultura", "")
-        # so' as culturas do grupo escolhido contam (a tela esconde as outras)
-        culturas_sel = [c for c in form.getlist("culturas") if c in culturas and _grupo_da_cultura(c) == grupo]
-        outra = form.get("cultura_outra", "").strip() if grupo == "hf" else ""
+        # Mais de um tipo de cultura ao mesmo tempo (pedido do Alan, 08/11/2026).
+        grupos = [g for g in GRUPOS_CULTURA if g in form.getlist("grupo_cultura")]
+        # so' as culturas dos grupos escolhidos contam (a tela esconde as outras)
+        culturas_sel = [c for c in form.getlist("culturas") if c in culturas and _grupo_da_cultura(c) in grupos]
+        outra = form.get("cultura_outra", "").strip() if "hf" in grupos else ""
         planos_venda = models.get_planos(apenas_ativos=True)
         # Tecnico do setor nao escolhe plano: fala com a OneAgro (pedido do Alan, 08/11/2026).
         plano_escolhido = None if "tecnico" in perfis else next(
@@ -6882,14 +6899,15 @@ def solicitar_acesso():
             except ValueError:
                 return 0
         # Area de cada cultura (pedido do Alan, 08/11/2026); a area total e' a soma.
-        areas = [(c, _area(form.get(f"area_cultura__{c}"))) for c in culturas_sel]
+        areas_grupo = [(c, _area(form.get(f"area_cultura__{c}")), _grupo_da_cultura(c)) for c in culturas_sel]
         if outra:
-            areas.append((outra, _area(form.get("area_outra"))))
+            areas_grupo.append((outra, _area(form.get("area_outra")), "hf"))
+        areas = [(c, a) for c, a, _g in areas_grupo]
         area_ha = sum(a for _c, a in areas)
         senha = form.get("senha", "")
         erro = None
         if not perfis:
-            erro = "Marque se você é produtor e/ou técnico do setor."
+            erro = "Marque se você é produtor ou técnico do setor."
         elif len(nome_completo.split()) < 2:
             erro = "Informe o seu nome completo (nome e sobrenome)."
         elif len(username) < 3:
@@ -6908,8 +6926,8 @@ def solicitar_acesso():
             erro = "Informe a fazenda ou empresa."
         elif not form.get("cidade", "").strip() or uf not in UFS_BR:
             erro = "Informe a cidade e o estado (UF)."
-        elif grupo not in GRUPOS_CULTURA:
-            erro = "Escolha o tipo de cultura: Cereais, HF ou Cana."
+        elif not grupos:
+            erro = "Escolha o tipo de cultura: Cereais, HF e/ou Cana."
         elif not culturas_sel and not outra:
             erro = "Marque pelo menos uma cultura."
         elif (sem_area := [c for c, a in areas if a <= 0]):
@@ -6938,7 +6956,7 @@ def solicitar_acesso():
                 "telefone": telefone, "tipo": "cliente" if modalidade == "plano" else "usuario",
                 "empresa": form.get("empresa", "").strip(), "cidade": form.get("cidade", "").strip(), "uf": uf,
                 "culturas": ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in areas), "area_ha": area_ha,
-                "grupo_cultura": grupo, "area_preco_ha": _area_para_preco(grupo, areas),
+                "grupo_cultura": ",".join(grupos), "area_preco_ha": _area_preco_grupos(grupos, areas_grupo),
                 "mensagem": form.get("mensagem", "").strip(), "user_id": user_id,
             }
             models.registrar_cadastro(registro)

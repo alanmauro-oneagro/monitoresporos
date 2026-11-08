@@ -702,7 +702,7 @@ def _clientes_rows():
         rows.append([
             cad.get("nome_completo") or c["username"], c["username"], models.fmt_telefone_br(c["telefone"]) or "",
             c["email"] or "", perfil, cad.get("empresa") or "", cidade,
-            _GRUPOS_CULTURA.get(cad.get("grupo_cultura"), ""),  # tipo de cultura (pedido do Alan, 08/11/2026)
+            ", ".join(_GRUPOS_CULTURA.get(g, g) for g in (cad.get("grupo_cultura") or "").split(",") if g),  # tipo(s) de cultura
             cad.get("culturas") or "",
             cad.get("area_ha") or "", _data_excel((cad.get("criado_em") or c["criado_em"] or "")[:10]),
             plano["nome"] if plano else "Sem plano escolhido",
