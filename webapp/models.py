@@ -3274,6 +3274,16 @@ def get_all_sites_report_user_ids():
     return por_site
 
 
+def clientes_por_site():
+    """{site_name da fazenda estimada: usuario do cliente dono da lavoura}."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT p.site_name, u.username FROM cliente_pontos p JOIN users u ON u.id = p.user_id"
+        " WHERE p.site_name IS NOT NULL").fetchall()
+    conn.close()
+    return {r["site_name"]: r["username"] for r in rows}
+
+
 def sites_de_clientes():
     """Fazendas estimadas criadas pelas lavouras dos clientes do app (plano)."""
     conn = get_db()
