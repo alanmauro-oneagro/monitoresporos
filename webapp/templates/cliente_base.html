@@ -15,11 +15,6 @@
         body { background: #f4f6f4; padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
         .topo { background: #fff; border-bottom: 1px solid #e3e7e3; padding: calc(0.5rem + env(safe-area-inset-top)) 1rem 0.5rem; }
         .topo img { height: 30px; }
-        .abas { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e3e7e3;
-                display: flex; padding-bottom: env(safe-area-inset-bottom); z-index: 1000; }
-        .abas a { flex: 1; text-align: center; padding: 0.55rem 0 0.45rem; font-size: 0.78rem; color: #0a1f44; text-decoration: none; }
-        .abas a .ic { display: block; font-size: 1.25rem; line-height: 1.2; }
-        .abas a.ativa { color: #3d8a26; font-weight: 600; }
         .card-perigo { background: #ff6b6b; color: #282828; }
         .card-atencao { background: #ffd43b; color: #282828; }
         .card-normal { background: #51cf66; color: #282828; }
@@ -55,15 +50,7 @@
     {% endwith %}
     {% block content %}{% endblock %}
 </div>
-{% if current_user.is_authenticated and current_user.is_cliente %}
-<nav class="abas">
-    <a href="{{ url_for('cliente_home') }}" class="{% if request.endpoint in ('cliente_home', 'cliente_ponto', 'cliente_ponto_novo') %}ativa{% endif %}"><span class="ic">🌱</span>Lavouras</a>
-    <a href="{{ url_for('cliente_regiao') }}" class="{% if request.endpoint == 'cliente_regiao' %}ativa{% endif %}"><span class="ic">🗺️</span>Região</a>
-    <a href="{{ url_for('cliente_assinatura') }}" class="{% if request.endpoint == 'cliente_assinatura' %}ativa{% endif %}"><span class="ic">⭐</span>Assinatura</a>
-    <a href="{{ url_for('cliente_conta') }}" class="{% if request.endpoint == 'cliente_conta' %}ativa{% endif %}"><span class="ic">👤</span>Conta</a>
-    {% if menu_site_cliente %}<a href="{{ url_for(menu_site_cliente[0][1]) }}"><span class="ic">🌐</span>Site</a>{% endif %}
-</nav>
-{% endif %}
+{% include "_abas_cliente.html" %}
 <script>
 // Offline (app e celular sem sinal): o service worker devolve a ultima
 // versao salva da pagina com data-offline="1" no <body>.

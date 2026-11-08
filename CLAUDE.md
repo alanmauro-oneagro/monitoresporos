@@ -153,6 +153,14 @@ se o plano liberar (recursos "site_*" em `RECURSOS_PLANO`, logo depois de
 "clima"; pedido do Alan, 31/10/2026), as abas do site Mapa/Alertas/
 Graficos/Manejos/Recomendacoes (`ABAS_SITE_CLIENTE` em `_restringir_cliente`;
 menu do `base.html` so' com essas abas + "📱 App"; no app, aba "🌐 Site").
+**App do cliente** (pedido do Alan, 08/11/2026): a barra de baixo
+(`_abas_cliente.html`: Site, Culturas, Regiao, Assinatura, Conta) e' fixa
+no rodape e aparece TAMBEM nas abas do Site (incluida em base.html e
+cliente_base.html). A aba "Lavouras" virou **Culturas** (`cliente_home`):
+tipo(s), cada cultura com a area e a area total vindos do cadastro, e
+abaixo as "Areas monitoradas" (as antigas lavouras). Depois do login o
+cliente entra direto no Site (`_inicio_cliente`: 1a aba do Site que o plano
+libera; sem nenhuma, nas Culturas).
 Nelas o cliente e' como um Usuario: so' as fazendas liberadas pra ele.
 **Toda lavoura vira fazenda estimada, sem configuracao da OneAgro**
 (pedido do Alan, 08/11/2026 -- antes so' com o recurso "fazenda_estimada"):
