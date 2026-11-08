@@ -119,16 +119,16 @@
 
     {% if modalidade_sel == 'plano' %}
     {# Ate' 2 pessoas que tambem recebem o relatorio, escolhendo de quais locais. #}
-    <h6 class="mt-4 mb-1">Quem mais recebe o relatório <span class="small text-muted fw-normal">(opcional)</span></h6>
+    <h6 class="mt-4 mb-1">Receber relatório <span class="small text-muted fw-normal">(opcional)</span></h6>
     <p class="small text-muted mb-2">Até 2 pessoas (ex.: gerente, agrônomo) recebem o relatório no WhatsApp.</p>
     {% for k in range(1, max_extras + 1) %}
     <div class="card shadow-sm mb-2 extra-bloco" data-k="{{ k }}"><div class="card-body p-2">
-        <div class="small fw-semibold mb-1">Pessoa {{ k }}</div>
-        <input class="form-control form-control-sm mb-1" name="extra_nome__{{ k }}" value="{{ form.get('extra_nome__' ~ k, '') }}" placeholder="Nome" aria-label="Nome da pessoa {{ k }}">
+        <div class="small fw-semibold mb-1">Contato {{ k }}</div>
+        <input class="form-control form-control-sm mb-1" name="extra_nome__{{ k }}" value="{{ form.get('extra_nome__' ~ k, '') }}" placeholder="Nome" aria-label="Nome do contato {{ k }}">
         <div class="input-group input-group-sm mb-1">
             <span class="input-group-text">+</span>
-            <input class="form-control" style="max-width: 4rem;" name="codigo_pais__extra{{ k }}" value="{{ form.get('codigo_pais__extra' ~ k, '55') }}" inputmode="numeric" aria-label="Código do país da pessoa {{ k }}">
-            <input class="form-control" name="numero_telefone__extra{{ k }}" value="{{ form.get('numero_telefone__extra' ~ k, '') }}" placeholder="Celular (DDD + número)" inputmode="tel" aria-label="Celular da pessoa {{ k }}">
+            <input class="form-control" style="max-width: 4rem;" name="codigo_pais__extra{{ k }}" value="{{ form.get('codigo_pais__extra' ~ k, '55') }}" inputmode="numeric" aria-label="Código do país do contato {{ k }}">
+            <input class="form-control" name="numero_telefone__extra{{ k }}" value="{{ form.get('numero_telefone__extra' ~ k, '') }}" placeholder="Celular (DDD + número)" inputmode="tel" aria-label="Celular do contato {{ k }}">
         </div>
         <div class="small text-muted">Recebe dos locais:</div>
         <div class="extra-locais d-flex flex-wrap gap-2 small" data-marcados="{{ (form.getlist('extra_locais__' ~ k) if form else []) | join(',') }}"></div>

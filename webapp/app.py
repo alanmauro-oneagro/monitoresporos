@@ -7055,7 +7055,7 @@ def _extras_do_form(form, n_locais):
             continue
         telefone = re.sub(r"\D", "", form.get(f"codigo_pais__extra{k}", "55")) + numero
         if not nome or not _is_valid_phone(telefone):
-            return [], f"Pessoa {k} que recebe o relatório: informe o nome e um celular válido (DDD + número)."
+            return [], f"Contato {k} que recebe o relatório: informe o nome e um celular válido (DDD + número)."
         locais = [int(i) for i in form.getlist(f"extra_locais__{k}") if i.isdigit() and int(i) < n_locais]
         if not locais:
             locais = list(range(n_locais))
@@ -7596,7 +7596,7 @@ def cliente_destinatarios():
             continue
         telefone = re.sub(r"\D", "", form.get(f"codigo_pais__extra{k}", "55")) + numero
         if not nome or not _is_valid_phone(telefone):
-            erro = f"Pessoa {k}: informe o nome e um celular válido (DDD + número)."
+            erro = f"Contato {k}: informe o nome e um celular válido (DDD + número)."
             if autosave:
                 return jsonify(ok=False, erro=erro)
             flash(erro, "error")
