@@ -238,35 +238,51 @@ class AssinaturasTest(unittest.TestCase):
         self.client.post("/app/conta/excluir", data={"senha": "segredo1"})
         self.assertIsNotNone(models.get_user_by_username("Zzz Teste Conta"))
 
-    def test_regiao_sem_nome_de_fazenda_e_posicao_aproximada(self):
-        models.salvar_plano(None, "Zzz Regiao", "", 199.9, "MONTHLY", 2, 300, ["regiao"], True, 9)
-        plano = next(p for p in models.get_planos() if p["nome"] == "Zzz Regiao")
-        self._cadastrar("Zzz Teste Regiao", plano_id=plano["id"])
-        self._liberar("Zzz Teste Regiao")
+    def test_graficos_favorabilidade_e_filtro_de_cultura(self):
+        """Aba Graficos (ex-Regiao, pedido do Alan, 08/11/2026): tabela de
+        favorabilidade de todas as doencas cadastradas + filtro por cultura;
+        graficos 7 + 5 dias so' com "graficos_app" (Premium)."""
+        self._cadastrar("Zzz Teste Graficos", plano_id=self.plano_basico)
+        self._liberar("Zzz Teste Graficos")
         self.assertIn("Adicionar fazenda monitorada", self.client.get("/app/regiao").get_data(as_text=True))
-        coords = data_reader.read_site_coordinates()
-        site, (lat, lon) = next(iter(coords.items()))
-        self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao R", "lat": lat, "lon": lon})
-        hoje = models._hoje_cuiaba()
-        leitura = {"doenca": "Ferrugem Zzz", "doenca_en": "Rust Zzz", "concentracao": 12.0, "status": "Perigo", "data": hoje}
-        with mock.patch.object(webapp, "get_dashboard_data", return_value={site: [leitura]}), \
-                mock.patch.object(webapp.inmet_stations, "estacao_mais_proxima",
-                                  return_value={"cidade": "Cidadezzz", "uf": "MT", "distancia_km": 10}):
-            regioes = webapp._regioes_cliente(models.get_cliente_pontos(models.get_user_by_username("Zzz Teste Regiao")["id"]), 300)
-            html = self.client.get("/app/regiao").get_data(as_text=True)
-        self.assertEqual(len(regioes), 1)
-        self.assertEqual((regioes[0]["lat"], regioes[0]["lon"]), (round(lat, 1), round(lon, 1)))
-        self.assertEqual(regioes[0]["rotulo"], "Região de Cidadezzz/MT")
-        self.assertIn("Ferrugem Zzz: 12.0", html)
-        self.assertIn('data-offline="0"', html)
-        for nome_real in data_reader.read_sites():
-            self.assertNotIn(nome_real, html, f"nome de fazenda real vazou: {nome_real}")
-        self.assertNotIn(f"{lat:.5f}", html)
+        self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao G", "lat": -12.5, "lon": -55.7})
+        doencas = {"Rust Zzz": {"nome_pt": "Ferrugem Zzz", "nome_cientifico": "Phakopsora zzz", "germ_temp_min": 15,
+                                "germ_temp_max": 28, "germ_umidade_min": 80, "germ_horas_molhamento": 6},
+                   "Mold Zzz": {"nome_pt": "Mofo Zzz", "nome_cientifico": "Sclerotinia zzz", "germ_temp_min": 10,
+                                "germ_temp_max": 25, "germ_umidade_min": 85, "germ_horas_molhamento": 10}}
+        with mock.patch.object(webapp, "_disease_info_cached", return_value=doencas), \
+                mock.patch.object(models, "get_doenca_culturas", return_value={"Mold Zzz": {"Milho"}}), \
+                mock.patch.object(webapp, "_weather_ponto_cliente", return_value=None), \
+                mock.patch.object(webapp, "_calc_risco_germinacao", return_value="amarelo"), \
+                mock.patch.object(webapp, "_calc_previsao_risco_germinacao",
+                                  return_value=[{"data_fmt": "09/11", "risco": "vermelho"}]):
+            todas = self.client.get("/app/regiao").get_data(as_text=True)
+            soja = self.client.get("/app/regiao?cultura=Soja").get_data(as_text=True)
+        self.assertIn("Favorabilidade climática", todas)
+        self.assertIn('id="filtroCultura"', todas)
+        self.assertIn("Ferrugem Zzz", todas)
+        self.assertIn("Mofo Zzz", todas)
+        self.assertIn("Ferrugem Zzz", soja)
+        self.assertNotIn("Mofo Zzz", soja)  # doenca so' do milho sai no filtro de soja
+        self.assertIn('risco-vermelho">A<', todas)
+        # Basico: sem graficos 7 + 5 dias, e o JSON do site fica fechado
+        self.assertIn("fazem parte dos planos Premium", todas)
+        self.assertEqual(self.client.get("/graficos/dados").status_code, 302)
 
-    def test_regiao_bloqueada_fora_do_plano(self):
-        self._cadastrar("Zzz Teste SemRegiao", plano_id=self.plano_basico)
-        self._liberar("Zzz Teste SemRegiao")
-        self.assertIn("não faz parte do seu plano", self.client.get("/app/regiao").get_data(as_text=True))
+    def test_graficos_premium_7_dias_e_previsao(self):
+        premium = next(p for p in models.get_planos() if p["nome"] == "Premium")
+        self.assertIn("graficos_app", premium["recursos"])
+        models.salvar_plano(None, "Zzz Graficos", "", 199.9, "MONTHLY", 2, 300, ["clima", "graficos_app"], True, 9)
+        plano = next(p for p in models.get_planos() if p["nome"] == "Zzz Graficos")
+        self._cadastrar("Zzz Teste Graf Premium", plano_id=plano["id"])
+        self._liberar("Zzz Teste Graf Premium")
+        self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao P", "lat": -12.5, "lon": -55.7})
+        with mock.patch.object(webapp, "_weather_ponto_cliente", return_value=None):
+            html = self.client.get("/app/regiao").get_data(as_text=True)
+        hoje = webapp._hoje_cuiaba()
+        self.assertIn("Esporos e favorabilidade", html)
+        self.assertIn(f"inicio={(hoje - webapp.timedelta(days=6)).isoformat()}&fim={hoje.isoformat()}", html)
+        self.assertEqual(self.client.get("/graficos/dados?inicio=2026-01-01&fim=2026-01-02").status_code, 200)
 
     def test_master_gerencia_planos_e_cortesia(self):
         models.create_user(models.MASTER_PRINCIPAL, "segredo1")

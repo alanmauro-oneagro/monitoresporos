@@ -257,7 +257,7 @@ class PlanosTest(unittest.TestCase):
         menu = c.get("/mapa").get_data(as_text=True)
         self.assertIn("📱 App", menu)
         self.assertNotIn(">Graficos<", menu)
-        self.assertIn("🌐", c.get("/app").get_data(as_text=True))
+        self.assertIn("🔔", c.get("/app").get_data(as_text=True))
 
         # lavoura nova vira fazenda estimada liberada so' pra ele
         resp = c.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao Zzz", "lat": "-12.5", "lon": "-55.7"})
