@@ -1417,10 +1417,27 @@ def _nome_exibicao(site):
     return site.split(" - ", 1)[1] if " - " in site else site
 
 
+_SEP_RELATORIO = "━" * 20
+
+
+def _cabecalho_relatorio_cliente():
+    """Topo do relatorio (WhatsApp e aba Relatorios do app; formato do Alan,
+    08/11/2026, tudo em negrito): ━━ / *RELATÓRIO DE MONITORAMENTO* /
+    *ONEAGRO - dd/mm/aaaa*."""
+    hoje = weather_forecast._agora_cuiaba().strftime("%d/%m/%Y")
+    return [_SEP_RELATORIO, "*RELATÓRIO DE MONITORAMENTO*", f"*ONEAGRO - {hoje}*"]
+
+
 def _whatsapp_titulo(site):
-    """'OneAgro - Grupo PIVA' -> '*GRUPO PIVA - OneAgro*' -- nome da
-    fazenda em destaque, sem repetir 'OneAgro' duas vezes."""
-    return f"*{_nome_exibicao(site).upper()} - OneAgro*"
+    """Nome da fazenda em maiusculas ('OneAgro - Grupo PIVA' -> 'GRUPO PIVA');
+    fazenda de cliente com grupo economico mantem o grupo como foi digitado
+    ('Grupo Mauro - FAZ PESCOCINHO')."""
+    nome = _nome_exibicao(site).upper()
+    dono = models.dono_da_fazenda_cliente(site)
+    grupo = ((models.get_cadastro_do_usuario(dono) or {}).get("grupo_economico") or "").strip() if dono else ""
+    if grupo and nome.startswith(grupo.upper() + " - "):
+        nome = f"{grupo} - {nome[len(grupo) + 3:]}"
+    return nome
 
 
 def _format_whatsapp_message(
@@ -1529,16 +1546,10 @@ def _format_whatsapp_message(
             linhas.append(f"📝 *Anotação:* {anotacao}")
         return linhas
 
-    cabecalho = [_whatsapp_titulo(site)]
-    subtitulo = " · ".join(
-        parte for parte in (
-            f"Recomendações {safra_label}" if safra_label else "",
-            f"Cultura: {cultura.upper()}" if cultura else "",
-        ) if parte
-    )
-    if subtitulo:
-        cabecalho.append(f"_{subtitulo}_")
-    cabecalho.append("")
+    cabecalho = _cabecalho_relatorio_cliente() + ["", f"*{_whatsapp_titulo(site)}*"]
+    if cultura:
+        cabecalho += ["", f"*Informações relevantes para manejo da(s) cultura(s) de: {cultura.upper()}*"]
+    cabecalho.append(_SEP_RELATORIO)
 
     if not diseases:
         partes = cabecalho + _linhas_clima()
@@ -8101,39 +8112,16 @@ def cliente_relatorio_txt(ponto_id):
     return Response(_texto_relatorio_cliente(ponto), mimetype="text/plain; charset=utf-8", headers=cabecalhos)
 
 
-_SEP_RELATORIO = "━" * 20
-
-
-def _cabecalho_relatorio_cliente():
-    """Cabecalho do relatorio do cliente (formato do Alan, 08/11/2026, tudo
-    em negrito): ━━ / *RELATÓRIO DE MONITORAMENTO* / *ONEAGRO - dd/mm/aaaa*."""
-    hoje = weather_forecast._agora_cuiaba().strftime("%d/%m/%Y")
-    return [_SEP_RELATORIO, "*RELATÓRIO DE MONITORAMENTO*", f"*ONEAGRO - {hoje}*"]
-
-
-def _bloco_relatorio_fazenda(ponto, grupo=""):
-    """Titulo da fazenda + culturas, em negrito, e o resto do relatorio:
-    *Grupo Mauro - FAZ X* / *Informações relevantes ... de: SOJA / MILHO* / ━━ / resto."""
+def _bloco_relatorio_fazenda(ponto):
+    """Relatorio de uma fazenda sem o topo (RELATÓRIO DE MONITORAMENTO/data),
+    pra juntar varias fazendas debaixo de um topo so'."""
     linhas = _texto_relatorio(ponto["site_name"]).split("\n")
-    titulo = linhas[0].strip("*")
-    if titulo.endswith(" - OneAgro"):
-        titulo = titulo[:-len(" - OneAgro")]
-    if grupo and titulo.upper().startswith(grupo.upper() + " - "):
-        titulo = f"{grupo} - {titulo[len(grupo) + 3:]}"
-    bloco, resto = ["", f"*{titulo}*"], linhas[1:]
-    if resto and resto[0].startswith("_") and resto[0].endswith("_"):
-        cultura = re.search(r"Cultura: (.+)$", resto[0].strip("_"))
-        if cultura:
-            bloco += ["", f"*Informações relevantes para manejo da(s) cultura(s) de: {cultura.group(1)}*"]
-        resto = resto[1:]
-    while resto and not resto[0].strip():
-        resto = resto[1:]
-    return bloco + [_SEP_RELATORIO] + resto
+    topo = _cabecalho_relatorio_cliente()
+    return linhas[len(topo):] if linhas[:len(topo)] == topo else linhas
 
 
 def _texto_relatorio_cliente(ponto):
-    grupo = ((models.get_cadastro_do_usuario(ponto["user_id"]) or {}).get("grupo_economico") or "").strip()
-    return "\n".join(_cabecalho_relatorio_cliente() + _bloco_relatorio_fazenda(ponto, grupo))
+    return _texto_relatorio(ponto["site_name"])
 
 
 @app.route("/app/relatorios/todos.txt")
@@ -8142,13 +8130,12 @@ def cliente_relatorios_todos_txt():
     """Todos os relatorios numa mensagem so': um cabecalho e as fazendas em
     seguida (pedido do Alan, 08/11/2026)."""
     user_id = int(current_user.id)
-    grupo = ((models.get_cadastro_do_usuario(user_id) or {}).get("grupo_economico") or "").strip()
     pontos = [p for p in models.get_cliente_pontos(user_id) if models.ponto_liberado(p) and p.get("site_name")]
     linhas = _cabecalho_relatorio_cliente()
     for i, p in enumerate(pontos):
         if i:
             linhas += ["", _SEP_RELATORIO]
-        linhas += _bloco_relatorio_fazenda(p, grupo)
+        linhas += _bloco_relatorio_fazenda(p)
     cabecalhos = {} if request.args.get("ver") else {
         "Content-Disposition": f'attachment; filename="relatorios-{_hoje_cuiaba().isoformat()}.txt"'}
     return Response("\n".join(linhas), mimetype="text/plain; charset=utf-8", headers=cabecalhos)

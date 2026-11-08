@@ -213,7 +213,9 @@ class FazendaAdicionalTest(unittest.TestCase):
         with mock.patch.object(webapp.asaas, "configurado", return_value=False):
             self._nova(c)
         ponto = models.get_cliente_pontos(uid)[0]
-        with mock.patch.object(webapp, "_texto_relatorio", return_value="*Faz Mourão*\nClima ok"):
+        with webapp.app.test_request_context():
+            corpo = "\n".join(webapp._cabecalho_relatorio_cliente() + ["", "*Faz Mourão*", "━" * 20, "Clima ok"])
+        with mock.patch.object(webapp, "_texto_relatorio", return_value=corpo):
             tela = c.get("/app/relatorios").get_data(as_text=True)
             ver = c.get(f"/app/relatorios/{ponto['id']}.txt?ver=1")
             txt = c.get(f"/app/relatorios/{ponto['id']}.txt")
@@ -252,15 +254,22 @@ class FazendaAdicionalTest(unittest.TestCase):
             self._nova(c)
             self._nova(c, nome="Faz Retiro", lat="-12.9")
         pontos = models.get_cliente_pontos(uid)
-        corpo = "*GRUPO CAB - FAZ MOURÃO - OneAgro*\n_Recomendações todas as safras · Cultura: SOJA / MILHO_\n\nClima ok"
+        with webapp.app.test_request_context():
+            corpo = "\n".join(webapp._cabecalho_relatorio_cliente() + ["", "*Grupo Cab - FAZ MOURÃO*", "", "*Informações x*", "━" * 20, "Clima ok"])
+            # cabecalho do WhatsApp automatico = o do app, com o grupo como foi digitado
+            msg = webapp._format_whatsapp_message(pontos[0]["site_name"], [], cultura="soja / milho")
+            topo = webapp._cabecalho_relatorio_cliente()
+            fazenda = webapp._nome_exibicao(pontos[0]["site_name"]).upper()[len("GRUPO CAB - "):]
+        self.assertEqual(msg.split("\n")[:8], topo + [
+            "", f"*Grupo Cab - {fazenda}*", "",
+            "*Informações relevantes para manejo da(s) cultura(s) de: SOJA / MILHO*", "━" * 20])
         with mock.patch.object(webapp, "_texto_relatorio", return_value=corpo):
             um = c.get(f"/app/relatorios/{pontos[0]['id']}.txt?ver=1").get_data(as_text=True)
             todos = c.get("/app/relatorios/todos.txt?ver=1").get_data(as_text=True)
             tela = c.get("/app/relatorios").get_data(as_text=True)
         linhas = um.split("\n")
         self.assertEqual(linhas[:3], ["━" * 20, "*RELATÓRIO DE MONITORAMENTO*", f"*ONEAGRO - {webapp._hoje_cuiaba():%d/%m/%Y}*"])
-        self.assertEqual(linhas[3:9], ["", "*Grupo Cab - FAZ MOURÃO*", "",
-                                       "*Informações relevantes para manejo da(s) cultura(s) de: SOJA / MILHO*", "━" * 20, "Clima ok"])
+        self.assertEqual(linhas[3:6], ["", "*Grupo Cab - FAZ MOURÃO*", ""])
         self.assertEqual(todos.count("*RELATÓRIO DE MONITORAMENTO*"), 1)
         self.assertEqual(todos.count("Clima ok"), 2)
         self.assertIn("Todas as fazendas (uma mensagem só)", tela)
