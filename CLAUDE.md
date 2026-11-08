@@ -235,7 +235,8 @@ MESMO no app (cliente_base) e nas abas do Site (base.html troca o navbar da
 equipe por ele): logo + menu ☰ com as abas do Site que o plano libera e as do
 app (Graficos, Relatorios, Assinatura, Conta) + Sair (`#linkSair`, limpa o
 cache offline). **Aba Relatorios** (`/app/relatorios`, `cliente_relatorios`):
-escolhe UMA fazenda e mostra o texto do relatorio (`_texto_relatorio`, o
+um cartao RECOLHIDO por fazenda ("▶ <nome>", mesmo modelo de Manejos);
+abrir carrega por fetch (`/app/relatorios/<id>.txt?ver=1`) e mostra o texto do relatorio (`_texto_relatorio`, o
 mesmo do WhatsApp -- `_preparar_relatorio` monta os dados pros dois) com
 cabecalho destacado ("📋 *RELATÓRIO ONEAGRO*", nome da fazenda, data/hora;
 `_texto_relatorio_cliente`) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
