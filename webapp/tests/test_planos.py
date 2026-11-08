@@ -602,7 +602,7 @@ class AppClienteCulturasSiteTest(unittest.TestCase):
         self.assertIn("Minha conta", home)
         self.assertIn('<span>Soja</span><span>1.200 ha</span>', home)
         # total em nome do dono da conta, nao da 1a fazenda (pedido do Alan, 08/11/2026)
-        self.assertIn('<span class="fw-semibold">Zzz Cli Site</span>', home)
+        self.assertIn('<span>Área total · Zzz Cli Site</span>', home)
         self.assertNotIn("Fazenda Zzz", home)
         self.assertIn("Cereais", home)
         self.assertIn("</span>Conta</a>", home)
