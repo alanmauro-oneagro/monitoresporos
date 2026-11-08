@@ -90,7 +90,7 @@
         <div class="col-6">
             <div class="rounded p-2 h-100 card-{{ 'perigo' if c.status == 'Perigo' else ('atencao' if c.status == 'Atencao' else 'normal') }}">
                 <div class="fw-bold small">{{ c.doenca }}</div>
-                <div class="fs-5 fw-bold">{{ c.concentracao }}</div>
+                <div class="fs-5 fw-bold">{{ c | valor_esporo }}</div>
                 <div style="font-size: 0.7rem;">{{ {'Perigo': 'Alta concentração', 'Atencao': 'Moderada'}.get(c.status, 'Normal') }} · {{ c.data | data_br }}</div>
             </div>
         </div>

@@ -3504,6 +3504,11 @@ def mapa():
     # via DMC) -- pedido explicito ("aplicar somente se tiver estacao no
     # pais"). Pinos de estacao sairam do Mapa (pedido do usuario, 16/10/2026).
     active_country_codes_mapa = sorted(active_countries | countries.paises_com_estacoes())
+    if not _ve_numero_esporos():
+        # Cliente sem "esporos_numero": nem o numero vai pra pagina (so' o nivel).
+        for site_info in sites_data:
+            for c in site_info.get("cards") or []:
+                c["concentracao"] = None
     return render_template(
         "mapa.html", sites_data=sites_data, no_access=False,
         abrir_no_estado=not current_user.is_admin and len(permitted) == 1,
@@ -6683,6 +6688,32 @@ def _inject_abas_site_cliente():
                 # Sem acesso: a barra de baixo so' tem Assinatura e Conta (pedido do Alan, 08/11/2026).
                 "cliente_bloqueado": not _acesso_cliente()[1]}
     return {"menu_site_cliente": None, "cliente_bloqueado": False}
+
+
+def _ve_numero_esporos():
+    """Cliente so' ve o numero de esporos com o recurso "esporos_numero"
+    (Premium + Estacao); os outros veem Alto/Medio/Baixo (pedido do Alan,
+    08/11/2026). Equipe OneAgro sempre ve o numero."""
+    if not current_user.is_authenticated or not getattr(current_user, "is_cliente", False):
+        return True
+    plano, liberada, _ = _acesso_cliente()
+    return bool(liberada and plano and "esporos_numero" in plano.get("recursos", []))
+
+
+NIVEL_ESPORO = {"Perigo": "Alto", "Atencao": "Médio"}
+
+
+@app.context_processor
+def _inject_esporos_numero():
+    return {"esporos_numero": _ve_numero_esporos() if request else True}
+
+
+@app.template_filter("valor_esporo")
+def _valor_esporo(card):
+    """Numero de esporos (ou "-") pra quem ve o numero; senao Alto/Medio/Baixo."""
+    if not _ve_numero_esporos():
+        return NIVEL_ESPORO.get(card.get("status"), "Baixo")
+    return card.get("concentracao") if card.get("concentracao") is not None else "-"
 
 
 def _cpf_cnpj_valido(numero):
