@@ -761,7 +761,7 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe
     # Culturas e area de cada local de plantio informado no cadastro (pedido do Alan, 08/11/2026).
-    for coluna in ("culturas TEXT", "area_ha REAL"):
+    for coluna in ("culturas TEXT", "area_ha REAL", "cidade TEXT", "uf TEXT"):
         try:
             conn.execute(f"ALTER TABLE cliente_pontos ADD COLUMN {coluna}")
         except sqlite3.OperationalError:
@@ -3981,10 +3981,11 @@ def criar_cliente_ponto(user_id, nome, lat, lon, cultura=""):
     return cur.lastrowid
 
 
-def set_culturas_do_ponto(ponto_id, culturas, area_ha):
-    """Culturas ("Soja (500 ha), Milho (300 ha)") e area do local de plantio."""
+def set_culturas_do_ponto(ponto_id, culturas, area_ha, cidade=None, uf=None):
+    """Culturas ("Soja (500 ha), Milho (300 ha)"), area, cidade e UF do local de plantio."""
     conn = get_db()
-    conn.execute("UPDATE cliente_pontos SET culturas = ?, area_ha = ? WHERE id = ?", (culturas, area_ha, ponto_id))
+    conn.execute("UPDATE cliente_pontos SET culturas = ?, area_ha = ?, cidade = COALESCE(?, cidade), uf = COALESCE(?, uf)"
+                 " WHERE id = ?", (culturas, area_ha, cidade, uf, ponto_id))
     conn.commit()
     conn.close()
 

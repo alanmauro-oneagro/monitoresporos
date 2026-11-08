@@ -108,7 +108,7 @@
             {% for a in c.areas %}
             <div class="border rounded px-2 py-1 mb-1 bg-white">
                 <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="fw-semibold">{{ a.nome }}</span>
+                    <span class="fw-semibold">{{ a.nome }}</span>{% if a.cidade %}<span class="text-muted">{{ a.cidade }}/{{ a.uf }}</span>{% endif %}
                     <span class="text-muted">{{ ('%.4f' | format(a.lat)) | replace('.', ',') }}; {{ ('%.4f' | format(a.lon)) | replace('.', ',') }}</span>
                     {% if a.site_name %}<a class="ms-auto" href="{{ url_for('mapa_interpolado') }}" title="Fazenda estimada no Mapas de Estudo (pino verde-claro)">🟢 no Mapas de Estudo</a>
                     {% else %}<span class="ms-auto text-muted">sem fazenda estimada</span>{% endif %}

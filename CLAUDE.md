@@ -117,7 +117,15 @@ cultura aparece no cadastro e como entra no preco
 Adicionar outro local", ate' 10): nome, culturas/areas do local
 (`culturas__<i>`, `area_cultura__<i>__<cultura>`, `cultura_outra__<i>`,
 `area_outra__<i>`) e ponto no mapa Leaflet/coordenadas (`local_lat__<i>`,
-`local_lon__<i>`; `local_idx` lista os locais). Cada local vira area
+`local_lon__<i>`; `local_idx` lista os locais). **Cada local = uma fazenda
+com Nome, Cidade e Estado proprios** (`local_nome__<i>`, `local_cidade__<i>`,
+`local_uf__<i>`; pedido do Alan, 08/11/2026 -- o bloco "Fazenda ou empresa
+/ Cidade / Estado" do topo saiu; a conta guarda os da 1a fazenda;
+`cliente_pontos.cidade/uf`). Mapa de cada fazenda: divisas dos estados e
+contorno do municipio digitado, buscados no navegador na API do IBGE
+(`servicodados.ibge.gov.br`: malha UF, lista de municipios da UF que
+vira sugestao da Cidade -- corrige pra grafia oficial -- e malha do
+municipio, que enquadra o mapa enquanto nao ha' ponto marcado). Cada local vira area
 monitorada (`cliente_pontos.culturas`/`area_ha`) + fazenda estimada
 (`_criar_locais_e_extras`); o cadastro guarda o total (culturas somadas
 por nome, area, area do preco = soma da regra de cada local). Form sem

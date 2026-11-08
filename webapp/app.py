@@ -6973,8 +6973,12 @@ def _locais_do_form(form, culturas, grupos):
         lat, lon = _coordenada(form.get(f"local_lat{suf}")), _coordenada(form.get(f"local_lon{suf}"))
         if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
             lat = lon = None
-        nome = (form.get(f"local_nome{suf}") or "").strip()[:60] or (empresa if n == 1 and empresa else f"Local {n}")
-        locais.append({"nome": nome, "lat": lat, "lon": lon, "com_mapa": bool(idxs), "areas_grupo": areas_grupo})
+        nome = (form.get(f"local_nome{suf}") or "").strip()[:60] or (empresa if n == 1 and empresa else "")
+        # Cidade/UF por fazenda (pedido do Alan, 08/11/2026); form antigo usa os do topo.
+        cidade = (form.get(f"local_cidade{suf}") if suf else form.get("cidade", "")) or ""
+        uf = (form.get(f"local_uf{suf}") if suf else form.get("uf", "")) or ""
+        locais.append({"nome": nome, "cidade": cidade.strip()[:80], "uf": uf, "lat": lat, "lon": lon,
+                       "com_mapa": bool(idxs), "areas_grupo": areas_grupo})
     return locais
 
 
@@ -7020,7 +7024,7 @@ def _criar_locais_e_extras(user_id, username, locais, extras, plano):
             ponto_id = models.criar_cliente_ponto(user_id, loc["nome"], loc["lat"], loc["lon"], "")
             models.set_culturas_do_ponto(
                 ponto_id, ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a, _g in loc["areas_grupo"]),
-                sum(a for _c, a, _g in loc["areas_grupo"]))
+                sum(a for _c, a, _g in loc["areas_grupo"]), loc["cidade"], loc["uf"])
             site = _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, loc["nome"], loc["lat"], loc["lon"], plano,
                                                       username=username)
             _preencher_safras(site, [(c, a) for c, a, _g in loc["areas_grupo"]])
@@ -7096,10 +7100,10 @@ def solicitar_acesso():
             # Mesma pessoa tentando um 2o cadastro (pedido do Alan, 01/11/2026)
             erro = (f"Este {'celular' if ja_cadastrado == 'telefone' else 'e-mail'} já está cadastrado na OneAgro. "
                     "Entre com a sua conta na tela de login (se não lembrar o usuário ou a senha, fale com a OneAgro).")
-        elif not form.get("empresa", "").strip():
-            erro = "Informe a fazenda ou empresa."
-        elif not form.get("cidade", "").strip() or uf not in UFS_BR:
-            erro = "Informe a cidade e o estado (UF)."
+        elif any(not loc["nome"] for loc in locais):
+            erro = "Informe o nome de cada fazenda."
+        elif (sem_cidade := [loc["nome"] for loc in locais if not loc["cidade"] or loc["uf"] not in UFS_BR]):
+            erro = f"Informe a cidade e o estado de: {', '.join(sem_cidade)}."
         elif not grupos:
             erro = "Escolha o tipo de cultura: Cereais, HF e/ou Outros."
         elif (sem_cultura := [loc["nome"] for loc in locais if not loc["areas_grupo"]]):
@@ -7133,7 +7137,8 @@ def solicitar_acesso():
             registro = {
                 "username": username, "nome_completo": nome_completo, "perfil": ",".join(perfis), "email": email,
                 "telefone": telefone, "tipo": "cliente" if modalidade == "plano" else "usuario",
-                "empresa": form.get("empresa", "").strip(), "cidade": form.get("cidade", "").strip(), "uf": uf,
+                # a fazenda/cidade/UF da conta = as da 1a fazenda informada
+                "empresa": locais[0]["nome"], "cidade": locais[0]["cidade"], "uf": locais[0]["uf"],
                 "culturas": ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in areas), "area_ha": area_ha,
                 "grupo_cultura": ",".join(grupos),
                 "area_preco_ha": sum(_area_preco_grupos(grupos, loc["areas_grupo"]) for loc in locais),
