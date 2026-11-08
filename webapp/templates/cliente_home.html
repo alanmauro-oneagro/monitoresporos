@@ -44,6 +44,7 @@
 <h6 class="mt-4 mb-1">Quem mais recebe o relatório</h6>
 <p class="small text-muted mb-2">Até {{ max_extras }} pessoas recebem o relatório no WhatsApp, das áreas que você marcar.</p>
 <form method="post" action="{{ url_for('cliente_destinatarios') }}" class="mb-3">
+    <input type="hidden" name="voltar" value="{{ voltar }}">
     {% for k in range(1, max_extras + 1) %}
     {% set e = extras[k - 1] if extras | length >= k else none %}
     <div class="card shadow-sm mb-2"><div class="card-body p-2">

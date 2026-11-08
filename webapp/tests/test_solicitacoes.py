@@ -363,6 +363,17 @@ class CadastroTest(unittest.TestCase):
         c.post("/app/destinatarios", data={"extra_nome__1": "Zzz Novo", "codigo_pais__extra1": "55",
                                            "numero_telefone__extra1": "65999990249", "extra_pontos__1": [str(pontos[0]["id"])]})
         self.assertEqual([s["nome"] for s in models.get_owner_subordinados(uid)], ["Zzz Novo"])
+        # depois de salvar volta pra tela anterior (pedido do Alan, 08/11/2026); link externo nao
+        home = c.get("/app", headers={"Referer": "http://localhost/app/regiao"}).get_data(as_text=True)
+        self.assertIn('name="voltar" value="/app/regiao"', home)
+        dados_dest = {"extra_nome__1": "Zzz Novo", "codigo_pais__extra1": "55", "numero_telefone__extra1": "65999990249",
+                      "extra_pontos__1": [str(pontos[0]["id"])]}
+        r = c.post("/app/destinatarios", data=dict(dados_dest, voltar="/app/regiao"))
+        self.assertTrue(r.headers["Location"].endswith("/app/regiao"))
+        r = c.post("/app/destinatarios", data=dict(dados_dest, voltar="https://malicioso.example/x"))
+        self.assertTrue(r.headers["Location"].endswith("/app"))
+        r = c.post("/app/destinatarios", data=dict(dados_dest, voltar="//malicioso.example/x"))
+        self.assertTrue(r.headers["Location"].endswith("/app"))
         self.assertEqual(recebe(sede), ["Zzz Cad Locais", "Zzz Novo"])
         self.assertEqual(recebe(retiro), ["Zzz Cad Locais"])
         # local sem coordenada: nao segue
