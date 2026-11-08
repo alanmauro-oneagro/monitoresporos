@@ -7411,6 +7411,16 @@ def cliente_conta():
     return redirect(url_for("cliente_home"))
 
 
+@app.route("/app/conta/conferir-senha", methods=["POST"])
+@login_required
+def cliente_conferir_senha():
+    """Confere a senha atual enquanto o cliente digita (aba Conta)."""
+    if not current_user.is_cliente:
+        abort(403)
+    row = models.get_user_by_id(int(current_user.id))
+    return jsonify(ok=check_password_hash(row["password_hash"], request.form.get("senha", "")))
+
+
 def _excluir_cliente(user_id):
     assinatura = models.get_assinatura(user_id)
     if assinatura and assinatura.get("asaas_subscription_id") and assinatura["status"] != "cancelada":
@@ -7457,7 +7467,9 @@ def _caminho_interno(url):
 @cliente_required
 def cliente_destinatarios():
     """Cliente troca as (ate' 2) pessoas que tambem recebem o relatorio e
-    de quais areas (pedido do Alan, 08/11/2026). Substitui as anteriores."""
+    de quais areas (pedido do Alan, 08/11/2026). Substitui as anteriores.
+    A aba Conta salva sozinha (`X-Autosave`, responde JSON)."""
+    autosave = request.headers.get("X-Autosave") == "1"
     user_id = int(current_user.id)
     pontos = models.get_cliente_pontos(user_id)
     por_id = {str(p["id"]): p for p in pontos}
@@ -7470,7 +7482,10 @@ def cliente_destinatarios():
             continue
         telefone = re.sub(r"\D", "", form.get(f"codigo_pais__extra{k}", "55")) + numero
         if not nome or not _is_valid_phone(telefone):
-            flash(f"Pessoa {k}: informe o nome e um celular válido (DDD + número).", "error")
+            erro = f"Pessoa {k}: informe o nome e um celular válido (DDD + número)."
+            if autosave:
+                return jsonify(ok=False, erro=erro)
+            flash(erro, "error")
             return redirect(url_for("cliente_home"))
         sites = [por_id[i]["site_name"] for i in form.getlist(f"extra_pontos__{k}") if i in por_id and por_id[i].get("site_name")]
         novos.append((nome, telefone, sites))
@@ -7479,6 +7494,8 @@ def cliente_destinatarios():
     for nome, telefone, sites in novos:
         sub_id = models.create_subordinado(user_id, nome, telefone)
         models.set_subordinado_report_sites(sub_id, list(models.site_ids_por_nome(sites).values()))
+    if autosave:
+        return jsonify(ok=True)
     flash("Pronto! Quem recebe o relatório foi atualizado.", "success")
     # Volta pra tela de onde o cliente veio (pedido do Alan, 08/11/2026).
     return redirect(_caminho_interno(form.get("voltar")) or url_for("cliente_home"))
