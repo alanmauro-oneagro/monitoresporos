@@ -210,3 +210,31 @@ class LavourasAntigasTest(unittest.TestCase):
                 self.assertIn(site, models.get_user_permitted_site_names(uid))
                 self.assertIn("5565999990231", [r["telefone"] for r in models.get_site_whatsapp_recipients(site)])
             self.assertEqual(webapp._criar_fazendas_das_lavouras_antigas(), 0)  # 2a vez: nada a fazer
+
+
+class SafrasPeloCadastroTest(unittest.TestCase):
+    """Safras da fazenda do cliente = 3 culturas de maior area (pedido do Alan, 08/11/2026)."""
+
+    def test_top3_e_nao_sobrescreve(self):
+        site = models.create_virtual_farm("Zzz Safras Top3", -12.8, -55.6, 30)
+        with webapp.app.app_context():
+            usadas = webapp._preencher_safras(site, [("Milho", 300), ("Soja", 900), ("Tomate", 5000), ("Algodao", 200),
+                                                     ("Feijao", 100), ("Milho", 50)])
+        self.assertEqual(usadas, ["Soja", "Milho", "Algodao"])  # Tomate fora da lista do site; Milho somado (350)
+        fc = models.get_all_farm_culturas()
+        self.assertEqual([fc[(site, sf)]["cultura"] for sf, _ in models.SAFRAS], ["Soja", "Milho", "Algodao"])
+        models.set_farm_cultura(site, "safra1", "Feijao")  # ajuste manual em Manejos
+        with webapp.app.app_context():
+            self.assertEqual(webapp._preencher_safras(site, [("Milho", 999)]), [])
+        self.assertEqual(models.get_all_farm_culturas()[(site, "safra1")]["cultura"], "Feijao")
+
+    def test_backfill_cliente_antigo_pelo_cadastro(self):
+        uid = models.criar_cliente("Zzz Cli Safra Antigo", "segredo1", "", "5565999990261", "", None)
+        models.registrar_cadastro({"username": "Zzz Cli Safra Antigo", "tipo": "cliente", "user_id": uid,
+                                   "culturas": "Milho (400 ha), Soja (600 ha)", "area_ha": 1000})
+        models.criar_cliente_ponto(uid, "Area Safra Antiga", -12.9, -55.5)
+        with webapp.app.app_context():
+            webapp._criar_fazendas_das_lavouras_antigas()
+        site = models.get_cliente_pontos(uid)[0]["site_name"]
+        fc = models.get_all_farm_culturas()
+        self.assertEqual([fc.get((site, sf), {}).get("cultura") for sf, _ in models.SAFRAS], ["Soja", "Milho", None])

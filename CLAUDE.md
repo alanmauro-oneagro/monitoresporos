@@ -130,7 +130,16 @@ do plano do cliente (`_formatos_whatsapp_clientes`). Integracao: Gerenciar
 Clientes (culturas de cada area + "Tambem recebem o relatorio"), app aba
 Culturas (culturas por area + form "Quem mais recebe", rota
 `cliente_destinatarios`, substitui as pessoas) e Excel aba Clientes
-(colunas "Locais de plantio" e "Também recebem o relatório"). A pessoa escolhe **Assinar plano** ou **Ter acesso
+(colunas "Locais de plantio" e "Também recebem o relatório"). **Safras pelo cadastro** (pedido do Alan, 08/11/2026): a
+fazenda de cada area do cliente ja' nasce com Safra / 2a / 3a Safra =
+as 3 culturas de MAIOR area daquele local (`app._preencher_safras`;
+`farm_culturas`, o mesmo que Manejos edita e Recomendacoes filtra). So'
+culturas da lista do site (outra cultura digitada fica de fora); nunca
+sobrescreve fazenda que ja' tem cultura em alguma safra. Fonte das areas
+(`_pares_cultura_area`): culturas do local > cultura do ponto > culturas do
+cadastro. Vale no cadastro com locais, no mapa da assinatura, em "+ Nova
+area" do app e no backfill da subida (`_criar_fazendas_das_lavouras_antigas`,
+cadastro so' quando o cliente tem 1 area). A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
 (tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao

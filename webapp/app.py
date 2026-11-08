@@ -7023,6 +7023,7 @@ def _criar_locais_e_extras(user_id, username, locais, extras, plano):
                 sum(a for _c, a, _g in loc["areas_grupo"]))
             site = _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, loc["nome"], loc["lat"], loc["lon"], plano,
                                                       username=username)
+            _preencher_safras(site, [(c, a) for c, a, _g in loc["areas_grupo"]])
         sites.append(site)
     ids = models.site_ids_por_nome(sites)
     for ex in extras:
@@ -7270,7 +7271,8 @@ def cliente_assinar():
             return redirect(url_for("cliente_assinatura", plano=plano["id"]))
         nome = (request.form.get("nome_area") or "").strip()[:60] or "Área monitorada"
         ponto_id = models.criar_cliente_ponto(int(current_user.id), nome, lat, lon, "")
-        _criar_fazenda_estimada_da_lavoura(int(current_user.id), ponto_id, nome, lat, lon, plano)
+        site = _criar_fazenda_estimada_da_lavoura(int(current_user.id), ponto_id, nome, lat, lon, plano)
+        _preencher_safras(site, _pares_cultura_area({}, models.get_cadastro_do_usuario(int(current_user.id))))
     if plano["valor"] <= 0:
         # Plano gratis: libera na hora, sem cobranca nem CPF/CNPJ.
         # Free vale 7 dias a partir do cadastro (pedido do Alan, 08/11/2026).
@@ -7434,7 +7436,9 @@ def cliente_ponto_novo():
             ponto_id = models.criar_cliente_ponto(user_id, nome, lat, lon, cultura if cultura in _culturas_cliente() else "")
             # Toda lavoura vira fazenda estimada (interpolacao da regiao), sem
             # configuracao da OneAgro (pedido do Alan, 08/11/2026).
-            _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano)
+            site = _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano)
+            _preencher_safras(site, _pares_cultura_area(models.get_cliente_ponto(user_id, ponto_id) or {},
+                                                        models.get_cadastro_do_usuario(user_id)))
             return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
     return render_template("cliente_ponto_novo.html", culturas=_culturas_cliente())
 
@@ -7463,6 +7467,43 @@ def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano,
     return None
 
 
+def _area_de_texto(texto):
+    """"1.200 ha" / "50,5 ha" -> 1200.0 / 50.5 (0 sem numero)."""
+    return _area_txt((texto or "").replace("ha", ""))
+
+
+def _pares_cultura_area(ponto, cadastro=None):
+    """[(cultura, area)] de uma area monitorada: culturas do local (cadastro
+    com varios locais); senao a cultura unica do ponto; senao as culturas
+    do cadastro do cliente."""
+    if ponto.get("culturas"):
+        return [(c, _area_de_texto(a)) for c, a in _culturas_com_area(ponto["culturas"])]
+    if ponto.get("cultura"):
+        return [(ponto["cultura"], 1.0)]
+    return [(c, _area_de_texto(a)) for c, a in _culturas_com_area((cadastro or {}).get("culturas"))]
+
+
+def _preencher_safras(site_name, pares):
+    """Safra / 2a Safra / 3a Safra da fazenda com as 3 culturas de maior area
+    (pedido do Alan, 08/11/2026) -- e' o que a aba Manejos edita e o que a
+    Recomendacoes filtra. So' culturas da lista do site; nunca sobrescreve
+    fazenda que ja' tem cultura em alguma safra. Devolve as culturas usadas."""
+    if not site_name:
+        return []
+    ja = models.get_all_farm_culturas()
+    if any((site_name, s) in ja for s, _ in models.SAFRAS):
+        return []
+    ativas = set(models.get_culturas_ativas())
+    total = {}
+    for cultura, area in pares:
+        if cultura in ativas:
+            total[cultura] = total.get(cultura, 0) + (area or 0)
+    top = sorted(total, key=lambda c: -total[c])[:len(models.SAFRAS)]
+    for (safra, _rotulo), cultura in zip(models.SAFRAS, top):
+        models.set_farm_cultura(site_name, safra, cultura)
+    return top
+
+
 def _criar_fazendas_das_lavouras_antigas():
     """Lavouras de clientes de antes da regra "toda lavoura vira fazenda"
     (pedido do Alan, 08/11/2026): cria a fazenda estimada de cada uma que
@@ -7475,14 +7516,19 @@ def _criar_fazendas_das_lavouras_antigas():
             # raio do plano que vale hoje; sem acesso, o do plano escolhido; sem nenhum, 50 km
             plano = _acesso_do_cliente(cliente["id"])[0] or (
                 models.get_plano(cliente["plano_id"]) if cliente.get("plano_id") else None)
-            for ponto in models.get_cliente_pontos(cliente["id"]):
+            pontos = models.get_cliente_pontos(cliente["id"])
+            cadastro = models.get_cadastro_do_usuario(cliente["id"]) if len(pontos) == 1 else None
+            for ponto in pontos:
                 if ponto.get("site_name") and models.get_virtual_farm(ponto["site_name"]):
                     models.liberar_fazenda_para_usuario(cliente["id"], ponto["site_name"])
                     models.receber_relatorio_da_fazenda(cliente["id"], ponto["site_name"])
+                    _preencher_safras(ponto["site_name"], _pares_cultura_area(ponto, cadastro))
                     continue
-                if _criar_fazenda_estimada_da_lavoura(cliente["id"], ponto["id"], ponto["nome"], ponto["lat"], ponto["lon"],
-                                                      plano, username=cliente["username"]):
+                site = _criar_fazenda_estimada_da_lavoura(cliente["id"], ponto["id"], ponto["nome"], ponto["lat"],
+                                                          ponto["lon"], plano, username=cliente["username"])
+                if site:
                     criadas += 1
+                    _preencher_safras(site, _pares_cultura_area(ponto, cadastro))
         except Exception as e:  # um cliente com problema nao trava a subida do site
             print(f"[lavouras antigas] cliente {cliente.get('id')}: {e}")
     if criadas:
