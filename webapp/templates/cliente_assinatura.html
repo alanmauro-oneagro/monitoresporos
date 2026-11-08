@@ -1,5 +1,9 @@
 {% extends "cliente_base.html" %}
 {% block title %}Assinatura - OneAgro App{% endblock %}
+{% block extra_head %}
+{% if pedir_local %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>#mapaArea { height: 45vh; min-height: 260px; border-radius: 0.5rem; }</style>{% endif %}
+{% endblock %}
 {% block content %}
 <h1 class="titulo">Assinatura</h1>
 {% set rotulos = {'pendente': 'Aguardando pagamento', 'ativa': 'Ativa', 'atrasada': 'Pagamento atrasado', 'cancelada': 'Cancelada'} %}
@@ -27,14 +31,19 @@
 
 {% if pode_assinar and planos %}
 <form method="post" action="{{ url_for('cliente_assinar') }}" class="mb-3" id="form-plano">
+    {% if so_plano_escolhido %}
+    <div class="d-flex align-items-baseline justify-content-between"><h6>Plano escolhido</h6>
+        <a class="small" href="{{ url_for('cliente_assinatura') }}">Ver todos os planos</a></div>
+    {% else %}
     <h6>{{ 'Trocar de plano' if liberada else ('Assinar novamente' if assinatura and assinatura.status == 'cancelada' else 'Escolha o seu plano') }}</h6>
+    {% endif %}
     {% for p in planos %}
     {% set disponivel = p.ativo and not p.sob_consulta %}
     <label class="card shadow-sm mb-2 plano-opcao plano-card{% if not disponivel %} opacity-50{% endif %}" for="plano_{{ p.id }}" style="cursor: {{ 'pointer' if disponivel else 'default' }};">
         <div class="card-body">
             <div class="d-flex align-items-center gap-2">
                 <input class="form-check-input mt-0" type="radio" name="plano_id" id="plano_{{ p.id }}" value="{{ p.id }}"
-                       data-gratis="{{ 1 if p.valor <= 0 else 0 }}" {% if not disponivel %}disabled{% elif (plano and plano.id == p.id) or plano_sel == p.id|string %}checked{% endif %} required>
+                       data-gratis="{{ 1 if p.valor <= 0 else 0 }}" {% if not disponivel %}disabled{% elif (plano and plano.id == p.id) or plano_sel == p.id|string or so_plano_escolhido %}checked{% endif %} required>
                 <span class="plano-nome">{{ p.nome }}</span>
             </div>
             {% if p.ativo and p.sob_consulta %}<div class="preco-box"><div class="preco-sub">Sob consulta</div></div>
@@ -50,6 +59,22 @@
         </div>
     </label>
     {% endfor %}
+    {% if pedir_local %}
+    {# Onde sera' a area monitorada (pedido do Alan, 08/11/2026): vira a 1a lavoura do cliente. #}
+    <div class="card shadow-sm mb-2" id="bloco-local"><div class="card-body">
+        <h6 class="mb-1">Onde será a área monitorada?</h6>
+        <p class="small text-muted mb-2">Toque no mapa, use a sua localização ou digite as coordenadas.</p>
+        <input type="hidden" name="pedir_local" value="1">
+        <input class="form-control form-control-sm mb-2" name="nome_area" value="{{ nome_area }}" maxlength="60" placeholder="Nome da área (ex.: Fazenda Sede)" aria-label="Nome da área">
+        <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label small text-muted mb-0" for="lat">Latitude</label><input class="form-control form-control-sm" name="lat" id="lat" inputmode="decimal" placeholder="Latitude (ex.: -15,6010)" aria-label="Latitude" required></div>
+            <div class="col-6"><label class="form-label small text-muted mb-0" for="lon">Longitude</label><input class="form-control form-control-sm" name="lon" id="lon" inputmode="decimal" placeholder="Longitude (ex.: -56,0970)" aria-label="Longitude" required></div>
+        </div>
+        <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" id="btnMinhaLocalizacao">📍 Usar minha localização</button>
+        <div id="mapaArea"></div>
+        <div class="small text-muted mt-1" id="ajudaMapa">Nenhum local marcado ainda.</div>
+    </div></div>
+    {% endif %}
     <div id="bloco-cpf" class="d-none mt-2">
         {% if not (assinatura and assinatura.cpf_cnpj) %}
         <label class="form-label small mb-1" for="cpf_cnpj">CPF ou CNPJ (para a cobrança)</label>
@@ -75,6 +100,44 @@
 })();
 </script>
 {% endif %}
+{% endif %}
+
+{% if pedir_local and pode_assinar and planos and not no_app_loja %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+    if (!window.L) return;
+    var latC = document.getElementById('lat'), lonC = document.getElementById('lon'), ajuda = document.getElementById('ajudaMapa');
+    var mapa = L.map('mapaArea').setView([-14.5, -54.5], 4);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri' }).addTo(mapa);
+    var marcador = null;
+    function num(v) { var n = parseFloat((v || '').trim().replace(',', '.')); return isNaN(n) ? null : n; }
+    function mostrar(lat, lon, centralizar) {
+        if (marcador) { marcador.setLatLng([lat, lon]); }
+        else { marcador = L.marker([lat, lon], { draggable: true }).addTo(mapa); marcador.on('dragend', function () { var p = marcador.getLatLng(); marcar(p.lat, p.lng, false); }); }
+        if (centralizar) mapa.setView([lat, lon], Math.max(mapa.getZoom(), 13));
+        ajuda.textContent = 'Local marcado: ' + lat.toFixed(5).replace('.', ',') + '; ' + lon.toFixed(5).replace('.', ',');
+    }
+    function marcar(lat, lon, centralizar) {
+        latC.value = lat.toFixed(6).replace('.', ',');
+        lonC.value = lon.toFixed(6).replace('.', ',');
+        mostrar(lat, lon, centralizar);
+    }
+    mapa.on('click', function (e) { marcar(e.latlng.lat, e.latlng.lng, false); });
+    // coordenadas digitadas movem o marcador
+    function digitadas() {
+        var lat = num(latC.value), lon = num(lonC.value);
+        if (lat !== null && lon !== null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) mostrar(lat, lon, true);
+    }
+    latC.addEventListener('change', digitadas); lonC.addEventListener('change', digitadas);
+    document.getElementById('btnMinhaLocalizacao').addEventListener('click', function () {
+        if (!navigator.geolocation) { alert('Este aparelho não informa a localização. Marque no mapa.'); return; }
+        navigator.geolocation.getCurrentPosition(function (pos) { marcar(pos.coords.latitude, pos.coords.longitude, true); },
+            function () { alert('Não foi possível obter a localização. Marque no mapa ou digite as coordenadas.'); },
+            { enableHighAccuracy: true, timeout: 15000 });
+    });
+})();
+</script>
 {% endif %}
 
 {% if pagamentos %}

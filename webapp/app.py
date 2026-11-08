@@ -7058,17 +7058,32 @@ def cliente_assinatura():
     assinatura, plano, liberada = _cliente_contexto()
     area = _area_preco_do_cliente(int(current_user.id))
     cot = cotacao.dolar()
+    planos = [_plano_para_area(p, area, cot) for p in models.get_planos()]
+    # Vindo do cadastro com o plano escolhido: so' esse plano (pedido do Alan, 08/11/2026).
+    plano_sel = request.args.get("plano", "")
+    escolhido = [p for p in planos if str(p["id"]) == plano_sel and p["ativo"] and not p.get("sob_consulta")]
+    cad = models.get_cadastro_do_usuario(int(current_user.id)) or {}
     return render_template(
         "cliente_assinatura.html", assinatura=assinatura, plano=plano, liberada=liberada,
         acesso_ate=models.acesso_ate(assinatura), pagamentos=models.get_pagamentos(int(current_user.id)),
         # Todos os planos aparecem; os fora de venda (ou ainda sem preco, como
         # os pagos recem-criados) ficam visiveis como "Em breve", sem escolha.
         # Plano com preco pela area ja' vem com o preco da area do cliente.
-        planos=[_plano_para_area(p, area, cot) for p in models.get_planos()], pode_assinar=_pode_assinar(assinatura),
-        plano_sel=request.args.get("plano", ""),
+        planos=escolhido or planos, so_plano_escolhido=bool(escolhido), pode_assinar=_pode_assinar(assinatura),
+        plano_sel=plano_sel,
+        # Sem nenhuma lavoura ainda: marca no mapa onde sera' a area monitorada.
+        pedir_local=not models.get_cliente_pontos(int(current_user.id)), nome_area=cad.get("empresa") or "",
         area_total=(models.get_cadastro_do_usuario(int(current_user.id)) or {}).get("area_ha"),
         recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO,
     )
+
+
+def _coordenada(texto):
+    """"-15,601" / "-15.601" -> -15.601; vazio ou invalido -> None."""
+    try:
+        return float((texto or "").strip().replace(",", "."))
+    except ValueError:
+        return None
 
 
 def _pode_assinar(assinatura):
@@ -7092,6 +7107,16 @@ def cliente_assinar():
     if plano.get("sob_consulta"):
         flash(f"O preço do plano {plano['nome']} depende da sua área plantada -- a OneAgro vai entrar em contato.", "error")
         return redirect(url_for("cliente_assinatura"))
+    if request.form.get("pedir_local") and not models.get_cliente_pontos(int(current_user.id)):
+        # Area monitorada marcada no mapa da assinatura (pedido do Alan, 08/11/2026) vira a 1a lavoura.
+        lat, lon = _coordenada(request.form.get("lat")), _coordenada(request.form.get("lon"))
+        if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            flash("Marque no mapa (ou digite as coordenadas) onde será a área monitorada.", "error")
+            return redirect(url_for("cliente_assinatura", plano=plano["id"]))
+        nome = (request.form.get("nome_area") or "").strip()[:60] or "Área monitorada"
+        ponto_id = models.criar_cliente_ponto(int(current_user.id), nome, lat, lon, "")
+        if "fazenda_estimada" in plano["recursos"]:
+            _criar_fazenda_estimada_da_lavoura(int(current_user.id), ponto_id, nome, lat, lon, plano)
     if plano["valor"] <= 0:
         # Plano gratis: libera na hora, sem cobranca nem CPF/CNPJ.
         models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"], status="ativa", cortesia_ate=models.SEM_PRAZO)

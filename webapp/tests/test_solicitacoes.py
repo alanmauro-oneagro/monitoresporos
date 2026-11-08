@@ -240,6 +240,42 @@ class CadastroTest(unittest.TestCase):
         html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("(65)99999-0099", html)
 
+    def test_aceite_libera_botao_e_assinatura_so_com_o_plano_e_mapa(self):
+        """Criar conta so' com os termos aceitos; tela do CPF so' com o plano
+        escolhido e o mapa da area monitorada (pedido do Alan, 08/11/2026)."""
+        html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
+        self.assertIn('id="botao-criar" disabled>Criar conta</button>', html)
+        planos = [p for p in models.get_planos(apenas_ativos=True) if p["valor"] > 0 and not p["preco_por_area"]]
+        if not planos:
+            pid = models.salvar_plano(None, "Zzz Plano Mapa", "", 120, "MONTHLY", 1, 30, ["clima", "fazenda_estimada"], True, 9)
+        else:
+            pid = planos[0]["id"]
+        plano = models.get_plano(pid)
+        c = webapp.app.test_client()
+        resp = c.post("/solicitar-acesso", data=_form(username="Zzz Cad Mapa", numero_telefone="65999990101",
+                                                      modalidade="plano", plano_id=str(pid)))
+        tela = c.get(resp.headers["Location"]).get_data(as_text=True)
+        self.assertIn("Plano escolhido", tela)
+        self.assertEqual(tela.count('type="radio" name="plano_id"'), 1)  # so' o plano escolhido
+        self.assertIn(f'<span class="plano-nome">{plano["nome"]}</span>', tela)
+        self.assertIn("Onde será a área monitorada?", tela)
+        self.assertIn('id="mapaArea"', tela)
+        self.assertIn('value="Fazenda Zzz"', tela)  # nome da area = fazenda do cadastro
+        self.assertIn("Ver todos os planos", tela)
+        self.assertGreater(c.get("/app/assinatura").get_data(as_text=True).count('type="radio" name="plano_id"'), 1)
+        # sem local: nao segue
+        resp = c.post("/app/assinatura/assinar", data={"plano_id": str(pid), "cpf_cnpj": CPF_VALIDO, "pedir_local": "1"},
+                      follow_redirects=True)
+        self.assertIn("Marque no mapa", resp.get_data(as_text=True))
+        user = models.get_user_by_username("Zzz Cad Mapa")
+        self.assertEqual(models.get_cliente_pontos(user["id"]), [])
+        # coordenadas digitadas (com virgula) viram a 1a lavoura
+        c.post("/app/assinatura/assinar", data={"plano_id": str(pid), "cpf_cnpj": CPF_VALIDO, "pedir_local": "1",
+                                                "nome_area": "Sede Zzz", "lat": "-15,6010", "lon": "-56.0970"})
+        pontos = models.get_cliente_pontos(user["id"])
+        self.assertEqual([(p["nome"], round(p["lat"], 4), round(p["lon"], 4)) for p in pontos], [("Sede Zzz", -15.601, -56.097)])
+        self.assertNotIn("Onde será a área monitorada?", c.get("/app/assinatura").get_data(as_text=True))  # ja' tem area
+
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
                          ["cereais", "cereais", "cereais", "cereais", "outros", "outros", "hf", "hf"])
