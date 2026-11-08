@@ -40,6 +40,7 @@
     <input type="hidden" name="upgrade" value="1">
     <div class="d-flex align-items-baseline justify-content-between"><h6>Fazer upgrade de plano</h6>
         <a class="small" href="{{ url_for('cliente_assinatura') }}">Voltar</a></div>
+    {% if credito %}<div class="alert alert-success small py-2">Você já pagou <strong>{{ credito | dinheiro }}</strong> no plano atual -- esse valor é descontado do plano novo.</div>{% endif %}
     {% elif so_plano_escolhido %}
     <div class="d-flex align-items-baseline justify-content-between"><h6>Plano escolhido</h6>
         <a class="small" href="{{ url_for('cliente_assinatura') }}">Ver todos os planos</a></div>
@@ -59,6 +60,7 @@
             {% elif not disponivel %}<div class="preco-box"><div class="preco-sub">Em breve</div></div>
             {% elif p.valor <= 0 %}<div class="preco-box"><div class="preco-parcela">Grátis</div></div>
             {% else %}{{ p | parcelas_plano(area_total) }}{% endif %}
+            {% if p.com_desconto %}<div class="small fw-semibold text-success mb-1">Com o desconto: {% if p.com_desconto.total > 0 %}{{ p.parcelas }}x de {{ p.com_desconto.parcela | dinheiro }} (total {{ p.com_desconto.total | dinheiro }}){% else %}sem nada a pagar{% endif %}</div>{% endif %}
             {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
             {% if p.preco_por_area and p.area_preco_ha %}<div class="small text-muted">Preço pela sua área: {{ '{:,.0f}'.format(p.area_preco_ha).replace(',', '.') }} ha{% if p.faixa %} ({{ p.faixa }}){% endif %}.</div>{% endif %}
             {% if p.moeda == 'USD' and p.valor > 0 and disponivel %}<div class="small text-muted">Cobrado em reais, pela cotação do dólar do dia (Banco Central).</div>{% endif %}

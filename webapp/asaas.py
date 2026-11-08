@@ -70,12 +70,18 @@ def criar_cliente(nome, cpf_cnpj, email, telefone, referencia):
     return resposta["id"]
 
 
-def criar_assinatura(customer_id, valor, ciclo, descricao, vencimento_iso, referencia):
-    resposta = _chamar("POST", "/subscriptions", {
+def criar_assinatura(customer_id, valor, ciclo, descricao, vencimento_iso, referencia, max_cobrancas=None):
+    """`max_cobrancas`: limita quantas cobrancas a assinatura gera (Asaas
+    `maxPayments`) -- usado no upgrade com desconto, pra o desconto valer so'
+    no 1o ano."""
+    dados = {
         "customer": customer_id, "billingType": "UNDEFINED", "value": round(float(valor), 2),
         "nextDueDate": vencimento_iso, "cycle": ciclo, "description": descricao,
         "externalReference": referencia,
-    })
+    }
+    if max_cobrancas:
+        dados["maxPayments"] = int(max_cobrancas)
+    resposta = _chamar("POST", "/subscriptions", dados)
     return resposta["id"]
 
 

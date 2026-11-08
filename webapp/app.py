@@ -6758,9 +6758,10 @@ def cliente_required(view):
     return wrapped
 
 
-def _iniciar_cobranca(user_id, plano):
+def _iniciar_cobranca(user_id, plano, credito=0):
     """Cria cliente + assinatura no Asaas (1o vencimento hoje) e devolve
-    o link da 1a fatura (ou None). Levanta asaas.AsaasErro."""
+    o link da 1a fatura (ou None). Levanta asaas.AsaasErro. `credito` (R$,
+    upgrade): descontado do total do 1o ano, dividido nas parcelas."""
     user = models.get_user_by_id(user_id)
     assinatura = models.get_assinatura(user_id)
     referencia = f"cliente:{user_id}"
@@ -6783,15 +6784,23 @@ def _iniciar_cobranca(user_id, plano):
         valor = round(plano["valor_parcela"] * cot["valor"], 2)
         descricao += (f" (U$ {plano['valor_parcela']:.2f} x R$ {cot['valor']:.4f}, cotação de "
                       f"{models.fmt_data_br(cot['data'])})").replace(".", ",")
+    max_cobrancas = None
+    if credito > 0:
+        # Desconto do que ja' foi pago no plano anterior (pedido do Alan, 08/11/2026):
+        # o restante do 1o ano dividido nas parcelas; essa assinatura gera so' essas parcelas.
+        total_brl = round(valor * plano["parcelas"], 2)
+        valor = round(max(total_brl - credito, 0) / plano["parcelas"], 2)
+        max_cobrancas = plano["parcelas"]
+        descricao += f" - desconto de {_dinheiro(credito)} do plano anterior"
     subscription_id = asaas.criar_assinatura(
-        customer_id, valor, plano["ciclo"], descricao, _hoje_cuiaba().isoformat(), referencia,
+        customer_id, valor, plano["ciclo"], descricao, _hoje_cuiaba().isoformat(), referencia, max_cobrancas,
     )
     models.atualizar_assinatura(user_id, asaas_subscription_id=subscription_id, plano_id=plano["id"], status="pendente")
     link = None
     for pagamento in asaas.pagamentos_da_assinatura(subscription_id):
         models.registrar_pagamento(
             user_id, pagamento["id"], pagamento.get("value"), pagamento.get("status"),
-            pagamento.get("dueDate"), pagamento.get("invoiceUrl"),
+            pagamento.get("dueDate"), pagamento.get("invoiceUrl"), subscription_id,
         )
         link = link or pagamento.get("invoiceUrl")
     return link
@@ -7194,12 +7203,12 @@ def _avisar_master_cadastro(reg):
         _whatsapp_em_segundo_plano(telefone, "\n".join(linhas))
 
 
-def _cobrar_ou_avisar(user_id, plano):
+def _cobrar_ou_avisar(user_id, plano, credito=0):
     if not asaas.configurado():
         flash("Conta criada! O pagamento online ainda não está disponível -- a OneAgro vai entrar em contato para liberar seu acesso.", "success")
         return redirect(url_for("cliente_assinatura"))
     try:
-        link = _iniciar_cobranca(user_id, plano)
+        link = _iniciar_cobranca(user_id, plano, credito)
     except asaas.AsaasErro as e:
         print(f"[assinatura] falha ao criar cobranca do cliente {user_id}: {e}")
         flash(f"Não foi possível gerar a cobrança agora ({e}). Tente de novo em alguns minutos.", "error")
@@ -7228,8 +7237,16 @@ def cliente_assinatura():
     superiores = _planos_superiores(plano, planos)
     upgrade = request.args.get("upgrade") == "1" and bool(superiores)
     tem_plano = bool(plano) and (assinatura or {}).get("status") != "cancelada"
+    credito = 0
     if upgrade:
         lista = superiores
+        # Desconto do que ja' foi pago no plano atual (pedido do Alan, 08/11/2026).
+        credito = models.credito_para_upgrade(int(current_user.id), (assinatura or {}).get("asaas_subscription_id"))
+        for p in lista:
+            total = _total_em_reais(p, cot)
+            if credito and total:
+                restante = max(total - credito, 0)
+                p["com_desconto"] = {"total": restante, "parcela": round(restante / p["parcelas"], 2)}
     else:
         lista = escolhido or planos
     return render_template(
@@ -7241,6 +7258,7 @@ def cliente_assinatura():
         planos=lista, so_plano_escolhido=bool(escolhido) and not upgrade,
         pode_assinar=_pode_assinar(assinatura) or upgrade,
         mostrar_planos=upgrade or bool(escolhido) or not tem_plano, upgrade=upgrade, superiores=superiores,
+        credito=credito,
         plano_sel=plano_sel,
         # Sem nenhuma lavoura ainda: marca no mapa onde sera' a area monitorada.
         pedir_local=not models.get_cliente_pontos(int(current_user.id)), nome_area=cad.get("empresa") or "",
@@ -7248,6 +7266,14 @@ def cliente_assinatura():
         recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO, free_ate=_acesso_cliente()[2],
         dias_free=models.DIAS_FREE,
     )
+
+
+def _total_em_reais(plano, cot=None):
+    """Total do plano em R$ (U$ pela cotacao do dia); None sem cotacao."""
+    if plano.get("moeda") != "USD":
+        return float(plano["valor"])
+    cot = cot or cotacao.dolar()
+    return round(plano["valor"] * cot["valor"], 2) if cot else None
 
 
 def _planos_superiores(plano, planos):
@@ -7279,6 +7305,10 @@ def cliente_assinar():
     plano = next((p for p in models.get_planos(apenas_ativos=True) if str(p["id"]) == request.form.get("plano_id")), None)
     atual = models.get_plano(assinatura["plano_id"]) if assinatura and assinatura.get("plano_id") else None
     eh_upgrade = bool(request.form.get("upgrade")) and plano and atual and plano["ordem"] > atual["ordem"]
+    credito = 0
+    if eh_upgrade:
+        credito = models.credito_para_upgrade(int(current_user.id), assinatura.get("asaas_subscription_id"))
+        models.fechar_pagamentos_sem_assinatura(int(current_user.id), assinatura.get("asaas_subscription_id"))
     if eh_upgrade and assinatura.get("asaas_subscription_id") and assinatura.get("status") != "cancelada":
         # Upgrade: a assinatura antiga no Asaas e' cancelada e a nova toma o lugar.
         try:
@@ -7329,7 +7359,14 @@ def cliente_assinar():
         # pagamento (ate' la', o Free dos 7 dias -- `_acesso_cliente`).
         models.atualizar_assinatura(int(current_user.id), cortesia_ate=None, status="pendente")
     models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"], cpf_cnpj=cpf_cnpj)
-    return _cobrar_ou_avisar(int(current_user.id), plano)
+    if credito > 0 and credito >= (_total_em_reais(plano) or float("inf")):
+        # O que ja' foi pago cobre o plano novo inteiro: troca sem cobranca nova.
+        models.atualizar_assinatura(int(current_user.id), status="ativa")
+        flash(f"Plano {plano['nome']} ativado -- o valor já pago cobre o plano novo.", "success")
+        return redirect(url_for("cliente_assinatura"))
+    if credito > 0:
+        flash(f"Desconto de {_dinheiro(credito)} do plano anterior aplicado nas parcelas.", "success")
+    return _cobrar_ou_avisar(int(current_user.id), plano, credito)
 
 
 @app.route("/app/assinatura/cancelar", methods=["POST"])
@@ -7792,7 +7829,7 @@ def asaas_webhook():
             status = "DELETED" if tipo == "PAYMENT_DELETED" else pagamento.get("status")
             models.registrar_pagamento(
                 assinatura["user_id"], pagamento["id"], pagamento.get("value"), status,
-                pagamento.get("dueDate"), pagamento.get("invoiceUrl"),
+                pagamento.get("dueDate"), pagamento.get("invoiceUrl"), pagamento.get("subscription"),
             )
     elif tipo in ("SUBSCRIPTION_DELETED", "SUBSCRIPTION_INACTIVATED"):
         assinatura = models.get_assinatura_por_subscription((evento.get("subscription") or {}).get("id") or "")

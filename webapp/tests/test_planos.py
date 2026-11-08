@@ -190,6 +190,47 @@ class PlanosTest(unittest.TestCase):
         if not acima:
             self.assertNotIn("Fazer upgrade de plano", c.get("/app/assinatura").get_data(as_text=True))
 
+    def test_upgrade_desconta_o_que_ja_foi_pago(self):
+        """Upgrade: o pago no plano atual (ainda valido) sai do total do novo,
+        dividido nas parcelas do 1o ano (pedido do Alan, 08/11/2026)."""
+        baixo = models.salvar_plano(None, "Zzz Desc Baixo", "", 120, "YEARLY", 1, 50, ["clima"], True, 61)
+        alto = models.salvar_plano(None, "Zzz Desc Alto", "", 240, "MONTHLY", 1, 50, ["clima"], True, 62)
+        topo = models.salvar_plano(None, "Zzz Desc Topo", "", 100, "MONTHLY", 1, 50, ["clima"], True, 63)
+        uid = self._cliente("Zzz Cliente Desconto")
+        models.atualizar_assinatura(uid, plano_id=baixo, status="ativa", cpf_cnpj=CPF_VALIDO,
+                                    asaas_subscription_id="sub_baixo")
+        hoje = models._hoje_cuiaba()
+        models.registrar_pagamento(uid, "pay_baixo", 120.0, "CONFIRMED", hoje, None, "sub_baixo")
+        models.registrar_pagamento(uid, "pay_velho", 999.0, "CONFIRMED", "2020-01-01", None, "sub_baixo")  # vencido: nao conta
+        self.assertEqual(models.credito_para_upgrade(uid, "sub_baixo"), 120.0)
+        c = self._logado(uid)
+        tela = c.get("/app/assinatura?upgrade=1").get_data(as_text=True)
+        self.assertIn("Você já pagou <strong>R$ 120,00</strong>", tela)
+        self.assertIn("Com o desconto: 12x de R$ 10,00 (total R$ 120,00)", tela)  # (240 - 120) / 12
+        self.assertIn("Com o desconto: sem nada a pagar", tela)  # topo de R$ 100 coberto
+        with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                mock.patch.object(webapp.asaas, "cancelar_assinatura"), \
+                mock.patch.object(webapp.asaas, "criar_cliente", return_value="cus_d"), \
+                mock.patch.object(webapp.asaas, "criar_assinatura", return_value="sub_alto") as criar, \
+                mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[]):
+            c.post("/app/assinatura/assinar", data={"plano_id": str(alto), "upgrade": "1"})
+        args = criar.call_args[0]
+        self.assertEqual((args[1], args[6]), (10.0, 12))  # parcela com desconto, so' 12 cobrancas
+        self.assertIn("desconto de R$ 120,00", args[3])
+        self.assertEqual(models.credito_para_upgrade(uid, "sub_alto"), 0)  # credito nao e' usado de novo
+        # credito que cobre o plano novo inteiro: troca sem cobranca
+        uid2 = self._cliente("Zzz Cliente Desconto 2")
+        models.atualizar_assinatura(uid2, plano_id=baixo, status="ativa", cpf_cnpj=CPF_VALIDO, asaas_subscription_id="sub_b2")
+        models.registrar_pagamento(uid2, "pay_b2", 120.0, "CONFIRMED", hoje, None, "sub_b2")
+        c2 = self._logado(uid2)
+        with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                mock.patch.object(webapp.asaas, "cancelar_assinatura"), \
+                mock.patch.object(webapp.asaas, "criar_assinatura") as criar2:
+            r = c2.post("/app/assinatura/assinar", data={"plano_id": str(topo), "upgrade": "1"}, follow_redirects=True)
+        criar2.assert_not_called()
+        self.assertIn("o valor já pago cobre o plano novo", r.get_data(as_text=True))
+        self.assertEqual(models.get_assinatura(uid2)["plano_id"], topo)
+
     def _cliente_no_plano(self, nome, recursos):
         plano_id = models.salvar_plano(None, f"Zzz Plano {nome}", "", 0, "MONTHLY", 3, 40, recursos, True, 9)
         uid = self._cliente(nome)
