@@ -8061,10 +8061,12 @@ def cliente_relatorios():
     """Aba Relatorios (pedido do Alan, 08/11/2026): o relatorio em texto de UMA
     fazenda por vez, com cabecalho destacado, pronto pra encaminhar pelo
     WhatsApp (enviar, copiar ou baixar .txt)."""
+    # Um cartao recolhido por fazenda (mesmo modelo de Manejos, pedido do Alan,
+    # 08/11/2026); o texto so' e' montado quando o cartao abre (/app/relatorios/<id>.txt).
     pontos = [p for p in models.get_cliente_pontos(int(current_user.id)) if models.ponto_liberado(p) and p.get("site_name")]
-    ponto = next((p for p in pontos if str(p["id"]) == request.args.get("fazenda")), pontos[0] if pontos else None)
-    texto = _texto_relatorio_cliente(ponto) if ponto else ""
-    return render_template("cliente_relatorios.html", pontos=pontos, ponto=ponto, texto=texto)
+    for p in pontos:
+        p["nome_exibicao"] = _nome_exibicao(p["site_name"])
+    return render_template("cliente_relatorios.html", pontos=pontos)
 
 
 @app.route("/app/relatorios/<int:ponto_id>.txt")
@@ -8074,8 +8076,9 @@ def cliente_relatorio_txt(ponto_id):
     if not ponto or not ponto.get("site_name") or not models.ponto_liberado(ponto):
         abort(404)
     nome = re.sub(r"[^A-Za-z0-9]+", "-", _sem_acento_min(_nome_exibicao(ponto["site_name"]))).strip("-") or "fazenda"
-    return Response(_texto_relatorio_cliente(ponto), mimetype="text/plain; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="relatorio-{nome}-{_hoje_cuiaba().isoformat()}.txt"'})
+    cabecalhos = {} if request.args.get("ver") else {
+        "Content-Disposition": f'attachment; filename="relatorio-{nome}-{_hoje_cuiaba().isoformat()}.txt"'}
+    return Response(_texto_relatorio_cliente(ponto), mimetype="text/plain; charset=utf-8", headers=cabecalhos)
 
 
 def _texto_relatorio_cliente(ponto):

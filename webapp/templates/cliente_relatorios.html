@@ -1,49 +1,74 @@
 {% extends "cliente_base.html" %}
 {% block title %}Relatórios - OneAgro App{% endblock %}
+{% block extra_head %}
+<style>
+    .relatorio-toggle { color: #0b5ed7; font-weight: 700; }
+    .relatorio-toggle .toggle-icon { display: inline-block; width: 1.1rem; }
+</style>
+{% endblock %}
 {% block content %}
-{# Aba Relatorios (pedido do Alan, 08/11/2026): texto de uma fazenda por vez pra encaminhar no WhatsApp. #}
+{# Aba Relatorios (pedido do Alan, 08/11/2026): um cartao recolhido por fazenda
+   (mesmo modelo de Manejos); abrir carrega o texto pra encaminhar no WhatsApp. #}
 <h1 class="titulo">Relatórios</h1>
-{% if not ponto %}
+{% if not pontos %}
 <div class="card shadow-sm"><div class="card-body">
     <p class="mb-2">Marque uma fazenda para gerar o relatório.</p>
     <a class="btn btn-success w-100" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar fazenda monitorada</a>
 </div></div>
-{% else %}
-<form method="get" class="mb-3">
-    <label class="form-label small text-muted mb-0" for="filtroFazenda">Fazenda</label>
-    <select class="form-select" name="fazenda" id="filtroFazenda" onchange="this.form.submit()">
-        {% for p in pontos %}<option value="{{ p.id }}" {% if p.id == ponto.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
-    </select>
-</form>
-<div class="d-grid gap-2 mb-3">
-    <a class="btn btn-success" id="btnWhatsapp" href="https://wa.me/?text={{ texto | urlencode }}" target="_blank" rel="noopener">📲 Enviar pelo WhatsApp</a>
-    <div class="d-flex gap-2">
-        <button type="button" class="btn btn-outline-success flex-fill" id="btnCopiar">📋 Copiar texto</button>
-        <a class="btn btn-outline-secondary flex-fill" href="{{ url_for('cliente_relatorio_txt', ponto_id=ponto.id) }}">⬇ Baixar .txt</a>
-    </div>
-    <div class="small text-success text-center" id="avisoCopiado" aria-live="polite"></div>
-</div>
-<div class="card shadow-sm mb-3"><div class="card-body p-2">
-    <pre class="mb-0" id="textoRelatorio" style="white-space: pre-wrap; font-family: inherit; font-size: 0.85rem;">{{ texto }}</pre>
-</div></div>
 {% endif %}
+{% for p in pontos %}
+<div class="card shadow-sm mb-2 relatorio" data-url="{{ url_for('cliente_relatorio_txt', ponto_id=p.id, ver=1) }}">
+    <div class="card-body py-3">
+        <button type="button" class="btn btn-link text-decoration-none p-0 relatorio-toggle text-start">
+            <span class="toggle-icon">▶</span>{{ p.nome_exibicao }}
+        </button>
+        <div class="relatorio-corpo d-none mt-3">
+            <div class="d-grid gap-2 mb-2">
+                <a class="btn btn-success disabled btn-whatsapp" href="#" target="_blank" rel="noopener">📲 Enviar pelo WhatsApp</a>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-success flex-fill btn-copiar" disabled>📋 Copiar texto</button>
+                    <a class="btn btn-outline-secondary flex-fill" href="{{ url_for('cliente_relatorio_txt', ponto_id=p.id) }}">⬇ Baixar .txt</a>
+                </div>
+                <div class="small text-success text-center aviso-copiado" aria-live="polite"></div>
+            </div>
+            <pre class="mb-0 texto-relatorio border rounded p-2 bg-light" style="white-space: pre-wrap; font-family: inherit; font-size: 0.85rem;">Carregando...</pre>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}
 {% block extra_scripts %}
 <script>
-(function () {
-    var botao = document.getElementById('btnCopiar');
-    if (!botao) { return; }
-    botao.addEventListener('click', function () {
-        var texto = document.getElementById('textoRelatorio').textContent;
-        var aviso = document.getElementById('avisoCopiado');
+document.querySelectorAll('.relatorio').forEach(function (card) {
+    var corpo = card.querySelector('.relatorio-corpo'), pre = card.querySelector('.texto-relatorio');
+    var whats = card.querySelector('.btn-whatsapp'), copiar = card.querySelector('.btn-copiar');
+    var carregado = false;
+    card.querySelector('.relatorio-toggle').addEventListener('click', function () {
+        var abrir = corpo.classList.contains('d-none');
+        corpo.classList.toggle('d-none');
+        this.querySelector('.toggle-icon').textContent = abrir ? '▼' : '▶';
+        if (!abrir || carregado) { return; }
+        carregado = true;
+        fetch(card.dataset.url, { credentials: 'same-origin' })
+            .then(function (r) { if (!r.ok) { throw new Error(); } return r.text(); })
+            .then(function (texto) {
+                pre.textContent = texto;
+                whats.href = 'https://wa.me/?text=' + encodeURIComponent(texto);
+                whats.classList.remove('disabled');
+                copiar.disabled = false;
+            })
+            .catch(function () { carregado = false; pre.textContent = 'Não foi possível montar o relatório agora. Toque de novo para tentar.'; });
+    });
+    copiar.addEventListener('click', function () {
+        var aviso = card.querySelector('.aviso-copiado');
         function ok() { aviso.textContent = '✓ Texto copiado -- é só colar no WhatsApp.'; }
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(texto).then(ok, function () { aviso.textContent = 'Não foi possível copiar.'; });
+            navigator.clipboard.writeText(pre.textContent).then(ok, function () { aviso.textContent = 'Não foi possível copiar.'; });
         } else {
-            var t = document.createElement('textarea'); t.value = texto; document.body.appendChild(t); t.select();
+            var t = document.createElement('textarea'); t.value = pre.textContent; document.body.appendChild(t); t.select();
             try { document.execCommand('copy'); ok(); } catch (e) {} document.body.removeChild(t);
         }
     });
-})();
+});
 </script>
 {% endblock %}

@@ -215,10 +215,14 @@ class FazendaAdicionalTest(unittest.TestCase):
         ponto = models.get_cliente_pontos(uid)[0]
         with mock.patch.object(webapp, "_texto_relatorio", return_value="*Faz Mourão*\nClima ok"):
             tela = c.get("/app/relatorios").get_data(as_text=True)
+            ver = c.get(f"/app/relatorios/{ponto['id']}.txt?ver=1")
             txt = c.get(f"/app/relatorios/{ponto['id']}.txt")
-        self.assertIn("📋 *RELATÓRIO ONEAGRO*", tela)
-        self.assertIn("https://wa.me/?text=", tela)
-        self.assertIn("Clima ok", tela)
+        # cartoes recolhidos por fazenda; o texto carrega ao abrir (08/11/2026)
+        self.assertIn('class="toggle-icon">▶</span>Faz Mourão', tela)
+        self.assertIn(f"/app/relatorios/{ponto['id']}.txt?ver=1", tela)
+        self.assertNotIn("Content-Disposition", ver.headers)
+        self.assertIn("📋 *RELATÓRIO ONEAGRO*", ver.get_data(as_text=True))
+        self.assertIn("Clima ok", ver.get_data(as_text=True))
         self.assertEqual(txt.mimetype, "text/plain")
         self.assertIn("attachment", txt.headers["Content-Disposition"])
         self.assertTrue(txt.get_data(as_text=True).startswith("━"))
