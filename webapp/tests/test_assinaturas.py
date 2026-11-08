@@ -95,8 +95,15 @@ class AssinaturasTest(unittest.TestCase):
 
     def test_pagamento_antigo_expira(self):
         uid = models.criar_cliente("Zzz Teste Expira", "segredo1", "a@b.com", "5565999990000", CPF_VALIDO, self.plano_pro)
-        vencimento = (models.datetime.strptime(models._hoje_cuiaba(), "%Y-%m-%d") - timedelta(days=60)).date().isoformat()
+        hoje = models.datetime.strptime(models._hoje_cuiaba(), "%Y-%m-%d")
+        # pagamento vale 1 ano (pedido do Alan, 08/11/2026): 60 dias atras ainda vale...
+        models.registrar_pagamento(uid, "pay_recente", 99.9, "CONFIRMED", (hoje - timedelta(days=60)).date().isoformat(), None)
+        self.assertTrue(models.assinatura_liberada(models.get_assinatura(uid)))
+        models.registrar_pagamento(uid, "pay_recente", 99.9, "REFUNDED", (hoje - timedelta(days=60)).date().isoformat(), None)
+        # ...com mais de 1 ano, expirou
+        vencimento = (hoje - timedelta(days=370)).date().isoformat()
         models.registrar_pagamento(uid, "pay_velho", 99.9, "CONFIRMED", vencimento, None)
+        self.assertEqual(models.get_assinatura(uid)["pago_ate"], models._somar_meses(vencimento, 12).isoformat())
         self.assertFalse(models.assinatura_liberada(models.get_assinatura(uid)))
         models.atualizar_assinatura(uid, cortesia_ate="2099-01-01")
         self.assertTrue(models.assinatura_liberada(models.get_assinatura(uid)))
