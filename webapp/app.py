@@ -6730,6 +6730,12 @@ def cadastro():
 
 UFS_BR = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR",
           "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]
+def _fmt_ha(area):
+    """1500.0 -> "1.500"; 12.5 -> "12,5"."""
+    texto = f"{area:,.2f}".rstrip("0").rstrip(".") if area % 1 else f"{area:,.0f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 MODALIDADES_CADASTRO = {"plano": "Assinar plano", "fazenda": "Ter acesso à fazenda cadastrada"}
 PERFIS_CADASTRO = {"produtor": "Produtor", "tecnico": "Técnico do setor"}
 
@@ -6768,7 +6774,7 @@ def solicitar_acesso():
     culturas = models.get_culturas_ativas()
     form = request.form
     if request.method == "POST":
-        modalidade = form.get("modalidade", "")
+        modalidade = "fazenda" if form.get("modalidade") == "fazenda" else "plano"
         perfis = [p for p in form.getlist("perfil") if p in PERFIS_CADASTRO]
         nome_completo = " ".join(form.get("nome_completo", "").split())
         username = " ".join(form.get("username", "").split())
@@ -6777,16 +6783,20 @@ def solicitar_acesso():
         uf = form.get("uf", "")
         culturas_sel = [c for c in form.getlist("culturas") if c in culturas]
         outra = form.get("cultura_outra", "").strip()
-        area_txt = form.get("area_ha", "").strip().replace(".", "").replace(",", ".")
-        try:
-            area_ha = float(area_txt)
-        except ValueError:
-            area_ha = 0
+
+        def _area(texto):
+            try:
+                return float((texto or "").strip().replace(".", "").replace(",", "."))
+            except ValueError:
+                return 0
+        # Area de cada cultura (pedido do Alan, 08/11/2026); a area total e' a soma.
+        areas = [(c, _area(form.get(f"area_cultura__{c}"))) for c in culturas_sel]
+        if outra:
+            areas.append((outra, _area(form.get("area_outra"))))
+        area_ha = sum(a for _c, a in areas)
         senha = form.get("senha", "")
         erro = None
-        if modalidade not in MODALIDADES_CADASTRO:
-            erro = "Escolha o que você quer: assinar um plano ou ter acesso à fazenda cadastrada."
-        elif not perfis:
+        if not perfis:
             erro = "Marque se você é produtor e/ou técnico do setor."
         elif len(nome_completo.split()) < 2:
             erro = "Informe o seu nome completo (nome e sobrenome)."
@@ -6808,8 +6818,8 @@ def solicitar_acesso():
             erro = "Informe a cidade e o estado (UF)."
         elif not culturas_sel and not outra:
             erro = "Marque pelo menos uma cultura."
-        elif area_ha <= 0:
-            erro = "Informe a área plantada/atendida em hectares (só o número)."
+        elif (sem_area := [c for c, a in areas if a <= 0]):
+            erro = f"Informe a área (hectares) de: {', '.join(sem_area)}."
         elif len(senha) < 6:
             erro = "A senha precisa ter pelo menos 6 caracteres."
         elif senha != form.get("senha_confirmar", ""):
@@ -6833,7 +6843,7 @@ def solicitar_acesso():
                 "username": username, "nome_completo": nome_completo, "perfil": ",".join(perfis), "email": email,
                 "telefone": telefone, "tipo": "cliente" if modalidade == "plano" else "usuario",
                 "empresa": form.get("empresa", "").strip(), "cidade": form.get("cidade", "").strip(), "uf": uf,
-                "culturas": ", ".join(culturas_sel + ([outra] if outra else [])), "area_ha": area_ha,
+                "culturas": ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in areas), "area_ha": area_ha,
                 "mensagem": form.get("mensagem", "").strip(), "user_id": user_id,
             }
             models.registrar_cadastro(registro)

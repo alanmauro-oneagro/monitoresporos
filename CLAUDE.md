@@ -61,7 +61,14 @@ WhatsApp de cada usuario (tabela `subordinados`), nao um nivel de acesso.
 **Cadastro direto (pedido do Alan, 31/10/2026 -- substitui a aprovacao
 e o codigo no WhatsApp de 30/10)**: "Ainda nao tem conta? Cadastre-se"
 (login) e o "Assinar" de `/planos` levam a `/solicitar-acesso`; `/cadastro`
-so' redireciona pra la'. A pessoa escolhe **Assinar plano** ou **Ter acesso
+so' redireciona pra la'. **Sem a pergunta "O que voce quer?"** (pedido do Alan,
+08/11/2026): o cadastro e' sempre "Assinar plano" (campo escondido
+`modalidade`); so' o link `/solicitar-acesso?modalidade=fazenda` cria
+acesso a fazenda. **Area por cultura** (mesmo pedido): marcar a cultura
+(ou escrever "Outra cultura") abre o campo da area dela (`area_cultura__<cultura>`,
+`area_outra`), "Area total" soma na tela; `solicitacoes_acesso.culturas`
+fica "Soja (1.200 ha), Milho (800 ha)" e `area_ha` = soma (base do "Preco
+pela area"). A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
 (tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao

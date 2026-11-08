@@ -2,19 +2,14 @@
 {% block title %}Criar conta - OneAgro App{% endblock %}
 {% block content %}
 <h1 class="titulo">Criar conta</h1>
-{% set modalidade_sel = form.get('modalidade') or request.args.get('modalidade', '') %}
+{# "O que voce quer?" saiu (pedido do Alan, 08/11/2026): quem clica em cadastrar assina
+   plano; o link com ?modalidade=fazenda continua criando acesso a fazenda. #}
+{% set modalidade_sel = 'fazenda' if (form.get('modalidade') or request.args.get('modalidade')) == 'fazenda' else 'plano' %}
 {% set perfis_sel = form.getlist('perfil') if form else [] %}
 <form method="post" class="card shadow-sm mb-3" id="form-cadastro"><div class="card-body">
 
-    <h6 class="mb-2">O que você quer?</h6>
-    {% for chave, rotulo in modalidades.items() %}
-    <div class="form-check mb-1">
-        <input class="form-check-input" type="radio" name="modalidade" id="modalidade_{{ chave }}" value="{{ chave }}" {% if modalidade_sel == chave %}checked{% endif %} required>
-        <label class="form-check-label" for="modalidade_{{ chave }}">{{ rotulo }}</label>
-    </div>
-    {% endfor %}
-
-    <h6 class="mt-3 mb-2">Você é</h6>
+    <input type="hidden" name="modalidade" value="{{ modalidade_sel }}">
+    <h6 class="mb-2">Você é</h6>
     <div class="d-flex flex-wrap gap-3">
         {% for chave, rotulo in perfis.items() %}
         <div class="form-check mb-0">
@@ -57,18 +52,30 @@
     </div>
 
     {% set culturas_sel = form.getlist('culturas') if form else [] %}
-    <div class="small mb-1">Culturas</div>
-    <div class="d-flex flex-wrap gap-3 mb-2">
+    {# Area por cultura (pedido do Alan, 08/11/2026): marcar a cultura abre o campo da area dela. #}
+    <div class="small mb-1">Culturas e área plantada / atendida de cada uma</div>
+    <div class="mb-2" id="culturas-area">
         {% for c in culturas %}
-        <div class="form-check mb-0">
-            <input class="form-check-input" type="checkbox" name="culturas" id="cultura_{{ loop.index }}" value="{{ c }}" {% if c in culturas_sel %}checked{% endif %}>
-            <label class="form-check-label small" for="cultura_{{ loop.index }}">{{ c }}</label>
+        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" style="min-height: 2.1rem;">
+            <div class="form-check mb-0" style="min-width: 7rem;">
+                <input class="form-check-input" type="checkbox" name="culturas" id="cultura_{{ loop.index }}" value="{{ c }}" {% if c in culturas_sel %}checked{% endif %}>
+                <label class="form-check-label small" for="cultura_{{ loop.index }}">{{ c }}</label>
+            </div>
+            <div class="input-group input-group-sm cultura-area{{ '' if c in culturas_sel else ' d-none' }}" style="max-width: 11rem;">
+                <input class="form-control" name="area_cultura__{{ c }}" value="{{ form.get('area_cultura__' ~ c, '') }}" inputmode="decimal" placeholder="Área" aria-label="Área de {{ c }} (ha)">
+                <span class="input-group-text">ha</span>
+            </div>
         </div>
         {% endfor %}
+        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha">
+            <input class="form-control form-control-sm" style="max-width: 9rem;" name="cultura_outra" id="cultura_outra" value="{{ form.get('cultura_outra', '') }}" placeholder="Outra cultura" aria-label="Outra cultura">
+            <div class="input-group input-group-sm cultura-area{{ '' if form.get('cultura_outra') else ' d-none' }}" style="max-width: 11rem;">
+                <input class="form-control" name="area_outra" value="{{ form.get('area_outra', '') }}" inputmode="decimal" placeholder="Área" aria-label="Área da outra cultura (ha)">
+                <span class="input-group-text">ha</span>
+            </div>
+        </div>
     </div>
-    <input class="form-control form-control-sm mb-3" name="cultura_outra" value="{{ form.get('cultura_outra', '') }}" placeholder="Outra cultura" aria-label="Outra cultura">
-    <label class="form-label small mb-1" for="area_ha">Área plantada / atendida (hectares)</label>
-    <input class="form-control mb-3" name="area_ha" id="area_ha" value="{{ form.get('area_ha', '') }}" inputmode="decimal" placeholder="Ex.: 1500" required>
+    <div class="small text-muted mb-3">Área total: <strong id="area-total">-</strong></div>
 
     <label class="form-label small mb-1" for="mensagem">Mensagem (opcional)</label>
     <textarea class="form-control mb-3" name="mensagem" id="mensagem" rows="3" placeholder="Conte o que você procura">{{ form.get('mensagem', '') }}</textarea>
@@ -92,6 +99,30 @@
 </div></form>
 <div class="text-center small mb-4"><a href="{{ url_for('login') }}">Já tenho conta</a></div>
 <script>
+(function () {
+    // Marcar a cultura (ou escrever outra) abre o campo da area dela; soma a area total.
+    var bloco = document.getElementById('culturas-area');
+    function numero(v) { v = (v || '').trim().replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+    function atualizar() {
+        var total = 0;
+        bloco.querySelectorAll('.cultura-linha').forEach(function (linha) {
+            var marca = linha.querySelector('input[type=checkbox]') ;
+            var ativo = marca ? marca.checked : linha.querySelector('#cultura_outra').value.trim() !== '';
+            var caixa = linha.querySelector('.cultura-area');
+            caixa.classList.toggle('d-none', !ativo);
+            var area = caixa.querySelector('input');
+            area.required = ativo;
+            if (ativo) total += numero(area.value);
+        });
+        document.getElementById('area-total').textContent = total > 0 ? total.toLocaleString('pt-BR') + ' ha' : '-';
+    }
+    bloco.addEventListener('input', atualizar);
+    bloco.addEventListener('change', function (e) {
+        atualizar();
+        if (e.target.type === 'checkbox' && e.target.checked) e.target.closest('.cultura-linha').querySelector('.cultura-area input').focus();
+    });
+    atualizar();
+})();
 (function () {
     var nome = document.getElementById('nome_completo');
     var usuario = document.getElementById('username');
