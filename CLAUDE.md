@@ -70,7 +70,22 @@ acesso a fazenda. **Area por cultura** (mesmo pedido): marcar a cultura
 fica "Soja (1.200 ha), Milho (800 ha)" e `area_ha` = soma (base do "Preco
 pela area"). Gerenciar Clientes mostra uma linha por cultura com a area dela
 ("Soja — 1.200 ha", `app._culturas_com_area`; cadastro antigo sem area
-mostra so' o nome) e "Area total". A pessoa escolhe **Assinar plano** ou **Ter acesso
+mostra so' o nome) e "Area total". **Tipo de cultura + planos no cadastro** (pedido do Alan,
+08/11/2026): antes das culturas a pessoa escolhe Cereais / HF / Cana
+(`app.GRUPOS_CULTURA`, `_grupo_da_cultura`; a tela mostra so' as culturas
+do grupo): Cereais = Soja, Milho, Algodao (preco pela area de SOJA; sem
+Soja, soma); Cana = Cana; HF = as demais + "Outra cultura" (soma)
+(`_area_para_preco`). Grava `solicitacoes_acesso.grupo_cultura` e
+`area_preco_ha`. A tela "Criar conta" ja' traz os planos (cartoes com
+preco; no app da loja sem preco); plano gratis escolhido ativa na hora,
+pago vai pra Minha assinatura com o plano ja' marcado (`?plano=<id>`,
+CPF/CNPJ continua la'). **Preco pela area** (`planos.preco_por_area`,
+caixa "Preço pela área" em Planos e Valores; ja' ligado no Premium): o
+valor total = area do preco x U$/ha da faixa da tabela de apoio, em U$,
+parcelas pelo ciclo (`app._plano_para_area`), calculado ao digitar no
+cadastro e usado em Minha assinatura, na cobranca (`cliente_assinar`) e em
+Gerenciar Clientes; faixa sem U$/ha = "Sob consulta" (nao deixa assinar).
+/planos mostra "Preço pela área plantada". A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
 (tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao

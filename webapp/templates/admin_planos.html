@@ -55,9 +55,14 @@
                         <select class="form-select form-select-sm flex-grow-0" style="width: 4.6rem;" name="moeda__{{ k }}" aria-label="Moeda" title="Plano em dólar é cobrado em reais pela cotação do dia (Banco Central)">{% for cod, simb in moedas.items() %}<option value="{{ cod }}" {% if (p.moeda if p else 'BRL') == cod %}selected{% endif %}>{{ simb }}</option>{% endfor %}</select>
                         <input class="form-control form-control-sm" style="min-width: 4rem;" name="valor__{{ k }}" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" aria-label="Valor">
                     </div>
-                    {% if p and p.valor > 0 %}<div class="text-muted" style="font-size: 0.72rem;">{{ p.parcelas }}x de {{ p.valor_parcela | dinheiro(p.simbolo) }}</div>{% endif %}
+                    {% if p and p.preco_por_area %}<div class="text-success" style="font-size: 0.72rem;">Preço pela área do cliente (tabela de apoio) -- este valor não é usado</div>
+                    {% elif p and p.valor > 0 %}<div class="text-muted" style="font-size: 0.72rem;">{{ p.parcelas }}x de {{ p.valor_parcela | dinheiro(p.simbolo) }}</div>{% endif %}
                     {% if p and p.moeda == 'USD' and p.valor > 0 and cotacao_dolar %}<div class="text-muted" style="font-size: 0.72rem;">≈ {{ (p.valor * cotacao_dolar.valor) | dinheiro }} hoje</div>{% endif %}
                 </td>{% endfor %}</tr>
+            <tr><td title="O valor total vem da tabela de apoio: área do cliente (Cereais = Soja, Cana = Cana, HF = soma) x U$/ha da faixa">Preço pela área <span class="fw-normal text-muted">(tabela de apoio)</span></td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col rec{{ ' plano-novo' if not p }}"><input class="form-check-input" type="checkbox" name="preco_area__{{ k }}" aria-label="Preço pela área" {% if p and p.preco_por_area %}checked{% endif %}></td>
+                {% endfor %}</tr>
             <tr><td>Ciclo</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
                 <td class="plano-col{{ ' plano-novo' if not p }}"><select class="form-select form-select-sm" name="ciclo__{{ k }}" aria-label="Ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }} ({{ 12 // _m }}x)</option>{% endfor %}</select></td>

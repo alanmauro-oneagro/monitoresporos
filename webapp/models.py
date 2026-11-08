@@ -762,15 +762,22 @@ def init_db():
         conn.execute("ALTER TABLE planos ADD COLUMN moeda TEXT NOT NULL DEFAULT 'BRL'")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
+    try:
+        # Preco calculado pela area plantada do cliente, na tabela de apoio
+        # (pedido do Alan, 08/11/2026) -- ja' nasce ligado no Premium.
+        conn.execute("ALTER TABLE planos ADD COLUMN preco_por_area INTEGER NOT NULL DEFAULT 0")
+        conn.execute("UPDATE planos SET preco_por_area = 1 WHERE lower(nome) = 'premium'")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
     # Planos padrao (pedido do Alan, 31/10/2026) -- so' cria o que ainda nao
     # existe pelo nome; os pagos nascem fora de venda ate' o Master por o
     # preco em Configuracoes > Planos e clientes.
     for ordem, (nome, recursos, max_pontos, ativo) in enumerate(PLANOS_PADRAO, 1):
         if not conn.execute("SELECT 1 FROM planos WHERE lower(nome) = lower(?)", (nome,)).fetchone():
             conn.execute(
-                "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem)"
-                " VALUES (?, '', 0, 'MONTHLY', ?, 50, ?, ?, ?)",
-                (nome, max_pontos, json.dumps(recursos), 1 if ativo else 0, ordem),
+                "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, preco_por_area)"
+                " VALUES (?, '', 0, 'MONTHLY', ?, 50, ?, ?, ?, ?)",
+                (nome, max_pontos, json.dumps(recursos), 1 if ativo else 0, ordem, 1 if nome == "Premium" else 0),
             )
     # Cadastro direto (pedido do Alan, 31/10/2026): cada linha e' o registro
     # de uma conta criada em /solicitar-acesso (status 'cadastrado'), pra
@@ -778,7 +785,9 @@ def init_db():
     # do fluxo anterior (com codigo no WhatsApp e aprovacao), sem uso.
     for coluna in ("token TEXT", "codigo_hash TEXT", "codigo_expira TEXT", "codigo_enviado_em TEXT",
                    "codigo_tentativas INTEGER NOT NULL DEFAULT 0", "codigo_reenvios INTEGER NOT NULL DEFAULT 0",
-                   "nome_completo TEXT", "perfil TEXT", "visto INTEGER NOT NULL DEFAULT 0"):
+                   "nome_completo TEXT", "perfil TEXT", "visto INTEGER NOT NULL DEFAULT 0",
+                   # Grupo de culturas (cereais/hf/cana) e area que conta pro preco (08/11/2026)
+                   "grupo_cultura TEXT", "area_preco_ha REAL"):
         try:
             conn.execute(f"ALTER TABLE solicitacoes_acesso ADD COLUMN {coluna}")
         except sqlite3.OperationalError:
@@ -3543,6 +3552,7 @@ def _plano_row_to_dict(r):
     # Valor do plano = total de 12 meses, dividido em parcelas pelo ciclo
     # (pedido do Alan, 08/11/2026): Mensal 12x, Trimestral 4x, Semestral 2x, Anual 1x.
     d["parcelas"] = max(1, 12 // meses)
+    d["preco_por_area"] = bool(d.get("preco_por_area"))
     d["valor_parcela"] = round(float(d["valor"] or 0) / d["parcelas"], 2)
     return d
 
@@ -3562,7 +3572,8 @@ def get_plano(plano_id):
     return _plano_row_to_dict(row) if row else None
 
 
-def salvar_plano(plano_id, nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, moeda="BRL"):
+def salvar_plano(plano_id, nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, moeda="BRL",
+                 preco_por_area=False):
     """Cria (plano_id None) ou atualiza um plano. Mudar o valor aqui NAO
     muda a cobranca de quem ja assinou (fica a do Asaas) -- so' vale pra
     assinatura nova."""
@@ -3573,17 +3584,18 @@ def salvar_plano(plano_id, nome, descricao, valor, ciclo, max_pontos, raio_km, r
     valores = (
         nome, descricao, float(valor), ciclo, int(max_pontos), float(raio_km),
         json.dumps([c for c in recursos if c in dict(RECURSOS_PLANO)]), 1 if ativo else 0, int(ordem), moeda,
+        1 if preco_por_area else 0,
     )
     conn = get_db()
     if plano_id:
         conn.execute(
             "UPDATE planos SET nome=?, descricao=?, valor=?, ciclo=?, max_pontos=?, raio_km=?, recursos=?, ativo=?, ordem=?,"
-            " moeda=? WHERE id = ?", valores + (plano_id,),
+            " moeda=?, preco_por_area=? WHERE id = ?", valores + (plano_id,),
         )
     else:
         cur = conn.execute(
-            "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, moeda)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", valores,
+            "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, moeda,"
+            " preco_por_area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", valores,
         )
         plano_id = cur.lastrowid
     conn.commit()
@@ -3635,7 +3647,7 @@ def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id, passw
 
 _CAMPOS_SOLICITACAO = (
     "username", "nome_completo", "perfil", "email", "telefone", "tipo", "empresa",
-    "cidade", "uf", "culturas", "area_ha", "mensagem", "user_id",
+    "cidade", "uf", "culturas", "area_ha", "mensagem", "user_id", "grupo_cultura", "area_preco_ha",
 )
 
 
@@ -3663,6 +3675,14 @@ def _apagar_cadastros_sem_conta(conn):
         " AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users))"
     )
     conn.commit()
+
+
+def get_cadastro_do_usuario(user_id):
+    """Registro do cadastro (mais recente) da conta, ou None."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM solicitacoes_acesso WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def get_cadastros(limite=200):

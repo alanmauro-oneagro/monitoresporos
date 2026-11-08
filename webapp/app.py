@@ -6730,6 +6730,61 @@ def cadastro():
 
 UFS_BR = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR",
           "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]
+# Grupo de culturas do cadastro (pedido do Alan, 08/11/2026), escolhido
+# antes das culturas: Cereais = Soja, Milho e Algodao (preco pela area de
+# Soja); Cana = so' Cana (pela area de Cana); HF = as demais + "Outra
+# cultura" (pela soma das areas).
+GRUPOS_CULTURA = {"cereais": "Cereais", "hf": "HF", "cana": "Cana"}
+_CEREAIS = ("soja", "milho", "algodao")
+
+
+def _sem_acento_min(texto):
+    return unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii").lower().strip()
+
+
+def _grupo_da_cultura(nome):
+    chave = _sem_acento_min(nome)
+    if chave in _CEREAIS:
+        return "cereais"
+    if chave.startswith("cana"):
+        return "cana"
+    return "hf"
+
+
+def _area_para_preco(grupo, areas):
+    """Area (ha) que entra no preco: Cereais = area de Soja (sem Soja, a
+    soma dos cereais); Cana e HF = soma das culturas do grupo."""
+    if grupo == "cereais":
+        soja = sum(a for c, a in areas if _sem_acento_min(c) == "soja")
+        if soja > 0:
+            return soja
+    return sum(a for _c, a in areas)
+
+
+def _area_preco_do_cliente(user_id):
+    cad = models.get_cadastro_do_usuario(user_id) or {}
+    return cad.get("area_preco_ha") or cad.get("area_ha")
+
+
+def _plano_para_area(plano, area_ha, cot=None):
+    """Plano com "preco pela area" (Premium, pedido do Alan, 08/11/2026):
+    o valor total vem da tabela de apoio (area x U$/ha da faixa, em U$) e
+    as parcelas seguem o ciclo. Sem area ou faixa sem U$/ha =
+    `sob_consulta`. Outros planos voltam iguais."""
+    if not plano or not plano.get("preco_por_area"):
+        return plano
+    p = dict(plano)
+    preco = preco_pela_area(area_ha, cot) if area_ha else None
+    p["area_preco_ha"] = area_ha
+    if not preco or preco["total_usd"] is None:
+        p.update(sob_consulta=True, valor=0.0, valor_parcela=0.0)
+        return p
+    total = round(preco["total_usd"], 2)
+    p.update(sob_consulta=False, moeda="USD", simbolo=models.MOEDAS["USD"], valor=total,
+             valor_parcela=round(total / p["parcelas"], 2), faixa=preco["faixa"], usd_ha=preco["usd_ha"])
+    return p
+
+
 def _culturas_com_area(texto):
     """"Soja (1.200 ha), Milho" -> [("Soja", "1.200 ha"), ("Milho", None)]
     (cadastro antigo nao tem area por cultura)."""
@@ -6775,6 +6830,19 @@ def verificar_usuario_cadastro():
     })
 
 
+def _contexto_cadastro(culturas):
+    """Culturas por grupo e planos (com o que a tela precisa pra calcular o
+    preco pela area enquanto a pessoa digita)."""
+    cot = cotacao.dolar()
+    return {
+        "culturas": culturas, "grupos": GRUPOS_CULTURA,
+        "grupo_de": {c: _grupo_da_cultura(c) for c in culturas},
+        "planos": models.get_planos(apenas_ativos=True), "recursos": models.RECURSOS_PLANO,
+        "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"]} for f in _tabela_precificacao()],
+        "cotacao_valor": cot["valor"] if cot else None,
+    }
+
+
 @app.route("/solicitar-acesso", methods=["GET", "POST"])
 def solicitar_acesso():
     """Cadastro publico (pedido do Alan, 31/10/2026): a conta nasce na hora
@@ -6794,8 +6862,12 @@ def solicitar_acesso():
         email = form.get("email", "").strip()
         telefone = _telefone_from_form(form)
         uf = form.get("uf", "")
-        culturas_sel = [c for c in form.getlist("culturas") if c in culturas]
-        outra = form.get("cultura_outra", "").strip()
+        grupo = form.get("grupo_cultura", "")
+        # so' as culturas do grupo escolhido contam (a tela esconde as outras)
+        culturas_sel = [c for c in form.getlist("culturas") if c in culturas and _grupo_da_cultura(c) == grupo]
+        outra = form.get("cultura_outra", "").strip() if grupo == "hf" else ""
+        planos_venda = models.get_planos(apenas_ativos=True)
+        plano_escolhido = next((p for p in planos_venda if str(p["id"]) == form.get("plano_id")), None)
 
         def _area(texto):
             try:
@@ -6829,6 +6901,8 @@ def solicitar_acesso():
             erro = "Informe a fazenda ou empresa."
         elif not form.get("cidade", "").strip() or uf not in UFS_BR:
             erro = "Informe a cidade e o estado (UF)."
+        elif grupo not in GRUPOS_CULTURA:
+            erro = "Escolha o tipo de cultura: Cereais, HF ou Cana."
         elif not culturas_sel and not outra:
             erro = "Marque pelo menos uma cultura."
         elif (sem_area := [c for c, a in areas if a <= 0]):
@@ -6850,24 +6924,34 @@ def solicitar_acesso():
                     user_id = models.get_user_by_username(username)["id"]
             except sqlite3.IntegrityError:
                 flash(f"O usuário \"{username}\" acabou de ser usado. Sugestão: {_sugerir_usuario(nome_completo)}.", "error")
-                return render_template("solicitar_acesso.html", culturas=culturas, ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
+                return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
                                        perfis=PERFIS_CADASTRO, form=form)
             registro = {
                 "username": username, "nome_completo": nome_completo, "perfil": ",".join(perfis), "email": email,
                 "telefone": telefone, "tipo": "cliente" if modalidade == "plano" else "usuario",
                 "empresa": form.get("empresa", "").strip(), "cidade": form.get("cidade", "").strip(), "uf": uf,
                 "culturas": ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in areas), "area_ha": area_ha,
+                "grupo_cultura": grupo, "area_preco_ha": _area_para_preco(grupo, areas),
                 "mensagem": form.get("mensagem", "").strip(), "user_id": user_id,
             }
             models.registrar_cadastro(registro)
             _avisar_master_cadastro(registro)
             login_user(User(models.get_user_by_id(user_id)), remember=True)
             if modalidade == "plano":
+                if plano_escolhido and not plano_escolhido["preco_por_area"] and plano_escolhido["valor"] <= 0:
+                    # Plano gratis escolhido no cadastro: ja' libera (mesmo caminho de cliente_assinar).
+                    models.atualizar_assinatura(user_id, plano_id=plano_escolhido["id"], status="ativa",
+                                                cortesia_ate=models.SEM_PRAZO)
+                    flash(f"Conta criada e plano {plano_escolhido['nome']} ativado!", "success")
+                    return redirect(url_for("cliente_home"))
+                if plano_escolhido:
+                    flash("Conta criada! Confirme o plano e informe o CPF/CNPJ para a cobrança.", "success")
+                    return redirect(url_for("cliente_assinatura", plano=plano_escolhido["id"]))
                 flash("Conta criada! Agora escolha o seu plano para liberar o acesso.", "success")
                 return redirect(url_for("cliente_assinatura"))
             flash("Conta criada! A OneAgro vai liberar as fazendas para você -- assim que isso acontecer, elas aparecem aqui.", "success")
             return redirect(url_for("index"))
-    return render_template("solicitar_acesso.html", culturas=culturas, ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
+    return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
                            perfis=PERFIS_CADASTRO, form=form)
 
 
@@ -6915,12 +6999,16 @@ def cliente_assinatura():
     if not current_user.is_cliente:
         abort(403)
     assinatura, plano, liberada = _cliente_contexto()
+    area = _area_preco_do_cliente(int(current_user.id))
+    cot = cotacao.dolar()
     return render_template(
         "cliente_assinatura.html", assinatura=assinatura, plano=plano, liberada=liberada,
         acesso_ate=models.acesso_ate(assinatura), pagamentos=models.get_pagamentos(int(current_user.id)),
         # Todos os planos aparecem; os fora de venda (ou ainda sem preco, como
         # os pagos recem-criados) ficam visiveis como "Em breve", sem escolha.
-        planos=models.get_planos(), pode_assinar=_pode_assinar(assinatura),
+        # Plano com preco pela area ja' vem com o preco da area do cliente.
+        planos=[_plano_para_area(p, area, cot) for p in models.get_planos()], pode_assinar=_pode_assinar(assinatura),
+        plano_sel=request.args.get("plano", ""),
         recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO,
     )
 
@@ -6941,6 +7029,10 @@ def cliente_assinar():
     plano = next((p for p in models.get_planos(apenas_ativos=True) if str(p["id"]) == request.form.get("plano_id")), None)
     if not plano:
         flash("Escolha um plano.", "error")
+        return redirect(url_for("cliente_assinatura"))
+    plano = _plano_para_area(plano, _area_preco_do_cliente(int(current_user.id)))
+    if plano.get("sob_consulta"):
+        flash(f"O preço do plano {plano['nome']} depende da sua área plantada -- a OneAgro vai entrar em contato.", "error")
         return redirect(url_for("cliente_assinatura"))
     if plano["valor"] <= 0:
         # Plano gratis: libera na hora, sem cobranca nem CPF/CNPJ.
@@ -7330,9 +7422,14 @@ def admin_solicitacoes():
     coords = _coords_all()
     paises = models.get_all_site_countries()
     cot = cotacao.dolar()
+    planos_por_id = {pl["id"]: pl for pl in models.get_planos()}
     for p in pessoas:
         # Preco pela area do cadastro, na faixa da tabela de apoio (Planos e Valores).
-        p["preco_area"] = preco_pela_area(p.get("area_ha"), cot) if p.get("tipo") == "cliente" else None
+        area_preco = p.get("area_preco_ha") or p.get("area_ha")
+        p["preco_area"] = preco_pela_area(area_preco, cot) if p.get("tipo") == "cliente" else None
+        p["area_preco"] = area_preco
+        cl = p.get("cliente")
+        p["plano_cliente"] = _plano_para_area(planos_por_id.get(cl["plano_id"]), area_preco, cot) if cl and cl.get("plano_id") else None
         p["culturas_lista"] = _culturas_com_area(p.get("culturas"))
         locais = [(l["nome"], l["lat"], l["lon"]) for l in models.get_cliente_pontos(p["user_id"]) if _no_brasil(l["lat"], l["lon"])]
         locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(p["user_id"])
@@ -7583,7 +7680,8 @@ def admin_planos_salvar():
         if moeda not in models.MOEDAS:
             moeda = "BRL"
         planos.append((None if k == "novo" else int(k), nome, form.get(f"descricao__{k}", "").strip(), valor, ciclo,
-                       max_pontos, raio_km, form.getlist(f"recursos__{k}"), bool(form.get(f"ativo__{k}")), ordem, moeda))
+                       max_pontos, raio_km, form.getlist(f"recursos__{k}"), bool(form.get(f"ativo__{k}")), ordem, moeda,
+                       bool(form.get(f"preco_area__{k}"))))
     for dados in planos:
         models.salvar_plano(*dados)
     flash("Planos salvos.", "success")
