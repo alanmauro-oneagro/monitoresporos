@@ -7515,6 +7515,49 @@ def cliente_conta():
     return redirect(url_for("cliente_home"))
 
 
+@app.route("/app/conta/editar", methods=["GET", "POST"])
+@login_required
+def cliente_conta_editar():
+    """Corrigir os dados digitados no cadastro: nome, grupo economico,
+    e-mail e celular (pedido do Alan, 08/11/2026). Trocar o grupo renomeia
+    as fazendas ("<grupo> - <fazenda>")."""
+    if not current_user.is_cliente:
+        abort(403)
+    user_id = int(current_user.id)
+    user = models.get_user_by_id(user_id)
+    cad = models.get_cadastro_do_usuario(user_id) or {}
+    form = request.form
+    if request.method == "POST":
+        nome_completo = " ".join(form.get("nome_completo", "").split())[:80]
+        grupo = " ".join(form.get("grupo_economico", "").split())[:40]
+        email = form.get("email", "").strip()
+        telefone = re.sub(r"\D", "", form.get("codigo_pais", "55")) + re.sub(r"\D", "", form.get("numero_telefone", ""))
+        erro = None
+        if len(nome_completo.split()) < 2:
+            erro = "Informe o seu nome completo (nome e sobrenome)."
+        elif not _is_valid_phone(telefone):
+            erro = "Celular inválido -- informe DDD + número."
+        elif email and not _is_valid_email(email):
+            erro = "E-mail inválido."
+        elif (ja := models.conta_com_contato(telefone, email, exceto_user_id=user_id)):
+            erro = ("Esse celular" if ja == "telefone" else "Esse e-mail") + " já está em outra conta."
+        if erro:
+            flash(erro, "error")
+        else:
+            models.set_user_contato(user_id, email, telefone)
+            models.atualizar_dados_cadastro(user_id, nome_completo=nome_completo, grupo_economico=grupo,
+                                            email=email, telefone=telefone)
+            if grupo != (cad.get("grupo_economico") or ""):
+                for p in models.get_cliente_pontos(user_id):
+                    _renomear_fazenda_cliente(user_id, p, user["username"])
+            flash("Dados atualizados.", "success")
+            return redirect(url_for("cliente_home"))
+    tel = (form.get("codigo_pais", "") + form.get("numero_telefone", "")) if form else (user["telefone"] or "")
+    return render_template("cliente_conta_editar.html", user=user, cadastro=cad, form=form,
+                           codigo_pais=(form.get("codigo_pais") if form else tel[:2]) or "55",
+                           numero=(form.get("numero_telefone") if form else tel[2:]) or "")
+
+
 @app.route("/app/conta/conferir-senha", methods=["POST"])
 @login_required
 def cliente_conferir_senha():
@@ -7751,14 +7794,62 @@ def _situacao_adicional(ponto):
     return {"chave": "bloqueada", "texto": "Bloqueada -- falta o pagamento"}
 
 
+def _nome_fazenda_cliente(user_id, nome, username):
+    """Com grupo economico no cadastro: "Grupo Mauro - Faz Mourao" no
+    relatorio (pedido do Alan, 08/11/2026); sem ele, "<fazenda> (<usuario>)"."""
+    grupo = ((models.get_cadastro_do_usuario(user_id) or {}).get("grupo_economico") or "").strip()
+    return f"{grupo} - {nome}" if grupo else f"{nome} ({username})"
+
+
+def _renomear_fazenda_cliente(user_id, ponto, username, lat=None, lon=None):
+    """Acerta nome (e local) da fazenda estimada depois que o cliente edita
+    a fazenda ou o grupo economico. Devolve o site_name final."""
+    site = ponto.get("site_name")
+    vf = models.get_virtual_farm(site) if site else None
+    if not vf:
+        return site
+    lat = vf["lat"] if lat is None else lat
+    lon = vf["lon"] if lon is None else lon
+    base = _nome_fazenda_cliente(user_id, ponto["nome"], username)
+    for tentativa in range(1, 20):
+        nome = base if tentativa == 1 else f"{base} {tentativa}"
+        if nome == vf["nome"] and (lat, lon) == (vf["lat"], vf["lon"]):
+            return site
+        try:
+            novo = models.update_virtual_farm(site, nome, lat, lon, vf["raio_km"],
+                                              countries.detectar_pais_por_coordenada(lat, lon), vf.get("tipo") or "doenca")
+        except sqlite3.IntegrityError:
+            continue
+        models.ligar_ponto_a_fazenda(ponto["id"], novo)
+        return novo
+    return site
+
+
+def _recalcular_cadastro(user_id):
+    """Total do cadastro (culturas, area, area do preco, tipos) = soma das
+    fazendas do cliente, depois de uma edicao."""
+    pontos = [p for p in models.get_cliente_pontos(user_id) if p.get("culturas")]
+    if not pontos:
+        return
+    somadas, tipos = {}, set()
+    for p in pontos:
+        for c, a in _culturas_com_area(p["culturas"]):
+            somadas[c] = somadas.get(c, 0) + _area_de_texto(a)
+            tipos.add(_grupo_da_cultura(c))
+    models.atualizar_dados_cadastro(
+        user_id, culturas=", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in somadas.items()),
+        area_ha=sum(p.get("area_ha") or 0 for p in pontos),
+        area_preco_ha=sum((p.get("area_preco_ha") or p.get("area_ha") or 0) for p in pontos),
+        grupo_cultura=",".join(t for t in GRUPOS_CULTURA if t in tipos),
+        empresa=pontos[0]["nome"], cidade=pontos[0].get("cidade") or "", uf=pontos[0].get("uf") or "")
+
+
 def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano, username=None):
     """Mesmo processo do Mapa Interpolado (`adicionar_ponto_virtual`): fazenda
     estimada no local da lavoura, com o raio do plano, liberada so' pro
     cliente dono dela. Nome com o usuario pra nao colidir com outro cliente."""
     username = username or current_user.username
-    # Com grupo economico no cadastro: "Grupo Mauro - Faz Mourao" no relatorio (pedido do Alan, 08/11/2026).
-    grupo = ((models.get_cadastro_do_usuario(user_id) or {}).get("grupo_economico") or "").strip()
-    base = f"{grupo} - {nome}" if grupo else f"{nome} ({username})"
+    base = _nome_fazenda_cliente(user_id, nome, username)
     for tentativa in range(1, 20):
         nome_fazenda = base if tentativa == 1 else f"{base} {tentativa}"
         try:
@@ -7866,17 +7957,62 @@ def cliente_ponto(ponto_id):
     )
 
 
-@app.route("/app/pontos/<int:ponto_id>/editar", methods=["POST"])
+@app.route("/app/pontos/<int:ponto_id>/editar", methods=["GET", "POST"])
 @cliente_required
 def cliente_ponto_editar(ponto_id):
+    """Editar tudo da fazenda (nome, cidade/UF, tipo, culturas e areas, local) --
+    pedido do Alan, 08/11/2026: corrigir o que foi digitado errado."""
+    from werkzeug.datastructures import MultiDict
     user_id = int(current_user.id)
-    if not models.get_cliente_ponto(user_id, ponto_id):
+    ponto = models.get_cliente_ponto(user_id, ponto_id)
+    if not ponto:
         abort(404)
-    nome = request.form.get("nome", "").strip()[:60]
-    cultura = request.form.get("cultura", "")
-    if nome:
-        models.atualizar_cliente_ponto(user_id, ponto_id, nome, cultura if cultura in _culturas_cliente() else "")
-    return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
+    culturas = _culturas_cliente()
+    form = request.form
+    if request.method == "POST":
+        grupos = [gr for gr in GRUPOS_CULTURA if gr in form.getlist("grupo_cultura")]
+        loc = _locais_do_form(form, culturas, grupos)[0]
+        nome = (form.get("nome") or "").strip()[:60]
+        lat, lon = _coordenada(form.get("lat")), _coordenada(form.get("lon"))
+        areas = [(c, a) for c, a, _g in loc["areas_grupo"]]
+        erro = None
+        if not nome:
+            erro = "Dê um nome para a fazenda."
+        elif not grupos:
+            erro = "Escolha o tipo de cultura (Cereais, HF ou Outros)."
+        elif not areas or any(a <= 0 for _c, a in areas):
+            erro = "Marque as culturas e informe a área (ha) de cada uma."
+        elif lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            erro = "Marque o local da fazenda no mapa."
+        if erro:
+            flash(erro, "error")
+        else:
+            models.editar_cliente_ponto(
+                ponto_id, nome, lat, lon, ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in areas),
+                sum(a for _c, a in areas), _area_preco_grupos(grupos, loc["areas_grupo"]),
+                (form.get("cidade") or "").strip()[:80], form.get("uf") or "")
+            _renomear_fazenda_cliente(user_id, models.get_cliente_ponto(user_id, ponto_id), current_user.username, lat, lon)
+            _recalcular_cadastro(user_id)
+            flash("Fazenda atualizada.", "success")
+            return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
+    else:
+        pares = _culturas_com_area(ponto.get("culturas")) if ponto.get("culturas") else (
+            [(ponto["cultura"], "")] if ponto.get("cultura") else [])
+        dados = [("nome", ponto["nome"]), ("cidade", ponto.get("cidade") or ""), ("uf", ponto.get("uf") or ""),
+                 ("lat", f"{ponto['lat']:.6f}"), ("lon", f"{ponto['lon']:.6f}")]
+        tipos = set()
+        for c, a in pares:
+            area = str(_area_de_texto(a) or "").replace(".0", "") if a else ""
+            if c in culturas:
+                dados += [("culturas", c), (f"area_cultura__{c}", area)]
+                tipos.add(_grupo_da_cultura(c))
+            else:
+                dados += [("cultura_outra", c), ("area_outra", area)]
+                tipos.add("hf")
+        dados += [("grupo_cultura", t) for t in GRUPOS_CULTURA if t in tipos]
+        form = MultiDict(dados)
+    return render_template("cliente_ponto_novo.html", culturas=culturas, grupos=GRUPOS_CULTURA,
+                           grupo_de={c: _grupo_da_cultura(c) for c in culturas}, ufs=UFS_BR, form=form, editar=ponto)
 
 
 @app.route("/app/pontos/<int:ponto_id>/excluir", methods=["POST"])

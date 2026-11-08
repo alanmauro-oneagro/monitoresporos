@@ -1,0 +1,24 @@
+{% extends "cliente_base.html" %}
+{% block title %}Editar meus dados - OneAgro App{% endblock %}
+{% block content %}
+{# Corrigir os dados do cadastro (pedido do Alan, 08/11/2026). #}
+<h1 class="titulo">Editar meus dados</h1>
+<form method="post" class="card shadow-sm mb-3"><div class="card-body">
+    <label class="form-label small mb-1" for="nome_completo">Nome completo</label>
+    <input class="form-control mb-3" name="nome_completo" id="nome_completo" value="{{ form.get('nome_completo') if form else (cadastro.nome_completo or '') }}" autocomplete="name" required>
+    <label class="form-label small mb-1" for="grupo_economico">Nome do grupo econômico</label>
+    <input class="form-control" name="grupo_economico" id="grupo_economico" value="{{ form.get('grupo_economico') if form else (cadastro.grupo_economico or '') }}" maxlength="40" placeholder="Ex.: Grupo Mauro">
+    <div class="small text-muted mb-3">Vai antes do nome de cada fazenda no relatório: <em>Grupo Mauro - Faz Mourão</em>.</div>
+    <label class="form-label small mb-1" for="numero_telefone">Celular (WhatsApp)</label>
+    <div class="input-group mb-3">
+        <span class="input-group-text">+</span>
+        <input class="form-control" style="max-width: 4.5rem;" name="codigo_pais" value="{{ codigo_pais }}" inputmode="numeric" aria-label="Código do país">
+        <input class="form-control" name="numero_telefone" id="numero_telefone" value="{{ numero }}" placeholder="DDD + número" inputmode="tel" required>
+    </div>
+    <label class="form-label small mb-1" for="email">E-mail (opcional)</label>
+    <input class="form-control mb-3" type="email" name="email" id="email" value="{{ form.get('email') if form else (user.email or '') }}" autocomplete="email">
+    <div class="small text-muted mb-3">Usuário: <strong>{{ user.username }}</strong> (não muda). As culturas e áreas se corrigem em cada fazenda, em "Fazendas monitoradas".</div>
+    <button class="btn btn-success w-100" type="submit">Salvar alterações</button>
+    <a class="btn btn-link w-100 mt-1" href="{{ url_for('cliente_home') }}">Cancelar</a>
+</div></form>
+{% endblock %}
