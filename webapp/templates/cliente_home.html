@@ -2,22 +2,25 @@
 {% block title %}Conta - OneAgro App{% endblock %}
 {% block content %}
 <h1 class="titulo">Minha conta</h1>
-<div class="card shadow-sm mb-3"><div class="card-body small">
+<div class="card shadow-sm mb-3"><div class="card-body py-2">
     <div><span class="text-muted">Usuário:</span> {{ user.username }}</div>
     <div><span class="text-muted">E-mail:</span> {{ user.email or '—' }}</div>
     <div><span class="text-muted">Celular:</span> {{ user.telefone | telefone_br if user.telefone else '—' }}</div>
 </div></div>
 <h6 class="mb-2">Culturas</h6>
 {# Dados do cadastro (pedido do Alan, 08/11/2026). #}
-<div class="card shadow-sm mb-3"><div class="card-body">
-    {% if cadastro.grupo_cultura %}<div class="small text-muted mb-1">{{ cadastro.grupo_cultura | grupos_cultura }}</div>{% endif %}
+{# Total de todas as fazendas, em nome do dono da conta (pedido do Alan, 08/11/2026). #}
+<div class="card shadow-sm mb-3"><div class="card-body py-2">
+    <div class="d-flex justify-content-between align-items-baseline pb-1 border-bottom">
+        <span class="fw-semibold">{{ cadastro.nome_completo or user.username }}</span>
+        {% if cadastro.grupo_cultura %}<span class="text-muted">{{ cadastro.grupo_cultura | grupos_cultura }}</span>{% endif %}
+    </div>
     {% for nome, area in culturas_lista %}
-    <div class="d-flex justify-content-between border-bottom py-1"><span class="fw-semibold">{{ nome }}</span><span>{{ area or '' }}</span></div>
+    <div class="d-flex justify-content-between border-bottom py-1"><span>{{ nome }}</span><span>{{ area or '' }}</span></div>
     {% else %}
-    <div class="text-muted small">Nenhuma cultura informada no cadastro.</div>
+    <div class="text-muted py-1">Nenhuma cultura informada no cadastro.</div>
     {% endfor %}
-    {% if cadastro.area_ha %}<div class="d-flex justify-content-between pt-2 small"><span class="text-muted">Área total</span><strong>{{ '{:,.0f}'.format(cadastro.area_ha).replace(',', '.') }} ha</strong></div>{% endif %}
-    {% if cadastro.empresa or cadastro.cidade %}<div class="small text-muted mt-1">{{ cadastro.empresa }}{% if cadastro.cidade %} · {{ cadastro.cidade }}{% if cadastro.uf %}/{{ cadastro.uf }}{% endif %}{% endif %}</div>{% endif %}
+    {% if cadastro.area_ha %}<div class="d-flex justify-content-between pt-1 fw-semibold"><span>Área total</span><span>{{ '{:,.0f}'.format(cadastro.area_ha).replace(',', '.') }} ha</span></div>{% endif %}
 </div></div>
 
 <h6 class="mb-2">Fazendas monitoradas</h6>
@@ -31,7 +34,7 @@
 <a href="{{ url_for('cliente_ponto', ponto_id=p.id) if plano else url_for('cliente_assinatura') }}" class="card shadow-sm mb-2 text-decoration-none text-dark{% if not p.liberado %} opacity-75{% endif %}">
     <div class="card-body d-flex justify-content-between align-items-center py-3">
         <div>
-            <div class="fw-semibold">{{ p.nome }}{% if p.cidade %} <span class="small text-muted fw-normal">{{ p.cidade }}/{{ p.uf }}</span>{% endif %}</div>
+            <div class="fw-semibold">{{ p.nome }}{% if p.cidade %} <span class="small text-muted fw-normal">{{ p.cidade }}{% if p.uf %}/{{ p.uf }}{% endif %}</span>{% endif %}</div>
             <div class="small text-muted">{{ p.culturas or p.cultura or 'Todas as culturas' }}{% if p.area_ha %} · {{ '{:,.0f}'.format(p.area_ha).replace(',', '.') }} ha{% endif %}</div>
             {% if p.situacao_adicional %}<span class="badge mt-1 {{ {'paga': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueada': 'bg-danger'}[p.situacao_adicional.chave] }}">{{ '🔒 ' if not p.liberado }}{{ p.situacao_adicional.texto }}</span>{% endif %}
         </div>
