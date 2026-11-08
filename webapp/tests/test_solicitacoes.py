@@ -165,6 +165,23 @@ class CadastroTest(unittest.TestCase):
         user = models.get_user_by_username("Zzz Cad Tecnico")
         self.assertIsNone(models.get_assinatura(user["id"])["plano_id"])  # nenhum plano escolhido
 
+    def test_perfil_unico_e_varios_tipos_de_cultura(self):
+        """Voce e': um so' (radio); Tipo de cultura: varios (pedido do Alan, 08/11/2026)."""
+        html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
+        self.assertIn('type="radio" name="perfil" id="perfil_produtor"', html)
+        self.assertIn('type="checkbox" class="btn-check" name="grupo_cultura" id="grupo_cana"', html)
+        dados = _form(username="Zzz Cad Varios", numero_telefone="65999990071", grupo_cultura=["cereais", "cana"],
+                      culturas=["Soja", "Milho", "Cana", "Batata"], cultura_outra="Tomate", area_outra="9")
+        dados.update({"area_cultura__Soja": "500", "area_cultura__Milho": "200", "area_cultura__Cana": "300",
+                      "area_cultura__Batata": "40"})
+        self.assertEqual(webapp.app.test_client().post("/solicitar-acesso", data=dados).status_code, 302)
+        reg = self._cadastro("Zzz Cad Varios")
+        # Batata e Tomate sao HF (nao marcado) -- ficam de fora; preco = Soja + Cana
+        self.assertEqual((reg["grupo_cultura"], reg["area_ha"], reg["area_preco_ha"]), ("cereais,cana", 1000.0, 800.0))
+        self.assertEqual(reg["culturas"], "Soja (500 ha), Milho (200 ha), Cana (300 ha)")
+        self.assertEqual(webapp.rotulo_grupos("cereais,cana"), "Cereais, Cana")
+        self.assertEqual(webapp._area_preco_grupos(["cereais", "hf"], [("Milho", 100, "cereais"), ("Uva", 5, "hf"), ("Milho", 7, "hf")]), 112)
+
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
                          ["cereais", "cereais", "cereais", "cereais", "cana", "cana", "hf", "hf"])
@@ -224,7 +241,8 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(c.get("/fazendas").status_code, 200)  # ja' entrou logado
         reg = self._cadastro("Zzz Cad Fazenda")
         self.assertEqual((reg["tipo"], reg["perfil"], reg["area_ha"], reg["nome_completo"]),
-                         ("usuario", "produtor,tecnico", 1500.0, "Zzz Teste da Silva Cadastro"))
+                         ("usuario", "produtor", 1500.0, "Zzz Teste da Silva Cadastro"))  # um perfil so'
+
         aviso = [t for tel, t in self.enviadas if tel == "5565988887777"]
         self.assertEqual(len(aviso), 1)
         self.assertIn("Zzz Cad Fazenda", aviso[0])

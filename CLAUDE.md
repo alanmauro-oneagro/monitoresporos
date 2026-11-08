@@ -91,7 +91,11 @@ preco (sem dica do grupo, sem "area para o preco", sem nota no Premium --
 pedido do Alan, 08/11/2026). **Tecnico do setor** marcado: os planos somem
 e aparece "Entrar em contato com: Alan Mauro / Cel (43) 99114-7595 /
 contato@oneagro.com.br" (`app.CONTATO_COMERCIAL`); o servidor ignora o
-plano escolhido e a conta nasce sem plano (aviso com o mesmo contato). A pessoa escolhe **Assinar plano** ou **Ter acesso
+plano escolhido e a conta nasce sem plano (aviso com o mesmo contato). **"Voce e'" = UMA opcao** (radio; servidor guarda so' a 1a) e
+**Tipo de cultura = varias** (checkbox; pedido do Alan, 08/11/2026):
+`grupo_cultura` vira "cereais,cana"; a tela mostra as culturas de todos
+os tipos marcados e a area do preco soma a regra de cada tipo
+(`app._area_preco_grupos`; filtro `grupos_cultura` = "Cereais, Cana"). A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
 (tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao

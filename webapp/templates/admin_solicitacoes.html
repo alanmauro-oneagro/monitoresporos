@@ -56,7 +56,7 @@
             <dt>Cidade</dt><dd>{{ c.cidade or '-' }}{% if c.uf %}/{{ c.uf }}{% endif %}</dd>
             {# Area de cada cultura (pedido do Alan, 08/11/2026). #}
             <dt>Culturas</dt><dd>{% for nome, area in c.culturas_lista %}<div class="cultura-area-linha">{{ nome }}{% if area %} <span class="text-muted">— {{ area }}</span>{% endif %}</div>{% else %}-{% endfor %}</dd>
-            {% if c.grupo_cultura %}<dt>Tipo</dt><dd>{{ {'cereais': 'Cereais', 'hf': 'HF', 'cana': 'Cana'}.get(c.grupo_cultura, c.grupo_cultura) }}{% if c.area_preco_ha and c.area_preco_ha != c.area_ha %} <span class="text-muted">-- área para o preço: {{ '{:,.0f}'.format(c.area_preco_ha).replace(',', '.') }} ha</span>{% endif %}</dd>{% endif %}
+            {% if c.grupo_cultura %}<dt>Tipo</dt><dd>{{ c.grupo_cultura | grupos_cultura }}{% if c.area_preco_ha and c.area_preco_ha != c.area_ha %} <span class="text-muted">-- área para o preço: {{ '{:,.0f}'.format(c.area_preco_ha).replace(',', '.') }} ha</span>{% endif %}</dd>{% endif %}
             <dt>Área total</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
             {% set pr = c.preco_area %}
             {% if pr %}<dt>Preço pela área</dt><dd>{% if pr.total_usd is not none %}<strong>{{ pr.total_usd | dinheiro('U$') }}</strong>{% if pr.total_brl is not none %} (≈ {{ pr.total_brl | dinheiro }}){% endif %}
