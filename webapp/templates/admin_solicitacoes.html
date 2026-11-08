@@ -69,6 +69,9 @@
         <div class="cad-assinatura small mb-3">
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <strong>Assinatura:</strong> {{ cl.plano_nome or 'sem plano escolhido' }}
+                {% set pl = planos | selectattr('id', 'equalto', cl.plano_id) | first if cl.plano_id else none %}
+                {% if pl and pl.valor > 0 %}<span class="plano-parcelas">· <strong>{{ pl.parcelas }}x de {{ pl.valor_parcela | dinheiro(pl.simbolo) }}</strong>
+                    <span class="text-muted" style="font-size: 0.75rem;">(total {{ pl.valor | dinheiro(pl.simbolo) }})</span></span>{% elif pl %}<span class="text-muted">· grátis</span>{% endif %}
                 <span class="text-muted">· {{ cl.status or '—' }}</span>
                 {% if fim and fim >= hoje %}<span class="badge bg-success">liberado</span>{% else %}<span class="badge bg-secondary">bloqueado</span>{% endif %}
                 <span class="text-muted">· pago até {{ cl.pago_ate | data_br if cl.pago_ate else '—' }} · {{ cl.n_pontos }} lavoura{{ '' if cl.n_pontos == 1 else 's' }}</span>
@@ -78,7 +81,7 @@
                 <input class="form-control form-control-sm" style="max-width: 160px;" type="date" name="cortesia_ate" id="cortesia_{{ cl.id }}" value="{{ cl.cortesia_ate or '' }}">
                 <select class="form-select form-select-sm" style="max-width: 190px;" name="plano_id" aria-label="Plano">
                     <option value="">(mesmo plano)</option>
-                    {% for p in planos %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}
+                    {% for p in planos %}<option value="{{ p.id }}">{{ p.nome }}{% if p.valor > 0 %} -- {{ p.parcelas }}x de {{ p.valor_parcela | dinheiro(p.simbolo) }}{% endif %}</option>{% endfor %}
                 </select>
                 <button class="btn btn-outline-success btn-sm" type="submit">OK</button>
             </form>

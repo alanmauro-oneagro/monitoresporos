@@ -167,6 +167,8 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(html.count("<dd>Zzz Cad Cliente Junto</dd>"), 1)  # uma vez so', com a assinatura junto
         self.assertIn("Zzz Cliente Antigo", html)  # cliente sem registro de cadastro tambem aparece
         self.assertIn("Zzz Plano Cad", html)  # plano do cliente antigo
+        self.assertIn("<strong>12x de R$ 2,50</strong>", html)  # plano mensal de R$ 30,00 no total
+        self.assertIn("(total R$ 30,00)", html)
         self.assertIn("Cortesia até", html)
         self.assertIn('data-filtro="cliente"', html)
         self.assertIn('class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle"', html)  # recolhido
