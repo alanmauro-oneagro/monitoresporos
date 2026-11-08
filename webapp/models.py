@@ -2523,6 +2523,23 @@ def get_culturas():
     return [r["nome"] or "" for r in rows]
 
 
+def get_grupos_culturas():
+    """Tipo de cada um dos 12 slots de cultura ("cereais"/"hf"/"cana" ou ""),
+    escolhido na aba Doencas/Culturas (pedido do Alan, 08/11/2026) -- e' o
+    que liga a cultura ao "Tipo de cultura" do cadastro. Por slot, pra
+    renomear a cultura nao perder o tipo."""
+    try:
+        grupos = json.loads(get_setting("grupos_culturas") or "[]")
+    except ValueError:
+        grupos = []
+    grupos = [g if isinstance(g, str) else "" for g in grupos][:12]
+    return grupos + [""] * (12 - len(grupos))
+
+
+def set_grupos_culturas(grupos):
+    set_setting("grupos_culturas", json.dumps([g or "" for g in grupos][:12]))
+
+
 def get_culturas_ativas():
     """So os nomes ja preenchidos -- usado nos seletores de cultura atual
     por fazenda (Fazendas/Recomendacoes) e na matriz de doencas."""

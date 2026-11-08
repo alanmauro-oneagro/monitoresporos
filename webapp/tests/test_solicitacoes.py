@@ -182,6 +182,33 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(webapp.rotulo_grupos("cereais,cana"), "Cereais, Cana")
         self.assertEqual(webapp._area_preco_grupos(["cereais", "hf"], [("Milho", 100, "cereais"), ("Uva", 5, "hf"), ("Milho", 7, "hf")]), 112)
 
+    def test_tipo_da_cultura_na_aba_doencas_culturas(self):
+        """Tipo escolhido na frente da cultura (aba Doencas/Culturas) manda no cadastro (pedido do Alan, 08/11/2026)."""
+        if not models.get_user_by_username("Zzz Teste Master Cad"):
+            models.create_user("Zzz Teste Master Cad", "x", is_master=True)
+        master = self._logado("Zzz Teste Master Cad")
+        html = master.get("/admin/doencas").get_data(as_text=True)
+        self.assertIn("<h4 class=\"mb-2\">Doenças/Culturas</h4>", html)
+        self.assertIn(">Doenças/Culturas</a>", html)  # menu
+        self.assertIn('name="cultura_grupo__0"', html)
+        nomes = models.get_culturas()
+        antes = models.get_grupos_culturas()
+        slot = nomes.index("Feijao")
+        dados = {"form_id": "matriz_culturas"}
+        for i, n in enumerate(nomes):
+            dados[f"cultura_nome__{i}"] = n
+            if n:
+                dados[f"cultura_grupo__{i}"] = "cereais" if i == slot else webapp._grupo_da_cultura(n)
+        try:
+            master.post("/admin/doencas", data=dados)
+            self.assertEqual(models.get_grupos_culturas()[slot], "cereais")
+            with webapp.app.test_request_context():
+                self.assertEqual(webapp._grupo_da_cultura("Feijao"), "cereais")
+            cad = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
+            self.assertIn('data-grupo="cereais" style="min-height: 2.1rem;">\n            <div class="form-check mb-0" style="min-width: 7rem;">\n                <input class="form-check-input" type="checkbox" name="culturas" id="cultura_%d" value="Feijao"' % (models.get_culturas_ativas().index("Feijao") + 1), cad)
+        finally:
+            models.set_grupos_culturas(antes)
+
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
                          ["cereais", "cereais", "cereais", "cereais", "cana", "cana", "hf", "hf"])

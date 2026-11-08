@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Doencas - OneAgro App{% endblock %}
+{% block title %}Doenças/Culturas - OneAgro App{% endblock %}
 {% block extra_head %}
 <style>
 /* Cabecalho da matriz Doencas x Pais -- 12
@@ -15,7 +15,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 </style>
 {% endblock %}
 {% block content %}
-<h4 class="mb-2">Doencas</h4>
+<h4 class="mb-2">Doenças/Culturas</h4>
 
 <form method="post" action="{{ url_for('adicionar_doenca_manual') }}" class="card shadow-sm mb-3">
     <div class="card-body">
@@ -115,11 +115,20 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 <form method="post" data-autosave data-autosave-reload class="card shadow-sm mb-2">
     <input type="hidden" name="form_id" value="matriz_culturas">
     <div class="card-body">
-        <div class="row g-2 row-cols-2 row-cols-sm-3 row-cols-lg-6">
+        <div class="row g-2 row-cols-1 row-cols-sm-2 row-cols-lg-4">
             {% for slot in range(12) %}
             <div class="col">
-                <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm"
-                       value="{{ culturas[slot] }}" placeholder="(livre)" aria-label="Cultura {{ slot + 1 }}">
+                {# Tipo da cultura na frente do nome (pedido do Alan, 08/11/2026): liga com o
+                   "Tipo de cultura" do cadastro (Cereais/HF/Cana). #}
+                <div class="input-group input-group-sm">
+                    <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm"
+                           value="{{ culturas[slot] }}" placeholder="(livre)" aria-label="Cultura {{ slot + 1 }}">
+                    <select name="cultura_grupo__{{ slot }}" class="form-select form-select-sm flex-grow-0" style="width: 7.2rem;"
+                            aria-label="Tipo da cultura {{ slot + 1 }}" {% if not culturas[slot] %}disabled{% endif %}>
+                        {% if not culturas[slot] %}<option value="">—</option>{% endif %}
+                        {% for chave, rotulo in grupos_cultura.items() %}<option value="{{ chave }}" {% if tipo_cultura[slot] == chave %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+                    </select>
+                </div>
             </div>
             {% endfor %}
         </div>
