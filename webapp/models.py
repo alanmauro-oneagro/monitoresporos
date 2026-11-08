@@ -3327,6 +3327,16 @@ def clientes_por_site():
     return {r["site_name"]: r["username"] for r in rows}
 
 
+def dono_da_fazenda_cliente(site_name):
+    """user_id do cliente dono da fazenda estimada (ou None)."""
+    if not site_name:
+        return None
+    conn = get_db()
+    row = conn.execute("SELECT user_id FROM cliente_pontos WHERE site_name = ? LIMIT 1", (site_name,)).fetchone()
+    conn.close()
+    return row["user_id"] if row else None
+
+
 def sites_de_clientes():
     """Fazendas estimadas criadas pelas lavouras dos clientes do app (plano)."""
     conn = get_db()

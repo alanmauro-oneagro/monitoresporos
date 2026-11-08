@@ -238,8 +238,12 @@ cache offline). **Aba Relatorios** (`/app/relatorios`, `cliente_relatorios`):
 um cartao RECOLHIDO por fazenda ("▶ <nome>", mesmo modelo de Manejos);
 abrir carrega por fetch (`/app/relatorios/<id>.txt?ver=1`) e mostra o texto do relatorio (`_texto_relatorio`, o
 mesmo do WhatsApp -- `_preparar_relatorio` monta os dados pros dois) com
-cabecalho destacado ("📋 *RELATÓRIO ONEAGRO*", nome da fazenda, data/hora;
-`_texto_relatorio_cliente`) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
+cabecalho no formato do Alan (08/11/2026): "*RELATÓRIO ONEAGRO*" / ━━ /
+"*<grupo economico ou nome>*  dd/mm/aaaa hh:mm" / ━━ / "*<FAZENDA sem o
+grupo> - OneAgro*" / "Recomendações ... · Cultura: *SOJA / MILHO*" / ━━
+(`_cabecalho_relatorio_cliente` + `_bloco_relatorio_fazenda`); cartao
+"Todas as fazendas (uma mensagem só)" no topo quando ha' mais de uma
+(`/app/relatorios/todos.txt`: 1 cabecalho + o bloco de cada fazenda) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
 "Copiar texto" e "Baixar .txt" (`/app/relatorios/<id>.txt`). Na lista "Fazendas monitoradas" o "✏️ Editar" fica
 logo na frente do nome; a pagina da fazenda (`cliente_ponto`) mostra SO'
 culturas/areas, area total, municipio, estado, coordenadas e o mapa
@@ -255,7 +259,12 @@ ja' entra na Programacao de Envios (agenda padrao do `create_virtual_farm`)
 com o proprio cliente recebendo (`models.receber_relatorio_da_fazenda`). Lavouras de antes dessa regra: `_criar_fazendas_das_lavouras_antigas`
 roda na subida do site (`_bootstrap_once`), cria a fazenda das que nao tem
 e garante liberacao + destinatario das que ja' tinham (idempotente).
-**Relatorio por WhatsApp pelo plano**: recursos `whatsapp_texto` e
+**Relatorio do Free enxuto** (pedido do Alan, 08/11/2026): fazenda de
+cliente cujo plano que vale hoje e' o Free (`_relatorio_simples`,
+`models.dono_da_fazenda_cliente`) sai sem "Clima agora", sem "Última leitura
+BioScout" e sem "Produtos disponíveis na fazenda" (`_format_whatsapp_message(...,
+simples=True)`; previsao de chuva e doencas ficam) -- no WhatsApp e na aba
+Relatorios. **Relatorio por WhatsApp pelo plano**: recursos `whatsapp_texto` e
 `whatsapp_pdf` (linhas na tabela de Planos e Valores; padrao: texto em
 todos, PDF so' no Premium e Premium + Estacao -- migrado 1x, setting
 `recursos_whatsapp_migrados`). `_send_site_whatsapp` manda a cada cliente
@@ -411,7 +420,10 @@ dias, A/M/B) das doencas com germinacao, do pais da fazenda
 (pedido do Alan, 08/11/2026): so' entram doencas marcadas (Doenças/Culturas)
 pra alguma cultura que ele informou no cadastro/fazendas
 (`_culturas_do_cliente`); doenca sem cultura marcada fica de fora; cliente
-sem nenhuma cultura da lista ve todas. Doenca sem leitura recente de esporos nas estacoes do raio
+sem nenhuma cultura da lista ve todas. Tabela (e graficos) AGRUPADOS por
+cultura, na ordem das culturas do cliente (cadastro, depois fazendas;
+linha "🌱 Soja"; doenca de varias culturas fica so' na 1a --
+`_agrupar_por_cultura`). Doenca sem leitura recente de esporos nas estacoes do raio
 da fazenda (`_cards_ponto_cliente`) vem com "(-)" na coluna Hoje (no lugar do
 A/M/B de hoje; os dias da previsao continuam) e a legenda "(-) Sem medição" (pedido do Alan, 08/11/2026).
 Com o recurso de plano `graficos_app` ("Gráficos: 7 dias de histórico e 5

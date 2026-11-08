@@ -16,6 +16,29 @@
     <a class="btn btn-success w-100" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar fazenda monitorada</a>
 </div></div>
 {% endif %}
+{% if pontos | length > 1 %}
+{# Todas as fazendas numa mensagem so' (pedido do Alan, 08/11/2026); cada uma
+   tambem pode ser enviada separada nos cartoes abaixo. #}
+<div class="card shadow-sm mb-3 relatorio border-success" data-url="{{ url_for('cliente_relatorios_todos_txt', ver=1) }}">
+    <div class="card-body py-3">
+        <button type="button" class="btn btn-link text-decoration-none p-0 relatorio-toggle text-start">
+            <span class="toggle-icon">▶</span>Todas as fazendas (uma mensagem só)
+        </button>
+        <div class="relatorio-corpo d-none mt-3">
+            <div class="d-grid gap-2 mb-2">
+                <a class="btn btn-success disabled btn-whatsapp" href="#" target="_blank" rel="noopener">📲 Enviar todos pelo WhatsApp</a>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-success flex-fill btn-copiar" disabled>📋 Copiar todos</button>
+                    <a class="btn btn-outline-secondary flex-fill" href="{{ url_for('cliente_relatorios_todos_txt') }}">⬇ Baixar .txt</a>
+                </div>
+                <div class="small text-success text-center aviso-copiado" aria-live="polite"></div>
+            </div>
+            <pre class="mb-0 texto-relatorio border rounded p-2 bg-light" style="white-space: pre-wrap; font-family: inherit; font-size: 0.85rem;">Carregando...</pre>
+        </div>
+    </div>
+</div>
+<div class="small text-muted mb-2">Ou envie cada fazenda separada:</div>
+{% endif %}
 {% for p in pontos %}
 <div class="card shadow-sm mb-2 relatorio" data-url="{{ url_for('cliente_relatorio_txt', ponto_id=p.id, ver=1) }}">
     <div class="card-body py-3">
