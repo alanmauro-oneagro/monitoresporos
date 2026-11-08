@@ -167,5 +167,43 @@ class FazendaAdicionalTest(unittest.TestCase):
         self.assertEqual(models.get_assinatura(uid)["forma_pagamento"], "CREDIT_CARD")
 
 
+    def test_editar_dados_da_conta_e_fazenda(self):
+        """Botao Editar na Conta e em cada fazenda: corrigir tudo que foi
+        digitado no cadastro (pedido do Alan, 08/11/2026)."""
+        uid = self._cliente_pagante("Zzz Adic Editar")
+        models.criar_cliente("Zzz Adic Outro", "segredo1", "outro@zzz.com", "5565999991299", "", None)
+        c = self._logado(uid)
+        with mock.patch.object(webapp.asaas, "configurado", return_value=False):
+            self._nova(c)
+        ponto = models.get_cliente_pontos(uid)[0]
+        self.assertIn("/app/conta/editar", c.get("/app").get_data(as_text=True))
+        # dados da conta: celular de outra conta e' recusado
+        r = c.post("/app/conta/editar", data={"nome_completo": "Zzz Joao Editado", "grupo_economico": "Grupo Zzz",
+                                             "codigo_pais": "55", "numero_telefone": "65999991299", "email": ""},
+                   follow_redirects=True)
+        self.assertIn("Esse celular já está em outra conta", r.get_data(as_text=True))
+        c.post("/app/conta/editar", data={"nome_completo": "Zzz Joao Editado", "grupo_economico": "Grupo Zzz",
+                                          "codigo_pais": "55", "numero_telefone": "(65)99999-1300", "email": "joao@zzz.com"})
+        user, cad = models.get_user_by_id(uid), models.get_cadastro_do_usuario(uid)
+        self.assertEqual((user["telefone"], user["email"]), ("5565999991300", "joao@zzz.com"))
+        self.assertEqual((cad["nome_completo"], cad["grupo_economico"]), ("Zzz Joao Editado", "Grupo Zzz"))
+        # trocar o grupo renomeia a fazenda
+        ponto = models.get_cliente_ponto(uid, ponto["id"])
+        self.assertEqual(models.get_virtual_farm(ponto["site_name"])["nome"], "Grupo Zzz - Faz Mourão")
+        # fazenda: tela de edicao ja' vem preenchida
+        tela = c.get(f"/app/pontos/{ponto['id']}/editar").get_data(as_text=True)
+        self.assertIn('value="Faz Mourão"', tela)
+        self.assertIn('name="area_cultura__Soja" value="100"', tela)
+        c.post(f"/app/pontos/{ponto['id']}/editar", data={
+            "nome": "Faz Mourão II", "cidade": "Sinop", "uf": "MT", "grupo_cultura": "cereais", "culturas": ["Soja"],
+            "area_cultura__Soja": "250", "lat": "-12.6", "lon": "-55.8"})
+        ponto = models.get_cliente_ponto(uid, ponto["id"])
+        self.assertEqual((ponto["nome"], ponto["culturas"], ponto["area_ha"], ponto["cidade"], ponto["lat"]),
+                         ("Faz Mourão II", "Soja (250 ha)", 250.0, "Sinop", -12.6))
+        vf = models.get_virtual_farm(ponto["site_name"])
+        self.assertEqual((vf["nome"], vf["lat"]), ("Grupo Zzz - Faz Mourão II", -12.6))
+        cad = models.get_cadastro_do_usuario(uid)
+        self.assertEqual((cad["culturas"], cad["area_ha"], cad["empresa"]), ("Soja (250 ha)", 250.0, "Faz Mourão II"))
+
 if __name__ == "__main__":
     unittest.main()

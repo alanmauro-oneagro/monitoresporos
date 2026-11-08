@@ -219,7 +219,16 @@ GET volta pra `/app`). "Quem mais recebe" salva sozinho, sem botao
 pessoa incompleta nao apaga o que ja' estava salvo). Trocar senha (unico
 botao Salvar): botao 👁 mostrar senha em cada campo, senha atual conferida
 ao digitar (`/app/conta/conferir-senha`), nova >= 6 e confirmacao igual;
-"Salvar senha" so' libera com tudo certo (pedidos do Alan, 08/11/2026). **Sem "Excluir conta"** no app (pedido do Alan,
+"Salvar senha" so' libera com tudo certo (pedidos do Alan, 08/11/2026). **Editar o que foi digitado** (pedido do Alan, 08/11/2026): botao
+"✏️ Editar" no quadro da conta (`/app/conta/editar`, `cliente_conta_editar`:
+nome completo, grupo economico, celular, e-mail; celular/e-mail de outra
+conta recusado -- `conta_com_contato(..., exceto_user_id)`; usuario nao
+muda; trocar o grupo renomeia as fazendas estimadas,
+`_renomear_fazenda_cliente`) e em cada fazenda (`/app/pontos/<id>/editar`,
+mesma tela da "Nova fazenda" ja' preenchida: nome, cidade/UF, tipo,
+culturas/areas e local; renomeia/move a fazenda estimada e refaz o total do
+cadastro pela soma das fazendas, `_recalcular_cadastro`; "Excluir fazenda"
+ficou nessa tela). Editar area NAO gera nem ajusta cobranca. **Sem "Excluir conta"** no app (pedido do Alan,
 08/11/2026; rota `/app/conta/excluir` retirada) -- o Master exclui em
 Gerenciar Clientes. Depois do login o
 cliente entra direto no Site (`_inicio_cliente`: 1a aba do Site que o plano

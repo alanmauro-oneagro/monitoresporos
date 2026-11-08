@@ -3832,7 +3832,7 @@ def marcar_cadastros_vistos():
     conn.close()
 
 
-def conta_com_contato(telefone, email=""):
+def conta_com_contato(telefone, email="", exceto_user_id=None):
     """Ja' existe conta com esse celular (mesmos digitos, ou os mesmos 11
     ultimos -- com ou sem o 55 na frente) ou e-mail? Usado pra barrar o
     segundo cadastro da mesma pessoa (pedido do Alan, 01/11/2026).
@@ -3840,9 +3840,11 @@ def conta_com_contato(telefone, email=""):
     digitos = "".join(ch for ch in (telefone or "") if ch.isdigit())
     email = (email or "").strip().lower()
     conn = get_db()
-    rows = conn.execute("SELECT telefone, email FROM users").fetchall()
+    rows = conn.execute("SELECT id, telefone, email FROM users").fetchall()
     conn.close()
     for r in rows:
+        if exceto_user_id and r["id"] == exceto_user_id:
+            continue
         outro = "".join(ch for ch in (r["telefone"] or "") if ch.isdigit())
         if digitos and outro and len(digitos) >= 10 and (outro == digitos or outro[-11:] == digitos[-11:]):
             return "telefone"
@@ -4121,6 +4123,28 @@ def get_ponto_por_id(ponto_id):
     row = conn.execute("SELECT * FROM cliente_pontos WHERE id = ?", (ponto_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def atualizar_dados_cadastro(user_id, **campos):
+    """Cliente corrige os proprios dados na Conta do app (pedido do Alan, 08/11/2026)."""
+    permitidos = {"nome_completo", "grupo_economico", "email", "telefone", "culturas", "area_ha", "area_preco_ha",
+                  "grupo_cultura", "empresa", "cidade", "uf"}
+    campos = {k: v for k, v in campos.items() if k in permitidos}
+    conn = get_db()
+    row = conn.execute("SELECT id FROM solicitacoes_acesso WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,)).fetchone()
+    if row and campos:
+        conn.execute(f"UPDATE solicitacoes_acesso SET {', '.join(f'{k} = ?' for k in campos)} WHERE id = ?",
+                     tuple(campos.values()) + (row["id"],))
+        conn.commit()
+    conn.close()
+
+
+def editar_cliente_ponto(ponto_id, nome, lat, lon, culturas, area_ha, area_preco_ha, cidade, uf):
+    conn = get_db()
+    conn.execute("UPDATE cliente_pontos SET nome = ?, lat = ?, lon = ?, culturas = ?, area_ha = ?, area_preco_ha = ?,"
+                 " cidade = ?, uf = ? WHERE id = ?", (nome, lat, lon, culturas, area_ha, area_preco_ha, cidade, uf, ponto_id))
+    conn.commit()
+    conn.close()
 
 
 def somar_ao_cadastro(user_id, culturas, area_ha, area_preco_ha, grupo_cultura):

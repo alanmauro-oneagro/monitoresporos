@@ -1,5 +1,5 @@
 {% extends "cliente_base.html" %}
-{% block title %}Nova fazenda monitorada - OneAgro App{% endblock %}
+{% block title %}{{ "Editar fazenda" if editar else "Nova fazenda monitorada" }} - OneAgro App{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>#mapaPonto { height: 45vh; min-height: 260px; border-radius: 0.5rem; }</style>
@@ -8,7 +8,7 @@
 {# Mesmas opcoes do cadastro: tipo de cultura, culturas e area de cada uma (pedido do Alan, 08/11/2026). #}
 {% set grupos_sel = form.getlist('grupo_cultura') if form else [] %}
 {% set marcadas = form.getlist('culturas') if form else [] %}
-<h1 class="titulo">Nova fazenda monitorada</h1>
+<h1 class="titulo">{{ "Editar fazenda" if editar else "Nova fazenda monitorada" }}</h1>
 <form method="post" id="formPonto">
     <input class="form-control mb-2" name="nome" value="{{ form.get('nome', '') if form else '' }}" placeholder="Nome (ex.: Faz Mourão)" maxlength="60" required aria-label="Nome da fazenda">
     <div class="row g-2 mb-3">
@@ -55,8 +55,14 @@
     <div id="mapaPonto" class="mb-2"></div>
     <p class="small text-muted mb-2" id="ajudaMapa">Toque no mapa para marcar a fazenda.</p>
     <input type="hidden" name="lat" id="lat" value="{{ form.get('lat', '') if form else '' }}"><input type="hidden" name="lon" id="lon" value="{{ form.get('lon', '') if form else '' }}">
-    <button class="btn btn-success w-100" type="submit">Salvar fazenda</button>
+    <button class="btn btn-success w-100" type="submit">{{ "Salvar alterações" if editar else "Salvar fazenda" }}</button>
 </form>
+{% if editar %}
+<a class="btn btn-link w-100 mt-1" href="{{ url_for('cliente_ponto', ponto_id=editar.id) }}">Cancelar</a>
+<form method="post" action="{{ url_for('cliente_ponto_excluir', ponto_id=editar.id) }}" class="mt-3" onsubmit="return confirm('Excluir esta fazenda monitorada?');">
+    <button class="btn btn-outline-danger btn-sm w-100" type="submit">Excluir fazenda</button>
+</form>
+{% endif %}
 {% endblock %}
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

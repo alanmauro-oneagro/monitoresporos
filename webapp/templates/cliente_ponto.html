@@ -15,23 +15,9 @@
 {% macro bloqueado(texto) %}<div class="bloqueado mb-3">🔒 {{ texto }} não faz parte do seu plano.{% if not no_app_loja %} <a href="{{ url_for('planos_publico') }}">Ver planos</a>{% endif %}</div>{% endmacro %}
 <div class="d-flex justify-content-between align-items-center">
     <h1 class="titulo mb-0">{{ ponto.nome }}</h1>
-    <button class="btn btn-sm btn-outline-secondary" type="button" onclick="document.getElementById('editarPonto').classList.toggle('d-none')">Editar</button>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('cliente_ponto_editar', ponto_id=ponto.id) }}">✏️ Editar</a>
 </div>
 <div class="small text-muted mb-3">{{ ponto.culturas or ponto.cultura or 'Todas as culturas' }} · {{ '%.4f' | format(ponto.lat) }}, {{ '%.4f' | format(ponto.lon) }}</div>
-
-<div id="editarPonto" class="d-none card shadow-sm mb-3"><div class="card-body">
-    <form method="post" action="{{ url_for('cliente_ponto_editar', ponto_id=ponto.id) }}">
-        <input class="form-control mb-2" name="nome" value="{{ ponto.nome }}" maxlength="60" required aria-label="Nome">
-        <select class="form-select mb-2" name="cultura" aria-label="Cultura">
-            <option value="">Todas as culturas</option>
-            {% for c in culturas %}<option value="{{ c }}" {% if c == ponto.cultura %}selected{% endif %}>{{ c }}</option>{% endfor %}
-        </select>
-        <button class="btn btn-success btn-sm w-100" type="submit">Salvar</button>
-    </form>
-    <form method="post" action="{{ url_for('cliente_ponto_excluir', ponto_id=ponto.id) }}" class="mt-2" onsubmit="return confirm('Excluir esta fazenda monitorada?');">
-        <button class="btn btn-outline-danger btn-sm w-100" type="submit">Excluir fazenda</button>
-    </form>
-</div></div>
 
 <h6>Clima</h6>
 {% if 'clima' in rec %}
