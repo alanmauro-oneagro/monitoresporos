@@ -15,10 +15,8 @@
     <div class="d-flex justify-content-between"><span class="text-muted small">Acesso liberado até</span><strong>{% if acesso_ate == sem_prazo %}Sem prazo{% elif acesso_ate %}{{ acesso_ate | data_br }}{% else %}—{% endif %}</strong></div>
     {% if free_ate %}
     {# Plano pago aguardando pagamento: usa o Free ate' o fim dos 7 dias do cadastro. #}
-    <div class="alert alert-info small mt-3 mb-2">Enquanto o pagamento não é aprovado, você usa o plano <strong>Free</strong> até <strong>{{ free_ate | data_br }}</strong>.</div>
-    <a class="btn btn-success w-100" href="{{ url_for('cliente_home') }}">Ver minhas lavouras</a>
+    <div class="alert alert-info small mt-3 mb-0">Enquanto o pagamento não é aprovado, você usa o plano <strong>Free</strong> até <strong>{{ free_ate | data_br }}</strong>.</div>
     {% elif liberada %}
-    <a class="btn btn-success w-100 mt-3" href="{{ url_for('cliente_home') }}">Ver minhas lavouras</a>
     {% else %}
     <div class="alert alert-warning small mt-3 mb-0">Seu acesso está bloqueado até a confirmação do pagamento.{% if not no_app_loja %} Pix confirma na hora; boleto em até 3 dias úteis.{% endif %}</div>
     {% endif %}
@@ -33,9 +31,16 @@
 <a class="btn btn-primary w-100 mb-3" href="{{ pg.invoice_url }}" target="_blank" rel="noopener">Pagar fatura de {{ pg.vencimento | data_br }} (R$ {{ '%.2f' | format(pg.valor or 0) | replace('.', ',') }})</a>
 {% endif %}{% endfor %}
 
-{% if pode_assinar and planos %}
+{% if plano and superiores and not mostrar_planos %}
+<a class="btn btn-outline-success w-100 mb-3" href="{{ url_for('cliente_assinatura', upgrade=1) }}">⬆ Fazer upgrade de plano</a>
+{% endif %}
+{% if pode_assinar and planos and mostrar_planos %}
 <form method="post" action="{{ url_for('cliente_assinar') }}" class="mb-3" id="form-plano">
-    {% if so_plano_escolhido %}
+    {% if upgrade %}
+    <input type="hidden" name="upgrade" value="1">
+    <div class="d-flex align-items-baseline justify-content-between"><h6>Fazer upgrade de plano</h6>
+        <a class="small" href="{{ url_for('cliente_assinatura') }}">Voltar</a></div>
+    {% elif so_plano_escolhido %}
     <div class="d-flex align-items-baseline justify-content-between"><h6>Plano escolhido</h6>
         <a class="small" href="{{ url_for('cliente_assinatura') }}">Ver todos os planos</a></div>
     {% else %}

@@ -313,7 +313,13 @@ tolerancia de 5 dias por ciclo).
 (`app._acesso_cliente` -> plano efetivo = `models.plano_free()`; Minha
 assinatura avisa "voce usa o plano Free ate' DD/MM"); passou dos 7 dias
 sem pagamento = bloqueado. Trocar do Free pra um pago pede CPF/CNPJ e
-limpa a cortesia do Free (o pago so' vale com pagamento). Clientes nao aparecem na aba Usuarios. App Android/iOS em
+limpa a cortesia do Free (o pago so' vale com pagamento). **Upgrade de plano** (pedido do Alan, 08/11/2026): com
+plano ja' escolhido, Minha assinatura mostra so' o quadro da situacao (sem
+lista de planos nem "Ver minhas lavouras") e o botao "⬆ Fazer upgrade de
+plano" (`?upgrade=1`), que lista SO' os planos a venda acima do atual
+(`_planos_superiores`: Ordem maior em Planos e Valores; "sob consulta" fora).
+No `cliente_assinar` com `upgrade=1`, a assinatura antiga no Asaas e'
+cancelada e a nova toma o lugar. Sem plano acima = sem botao. Clientes nao aparecem na aba Usuarios. App Android/iOS em
 `mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
 app nao aparece preco nem link de pagamento (regra das lojas).
 Recurso de plano "regiao" (`/app/regiao`, pedido do Alan, 26/10/2026):
