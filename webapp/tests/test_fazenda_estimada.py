@@ -189,3 +189,24 @@ class FazendaClienteNoMapaDeEstudoTest(unittest.TestCase):
         self.assertIn(site, dados)
         self.assertEqual((dados[site]["de_plano"], dados[site]["cards"], dados[site]["inativo"]), (True, [], False))
         self.assertIn("🟢 Cliente: Zzz Cli Longe", html)  # em Pontos Criados
+
+
+class LavourasAntigasTest(unittest.TestCase):
+    """Lavouras de clientes de antes da regra ganham a fazenda estimada na subida
+    do site (pedido do Alan, 08/11/2026)."""
+
+    def test_cria_fazenda_e_destinatario(self):
+        uid = models.criar_cliente("Zzz Cli Antigo Lav", "segredo1", "", "5565999990231", "", None)
+        sem_fazenda = models.criar_cliente_ponto(uid, "Talhao Antigo", -12.6, -55.8)
+        site_velho = models.create_virtual_farm("Zzz Fazenda Velha Lav", -12.7, -55.9, 30)
+        models.ligar_ponto_a_fazenda(models.criar_cliente_ponto(uid, "Talhao Ligado", -12.7, -55.9), site_velho)
+        with webapp.app.app_context():
+            self.assertGreaterEqual(webapp._criar_fazendas_das_lavouras_antigas(), 1)
+            pontos = {p["id"]: p for p in models.get_cliente_pontos(uid)}
+            novo = pontos[sem_fazenda]["site_name"]
+            self.assertIsNotNone(models.get_virtual_farm(novo))
+            self.assertIn("Talhao Antigo (Zzz Cli Antigo Lav)", novo)
+            for site in (novo, site_velho):
+                self.assertIn(site, models.get_user_permitted_site_names(uid))
+                self.assertIn("5565999990231", [r["telefone"] for r in models.get_site_whatsapp_recipients(site)])
+            self.assertEqual(webapp._criar_fazendas_das_lavouras_antigas(), 0)  # 2a vez: nada a fazer

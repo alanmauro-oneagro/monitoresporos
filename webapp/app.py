@@ -7322,16 +7322,17 @@ def cliente_ponto_novo():
     return render_template("cliente_ponto_novo.html", culturas=_culturas_cliente())
 
 
-def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano):
+def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano, username=None):
     """Mesmo processo do Mapa Interpolado (`adicionar_ponto_virtual`): fazenda
     estimada no local da lavoura, com o raio do plano, liberada so' pro
     cliente dono dela. Nome com o usuario pra nao colidir com outro cliente."""
-    base = f"{nome} ({current_user.username})"
+    username = username or current_user.username
+    base = f"{nome} ({username})"
     for tentativa in range(1, 20):
         nome_fazenda = base if tentativa == 1 else f"{base} {tentativa}"
         try:
             site_name = models.create_virtual_farm(
-                nome_fazenda, lat, lon, plano["raio_km"], criado_por=current_user.username,
+                nome_fazenda, lat, lon, (plano or {}).get("raio_km") or 50, criado_por=username,
                 country_code=countries.detectar_pais_por_coordenada(lat, lon), tipo="doenca",
             )
         except sqlite3.IntegrityError:
@@ -7343,6 +7344,33 @@ def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano)
         models.receber_relatorio_da_fazenda(user_id, site_name)
         return site_name
     return None
+
+
+def _criar_fazendas_das_lavouras_antigas():
+    """Lavouras de clientes de antes da regra "toda lavoura vira fazenda"
+    (pedido do Alan, 08/11/2026): cria a fazenda estimada de cada uma que
+    ainda nao tem, e garante que o cliente ve e recebe os relatorios das
+    que ja' tinham. Roda na subida do site; idempotente (so' mexe no que
+    falta). Devolve quantas fazendas criou."""
+    criadas = 0
+    for cliente in models.get_all_clientes():
+        try:
+            # raio do plano que vale hoje; sem acesso, o do plano escolhido; sem nenhum, 50 km
+            plano = _acesso_do_cliente(cliente["id"])[0] or (
+                models.get_plano(cliente["plano_id"]) if cliente.get("plano_id") else None)
+            for ponto in models.get_cliente_pontos(cliente["id"]):
+                if ponto.get("site_name") and models.get_virtual_farm(ponto["site_name"]):
+                    models.liberar_fazenda_para_usuario(cliente["id"], ponto["site_name"])
+                    models.receber_relatorio_da_fazenda(cliente["id"], ponto["site_name"])
+                    continue
+                if _criar_fazenda_estimada_da_lavoura(cliente["id"], ponto["id"], ponto["nome"], ponto["lat"], ponto["lon"],
+                                                      plano, username=cliente["username"]):
+                    criadas += 1
+        except Exception as e:  # um cliente com problema nao trava a subida do site
+            print(f"[lavouras antigas] cliente {cliente.get('id')}: {e}")
+    if criadas:
+        print(f"[lavouras antigas] {criadas} fazenda(s) estimada(s) criada(s)")
+    return criadas
 
 
 def _culturas_cliente():
@@ -7949,6 +7977,7 @@ def _bootstrap_once():
     models.init_db()
     _bootstrap_admin_from_env()
     _bootstrap_master_qap()
+    _criar_fazendas_das_lavouras_antigas()
     threading.Thread(target=_whatsapp_scheduler_loop, daemon=True).start()
 
 
@@ -7983,6 +8012,7 @@ if __name__ == "__main__":
     models.init_db()
     _bootstrap_admin_from_env()
     _bootstrap_master_qap()
+    _criar_fazendas_das_lavouras_antigas()
     # so inicia o agendador uma vez (o reloader do Flask sobe o processo 2x em modo debug)
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
         threading.Thread(target=_whatsapp_scheduler_loop, daemon=True).start()

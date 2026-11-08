@@ -172,7 +172,9 @@ Nelas o cliente e' como um Usuario: so' as fazendas liberadas pra ele.
 **Toda lavoura vira fazenda estimada, sem configuracao da OneAgro**
 (pedido do Alan, 08/11/2026 -- antes so' com o recurso "fazenda_estimada"):
 ja' entra na Programacao de Envios (agenda padrao do `create_virtual_farm`)
-com o proprio cliente recebendo (`models.receber_relatorio_da_fazenda`).
+com o proprio cliente recebendo (`models.receber_relatorio_da_fazenda`). Lavouras de antes dessa regra: `_criar_fazendas_das_lavouras_antigas`
+roda na subida do site (`_bootstrap_once`), cria a fazenda das que nao tem
+e garante liberacao + destinatario das que ja' tinham (idempotente).
 **Relatorio por WhatsApp pelo plano**: recursos `whatsapp_texto` e
 `whatsapp_pdf` (linhas na tabela de Planos e Valores; padrao: texto em
 todos, PDF so' no Premium e Premium + Estacao -- migrado 1x, setting
