@@ -228,7 +228,10 @@ muda; trocar o grupo renomeia as fazendas estimadas,
 mesma tela da "Nova fazenda" ja' preenchida: nome, cidade/UF, tipo,
 culturas/areas e local; renomeia/move a fazenda estimada e refaz o total do
 cadastro pela soma das fazendas, `_recalcular_cadastro`; "Excluir fazenda"
-ficou nessa tela). Editar area NAO gera nem ajusta cobranca. **Sem "Excluir conta"** no app (pedido do Alan,
+ficou nessa tela). Editar area NAO gera nem ajusta cobranca. Na lista "Fazendas monitoradas" o "✏️ Editar" fica
+logo na frente do nome; a pagina da fazenda (`cliente_ponto`) mostra SO'
+culturas/areas, area total, municipio, estado, coordenadas e o mapa
+(clima/risco/esporos sairam -- pedido do Alan, 08/11/2026). **Sem "Excluir conta"** no app (pedido do Alan,
 08/11/2026; rota `/app/conta/excluir` retirada) -- o Master exclui em
 Gerenciar Clientes. Depois do login o
 cliente entra direto no Site (`_inicio_cliente`: 1a aba do Site que o plano
