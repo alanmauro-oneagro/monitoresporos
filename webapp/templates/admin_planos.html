@@ -48,18 +48,19 @@
             {% endfor %}
         </tr></thead>
         <tbody>
-            <tr><td title="0 = plano grátis (libera na hora, sem cobrança nem CPF)">Valor <span class="fw-normal text-muted">(0 = grátis)</span></td>
+            <tr><td title="0 = plano grátis (libera na hora, sem cobrança nem CPF)">Valor total <span class="fw-normal text-muted">(12 meses; 0 = grátis)</span></td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
                 <td class="plano-col{{ ' plano-novo' if not p }}">
                     <div class="input-group input-group-sm flex-nowrap">
                         <select class="form-select form-select-sm flex-grow-0" style="width: 4.6rem;" name="moeda__{{ k }}" aria-label="Moeda" title="Plano em dólar é cobrado em reais pela cotação do dia (Banco Central)">{% for cod, simb in moedas.items() %}<option value="{{ cod }}" {% if (p.moeda if p else 'BRL') == cod %}selected{% endif %}>{{ simb }}</option>{% endfor %}</select>
                         <input class="form-control form-control-sm" style="min-width: 4rem;" name="valor__{{ k }}" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" aria-label="Valor">
                     </div>
+                    {% if p and p.valor > 0 %}<div class="text-muted" style="font-size: 0.72rem;">{{ p.parcelas }}x de {{ p.valor_parcela | dinheiro(p.simbolo) }}</div>{% endif %}
                     {% if p and p.moeda == 'USD' and p.valor > 0 and cotacao_dolar %}<div class="text-muted" style="font-size: 0.72rem;">≈ {{ (p.valor * cotacao_dolar.valor) | dinheiro }} hoje</div>{% endif %}
                 </td>{% endfor %}</tr>
             <tr><td>Ciclo</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
-                <td class="plano-col{{ ' plano-novo' if not p }}"><select class="form-select form-select-sm" name="ciclo__{{ k }}" aria-label="Ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }}</option>{% endfor %}</select></td>
+                <td class="plano-col{{ ' plano-novo' if not p }}"><select class="form-select form-select-sm" name="ciclo__{{ k }}" aria-label="Ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }} ({{ 12 // _m }}x)</option>{% endfor %}</select></td>
                 {% endfor %}</tr>
             <tr><td>Ordem</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
