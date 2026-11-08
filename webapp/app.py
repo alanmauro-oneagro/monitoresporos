@@ -7907,6 +7907,10 @@ def cliente_regiao():
     if ponto:
         # Filtro previo: so' doencas das culturas do cadastro do cliente (pedido do Alan, 08/11/2026).
         riscos = _favorabilidade_ponto(ponto, _weather_ponto_cliente(ponto), [cultura] if cultura else culturas)
+        # Doenca sem leitura recente de esporos nas estacoes do raio = "(-) Sem medicao" (pedido do Alan, 08/11/2026).
+        medidas = {c["doenca_en"] for c in _cards_ponto_cliente(ponto, plano)[0]}
+        for d in riscos:
+            d["sem_medicao"] = d["doenca_en"] not in medidas
         for d in riscos:
             for p in d.get("previsao_risco") or []:
                 if p["data_fmt"] not in datas:
