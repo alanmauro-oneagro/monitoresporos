@@ -23,7 +23,7 @@ def _form(**extra):
     dados = {
         "modalidade": "fazenda", "perfil": ["produtor"], "nome_completo": "Zzz Teste da Silva Cadastro",
         "username": "Zzz Cadastro", "codigo_pais": "55", "numero_telefone": "65999990001", "email": "",
-        "empresa": "Fazenda Zzz", "cidade": "Sorriso", "uf": "MT", "cultura_outra": "Soja", "area_ha": "1.500",
+        "empresa": "Fazenda Zzz", "cidade": "Sorriso", "uf": "MT", "cultura_outra": "Soja", "area_outra": "1.500",
         "mensagem": "Quero acompanhar a ferrugem", "senha": "segredo1", "senha_confirmar": "segredo1", "aceite": "on",
     }
     dados.update(extra)
@@ -62,7 +62,7 @@ class CadastroTest(unittest.TestCase):
     def test_links_e_formulario(self):
         c = webapp.app.test_client()
         html = c.get("/solicitar-acesso").get_data(as_text=True)
-        for trecho in ("Assinar plano", "Ter acesso à fazenda cadastrada", "Produtor", "Técnico do setor", 'name="nome_completo"'):
+        for trecho in ("Produtor", "Técnico do setor", 'name="nome_completo"'):
             self.assertIn(trecho, html)
         self.assertNotIn('name="cpf_cnpj"', html)
         self.assertIn("Cadastre-se", c.get("/login").get_data(as_text=True))
@@ -83,14 +83,14 @@ class CadastroTest(unittest.TestCase):
 
     def test_validacoes(self):
         casos = {
-            "sem modalidade": dict(modalidade=""),
             "sem perfil": dict(perfil=[]),
             "so um nome": dict(nome_completo="Zzz"),
             "usuario repetido": dict(username="zzz teste master cad"),
             "sem fazenda": dict(empresa=""),
             "sem UF": dict(uf=""),
             "sem cultura": dict(cultura_outra=""),
-            "sem area": dict(area_ha=""),
+            "sem area": dict(area_outra=""),
+            "cultura marcada sem area": dict(culturas=["Milho"]),
             "senha curta": dict(senha="123", senha_confirmar="123"),
             "senha diferente": dict(senha_confirmar="outra1"),
         }
@@ -107,6 +107,25 @@ class CadastroTest(unittest.TestCase):
                                                                             numero_telefone="65999990008"))
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(models.username_em_uso("Zzz Sem Mensagem"))
+
+    def test_sem_pergunta_e_area_por_cultura(self):
+        """Sem "O que voce quer?" (cadastro = assinar plano) e area de cada
+        cultura marcada, total = soma (pedido do Alan, 08/11/2026)."""
+        html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
+        self.assertNotIn("O que você quer?", html)
+        self.assertIn('<input type="hidden" name="modalidade" value="plano">', html)
+        self.assertIn('name="area_cultura__Milho"', html)
+        self.assertIn('value="fazenda"', webapp.app.test_client().get("/solicitar-acesso?modalidade=fazenda").get_data(as_text=True))
+        dados = _form(username="Zzz Cad Areas", numero_telefone="65999990031", culturas=["Soja", "Milho"],
+                      cultura_outra="Sorgo", area_outra="50,5")
+        dados.pop("modalidade")
+        dados.update({"area_cultura__Soja": "1.000", "area_cultura__Milho": "300"})
+        resp = webapp.app.test_client().post("/solicitar-acesso", data=dados)
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(models.get_user_by_username("Zzz Cad Areas")["is_cliente"], 1)  # sem a pergunta = assinar plano
+        reg = self._cadastro("Zzz Cad Areas")
+        self.assertEqual(reg["area_ha"], 1350.5)
+        self.assertEqual(reg["culturas"], "Soja (1.000 ha), Milho (300 ha), Sorgo (50,5 ha)")
 
     def test_acesso_a_fazenda_cria_usuario_sem_fazendas(self):
         self.enviadas.clear()
