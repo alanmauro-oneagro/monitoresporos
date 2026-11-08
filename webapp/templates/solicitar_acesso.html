@@ -54,7 +54,7 @@
     {% set culturas_sel = form.getlist('culturas') if form else [] %}
     {# Area por cultura (pedido do Alan, 08/11/2026): marcar a cultura abre o campo da area dela. #}
     {# Grupo antes das culturas (pedido do Alan, 08/11/2026): mostra so' as culturas do grupo
-       e define a area do preco (Cereais = Soja; Cana = Cana; HF = soma). #}
+       e define a area do preco (Cereais = Soja; Outros e HF = soma). #}
     {% set grupos_sel = form.getlist('grupo_cultura') if form else [] %}
     <div class="small mb-1">Tipo de cultura</div>
     <div class="btn-group w-100 mb-2" role="group" id="grupo-cultura">
@@ -157,7 +157,7 @@
     function dinheiro(v, s) { return s + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function gruposAtuais() { return Array.prototype.map.call(document.querySelectorAll('input[name=grupo_cultura]:checked'), function (g) { return g.value; }); }
     function atualizar() {
-        var grupos = gruposAtuais(), total = 0, porGrupo = {cereais: 0, hf: 0, cana: 0}, soja = 0;
+        var grupos = gruposAtuais(), total = 0, porGrupo = {cereais: 0, hf: 0, outros: 0}, soja = 0;
         document.getElementById('bloco-culturas').classList.toggle('d-none', !grupos.length);
         bloco.querySelectorAll('.cultura-linha').forEach(function (linha) {
             var doGrupo = grupos.indexOf(linha.dataset.grupo) >= 0;
@@ -176,8 +176,8 @@
                 if (marca && marca.value.toLowerCase() === 'soja') soja = numero(area.value);
             }
         });
-        // mesma conta de app._area_preco_grupos: Cereais pela Soja (sem Soja, soma), Cana e HF pela soma
-        var areaPreco = (soja > 0 ? soja : porGrupo.cereais) + porGrupo.cana + porGrupo.hf;
+        // mesma conta de app._area_preco_grupos: Cereais pela Soja (sem Soja, soma), Outros e HF pela soma
+        var areaPreco = (soja > 0 ? soja : porGrupo.cereais) + porGrupo.outros + porGrupo.hf;
         document.getElementById('area-total').textContent = total > 0 ? total.toLocaleString('pt-BR') + ' ha' : '-';
         document.querySelectorAll('.preco-plano[data-por-area]').forEach(function (el) {
             var faixa = areaPreco > 0 ? FAIXAS.filter(function (f) { return f.ate === null || areaPreco <= f.ate; })[0] : null;
@@ -284,7 +284,7 @@
             alert('Marque se você é produtor ou técnico do setor.');
         } else if (!document.querySelector('input[name="grupo_cultura"]:checked')) {
             e.preventDefault();
-            alert('Escolha o tipo de cultura: Cereais, HF e/ou Cana.');
+            alert('Escolha o tipo de cultura: Cereais, HF e/ou Outros.');
         }
     });
 })();
