@@ -143,7 +143,9 @@ Semestral 2x, Anual 1x (`plano["parcelas"]`/`plano["valor_parcela"]` em
 `models._plano_row_to_dict`). O Asaas cobra UMA parcela por ciclo
 (`_iniciar_cobranca`; plano em U$ converte a parcela). Telas do cliente
 (Minha assinatura, /planos) mostram "12x de R$ 99,90" em destaque e
-"Total R$ 1.198,80" por ultimo em letra menor (filtro `parcelas_plano`). **Tabela de apoio** (Planos e
+"Total R$ 1.198,80" por ultimo em letra menor (filtro `parcelas_plano`). Gerenciar Clientes mostra as
+parcelas no quadro da assinatura ("12x de R$ 99,90 (total ...)") e no
+seletor de plano da cortesia. **Tabela de apoio** (Planos e
 Valores, pedido do Alan, 07/11/2026): faixas FIXAS de area
 (`app.FAIXAS_PRECO`: ate' 100, 250, 500, 1.000, 2.000, 3.000, 5.000,
 10.000 ha e acima de 10.000), o Master digita so' o U$/ha de cada faixa;
