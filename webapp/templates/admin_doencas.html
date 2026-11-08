@@ -119,7 +119,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
             {% for slot in range(12) %}
             <div class="col">
                 {# Tipo da cultura na frente do nome (pedido do Alan, 08/11/2026): liga com o
-                   "Tipo de cultura" do cadastro (Cereais/HF/Cana). #}
+                   "Tipo de cultura" do cadastro (Cereais/HF/Outros). #}
                 <div class="input-group input-group-sm">
                     <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm"
                            value="{{ culturas[slot] }}" placeholder="(livre)" aria-label="Cultura {{ slot + 1 }}">

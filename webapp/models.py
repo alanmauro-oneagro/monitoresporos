@@ -792,6 +792,13 @@ def init_db():
             conn.execute(f"ALTER TABLE solicitacoes_acesso ADD COLUMN {coluna}")
         except sqlite3.OperationalError:
             pass  # coluna ja existe
+    # Tipo de cultura "Cana" virou "Outros" (pedido do Alan, 08/11/2026).
+    conn.execute("UPDATE solicitacoes_acesso SET grupo_cultura = replace(grupo_cultura, 'cana', 'outros')"
+                 " WHERE grupo_cultura LIKE '%cana%'")
+    linha = conn.execute("SELECT value FROM app_settings WHERE key = 'grupos_culturas'").fetchone()
+    if linha and '"cana"' in (linha["value"] or ""):
+        conn.execute("UPDATE app_settings SET value = ? WHERE key = 'grupos_culturas'",
+                     (linha["value"].replace('"cana"', '"outros"'),))
     try:
         conn.execute("ALTER TABLE users ADD COLUMN is_cliente INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:

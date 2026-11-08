@@ -115,7 +115,7 @@ class CadastroTest(unittest.TestCase):
         self.assertNotIn("O que você quer?", html)
         self.assertIn('<input type="hidden" name="modalidade" value="plano">', html)
         self.assertIn('name="area_cultura__Milho"', html)
-        for grupo in ('value="cereais"', 'value="hf"', 'value="cana"'):
+        for grupo in ('value="cereais"', 'value="hf"', 'value="outros"'):
             self.assertIn(grupo, html)
         self.assertIn('data-grupo="cereais"', html)
         self.assertIn("Escolha o seu plano", html)  # planos ja' no cadastro
@@ -169,17 +169,17 @@ class CadastroTest(unittest.TestCase):
         """Voce e': um so' (radio); Tipo de cultura: varios (pedido do Alan, 08/11/2026)."""
         html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
         self.assertIn('type="radio" name="perfil" id="perfil_produtor"', html)
-        self.assertIn('type="checkbox" class="btn-check" name="grupo_cultura" id="grupo_cana"', html)
-        dados = _form(username="Zzz Cad Varios", numero_telefone="65999990071", grupo_cultura=["cereais", "cana"],
+        self.assertIn('type="checkbox" class="btn-check" name="grupo_cultura" id="grupo_outros"', html)
+        dados = _form(username="Zzz Cad Varios", numero_telefone="65999990071", grupo_cultura=["cereais", "outros"],
                       culturas=["Soja", "Milho", "Cana", "Batata"], cultura_outra="Tomate", area_outra="9")
         dados.update({"area_cultura__Soja": "500", "area_cultura__Milho": "200", "area_cultura__Cana": "300",
                       "area_cultura__Batata": "40"})
         self.assertEqual(webapp.app.test_client().post("/solicitar-acesso", data=dados).status_code, 302)
         reg = self._cadastro("Zzz Cad Varios")
         # Batata e Tomate sao HF (nao marcado) -- ficam de fora; preco = Soja + Cana
-        self.assertEqual((reg["grupo_cultura"], reg["area_ha"], reg["area_preco_ha"]), ("cereais,cana", 1000.0, 800.0))
+        self.assertEqual((reg["grupo_cultura"], reg["area_ha"], reg["area_preco_ha"]), ("cereais,outros", 1000.0, 800.0))
         self.assertEqual(reg["culturas"], "Soja (500 ha), Milho (200 ha), Cana (300 ha)")
-        self.assertEqual(webapp.rotulo_grupos("cereais,cana"), "Cereais, Cana")
+        self.assertEqual(webapp.rotulo_grupos("cereais,outros"), "Cereais, Outros")
         self.assertEqual(webapp._area_preco_grupos(["cereais", "hf"], [("Milho", 100, "cereais"), ("Uva", 5, "hf"), ("Milho", 7, "hf")]), 112)
 
     def test_tipo_da_cultura_na_aba_doencas_culturas(self):
@@ -209,13 +209,27 @@ class CadastroTest(unittest.TestCase):
         finally:
             models.set_grupos_culturas(antes)
 
+    def test_cana_virou_outros_no_banco(self):
+        """Cadastro e tipo das culturas gravados como "cana" passam a "outros" no init_db."""
+        uid = models.criar_cliente("Zzz Cad Cana Antiga", "segredo1", "", "5565999990081", "", None)
+        models.registrar_cadastro({"username": "Zzz Cad Cana Antiga", "tipo": "cliente", "user_id": uid,
+                                   "grupo_cultura": "cereais,cana"})
+        antes = models.get_grupos_culturas()
+        models.set_grupos_culturas(["cereais", "cana"] + [""] * 10)
+        try:
+            models.init_db()
+            self.assertEqual(self._cadastro("Zzz Cad Cana Antiga")["grupo_cultura"], "cereais,outros")
+            self.assertEqual(models.get_grupos_culturas()[:2], ["cereais", "outros"])
+        finally:
+            models.set_grupos_culturas(antes)
+
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
-                         ["cereais", "cereais", "cereais", "cereais", "cana", "cana", "hf", "hf"])
+                         ["cereais", "cereais", "cereais", "cereais", "outros", "outros", "hf", "hf"])
         self.assertEqual(webapp._area_para_preco("cereais", [("Soja", 800), ("Milho", 200)]), 800)
         self.assertEqual(webapp._area_para_preco("cereais", [("Milho", 200), ("Algodao", 100)]), 300)  # sem Soja: soma
         self.assertEqual(webapp._area_para_preco("hf", [("Batata", 10), ("Uva", 5)]), 15)
-        self.assertEqual(webapp._area_para_preco("cana", [("Cana", 900)]), 900)
+        self.assertEqual(webapp._area_para_preco("outros", [("Cana", 900)]), 900)
 
     def test_plano_premium_pelo_preco_da_area(self):
         """Premium: total = area x U$/ha da faixa; parcelas pelo ciclo; sem valor na faixa = sob consulta."""

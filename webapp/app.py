@@ -6738,9 +6738,10 @@ UFS_BR = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS"
           "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]
 # Grupo de culturas do cadastro (pedido do Alan, 08/11/2026), escolhido
 # antes das culturas: Cereais = Soja, Milho e Algodao (preco pela area de
-# Soja); Cana = so' Cana (pela area de Cana); HF = as demais + "Outra
+# Soja); Outros (ex-"Cana", trocado pelo Alan em 08/11/2026) = Cana de
+# saida (pela soma das culturas dele); HF = as demais + "Outra
 # cultura" (pela soma das areas).
-GRUPOS_CULTURA = {"cereais": "Cereais", "hf": "HF", "cana": "Cana"}
+GRUPOS_CULTURA = {"cereais": "Cereais", "hf": "HF", "outros": "Outros"}
 _CEREAIS = ("soja", "milho", "algodao")
 
 
@@ -6761,20 +6762,20 @@ def _grupos_escolhidos():
 
 def _grupo_da_cultura(nome):
     """Tipo escolhido na aba Doencas/Culturas; sem escolha, pelo nome
-    (Soja/Milho/Algodao = cereais, Cana = cana, o resto = hf)."""
+    (Soja/Milho/Algodao = cereais, Cana = outros, o resto = hf)."""
     if nome in _grupos_escolhidos():
         return _grupos_escolhidos()[nome]
     chave = _sem_acento_min(nome)
     if chave in _CEREAIS:
         return "cereais"
     if chave.startswith("cana"):
-        return "cana"
+        return "outros"
     return "hf"
 
 
 def _area_para_preco(grupo, areas):
     """Area (ha) que entra no preco: Cereais = area de Soja (sem Soja, a
-    soma dos cereais); Cana e HF = soma das culturas do grupo."""
+    soma dos cereais); Outros e HF = soma das culturas do grupo."""
     if grupo == "cereais":
         soja = sum(a for c, a in areas if _sem_acento_min(c) == "soja")
         if soja > 0:
@@ -6784,13 +6785,13 @@ def _area_para_preco(grupo, areas):
 
 def _area_preco_grupos(grupos, areas_grupo):
     """Varios tipos marcados: soma a area de preco de cada um (Cereais pela
-    Soja, Cana pela Cana, HF pela soma das culturas dele). `areas_grupo` =
+    Soja, Outros e HF pela soma das culturas de cada um). `areas_grupo` =
     [(cultura, area, grupo)]."""
     return sum(_area_para_preco(g, [(c, a) for c, a, gg in areas_grupo if gg == g]) for g in grupos)
 
 
 def rotulo_grupos(texto):
-    """"cereais,cana" -> "Cereais, Cana"."""
+    """"cereais,outros" -> "Cereais, Outros"."""
     return ", ".join(GRUPOS_CULTURA.get(g, g) for g in (texto or "").split(",") if g)
 
 
@@ -6948,7 +6949,7 @@ def solicitar_acesso():
         elif not form.get("cidade", "").strip() or uf not in UFS_BR:
             erro = "Informe a cidade e o estado (UF)."
         elif not grupos:
-            erro = "Escolha o tipo de cultura: Cereais, HF e/ou Cana."
+            erro = "Escolha o tipo de cultura: Cereais, HF e/ou Outros."
         elif not culturas_sel and not outra:
             erro = "Marque pelo menos uma cultura."
         elif (sem_area := [c for c, a in areas if a <= 0]):

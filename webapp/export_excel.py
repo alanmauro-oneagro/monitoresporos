@@ -681,7 +681,7 @@ def _cortesia_excel(valor):
     return "Sem prazo" if valor == models.SEM_PRAZO else _data_excel(valor)
 
 
-_GRUPOS_CULTURA = {"cereais": "Cereais", "hf": "HF", "cana": "Cana"}
+_GRUPOS_CULTURA = {"cereais": "Cereais", "hf": "HF", "outros": "Outros"}
 
 
 def _clientes_rows():

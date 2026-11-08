@@ -72,7 +72,9 @@ fica "Soja (1.200 ha), Milho (800 ha)" e `area_ha` = soma (base do "Preco
 pela area"). Gerenciar Clientes mostra uma linha por cultura com a area dela
 ("Soja — 1.200 ha", `app._culturas_com_area`; cadastro antigo sem area
 mostra so' o nome) e "Area total". **Tipo de cultura + planos no cadastro** (pedido do Alan,
-08/11/2026): antes das culturas a pessoa escolhe Cereais / HF / Cana
+08/11/2026): antes das culturas a pessoa escolhe Cereais / HF / Outros (ex-"Cana",
+trocado pelo Alan em 08/11/2026; `init_db` troca "cana" por "outros" nos
+cadastros e no setting `grupos_culturas`)
 (`app.GRUPOS_CULTURA`, `_grupo_da_cultura`; a tela mostra so' as culturas
 do grupo): Cereais = Soja, Milho, Algodao (preco pela area de SOJA; sem
 Soja, soma); Cana = Cana; HF = as demais + "Outra cultura" (soma)
@@ -94,11 +96,11 @@ e aparece "Entrar em contato com: Alan Mauro / Cel (43) 99114-7595 /
 contato@oneagro.com.br" (`app.CONTATO_COMERCIAL`); o servidor ignora o
 plano escolhido e a conta nasce sem plano (aviso com o mesmo contato). **"Voce e'" = UMA opcao** (radio; servidor guarda so' a 1a) e
 **Tipo de cultura = varias** (checkbox; pedido do Alan, 08/11/2026):
-`grupo_cultura` vira "cereais,cana"; a tela mostra as culturas de todos
+`grupo_cultura` vira "cereais,outros"; a tela mostra as culturas de todos
 os tipos marcados e a area do preco soma a regra de cada tipo
-(`app._area_preco_grupos`; filtro `grupos_cultura` = "Cereais, Cana"). **Tipo de cada cultura** (pedido do Alan, 08/11/2026): na aba
+(`app._area_preco_grupos`; filtro `grupos_cultura` = "Cereais, Outros"). **Tipo de cada cultura** (pedido do Alan, 08/11/2026): na aba
 Doenças/Culturas, quadro Culturas, um seletor Cereais/HF/Cana ao lado de
-cada nome (`cultura_grupo__<slot>`, setting `grupos_culturas` = lista dos
+cada nome (Cereais/HF/Outros, `cultura_grupo__<slot>`, setting `grupos_culturas` = lista dos
 12 slots, `models.get_grupos_culturas`) -- e' ele que decide em que tipo a
 cultura aparece no cadastro e como entra no preco
 (`app._grupo_da_cultura`: escolhido > regra pelo nome). A pessoa escolhe **Assinar plano** ou **Ter acesso
