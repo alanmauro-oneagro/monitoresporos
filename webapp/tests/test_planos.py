@@ -499,3 +499,35 @@ class PlanosLinhasForaDaTelaTest(unittest.TestCase):
         self.assertEqual((plano["max_pontos"], plano["raio_km"]), (7, 33))
         self.assertEqual(set(plano["recursos"]), {"clima", "esporos", "regiao", "site_mapa"})
         models.excluir_plano(pid)
+
+
+class AppClienteCulturasSiteTest(unittest.TestCase):
+    """App do cliente (pedido do Alan, 08/11/2026): "Lavouras" virou "Culturas"
+    com os dados do cadastro; depois do login entra direto no Site; a barra de
+    baixo aparece tambem nas abas do Site."""
+
+    def test_login_vai_pro_site_e_barra_fixa(self):
+        webapp.app.config["TESTING"] = True
+        com_site = models.salvar_plano(None, "Zzz Plano Com Site", "", 0, "MONTHLY", 1, 30, ["clima", "site_mapa"], True, 9)
+        sem_site = models.salvar_plano(None, "Zzz Plano Sem Site", "", 0, "MONTHLY", 1, 30, ["clima"], True, 9)
+        a = models.criar_cliente("Zzz Cli Site", "segredo1", "", "5565999990161", "", com_site)
+        b = models.criar_cliente("Zzz Cli Sem Site", "segredo1", "", "5565999990162", "", sem_site)
+        for uid in (a, b):
+            models.atualizar_assinatura(uid, status="ativa", cortesia_ate="2099-01-01")
+        models.registrar_cadastro({"username": "Zzz Cli Site", "tipo": "cliente", "user_id": a, "grupo_cultura": "cereais",
+                                   "culturas": "Soja (1.200 ha), Milho (800 ha)", "area_ha": 2000, "empresa": "Fazenda Zzz"})
+        c = webapp.app.test_client()
+        resp = c.post("/login", data={"username": "Zzz Cli Site", "password": "segredo1"}, follow_redirects=True)
+        self.assertTrue(resp.request.path.endswith("/mapa"))  # direto no Site
+        html = resp.get_data(as_text=True)
+        self.assertIn('<nav class="abas">', html)  # barra de baixo tambem no Site
+        self.assertIn("position: fixed; bottom: 0", html)
+        home = c.get("/app").get_data(as_text=True)
+        self.assertIn("Minhas culturas", home)
+        self.assertIn('<span class="fw-semibold">Soja</span><span>1.200 ha</span>', home)
+        self.assertIn("Cereais", home)
+        self.assertIn("</span>Culturas</a>", home)
+        self.assertNotIn("</span>Lavouras</a>", home)
+        d = webapp.app.test_client()
+        resp = d.post("/login", data={"username": "Zzz Cli Sem Site", "password": "segredo1"}, follow_redirects=True)
+        self.assertTrue(resp.request.path.endswith("/app"))  # plano sem Site: Culturas

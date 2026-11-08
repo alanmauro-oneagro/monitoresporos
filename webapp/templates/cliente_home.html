@@ -1,10 +1,23 @@
 {% extends "cliente_base.html" %}
-{% block title %}Minhas lavouras - OneAgro App{% endblock %}
+{% block title %}Minhas culturas - OneAgro App{% endblock %}
 {% block content %}
-<h1 class="titulo">Minhas lavouras</h1>
+<h1 class="titulo">Minhas culturas</h1>
+{# Dados do cadastro (pedido do Alan, 08/11/2026). #}
+<div class="card shadow-sm mb-3"><div class="card-body">
+    {% if cadastro.grupo_cultura %}<div class="small text-muted mb-1">{{ cadastro.grupo_cultura | grupos_cultura }}</div>{% endif %}
+    {% for nome, area in culturas_lista %}
+    <div class="d-flex justify-content-between border-bottom py-1"><span class="fw-semibold">{{ nome }}</span><span>{{ area or '' }}</span></div>
+    {% else %}
+    <div class="text-muted small">Nenhuma cultura informada no cadastro.</div>
+    {% endfor %}
+    {% if cadastro.area_ha %}<div class="d-flex justify-content-between pt-2 small"><span class="text-muted">Área total</span><strong>{{ '{:,.0f}'.format(cadastro.area_ha).replace(',', '.') }} ha</strong></div>{% endif %}
+    {% if cadastro.empresa or cadastro.cidade %}<div class="small text-muted mt-1">{{ cadastro.empresa }}{% if cadastro.cidade %} · {{ cadastro.cidade }}{% if cadastro.uf %}/{{ cadastro.uf }}{% endif %}{% endif %}</div>{% endif %}
+</div></div>
+
+<h6 class="mb-2">Áreas monitoradas</h6>
 {% if not pontos %}
 <div class="card shadow-sm mb-3"><div class="card-body">
-    <p class="mb-0">Marque no mapa onde fica a sua lavoura para ver o clima e o risco de doenças da região.</p>
+    <p class="mb-0">Marque no mapa onde fica a sua área para ver o clima e o risco de doenças da região.</p>
 </div></div>
 {% endif %}
 {% for p in pontos %}
@@ -25,7 +38,7 @@
     </div>
 </a>
 {% endfor %}
-<a class="btn btn-success w-100 mt-2" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar lavoura</a>
+<a class="btn btn-success w-100 mt-2" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar área monitorada</a>
 {% endblock %}
 {% block extra_scripts %}
 <script>

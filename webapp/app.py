@@ -2684,8 +2684,18 @@ def service_worker():
 @app.route("/")
 def index():
     if current_user.is_authenticated:
-        return redirect(url_for("cliente_home" if current_user.is_cliente else "mapa"))
+        return redirect(_inicio_cliente() if current_user.is_cliente else url_for("mapa"))
     return redirect(url_for("login"))
+
+
+def _inicio_cliente():
+    """Cliente entra direto no Site (1a aba do site que o plano libera);
+    sem aba do site no plano, nas Culturas do app (pedido do Alan, 08/11/2026)."""
+    abas = _abas_site_do_cliente()
+    for recurso, _rotulo, endpoint in ABAS_SITE_MENU:
+        if recurso in abas:
+            return url_for(endpoint)
+    return url_for("cliente_home")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -2704,7 +2714,7 @@ def login():
         row = models.get_user_by_username(username)
         if row and check_password_hash(row["password_hash"], password):
             login_user(User(row), remember=lembrar)
-            return redirect(url_for("cliente_home" if row["is_cliente"] else "mapa"))
+            return redirect(url_for("index") if row["is_cliente"] else url_for("mapa"))
         if row and row["temp_password_hash"] and _senha_temporaria_valida(row) \
                 and check_password_hash(row["temp_password_hash"], password):
             # Senha de "esqueci a senha" -- uso unico, apaga na hora (nao
@@ -7273,8 +7283,11 @@ def _excluir_cliente(user_id):
 @cliente_required
 def cliente_home():
     pontos = models.get_cliente_pontos(int(current_user.id))
+    cad = models.get_cadastro_do_usuario(int(current_user.id)) or {}
     return render_template(
         "cliente_home.html", pontos=pontos, plano=g.cliente_plano,
+        # Culturas do cadastro (pedido do Alan, 08/11/2026: "Lavouras" virou "Culturas").
+        cadastro=cad, culturas_lista=_culturas_com_area(cad.get("culturas")),
         resumos={p["id"]: _resumo_ponto_cliente(p, g.cliente_plano) for p in pontos},
         urls_offline=[url_for("cliente_ponto", ponto_id=p["id"]) for p in pontos] + [url_for("cliente_regiao")],
     )
