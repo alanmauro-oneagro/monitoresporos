@@ -1823,7 +1823,8 @@ def _build_site_pdf(
         cultura=cultura, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
         rodape_data=rodape_data, leitura_bioscout=leitura_bioscout,
         mostrar_secao_doencas=mostrar_secao_doencas, anotacao=anotacao,
-        riscos_climaticos=riscos_climaticos,
+        riscos_climaticos=riscos_climaticos, titulo_fazenda=_whatsapp_titulo(site),
+        data_relatorio=weather_forecast._agora_cuiaba().strftime("%d/%m/%Y"),
     )
     filename = f"Recomendacao_{nome_fazenda}_{datetime.now().strftime('%Y%m%d')}.pdf".replace(" ", "_")
     return nome_fazenda, filename, buffer.getvalue()
