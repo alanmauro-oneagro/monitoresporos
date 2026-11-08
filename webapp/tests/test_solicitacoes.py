@@ -23,7 +23,7 @@ def _form(**extra):
     dados = {
         "modalidade": "fazenda", "perfil": ["produtor"], "nome_completo": "Zzz Teste da Silva Cadastro",
         "username": "Zzz Cadastro", "codigo_pais": "55", "numero_telefone": "65999990001", "email": "",
-        "empresa": "Fazenda Zzz", "cidade": "Sorriso", "uf": "MT", "cultura_outra": "Soja", "area_outra": "1.500",
+        "empresa": "Fazenda Zzz", "cidade": "Sorriso", "uf": "MT", "grupo_cultura": "hf", "cultura_outra": "Soja", "area_outra": "1.500",
         "mensagem": "Quero acompanhar a ferrugem", "senha": "segredo1", "senha_confirmar": "segredo1", "aceite": "on",
     }
     dados.update(extra)
@@ -109,29 +109,92 @@ class CadastroTest(unittest.TestCase):
         self.assertTrue(models.username_em_uso("Zzz Sem Mensagem"))
 
     def test_sem_pergunta_e_area_por_cultura(self):
-        """Sem "O que voce quer?" (cadastro = assinar plano) e area de cada
-        cultura marcada, total = soma (pedido do Alan, 08/11/2026)."""
+        """Sem "O que voce quer?" (cadastro = assinar plano), grupo de cultura
+        antes das culturas e area de cada uma (pedidos do Alan, 08/11/2026)."""
         html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
         self.assertNotIn("O que você quer?", html)
         self.assertIn('<input type="hidden" name="modalidade" value="plano">', html)
         self.assertIn('name="area_cultura__Milho"', html)
+        for grupo in ('value="cereais"', 'value="hf"', 'value="cana"'):
+            self.assertIn(grupo, html)
+        self.assertIn('data-grupo="cereais"', html)
+        self.assertIn("Escolha o seu plano", html)  # planos ja' no cadastro
         self.assertIn('value="fazenda"', webapp.app.test_client().get("/solicitar-acesso?modalidade=fazenda").get_data(as_text=True))
-        dados = _form(username="Zzz Cad Areas", numero_telefone="65999990031", culturas=["Soja", "Milho"],
-                      cultura_outra="Sorgo", area_outra="50,5")
+        # Cereais: preco pela area de Soja; cultura de outro grupo nao entra
+        dados = _form(username="Zzz Cad Areas", numero_telefone="65999990031", grupo_cultura="cereais",
+                      culturas=["Soja", "Milho", "Batata"], cultura_outra="Sorgo", area_outra="50")
         dados.pop("modalidade")
-        dados.update({"area_cultura__Soja": "1.000", "area_cultura__Milho": "300"})
+        dados.update({"area_cultura__Soja": "1.000", "area_cultura__Milho": "300", "area_cultura__Batata": "70"})
         resp = webapp.app.test_client().post("/solicitar-acesso", data=dados)
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(models.get_user_by_username("Zzz Cad Areas")["is_cliente"], 1)  # sem a pergunta = assinar plano
         reg = self._cadastro("Zzz Cad Areas")
-        self.assertEqual(reg["area_ha"], 1350.5)
-        self.assertEqual(reg["culturas"], "Soja (1.000 ha), Milho (300 ha), Sorgo (50,5 ha)")
-        # Gerenciar Clientes: uma linha por cultura com a area dela
+        self.assertEqual((reg["grupo_cultura"], reg["area_ha"], reg["area_preco_ha"]), ("cereais", 1300.0, 1000.0))
+        self.assertEqual(reg["culturas"], "Soja (1.000 ha), Milho (300 ha)")
+        # HF: soma das culturas, inclusive "Outra cultura"
+        dados = _form(username="Zzz Cad HF", numero_telefone="65999990032", grupo_cultura="hf",
+                      culturas=["Batata"], cultura_outra="Tomate", area_outra="20,5")
+        dados["area_cultura__Batata"] = "30"
+        self.assertEqual(webapp.app.test_client().post("/solicitar-acesso", data=dados).status_code, 302)
+        reg = self._cadastro("Zzz Cad HF")
+        self.assertEqual((reg["area_ha"], reg["area_preco_ha"], reg["culturas"]), (50.5, 50.5, "Batata (30 ha), Tomate (20,5 ha)"))
+        # sem grupo = recusa
+        sem = _form(username="Zzz Cad Sem Grupo", numero_telefone="65999990033", grupo_cultura="")
+        self.assertEqual(webapp.app.test_client().post("/solicitar-acesso", data=sem).status_code, 200)
+        # Gerenciar Clientes: uma linha por cultura com a area dela + tipo
         html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
-        for linha in ("Soja <span class=\"text-muted\">— 1.000 ha</span>", "Milho <span class=\"text-muted\">— 300 ha</span>",
-                      "Sorgo <span class=\"text-muted\">— 50,5 ha</span>"):
+        for linha in ("Soja <span class=\"text-muted\">— 1.000 ha</span>", "Milho <span class=\"text-muted\">— 300 ha</span>"):
             self.assertIn(f'<div class="cultura-area-linha">{linha}</div>', html)
+        self.assertIn("Cereais <span class=\"text-muted\">-- área para o preço: 1.000 ha</span>", html)
         self.assertEqual(webapp._culturas_com_area("Soja, Milho (2.000 ha)"), [("Soja", None), ("Milho", "2.000 ha")])
+
+    def test_grupo_da_cultura(self):
+        self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
+                         ["cereais", "cereais", "cereais", "cereais", "cana", "cana", "hf", "hf"])
+        self.assertEqual(webapp._area_para_preco("cereais", [("Soja", 800), ("Milho", 200)]), 800)
+        self.assertEqual(webapp._area_para_preco("cereais", [("Milho", 200), ("Algodao", 100)]), 300)  # sem Soja: soma
+        self.assertEqual(webapp._area_para_preco("hf", [("Batata", 10), ("Uva", 5)]), 15)
+        self.assertEqual(webapp._area_para_preco("cana", [("Cana", 900)]), 900)
+
+    def test_plano_premium_pelo_preco_da_area(self):
+        """Premium: total = area x U$/ha da faixa; parcelas pelo ciclo; sem valor na faixa = sob consulta."""
+        import json
+        import cotacao
+        premium = next(p for p in models.get_planos() if p["nome"] == "Premium")
+        self.assertTrue(premium["preco_por_area"])  # ja' nasce ligado no Premium
+        models.set_setting("tabela_precificacao", json.dumps([{"ate_ha": 1000, "usd_ha": 1.2}]))
+        try:
+            with mock.patch.object(cotacao, "dolar", return_value={"valor": 5.0, "data": "2026-11-06"}):
+                p = webapp._plano_para_area(premium, 800)
+                self.assertEqual((p["valor"], p["moeda"], p["parcelas"], p["valor_parcela"], p["sob_consulta"]),
+                                 (960.0, "USD", 12, 80.0, False))
+                self.assertTrue(webapp._plano_para_area(premium, 5000)["sob_consulta"])  # faixa ate' 5.000 sem U$/ha
+                self.assertTrue(webapp._plano_para_area(premium, None)["sob_consulta"])
+                # cliente cereais com 800 ha de soja ve o Premium com o preco dele em Minha assinatura
+                models.salvar_plano(premium["id"], "Premium", "", 0, "MONTHLY", 1, 50, premium["recursos"], True, 3,
+                                    preco_por_area=True)
+                c = webapp.app.test_client()
+                dados = _form(username="Zzz Cad Premium", numero_telefone="65999990034", grupo_cultura="cereais",
+                              culturas=["Soja", "Milho"], modalidade="plano", plano_id=str(premium["id"]))
+                dados.update({"area_cultura__Soja": "800", "area_cultura__Milho": "400"})
+                resp = c.post("/solicitar-acesso", data=dados)
+                self.assertIn(f"/app/assinatura?plano={premium['id']}", resp.headers["Location"])
+                tela = c.get(resp.headers["Location"]).get_data(as_text=True)
+                self.assertIn('<span class="plano-parcela">12x de U$ 80,00 (≈ R$ 400,00)</span>', tela)
+                self.assertIn("Preço pela sua área: 800 ha (até 1.000 ha).", tela)
+                import re
+                self.assertRegex(tela, rf'value="{premium["id"]}"\s+data-gratis="0"\s+checked')  # ja' vem marcado
+                with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                        mock.patch.object(webapp.asaas, "criar_cliente", return_value="cus_p"), \
+                        mock.patch.object(webapp.asaas, "criar_assinatura", return_value="sub_p") as criar, \
+                        mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[]):
+                    c.post("/app/assinatura/assinar", data={"plano_id": str(premium["id"]), "cpf_cnpj": CPF_VALIDO})
+                self.assertEqual(criar.call_args[0][1], 400.0)  # parcela U$ 80 x 5,00
+        finally:
+            models.set_setting("tabela_precificacao", "")
+            models.salvar_plano(premium["id"], premium["nome"], premium["descricao"], premium["valor"], premium["ciclo"],
+                                premium["max_pontos"], premium["raio_km"], premium["recursos"], premium["ativo"],
+                                premium["ordem"], premium["moeda"], premium["preco_por_area"])
 
     def test_acesso_a_fazenda_cria_usuario_sem_fazendas(self):
         self.enviadas.clear()

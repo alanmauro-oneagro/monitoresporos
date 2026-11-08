@@ -53,10 +53,22 @@
 
     {% set culturas_sel = form.getlist('culturas') if form else [] %}
     {# Area por cultura (pedido do Alan, 08/11/2026): marcar a cultura abre o campo da area dela. #}
+    {# Grupo antes das culturas (pedido do Alan, 08/11/2026): mostra so' as culturas do grupo
+       e define a area do preco (Cereais = Soja; Cana = Cana; HF = soma). #}
+    {% set grupo_sel = form.get('grupo_cultura', '') %}
+    <div class="small mb-1">Tipo de cultura</div>
+    <div class="btn-group w-100 mb-2" role="group" id="grupo-cultura">
+        {% for chave, rotulo in grupos.items() %}
+        <input type="radio" class="btn-check" name="grupo_cultura" id="grupo_{{ chave }}" value="{{ chave }}" autocomplete="off" {% if grupo_sel == chave %}checked{% endif %} required>
+        <label class="btn btn-outline-success" for="grupo_{{ chave }}">{{ rotulo }}</label>
+        {% endfor %}
+    </div>
+    <div class="small text-muted mb-2" id="grupo-dica"></div>
+    <div id="bloco-culturas" class="{{ '' if grupo_sel else 'd-none' }}">
     <div class="small mb-1">Culturas e área plantada / atendida de cada uma</div>
     <div class="mb-2" id="culturas-area">
         {% for c in culturas %}
-        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" style="min-height: 2.1rem;">
+        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="{{ grupo_de[c] }}" style="min-height: 2.1rem;">
             <div class="form-check mb-0" style="min-width: 7rem;">
                 <input class="form-check-input" type="checkbox" name="culturas" id="cultura_{{ loop.index }}" value="{{ c }}" {% if c in culturas_sel %}checked{% endif %}>
                 <label class="form-check-label small" for="cultura_{{ loop.index }}">{{ c }}</label>
@@ -67,7 +79,7 @@
             </div>
         </div>
         {% endfor %}
-        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha">
+        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="hf">
             <input class="form-control form-control-sm" style="max-width: 9rem;" name="cultura_outra" id="cultura_outra" value="{{ form.get('cultura_outra', '') }}" placeholder="Outra cultura" aria-label="Outra cultura">
             <div class="input-group input-group-sm cultura-area{{ '' if form.get('cultura_outra') else ' d-none' }}" style="max-width: 11rem;">
                 <input class="form-control" name="area_outra" value="{{ form.get('area_outra', '') }}" inputmode="decimal" placeholder="Área" aria-label="Área da outra cultura (ha)">
@@ -75,7 +87,38 @@
             </div>
         </div>
     </div>
-    <div class="small text-muted mb-3">Área total: <strong id="area-total">-</strong></div>
+    <div class="small text-muted mb-3">Área total: <strong id="area-total">-</strong>
+        <span id="area-preco-linha" class="d-none"> · área para o preço: <strong id="area-preco">-</strong></span></div>
+    </div>
+
+    {% if modalidade_sel == 'plano' and planos %}
+    {# Planos ja' no cadastro (pedido do Alan, 08/11/2026); o plano com preco pela area
+       calcula na hora pela tabela de apoio (mesma conta de app._plano_para_area). #}
+    <h6 class="mt-4 mb-2">Escolha o seu plano</h6>
+    <div id="planos-cadastro" class="mb-3">
+        {% for p in planos %}
+        <label class="card shadow-sm mb-2" for="plano_{{ p.id }}" style="cursor: pointer;">
+            <div class="card-body py-2">
+                <div class="d-flex align-items-baseline gap-2">
+                    <input class="form-check-input mt-0" type="radio" name="plano_id" id="plano_{{ p.id }}" value="{{ p.id }}"
+                           {% if form.get('plano_id') == p.id|string or request.args.get('plano') == p.id|string %}checked{% endif %} {% if not no_app_loja %}required{% endif %}>
+                    <strong>{{ p.nome }}</strong>
+                    {% if not no_app_loja %}
+                    <span class="ms-auto fw-bold text-success text-end preco-plano" {% if p.preco_por_area %}data-por-area="1" data-parcelas="{{ p.parcelas }}"{% endif %}>
+                        {% if p.preco_por_area %}<span class="small text-muted fw-normal">Informe a área para calcular</span>{% elif p.valor <= 0 %}Grátis{% else %}{{ p | parcelas_plano }}{% endif %}
+                    </span>
+                    {% endif %}
+                </div>
+                {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
+                {% if p.preco_por_area and not no_app_loja %}<div class="small text-muted">Preço pela área plantada (Cereais: área de Soja; Cana: área de Cana; HF: soma das culturas).</div>{% endif %}
+                <ul class="small mb-0 ps-4 mt-1">
+                    {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}
+                </ul>
+            </div>
+        </label>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <label class="form-label small mb-1" for="mensagem">Mensagem (opcional)</label>
     <textarea class="form-control mb-3" name="mensagem" id="mensagem" rows="3" placeholder="Conte o que você procura">{{ form.get('mensagem', '') }}</textarea>
@@ -100,22 +143,52 @@
 <div class="text-center small mb-4"><a href="{{ url_for('login') }}">Já tenho conta</a></div>
 <script>
 (function () {
-    // Marcar a cultura (ou escrever outra) abre o campo da area dela; soma a area total.
+    // Grupo escolhido mostra so' as culturas dele; marcar a cultura (ou escrever
+    // outra) abre o campo da area; soma a area total e calcula o preco pela area.
     var bloco = document.getElementById('culturas-area');
+    var FAIXAS = {{ faixas_preco | tojson }}, COTACAO = {{ cotacao_valor | tojson }};
+    var DICAS = {cereais: 'Soja, Milho e Algodão -- o preço usa a área de Soja.', cana: 'Cana -- o preço usa a área de Cana.', hf: 'Demais culturas -- o preço usa a soma das áreas.'};
     function numero(v) { v = (v || '').trim().replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+    function dinheiro(v, s) { return s + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function grupoAtual() { var g = document.querySelector('input[name=grupo_cultura]:checked'); return g ? g.value : ''; }
     function atualizar() {
-        var total = 0;
+        var grupo = grupoAtual(), total = 0, soja = 0;
+        document.getElementById('bloco-culturas').classList.toggle('d-none', !grupo);
+        document.getElementById('grupo-dica').textContent = DICAS[grupo] || '';
         bloco.querySelectorAll('.cultura-linha').forEach(function (linha) {
-            var marca = linha.querySelector('input[type=checkbox]') ;
-            var ativo = marca ? marca.checked : linha.querySelector('#cultura_outra').value.trim() !== '';
+            var doGrupo = linha.dataset.grupo === grupo;
+            linha.classList.toggle('d-none', !doGrupo);
+            var marca = linha.querySelector('input[type=checkbox]');
+            var outra = linha.querySelector('#cultura_outra');
+            if (!doGrupo) { if (marca) marca.checked = false; if (outra) outra.value = ''; }
+            var ativo = doGrupo && (marca ? marca.checked : outra.value.trim() !== '');
             var caixa = linha.querySelector('.cultura-area');
             caixa.classList.toggle('d-none', !ativo);
             var area = caixa.querySelector('input');
             area.required = ativo;
-            if (ativo) total += numero(area.value);
+            if (ativo) {
+                total += numero(area.value);
+                if (marca && marca.value.toLowerCase() === 'soja') soja = numero(area.value);
+            }
         });
+        var areaPreco = grupo === 'cereais' && soja > 0 ? soja : total;
         document.getElementById('area-total').textContent = total > 0 ? total.toLocaleString('pt-BR') + ' ha' : '-';
+        document.getElementById('area-preco').textContent = areaPreco > 0 ? areaPreco.toLocaleString('pt-BR') + ' ha' : '-';
+        document.getElementById('area-preco-linha').classList.toggle('d-none', !(grupo === 'cereais' && areaPreco > 0 && areaPreco !== total));
+        document.querySelectorAll('.preco-plano[data-por-area]').forEach(function (el) {
+            var faixa = areaPreco > 0 ? FAIXAS.filter(function (f) { return f.ate === null || areaPreco <= f.ate; })[0] : null;
+            if (!faixa || faixa.usd_ha === null) {
+                el.innerHTML = '<span class="small text-muted fw-normal">' + (areaPreco > 0 ? 'Sob consulta' : 'Informe a área para calcular') + '</span>';
+                return;
+            }
+            var totalUsd = Math.round(areaPreco * faixa.usd_ha * 100) / 100, n = parseInt(el.dataset.parcelas, 10);
+            var parcela = Math.round(totalUsd / n * 100) / 100;
+            var reais = function (v) { return COTACAO ? ' (≈ ' + dinheiro(v * COTACAO, 'R$') + ')' : ''; };
+            el.innerHTML = '<span class="plano-parcela">' + n + 'x de ' + dinheiro(parcela, 'U$') + reais(parcela) + '</span>' +
+                ' <span class="plano-total small text-muted fw-normal d-block">Total ' + dinheiro(totalUsd, 'U$') + reais(totalUsd) + '</span>';
+        });
     }
+    document.getElementById('grupo-cultura').addEventListener('change', atualizar);
     bloco.addEventListener('input', atualizar);
     bloco.addEventListener('change', function (e) {
         atualizar();

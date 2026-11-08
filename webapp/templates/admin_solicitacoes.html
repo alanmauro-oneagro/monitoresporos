@@ -56,6 +56,7 @@
             <dt>Cidade</dt><dd>{{ c.cidade or '-' }}{% if c.uf %}/{{ c.uf }}{% endif %}</dd>
             {# Area de cada cultura (pedido do Alan, 08/11/2026). #}
             <dt>Culturas</dt><dd>{% for nome, area in c.culturas_lista %}<div class="cultura-area-linha">{{ nome }}{% if area %} <span class="text-muted">— {{ area }}</span>{% endif %}</div>{% else %}-{% endfor %}</dd>
+            {% if c.grupo_cultura %}<dt>Tipo</dt><dd>{{ {'cereais': 'Cereais', 'hf': 'HF', 'cana': 'Cana'}.get(c.grupo_cultura, c.grupo_cultura) }}{% if c.area_preco_ha and c.area_preco_ha != c.area_ha %} <span class="text-muted">-- área para o preço: {{ '{:,.0f}'.format(c.area_preco_ha).replace(',', '.') }} ha</span>{% endif %}</dd>{% endif %}
             <dt>Área total</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
             {% set pr = c.preco_area %}
             {% if pr %}<dt>Preço pela área</dt><dd>{% if pr.total_usd is not none %}<strong>{{ pr.total_usd | dinheiro('U$') }}</strong>{% if pr.total_brl is not none %} (≈ {{ pr.total_brl | dinheiro }}){% endif %}
@@ -70,8 +71,9 @@
         <div class="cad-assinatura small mb-3">
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <strong>Assinatura:</strong> {{ cl.plano_nome or 'sem plano escolhido' }}
-                {% set pl = planos | selectattr('id', 'equalto', cl.plano_id) | first if cl.plano_id else none %}
-                {% if pl and pl.valor > 0 %}<span class="plano-parcelas">· <strong>{{ pl.parcelas }}x de {{ pl.valor_parcela | dinheiro(pl.simbolo) }}</strong>
+                {% set pl = c.plano_cliente %}
+                {% if pl and pl.sob_consulta %}<span class="text-muted">· preço pela área -- sem valor na tabela de apoio</span>
+                {% elif pl and pl.valor > 0 %}<span class="plano-parcelas">· <strong>{{ pl.parcelas }}x de {{ pl.valor_parcela | dinheiro(pl.simbolo) }}</strong>
                     <span class="text-muted" style="font-size: 0.75rem;">(total {{ pl.valor | dinheiro(pl.simbolo) }})</span></span>{% elif pl %}<span class="text-muted">· grátis</span>{% endif %}
                 <span class="text-muted">· {{ cl.status or '—' }}</span>
                 {% if fim and fim >= hoje %}<span class="badge bg-success">liberado</span>{% else %}<span class="badge bg-secondary">bloqueado</span>{% endif %}
