@@ -103,7 +103,14 @@ preco (sem dica do grupo, sem "area para o preco", sem nota no Premium --
 pedido do Alan, 08/11/2026). **Tecnico do setor** marcado: os planos somem
 e aparece "Entrar em contato com: Alan Mauro / Cel (43) 99114-7595 /
 contato@oneagro.com.br" (`app.CONTATO_COMERCIAL`); o servidor ignora o
-plano escolhido e a conta nasce sem plano (aviso com o mesmo contato). **"Voce e'" = UMA opcao** (radio; servidor guarda so' a 1a) e
+plano escolhido e a conta nasce sem plano (aviso com o mesmo contato). **Grupo economico** (pedido do Alan, 08/11/2026): campo
+"Nome do grupo econômico" em Seus dados (opcional, ate' 40 letras,
+`solicitacoes_acesso.grupo_economico`); com ele, cada fazenda estimada do
+cliente nasce como "<grupo> - <fazenda>" (ex.: "Grupo Mauro - Faz Mourão",
+`_criar_fazenda_estimada_da_lavoura`, vale tambem pra fazenda nova do app)
+e e' esse o nome no relatorio/telas; sem ele, o antigo "<fazenda>
+(<usuario>)". Aparece em Gerenciar Clientes, na Conta do app e no Excel
+(ultima coluna da aba Clientes). Fazendas criadas antes nao mudam de nome. **"Voce e'" = UMA opcao** (radio; servidor guarda so' a 1a) e
 **Tipo de cultura = varias** (checkbox; pedido do Alan, 08/11/2026):
 `grupo_cultura` vira "cereais,outros"; a tela mostra as culturas de todos
 os tipos marcados e a area do preco soma a regra de cada tipo

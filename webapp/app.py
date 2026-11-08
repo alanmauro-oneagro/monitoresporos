@@ -7194,6 +7194,7 @@ def solicitar_acesso():
                 "grupo_cultura": ",".join(grupos),
                 "area_preco_ha": sum(_area_preco_grupos(grupos, loc["areas_grupo"]) for loc in locais),
                 "mensagem": form.get("mensagem", "").strip(), "user_id": user_id,
+                "grupo_economico": " ".join(form.get("grupo_economico", "").split())[:40],
             }
             models.registrar_cadastro(registro)
             if modalidade == "plano":
@@ -7755,7 +7756,9 @@ def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano,
     estimada no local da lavoura, com o raio do plano, liberada so' pro
     cliente dono dela. Nome com o usuario pra nao colidir com outro cliente."""
     username = username or current_user.username
-    base = f"{nome} ({username})"
+    # Com grupo economico no cadastro: "Grupo Mauro - Faz Mourao" no relatorio (pedido do Alan, 08/11/2026).
+    grupo = ((models.get_cadastro_do_usuario(user_id) or {}).get("grupo_economico") or "").strip()
+    base = f"{grupo} - {nome}" if grupo else f"{nome} ({username})"
     for tentativa in range(1, 20):
         nome_fazenda = base if tentativa == 1 else f"{base} {tentativa}"
         try:

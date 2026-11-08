@@ -726,7 +726,7 @@ def _clientes_rows():
             models.CICLOS_PLANO.get(plano["ciclo"], (plano["ciclo"],))[0] if plano else "",
             {"pendente": "Aguardando pagamento", "ativa": "Ativa"}.get(c["status"], (c["status"] or "").capitalize()),
             _sim_nao(fim and fim >= hoje), _data_excel(c["pago_ate"]), _cortesia_excel(c["cortesia_ate"]),
-            c["n_pontos"], *_locais_e_extras(c["id"]),
+            c["n_pontos"], *_locais_e_extras(c["id"]), cad.get("grupo_economico") or "",
         ])
     return rows
 
@@ -783,7 +783,7 @@ def build_workbook(completar_clima=None):
         wb, "Clientes",
         ["Cliente", "Usuário", "Celular", "E-mail", "Perfil", "Fazenda/empresa", "Cidade", "Tipo de cultura", "Culturas", "Área (ha)",
          "Cadastrado em", "Plano", "Valor do plano", "Moeda", "Ciclo", "Situação", "Acesso liberado", "Pago até",
-         "Cortesia até", "Áreas monitoradas", "Locais de plantio", "Também recebem o relatório"],
+         "Cortesia até", "Áreas monitoradas", "Locais de plantio", "Também recebem o relatório", "Grupo econômico"],
         _clientes_rows, date_columns=(10, 17, 18),
     )
     _try_sheet(

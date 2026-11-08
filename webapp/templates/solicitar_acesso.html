@@ -79,6 +79,10 @@
     <h6 class="mt-4 mb-2">Seus dados</h6>
     <label class="form-label small mb-1" for="nome_completo">Nome completo</label>
     <input class="form-control mb-3" name="nome_completo" id="nome_completo" value="{{ form.get('nome_completo', '') }}" autocomplete="name" required>
+    {# Grupo economico (pedido do Alan, 08/11/2026): vai antes do nome de cada fazenda no relatorio. #}
+    <label class="form-label small mb-1" for="grupo_economico">Nome do grupo econômico</label>
+    <input class="form-control" name="grupo_economico" id="grupo_economico" value="{{ form.get('grupo_economico', '') }}" maxlength="40" placeholder="Ex.: Grupo Mauro">
+    <div class="small text-muted mb-3">Como vai aparecer no relatório, antes do nome de cada fazenda: <em>Grupo Mauro - Faz Mourão</em>.</div>
     <label class="form-label small mb-1" for="username">Usuário (para entrar no sistema)</label>
     <input class="form-control" name="username" id="username" value="{{ form.get('username', '') }}" autocomplete="username" required>
     <div class="small mb-3" id="usuario-status" aria-live="polite"></div>
