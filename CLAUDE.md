@@ -29,7 +29,8 @@ padrao: Administrador = Usuarios + Mapas de Estudo, Usuario = nenhuma).
 **Nomes no menu (pedido do Alan, 01/11/2026)**: "Mapas de NDVI" (rota `ndvi`),
 "Planos e Valores" (`admin_planos`), "Gerenciar Acessos" (`admin_acessos`)
 e "Programação de Envios" (`whatsapp_gerenciamento`, chave `envios`), "Mapas de Solo" (`solo`),
-"Gerenciar Exportações" (`admin_exportar`, ex-"Exportar"); onde
+"Gerenciar Exportações" (`admin_exportar`, ex-"Exportar"), "Doenças/Culturas"
+(`admin_doencas`, chave `doencas`, ex-"Doenças", 08/11/2026); onde
 este arquivo diz NDVI/Planos/Acessos/Envios, sao essas abas.
 **Mapas de Estudo = ex-"Mapa Interpolado"** (renomeado pelo Alan,
 01/11/2026): rota `/mapa-interpolado`, endpoint/chave `mapa_interpolado`
@@ -95,7 +96,12 @@ plano escolhido e a conta nasce sem plano (aviso com o mesmo contato). **"Voce e
 **Tipo de cultura = varias** (checkbox; pedido do Alan, 08/11/2026):
 `grupo_cultura` vira "cereais,cana"; a tela mostra as culturas de todos
 os tipos marcados e a area do preco soma a regra de cada tipo
-(`app._area_preco_grupos`; filtro `grupos_cultura` = "Cereais, Cana"). A pessoa escolhe **Assinar plano** ou **Ter acesso
+(`app._area_preco_grupos`; filtro `grupos_cultura` = "Cereais, Cana"). **Tipo de cada cultura** (pedido do Alan, 08/11/2026): na aba
+Doenças/Culturas, quadro Culturas, um seletor Cereais/HF/Cana ao lado de
+cada nome (`cultura_grupo__<slot>`, setting `grupos_culturas` = lista dos
+12 slots, `models.get_grupos_culturas`) -- e' ele que decide em que tipo a
+cultura aparece no cadastro e como entra no preco
+(`app._grupo_da_cultura`: escolhido > regra pelo nome). A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
 (tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao

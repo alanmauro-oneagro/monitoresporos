@@ -27,7 +27,7 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g, get_template_attribute
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g, get_template_attribute, has_app_context
 from flask_compress import Compress
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
@@ -2485,7 +2485,7 @@ def master_required(view):
 # sempre so' Master.
 ABAS_CONFIG = [
     ("usuarios", "Usuários", "admin_users"),
-    ("doencas", "Doenças", "admin_doencas"),
+    ("doencas", "Doenças/Culturas", "admin_doencas"),
     ("fungicidas", "Fungicidas", "admin_fungicidas"),
     ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo"),
@@ -5188,6 +5188,10 @@ def admin_doencas():
             # cultura nova de verdade).
             nomes_slots = [request.form.get(f"cultura_nome__{i}", "").strip() for i in range(12)]
             genuinamente_novos = models.set_culturas(nomes_slots)
+            # Tipo de cada cultura (pedido do Alan, 08/11/2026) -- liga com o cadastro.
+            models.set_grupos_culturas([
+                (request.form.get(f"cultura_grupo__{i}") if request.form.get(f"cultura_grupo__{i}") in GRUPOS_CULTURA else "")
+                if nomes_slots[i] else "" for i in range(12)])
             for nome in genuinamente_novos:
                 # Cultura nova de verdade (slot vazio antes): bloqueia ela
                 # de saida em todo quimico ja cadastrado -- ninguem
@@ -5298,6 +5302,8 @@ def admin_doencas():
     ]
     return render_template(
         "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, culturas=culturas,
+        grupos_cultura=GRUPOS_CULTURA,
+        tipo_cultura=[_grupo_da_cultura(c) if c else "" for c in culturas],
         paises=paises, matriz_paises=matriz_paises,
     )
 
@@ -6742,7 +6748,22 @@ def _sem_acento_min(texto):
     return unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode("ascii").lower().strip()
 
 
+def _grupos_escolhidos():
+    """{cultura: tipo} escolhido na aba Doencas/Culturas (1x por requisicao)."""
+    def ler():
+        return {c: t for c, t in zip(models.get_culturas(), models.get_grupos_culturas()) if c and t in GRUPOS_CULTURA}
+    if not has_app_context():
+        return ler()
+    if getattr(g, "_grupos_culturas", None) is None:
+        g._grupos_culturas = ler()
+    return g._grupos_culturas
+
+
 def _grupo_da_cultura(nome):
+    """Tipo escolhido na aba Doencas/Culturas; sem escolha, pelo nome
+    (Soja/Milho/Algodao = cereais, Cana = cana, o resto = hf)."""
+    if nome in _grupos_escolhidos():
+        return _grupos_escolhidos()[nome]
     chave = _sem_acento_min(nome)
     if chave in _CEREAIS:
         return "cereais"
@@ -7478,7 +7499,7 @@ def admin_solicitacoes():
 # ve os itens que pode abrir). Aba nova do menu entra aqui tambem.
 MENU_CONFIG = [
     ("usuarios", "Usuários", "admin_users", "usuarios"),
-    ("doencas", "Doenças", "admin_doencas", "doencas"),
+    ("doencas", "Doenças/Culturas", "admin_doencas", "doencas"),
     ("fungicidas", "Fungicidas", "admin_fungicidas", "fungicidas"),
     ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo", "solo"),
