@@ -246,7 +246,9 @@ manejo da(s) cultura(s) de: SOJA / MILHO*" / ━━
 `_format_whatsapp_message` -- vale TAMBEM pro WhatsApp automatico/manual de
 toda fazenda, pedido do Alan, 08/11/2026; grupo economico do cliente fica
 como digitado, resto em maiusculas; ponto so' clima/fazenda sem cultura =
-sem a linha "Informações"; o PDF nao mudou); cartao
+sem a linha "Informações"; o PDF tem o mesmo cabecalho, tudo em negrito
+entre duas linhas -- `export_pdf.build_recommendation_pdf(titulo_fazenda=,
+data_relatorio=)`); cartao
 "Todas as fazendas (uma mensagem só)" no topo quando ha' mais de uma
 (`/app/relatorios/todos.txt`: 1 cabecalho + o bloco de cada fazenda) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
 "Copiar texto" e "Baixar .txt" (`/app/relatorios/<id>.txt`). Na lista "Fazendas monitoradas" o "✏️ Editar" fica

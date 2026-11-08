@@ -18,7 +18,7 @@ import math
 
 from reportlab.graphics.shapes import Circle, Drawing, Line, Path, Polygon, Rect, String, Wedge
 from reportlab.platypus import (
-    Flowable, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+    Flowable, HRFlowable, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
 AZUL_MARCA = colors.HexColor("#0a1f44")
@@ -31,6 +31,13 @@ VERMELHO_FAIXA = colors.HexColor("#f6d4d0")
 _styles = getSampleStyleSheet()
 _ESTILO_TITULO = ParagraphStyle(
     "TituloFazenda", parent=_styles["Heading1"], textColor=AZUL_MARCA, fontSize=14, leading=17, spaceBefore=0, spaceAfter=1,
+)
+# Cabecalho "RELATÓRIO DE MONITORAMENTO" (mesmo do WhatsApp; pedido do Alan, 08/11/2026).
+_ESTILO_TOPO = ParagraphStyle(
+    "TopoRelatorio", parent=_styles["Normal"], fontName="Helvetica-Bold", textColor=AZUL_MARCA, fontSize=12, leading=15,
+)
+_ESTILO_TOPO_INFO = ParagraphStyle(
+    "TopoInfo", parent=_styles["Normal"], fontName="Helvetica-Bold", fontSize=9, leading=12,
 )
 _ESTILO_SUBTITULO = ParagraphStyle(
     "Subtitulo", parent=_styles["Normal"], textColor=colors.grey, fontSize=8.5, spaceAfter=6,
@@ -493,6 +500,7 @@ def build_recommendation_pdf(
     nome_fazenda, safra_label, diseases, weather=None, produtos=None,
     cultura=None, plantio_linhas=None, aplicacoes_linhas=None, rodape_data="",
     leitura_bioscout=None, mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
+    titulo_fazenda=None, data_relatorio="",
 ):
     """`diseases`/`weather`/`produtos`/`cultura` tem o mesmo formato usado
     em `_format_whatsapp_message` (ver app.py); `plantio_linhas` e
@@ -529,9 +537,18 @@ def build_recommendation_pdf(
             return KeepTogether([_Marca(paginas, ("ini", i)), *flowables, _Marca(paginas, ("fim", i))])
 
         story = []
-        subtitulo = f"Recomendações {safra_label} - {cultura.upper()}" if cultura else f"Recomendações {safra_label}"
+        # Mesmo cabecalho do texto do WhatsApp (`app._cabecalho_relatorio_cliente`),
+        # tudo em negrito; `titulo_fazenda` = `app._whatsapp_titulo` (grupo como digitado).
+        def linha():
+            return HRFlowable(width="100%", thickness=1.2, color=AZUL_MARCA, spaceBefore=2, spaceAfter=4)
 
-        topo = [Paragraph(f"{nome_fazenda} - OneAgro", _ESTILO_TITULO), Paragraph(subtitulo, _ESTILO_SUBTITULO)]
+        topo = [linha(), Paragraph("RELATÓRIO DE MONITORAMENTO", _ESTILO_TOPO),
+                Paragraph(escape(f"ONEAGRO - {data_relatorio}" if data_relatorio else "ONEAGRO"), _ESTILO_TOPO),
+                Spacer(1, 6), Paragraph(escape(titulo_fazenda or nome_fazenda.upper()), _ESTILO_TITULO)]
+        if cultura:
+            topo += [Spacer(1, 3), Paragraph(escape(
+                f"Informações relevantes para manejo da(s) cultura(s) de: {cultura.upper()}"), _ESTILO_TOPO_INFO)]
+        topo += [linha()]
         if weather:
             story += [em_bloco(topo + [_cabecalho_clima(weather, leitura_bioscout)]), Spacer(1, 6)]
         else:
