@@ -6730,6 +6730,19 @@ def cadastro():
 
 UFS_BR = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR",
           "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]
+def _culturas_com_area(texto):
+    """"Soja (1.200 ha), Milho" -> [("Soja", "1.200 ha"), ("Milho", None)]
+    (cadastro antigo nao tem area por cultura)."""
+    itens = []
+    for parte in (texto or "").split(", "):
+        parte = parte.strip()
+        if not parte:
+            continue
+        m = re.fullmatch(r"(.+?) \(([\d.,]+ ha)\)", parte)
+        itens.append((m.group(1), m.group(2)) if m else (parte, None))
+    return itens
+
+
 def _fmt_ha(area):
     """1500.0 -> "1.500"; 12.5 -> "12,5"."""
     texto = f"{area:,.2f}".rstrip("0").rstrip(".") if area % 1 else f"{area:,.0f}"
@@ -7320,6 +7333,7 @@ def admin_solicitacoes():
     for p in pessoas:
         # Preco pela area do cadastro, na faixa da tabela de apoio (Planos e Valores).
         p["preco_area"] = preco_pela_area(p.get("area_ha"), cot) if p.get("tipo") == "cliente" else None
+        p["culturas_lista"] = _culturas_com_area(p.get("culturas"))
         locais = [(l["nome"], l["lat"], l["lon"]) for l in models.get_cliente_pontos(p["user_id"]) if _no_brasil(l["lat"], l["lon"])]
         locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(p["user_id"])
                    if s in coords and paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY]

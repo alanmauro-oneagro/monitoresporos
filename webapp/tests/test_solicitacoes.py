@@ -126,6 +126,12 @@ class CadastroTest(unittest.TestCase):
         reg = self._cadastro("Zzz Cad Areas")
         self.assertEqual(reg["area_ha"], 1350.5)
         self.assertEqual(reg["culturas"], "Soja (1.000 ha), Milho (300 ha), Sorgo (50,5 ha)")
+        # Gerenciar Clientes: uma linha por cultura com a area dela
+        html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        for linha in ("Soja <span class=\"text-muted\">— 1.000 ha</span>", "Milho <span class=\"text-muted\">— 300 ha</span>",
+                      "Sorgo <span class=\"text-muted\">— 50,5 ha</span>"):
+            self.assertIn(f'<div class="cultura-area-linha">{linha}</div>', html)
+        self.assertEqual(webapp._culturas_com_area("Soja, Milho (2.000 ha)"), [("Soja", None), ("Milho", "2.000 ha")])
 
     def test_acesso_a_fazenda_cria_usuario_sem_fazendas(self):
         self.enviadas.clear()

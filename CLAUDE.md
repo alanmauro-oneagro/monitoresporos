@@ -68,7 +68,9 @@ acesso a fazenda. **Area por cultura** (mesmo pedido): marcar a cultura
 (ou escrever "Outra cultura") abre o campo da area dela (`area_cultura__<cultura>`,
 `area_outra`), "Area total" soma na tela; `solicitacoes_acesso.culturas`
 fica "Soja (1.200 ha), Milho (800 ha)" e `area_ha` = soma (base do "Preco
-pela area"). A pessoa escolhe **Assinar plano** ou **Ter acesso
+pela area"). Gerenciar Clientes mostra uma linha por cultura com a area dela
+("Soja — 1.200 ha", `app._culturas_com_area`; cadastro antigo sem area
+mostra so' o nome) e "Area total". A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
 (tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao
