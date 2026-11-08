@@ -338,7 +338,34 @@ validade (`models.credito_para_upgrade`: pagamentos confirmados com
 valor cheio, sem proporcional ao tempo) sai do total do plano novo: o
 resto e' dividido pelas parcelas do ciclo e a nova assinatura no Asaas
 para nessas parcelas (`maxPayments`; renovacao depois e' no valor cheio).
-Credito >= total = troca na hora, sem cobranca. Pagamentos antigos ficam
+Credito >= total = troca na hora, sem cobranca. **Fazenda adicional** (pedido do Alan,
+08/11/2026): "+ Adicionar fazenda monitorada" (`cliente_ponto_novo`) tem as
+mesmas opcoes do cadastro (nome "ex.: Faz Mourão", cidade/UF, tipo
+Cereais/HF/Outros, culturas e area de cada uma, mapa; campos sem sufixo de
+`_locais_do_form`); a fazenda soma no cadastro (`models.somar_ao_cadastro`:
+culturas, area, area do preco). Plano pago com assinatura no Asaas = cobranca
+adicional (`_cobrar_fazenda_adicional`): preco da area total nova pela Tabela
+de apoio menos o da area anterior, em U$, numa assinatura PROPRIA no Asaas
+(ref `fazenda:<ponto_id>`, mesmo ciclo/parcelas do plano, U$ pela cotacao);
+Free ou plano ainda sem cobranca nao cobram; faixa sem U$/ha = "sob_consulta".
+`cliente_pontos.adicional_status` (NULL/"incluida" = coberta, "pendente",
+"ativa", "sob_consulta", "cancelada"), `adicional_pago_ate` pelos pagamentos
+com `assinatura_pagamentos.ponto_id` (nunca mexem no `pago_ate` do plano nem
+no credito do upgrade). 7 dias gratis da criacao (`models.ponto_liberado`);
+depois, sem pagamento, a fazenda some das telas do cliente
+(`get_user_permitted_site_names` tira `sites_bloqueados_de_clientes`), a
+pagina dela mostra "acesso terminou", e o relatorio dela nao sai
+(`_send_site_whatsapp`). Assinatura lista "Fazendas adicionais" (situacao,
+U$/ano, "Pagar fatura desta fazenda", "Gerar cobranca" se falhou na hora --
+`cliente_cobrar_fazenda`); Conta e Gerenciar Clientes mostram o selo.
+Excluir a fazenda cancela a cobranca dela. **Sem acesso** (prazo vencido sem
+pagamento): login cai direto na Assinatura (`_inicio_cliente`), a barra so'
+tem Assinatura e Conta (`cliente_bloqueado`); Conta (`cliente_home`) e "quem
+recebe" abrem sem plano. **Forma de pagamento** (Minha assinatura, PIX ou
+Cartao de credito; `assinaturas.forma_pagamento`, `asaas.FORMAS_PAGAMENTO`):
+vai no `billingType` das assinaturas novas e troca as existentes (plano e
+fazendas adicionais, `asaas.alterar_forma_pagamento`, PUT com
+`updatePendingPayments`); sem escolha = UNDEFINED (escolhe na fatura). Pagamentos antigos ficam
 presos a' assinatura velha (`fechar_pagamentos_sem_assinatura`), o credito
 nao e' reaproveitado. A tela do upgrade mostra "Com o desconto: ..." em
 cada plano. Clientes nao aparecem na aba Usuarios. App Android/iOS em
@@ -664,7 +691,7 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
     agendador, a partir das 3h de Cuiaba, guarda 7 em
     `<pasta do banco>/backups/`) + botao "Baixar backup do banco" em
     Exportar (`/admin/exportar/backup`, Master, .db.gz).
-  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular tests.test_fazenda_estimada tests.test_whatsapp_desconectado tests.test_menu_config`
+  - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular tests.test_fazenda_estimada tests.test_whatsapp_desconectado tests.test_menu_config tests.test_fazenda_adicional`
     (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
     com Master/Administrador/Usuario/Cliente (sem erro 500, rede
     desligada) e confere as regras de acesso. Rodar antes de cada PR da

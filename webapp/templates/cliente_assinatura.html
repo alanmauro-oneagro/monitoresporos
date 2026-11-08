@@ -26,10 +26,45 @@
 {% endif %}
 
 {% if not no_app_loja %}
-{% set em_aberto = pagamentos | selectattr('status', 'in', ['PENDING', 'OVERDUE']) | list %}
+{% set em_aberto = pagamentos | selectattr('ponto_id', 'none') | selectattr('status', 'in', ['PENDING', 'OVERDUE']) | list %}
 {% for pg in em_aberto %}{% if pg.invoice_url %}
 <a class="btn btn-primary w-100 mb-3" href="{{ pg.invoice_url }}" target="_blank" rel="noopener">Pagar fatura de {{ pg.vencimento | data_br }} (R$ {{ '%.2f' | format(pg.valor or 0) | replace('.', ',') }})</a>
 {% endif %}{% endfor %}
+
+{% if plano and (plano.valor > 0 or plano.preco_por_area) and not mostrar_planos %}
+{# Forma de pagamento (pedido do Alan, 08/11/2026): vale pras proximas faturas e as em aberto. #}
+<form method="post" action="{{ url_for('cliente_forma_pagamento') }}" class="card shadow-sm mb-3" id="formFormaPagamento"><div class="card-body py-2">
+    <div class="small fw-semibold mb-1">Forma de pagamento</div>
+    <div class="d-flex gap-2">
+        {% for chave, rotulo in formas_pagamento.items() %}
+        <input type="radio" class="btn-check" name="forma_pagamento" id="forma_{{ chave }}" value="{{ chave }}" autocomplete="off"
+               {% if assinatura and assinatura.forma_pagamento == chave %}checked{% endif %} onchange="this.form.submit()">
+        <label class="btn btn-outline-success flex-fill" for="forma_{{ chave }}">{{ '⚡ PIX' if chave == 'PIX' else '💳 ' ~ rotulo }}</label>
+        {% endfor %}
+    </div>
+    {% if not assinatura or not assinatura.forma_pagamento %}<div class="small text-muted mt-1">Sem escolha, você escolhe na hora de pagar a fatura.</div>{% endif %}
+</div></form>
+{% endif %}
+
+{% if fazendas_adicionais %}
+{# Fazendas a mais: cobranca propria, 7 dias gratis e depois so' com pagamento (pedido do Alan, 08/11/2026). #}
+<h6>Fazendas adicionais</h6>
+{% for f in fazendas_adicionais %}
+<div class="card shadow-sm mb-2"><div class="card-body py-2 small">
+    <div><strong>{{ f.nome }}</strong></div>
+    <span class="badge text-wrap {{ {'paga': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueada': 'bg-danger'}[f.situacao.chave] }}">{{ f.situacao.texto }}</span>
+    <div class="text-muted">{{ f.culturas or '' }}</div>
+    {% if f.adicional_status == 'sob_consulta' %}<div>Valor sob consulta -- a OneAgro vai entrar em contato.</div>
+    {% elif f.adicional_total %}<div>Área a mais: {{ f.adicional_total | dinheiro('U$' if (f.adicional_moeda or 'USD') == 'USD' else 'R$') }} por ano{% if plano and plano.parcelas > 1 %}, em {{ plano.parcelas }}x{% endif %}</div>{% endif %}
+    {% if not no_app_loja %}
+    {% if f.fatura %}<a class="btn btn-primary btn-sm w-100 mt-2" href="{{ f.fatura }}" target="_blank" rel="noopener">Pagar fatura desta fazenda</a>
+    {% elif f.adicional_status == 'pendente' and not f.adicional_subscription_id %}
+    <form method="post" action="{{ url_for('cliente_cobrar_fazenda', ponto_id=f.id) }}"><button class="btn btn-outline-primary btn-sm w-100 mt-2" type="submit">Gerar cobrança</button></form>
+    {% endif %}
+    {% endif %}
+</div></div>
+{% endfor %}
+{% endif %}
 
 {% if plano and superiores and not mostrar_planos %}
 <a class="btn btn-outline-success w-100 mb-3" href="{{ url_for('cliente_assinatura', upgrade=1) }}">⬆ Fazer upgrade de plano</a>
@@ -154,10 +189,11 @@
 {% if pagamentos %}
 <h6 class="mt-4">Histórico</h6>
 <ul class="list-group mb-3">
+    {% set nomes_fazenda = {} %}{% for f in fazendas_adicionais %}{% set _ = nomes_fazenda.update({f.id: f.nome}) %}{% endfor %}
     {% set st = {'PENDING': 'Em aberto', 'OVERDUE': 'Vencida', 'CONFIRMED': 'Paga', 'RECEIVED': 'Paga', 'RECEIVED_IN_CASH': 'Paga', 'REFUNDED': 'Estornada', 'DELETED': 'Cancelada'} %}
     {% for pg in pagamentos %}
     <li class="list-group-item d-flex justify-content-between small">
-        <span>{{ pg.vencimento | data_br }}</span><span>R$ {{ '%.2f' | format(pg.valor or 0) | replace('.', ',') }}</span><span>{{ st.get(pg.status, pg.status) }}</span>
+        <span>{{ pg.vencimento | data_br }}{% if pg.ponto_id %} <span class="text-muted">· {{ nomes_fazenda.get(pg.ponto_id, 'Fazenda adicional') }}</span>{% endif %}</span><span>R$ {{ '%.2f' | format(pg.valor or 0) | replace('.', ',') }}</span><span>{{ st.get(pg.status, pg.status) }}</span>
     </li>
     {% endfor %}
 </ul>

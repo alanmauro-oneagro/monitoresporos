@@ -14,7 +14,7 @@
 </style>
 <nav class="abas">
     {% if menu_site_cliente %}<a href="{{ url_for(menu_site_cliente[0][1]) }}" class="{% if request.endpoint in eps_site or request.endpoint == 'recommendations' %}ativa{% endif %}"><span class="ic">🌐</span>Site</a>{% endif %}
-    <a href="{{ url_for('cliente_regiao') }}" class="{% if request.endpoint == 'cliente_regiao' %}ativa{% endif %}"><span class="ic">🗺️</span>Região</a>
+    {% if not cliente_bloqueado %}<a href="{{ url_for('cliente_regiao') }}" class="{% if request.endpoint == 'cliente_regiao' %}ativa{% endif %}"><span class="ic">🗺️</span>Região</a>{% endif %}
     <a href="{{ url_for('cliente_assinatura') }}" class="{% if request.endpoint == 'cliente_assinatura' %}ativa{% endif %}"><span class="ic">⭐</span>Assinatura</a>
     <a href="{{ url_for('cliente_home') }}" class="{% if request.endpoint in ('cliente_home', 'cliente_conta', 'cliente_ponto', 'cliente_ponto_novo') %}ativa{% endif %}"><span class="ic">👤</span>Conta</a>
 </nav>

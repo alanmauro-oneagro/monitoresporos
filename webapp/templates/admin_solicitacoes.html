@@ -113,6 +113,7 @@
                     {% if a.site_name %}<a class="ms-auto" href="{{ url_for('mapa_interpolado') }}" title="Fazenda estimada no Mapas de Estudo (pino verde-claro)">🟢 no Mapas de Estudo</a>
                     {% else %}<span class="ms-auto text-muted">sem fazenda estimada</span>{% endif %}
                 </div>
+                {% if a.adicional %}<div><span class="badge {{ {'paga': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueada': 'bg-danger'}[a.adicional.chave] }}">Fazenda adicional: {{ a.adicional.texto }}</span>{% if a.adicional_total %} <span class="text-muted">{{ a.adicional_total | dinheiro('U$') }}/ano</span>{% endif %}</div>{% endif %}
                 {% if a.culturas %}<div class="text-muted">{{ a.culturas }}{% if a.area_ha %} · {{ '{:,.0f}'.format(a.area_ha).replace(',', '.') }} ha{% endif %}</div>{% endif %}
                 {% if a.sinal is not none %}{{ sinal_cel.linha(a.sinal) }}{% endif %}
             </div>

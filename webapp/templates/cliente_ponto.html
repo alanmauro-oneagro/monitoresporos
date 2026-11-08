@@ -1,6 +1,15 @@
 {% extends "cliente_base.html" %}
 {% block title %}{{ ponto.nome }} - OneAgro App{% endblock %}
 {% block content %}
+{% if bloqueado %}
+{# Fazenda adicional sem pagamento depois dos 7 dias (pedido do Alan, 08/11/2026). #}
+<h1 class="titulo">{{ ponto.nome }}</h1>
+<div class="bloqueado mb-3">🔒 O acesso a esta fazenda terminou: a área a mais ainda não foi paga.</div>
+<a class="btn btn-success w-100 mb-2" href="{{ url_for('cliente_assinatura') }}">Ver a cobrança em Assinatura</a>
+<form method="post" action="{{ url_for('cliente_ponto_excluir', ponto_id=ponto.id) }}" onsubmit="return confirm('Excluir esta fazenda monitorada?');">
+    <button class="btn btn-outline-danger btn-sm w-100" type="submit">Excluir fazenda</button>
+</form>
+{% else %}
 {% set rec = dados.recursos %}
 {% set rot_risco = {'vermelho': 'Alto', 'amarelo': 'Médio', 'verde': 'Baixo'} %}
 {% macro bloqueado(texto) %}<div class="bloqueado mb-3">🔒 {{ texto }} não faz parte do seu plano.{% if not no_app_loja %} <a href="{{ url_for('planos_publico') }}">Ver planos</a>{% endif %}</div>{% endmacro %}
@@ -8,7 +17,7 @@
     <h1 class="titulo mb-0">{{ ponto.nome }}</h1>
     <button class="btn btn-sm btn-outline-secondary" type="button" onclick="document.getElementById('editarPonto').classList.toggle('d-none')">Editar</button>
 </div>
-<div class="small text-muted mb-3">{{ ponto.cultura or 'Todas as culturas' }} · {{ '%.4f' | format(ponto.lat) }}, {{ '%.4f' | format(ponto.lon) }}</div>
+<div class="small text-muted mb-3">{{ ponto.culturas or ponto.cultura or 'Todas as culturas' }} · {{ '%.4f' | format(ponto.lat) }}, {{ '%.4f' | format(ponto.lon) }}</div>
 
 <div id="editarPonto" class="d-none card shadow-sm mb-3"><div class="card-body">
     <form method="post" action="{{ url_for('cliente_ponto_editar', ponto_id=ponto.id) }}">
@@ -109,4 +118,5 @@
     <div class="alert alert-success small">Nenhuma doença em alerta na região agora.</div>
     {% endif %}
 {% else %}{{ bloqueado('A recomendação de fungicidas') }}{% endif %}
+{% endif %}
 {% endblock %}
