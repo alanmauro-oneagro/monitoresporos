@@ -1,0 +1,49 @@
+{% extends "cliente_base.html" %}
+{% block title %}Relatórios - OneAgro App{% endblock %}
+{% block content %}
+{# Aba Relatorios (pedido do Alan, 08/11/2026): texto de uma fazenda por vez pra encaminhar no WhatsApp. #}
+<h1 class="titulo">Relatórios</h1>
+{% if not ponto %}
+<div class="card shadow-sm"><div class="card-body">
+    <p class="mb-2">Marque uma fazenda para gerar o relatório.</p>
+    <a class="btn btn-success w-100" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar fazenda monitorada</a>
+</div></div>
+{% else %}
+<form method="get" class="mb-3">
+    <label class="form-label small text-muted mb-0" for="filtroFazenda">Fazenda</label>
+    <select class="form-select" name="fazenda" id="filtroFazenda" onchange="this.form.submit()">
+        {% for p in pontos %}<option value="{{ p.id }}" {% if p.id == ponto.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
+    </select>
+</form>
+<div class="d-grid gap-2 mb-3">
+    <a class="btn btn-success" id="btnWhatsapp" href="https://wa.me/?text={{ texto | urlencode }}" target="_blank" rel="noopener">📲 Enviar pelo WhatsApp</a>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-success flex-fill" id="btnCopiar">📋 Copiar texto</button>
+        <a class="btn btn-outline-secondary flex-fill" href="{{ url_for('cliente_relatorio_txt', ponto_id=ponto.id) }}">⬇ Baixar .txt</a>
+    </div>
+    <div class="small text-success text-center" id="avisoCopiado" aria-live="polite"></div>
+</div>
+<div class="card shadow-sm mb-3"><div class="card-body p-2">
+    <pre class="mb-0" id="textoRelatorio" style="white-space: pre-wrap; font-family: inherit; font-size: 0.85rem;">{{ texto }}</pre>
+</div></div>
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function () {
+    var botao = document.getElementById('btnCopiar');
+    if (!botao) { return; }
+    botao.addEventListener('click', function () {
+        var texto = document.getElementById('textoRelatorio').textContent;
+        var aviso = document.getElementById('avisoCopiado');
+        function ok() { aviso.textContent = '✓ Texto copiado -- é só colar no WhatsApp.'; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(texto).then(ok, function () { aviso.textContent = 'Não foi possível copiar.'; });
+        } else {
+            var t = document.createElement('textarea'); t.value = texto; document.body.appendChild(t); t.select();
+            try { document.execCommand('copy'); ok(); } catch (e) {} document.body.removeChild(t);
+        }
+    });
+})();
+</script>
+{% endblock %}

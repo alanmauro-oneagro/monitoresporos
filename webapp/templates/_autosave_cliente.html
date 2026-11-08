@@ -1,0 +1,28 @@
+{# Edicao do cliente salva sozinha, sem botao (pedido do Alan, 08/11/2026):
+   texto ao sair do campo, escolhas na hora. Header X-Autosave -> JSON {ok, erro}. #}
+<script>
+window.autosaveCliente = function (form, status) {
+    var timer = null, ultimo = new URLSearchParams(new FormData(form)).toString();
+    function salvar() {
+        var dados = new FormData(form), chave = new URLSearchParams(dados).toString();
+        if (chave === ultimo) { return; }
+        status.className = 'small fw-semibold text-muted'; status.textContent = 'Salvando...';
+        fetch(form.getAttribute('action') || location.href, { method: 'POST', body: dados, credentials: 'same-origin', headers: { 'X-Autosave': '1' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.ok) { ultimo = chave; status.className = 'small fw-semibold text-success'; status.textContent = '✓ Salvo'; }
+                else { status.className = 'small fw-semibold text-danger'; status.textContent = d.erro || 'Não salvou.'; }
+            })
+            .catch(function () { status.className = 'small fw-semibold text-danger'; status.textContent = 'Sem conexão -- não salvou.'; });
+    }
+    form.addEventListener('submit', function (e) { e.preventDefault(); salvar(); });
+    form.addEventListener('change', function (e) {
+        var texto = e.target && e.target.tagName === 'INPUT' && /^(text|email|tel|number|search)$/.test(e.target.type || 'text') && e.target.type !== 'hidden';
+        clearTimeout(timer); timer = setTimeout(salvar, texto ? 0 : 400);
+    });
+    form.addEventListener('focusout', function (e) {
+        if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'radio') { clearTimeout(timer); timer = setTimeout(salvar, 0); }
+    });
+    return salvar;
+};
+</script>

@@ -27,7 +27,7 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g, get_template_attribute, has_app_context
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g, get_template_attribute, has_app_context, Response
 from flask_compress import Compress
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
@@ -1808,6 +1808,70 @@ def _build_site_pdf(
     return nome_fazenda, filename, buffer.getvalue()
 
 
+def _preparar_relatorio(site, safra=None):
+    """Dados do relatorio de uma fazenda (texto/PDF): o mesmo que o envio
+    por WhatsApp usa -- tambem a aba Relatorios do app."""
+    translations = _load_translations()
+    raw_cards = _resolve_site_cards(site, translations)
+    dias_sem_leitura = _dias_sem_leitura(raw_cards)
+    leitura_bioscout = models.fmt_data_br(max((c["data"] for c in raw_cards), default=None))
+    culturas_by_site = models.get_all_farm_culturas()
+    cultura = _cultura_label(site, safra, culturas_by_site)
+    vf = models.get_virtual_farm(site)
+    is_virtual = vf is not None
+    is_clima_point = is_virtual and vf.get("tipo") == "clima"
+    bloqueado = _nivel_dados_site(site, raw_cards) == "bloqueado"
+    # Sem secao de doenca no relatorio (texto/PDF) quando nao ha'
+    # monitoramento de doenca de verdade acontecendo -- ponto "so clima"
+    # (nunca monitora) ou fazenda real com estacao sem leitura ha muito
+    # tempo (dado velho demais pra confiar) -- senao o relatorio parece
+    # dizer "tudo tranquilo" quando na verdade a fazenda nao foi checada.
+    mostrar_secao_doencas = not is_clima_point and not bloqueado
+    coords = _weather_coords_all()
+    weather = _get_weather_for_site(site, coords)
+    riscos_climaticos = []
+    if bloqueado:
+        diseases = []
+        # Sem leitura confirmada pra montar "Doencas em Atencao/Perigo",
+        # mas o risco CLIMATICO (so' clima x germinacao, nunca depende
+        # do sensor) continua valido -- avisa mesmo sem confirmar a
+        # doenca, pedido explicito do usuario.
+        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather, site, safra)
+    else:
+        cards_by_site = _filter_cards_by_cultura(
+            {site: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
+        )
+        cards = cards_by_site.get(site, [])
+        notes = models.get_all_recommendation_notes()
+        diseases = _build_site_diseases(site, cards, notes, cultura=cultura)
+
+    for d in diseases:
+        d["risco"] = _calc_risco_germinacao(d, weather)
+        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    if not bloqueado and not is_clima_point:
+        riscos_climaticos = _riscos_climaticos_sem_alerta(cards, weather, diseases, site, safra)
+    produtos = _farm_produtos_estoque(site, safra)
+    return {"raw_cards": raw_cards, "dias_sem_leitura": dias_sem_leitura, "leitura_bioscout": leitura_bioscout,
+            "cultura": cultura, "is_virtual": is_virtual, "is_clima_point": is_clima_point, "bloqueado": bloqueado,
+            "mostrar_secao_doencas": mostrar_secao_doencas, "weather": weather, "diseases": diseases,
+            "riscos_climaticos": riscos_climaticos, "produtos": produtos}
+
+
+def _texto_relatorio(site, safra=None, ctx=None):
+    """Texto do relatorio da fazenda, igual ao do WhatsApp."""
+    ctx = ctx or _preparar_relatorio(site, safra)
+    safra_label = SAFRA_LABELS[safra] if safra else "todas as safras"
+    plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
+    return _format_whatsapp_message(
+        site, ctx["diseases"], weather=ctx["weather"], produtos=ctx["produtos"], is_virtual=ctx["is_virtual"],
+        cultura=ctx["cultura"], safra_label=safra_label, plantio_linhas=plantio_linhas,
+        aplicacoes_linhas=aplicacoes_linhas, leitura_bioscout=ctx["leitura_bioscout"],
+        mostrar_secao_doencas=ctx["mostrar_secao_doencas"], riscos_climaticos=ctx["riscos_climaticos"],
+        vento_dia=_rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]) if ctx["is_clima_point"] else None,
+        ponto_clima=ctx["is_clima_point"],
+    )
+
+
 def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, destinos_override=None):
     """Monta o relatorio de uma fazenda (Dados de Clima, Fungos em alta
     quantidade, Recomendacoes das Instituicoes de Pesquisa, Produtos
@@ -1859,52 +1923,17 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     if site in models.sites_bloqueados_de_clientes():
         # Fazenda adicional do cliente sem pagamento depois dos 7 dias (pedido do Alan, 08/11/2026).
         return True, True, "Fazenda adicional sem pagamento -- relatório não enviado."
-    translations = _load_translations()
-    raw_cards = _resolve_site_cards(site, translations)
-    dias_sem_leitura = _dias_sem_leitura(raw_cards)
-    leitura_bioscout = models.fmt_data_br(max((c["data"] for c in raw_cards), default=None))
-    culturas_by_site = models.get_all_farm_culturas()
-    cultura = _cultura_label(site, safra, culturas_by_site)
-    vf = models.get_virtual_farm(site)
-    is_virtual = vf is not None
-    is_clima_point = is_virtual and vf.get("tipo") == "clima"
-    bloqueado = _nivel_dados_site(site, raw_cards) == "bloqueado"
+    ctx = _preparar_relatorio(site, safra)
+    is_clima_point, bloqueado = ctx["is_clima_point"], ctx["bloqueado"]
     if (bloqueado or is_clima_point) and enviar_pdf:
         # Fazenda sem leitura recente / ponto so' clima: sem PDF (pedido do
         # Alan). PDF "ok" pro agendador nao tentar de novo a cada minuto.
         enviar_pdf = False
         if not enviar_texto:
             return False, True, "Sem PDF para fazenda sem leitura recente ou ponto so' clima."
-    # Sem secao de doenca no relatorio (texto/PDF) quando nao ha'
-    # monitoramento de doenca de verdade acontecendo -- ponto "so clima"
-    # (nunca monitora) ou fazenda real com estacao sem leitura ha muito
-    # tempo (dado velho demais pra confiar) -- senao o relatorio parece
-    # dizer "tudo tranquilo" quando na verdade a fazenda nao foi checada.
-    mostrar_secao_doencas = not is_clima_point and not bloqueado
-    coords = _weather_coords_all()
-    weather = _get_weather_for_site(site, coords)
-    riscos_climaticos = []
-    if bloqueado:
-        diseases = []
-        # Sem leitura confirmada pra montar "Doencas em Atencao/Perigo",
-        # mas o risco CLIMATICO (so' clima x germinacao, nunca depende
-        # do sensor) continua valido -- avisa mesmo sem confirmar a
-        # doenca, pedido explicito do usuario.
-        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather, site, safra)
-    else:
-        cards_by_site = _filter_cards_by_cultura(
-            {site: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
-        )
-        cards = cards_by_site.get(site, [])
-        notes = models.get_all_recommendation_notes()
-        diseases = _build_site_diseases(site, cards, notes, cultura=cultura)
-
-    for d in diseases:
-        d["risco"] = _calc_risco_germinacao(d, weather)
-        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
-    if not bloqueado and not is_clima_point:
-        riscos_climaticos = _riscos_climaticos_sem_alerta(cards, weather, diseases, site, safra)
-    produtos = _farm_produtos_estoque(site, safra)
+    leitura_bioscout, cultura = ctx["leitura_bioscout"], ctx["cultura"]
+    mostrar_secao_doencas, weather = ctx["mostrar_secao_doencas"], ctx["weather"]
+    diseases, riscos_climaticos, produtos = ctx["diseases"], ctx["riscos_climaticos"], ctx["produtos"]
 
     destinos = destinos_override if destinos_override is not None else _site_whatsapp_destinations(site)
     if not destinos:
@@ -1921,16 +1950,7 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
 
     text = None
     if enviar_texto:
-        safra_label = SAFRA_LABELS[safra] if safra else "todas as safras"
-        plantio_linhas, aplicacoes_linhas = _farm_plantio_aplicacoes_estoque(site, safra)
-        text = _format_whatsapp_message(
-            site, diseases, weather=weather, produtos=produtos, is_virtual=is_virtual, cultura=cultura,
-            safra_label=safra_label, plantio_linhas=plantio_linhas, aplicacoes_linhas=aplicacoes_linhas,
-            leitura_bioscout=leitura_bioscout, mostrar_secao_doencas=mostrar_secao_doencas,
-            riscos_climaticos=riscos_climaticos,
-            vento_dia=_rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]) if is_clima_point else None,
-            ponto_clima=is_clima_point,
-        )
+        text = _texto_relatorio(site, safra, ctx)
 
     # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
     # gerado uma vez so' e mandado como documento pra cada destinatario --
@@ -7541,7 +7561,10 @@ def cliente_conta_editar():
             erro = "E-mail inválido."
         elif (ja := models.conta_com_contato(telefone, email, exceto_user_id=user_id)):
             erro = ("Esse celular" if ja == "telefone" else "Esse e-mail") + " já está em outra conta."
+        autosave = request.headers.get("X-Autosave") == "1"
         if erro:
+            if autosave:
+                return jsonify(ok=False, erro=erro)
             flash(erro, "error")
         else:
             models.set_user_contato(user_id, email, telefone)
@@ -7550,6 +7573,8 @@ def cliente_conta_editar():
             if grupo != (cad.get("grupo_economico") or ""):
                 for p in models.get_cliente_pontos(user_id):
                     _renomear_fazenda_cliente(user_id, p, user["username"])
+            if autosave:
+                return jsonify(ok=True)
             flash("Dados atualizados.", "success")
             return redirect(url_for("cliente_home"))
     tel = (form.get("codigo_pais", "") + form.get("numero_telefone", "")) if form else (user["telefone"] or "")
@@ -7980,7 +8005,10 @@ def cliente_ponto_editar(ponto_id):
             erro = "Marque as culturas e informe a área (ha) de cada uma."
         elif lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
             erro = "Marque o local da fazenda no mapa."
+        autosave = request.headers.get("X-Autosave") == "1"
         if erro:
+            if autosave:
+                return jsonify(ok=False, erro=erro)
             flash(erro, "error")
         else:
             models.editar_cliente_ponto(
@@ -7989,6 +8017,8 @@ def cliente_ponto_editar(ponto_id):
                 (form.get("cidade") or "").strip()[:80], form.get("uf") or "")
             _renomear_fazenda_cliente(user_id, models.get_cliente_ponto(user_id, ponto_id), current_user.username, lat, lon)
             _recalcular_cadastro(user_id)
+            if autosave:
+                return jsonify(ok=True)
             flash("Fazenda atualizada.", "success")
             return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
     else:
@@ -8023,6 +8053,37 @@ def cliente_ponto_excluir(ponto_id):
             return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
     models.excluir_cliente_ponto(int(current_user.id), ponto_id)
     return redirect(url_for("cliente_home"))
+
+
+@app.route("/app/relatorios")
+@cliente_required
+def cliente_relatorios():
+    """Aba Relatorios (pedido do Alan, 08/11/2026): o relatorio em texto de UMA
+    fazenda por vez, com cabecalho destacado, pronto pra encaminhar pelo
+    WhatsApp (enviar, copiar ou baixar .txt)."""
+    pontos = [p for p in models.get_cliente_pontos(int(current_user.id)) if models.ponto_liberado(p) and p.get("site_name")]
+    ponto = next((p for p in pontos if str(p["id"]) == request.args.get("fazenda")), pontos[0] if pontos else None)
+    texto = _texto_relatorio_cliente(ponto) if ponto else ""
+    return render_template("cliente_relatorios.html", pontos=pontos, ponto=ponto, texto=texto)
+
+
+@app.route("/app/relatorios/<int:ponto_id>.txt")
+@cliente_required
+def cliente_relatorio_txt(ponto_id):
+    ponto = models.get_cliente_ponto(int(current_user.id), ponto_id)
+    if not ponto or not ponto.get("site_name") or not models.ponto_liberado(ponto):
+        abort(404)
+    nome = re.sub(r"[^A-Za-z0-9]+", "-", _sem_acento_min(_nome_exibicao(ponto["site_name"]))).strip("-") or "fazenda"
+    return Response(_texto_relatorio_cliente(ponto), mimetype="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="relatorio-{nome}-{_hoje_cuiaba().isoformat()}.txt"'})
+
+
+def _texto_relatorio_cliente(ponto):
+    """Cabecalho bem visivel + o mesmo texto do relatorio do WhatsApp."""
+    agora = weather_forecast._agora_cuiaba()
+    cabecalho = ["━━━━━━━━━━━━━━━━━━━━", "📋 *RELATÓRIO ONEAGRO*", f"*{_nome_exibicao(ponto['site_name'])}*",
+                 f"📅 {agora.strftime('%d/%m/%Y %H:%M')}", "━━━━━━━━━━━━━━━━━━━━", ""]
+    return "\n".join(cabecalho) + _texto_relatorio(ponto["site_name"])
 
 
 @app.route("/app/regiao")
