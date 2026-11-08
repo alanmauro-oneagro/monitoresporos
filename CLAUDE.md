@@ -373,10 +373,14 @@ cada plano. Clientes nao aparecem na aba Usuarios. App Android/iOS em
 app nao aparece preco nem link de pagamento (regra das lojas).
 **Aba Graficos do app** (`/app/regiao`, endpoint `cliente_regiao`; ex-"Regiao",
 cujo mapa de estacoes por celula saiu -- pedido do Alan, 08/11/2026): filtro
-por cultura no topo (culturas das fazendas do cliente; doenca sem cultura
-marcada sempre entra) e por fazenda (se tiver mais de uma); tabela de
-**favorabilidade climatica** (hoje + 5 dias, A/M/B) de TODAS as doencas
-cadastradas com germinacao, do pais da fazenda (`_favorabilidade_ponto`).
+por cultura no topo ("Minhas culturas" = todas as do cliente) e por fazenda
+(se tiver mais de uma); tabela de **favorabilidade climatica** (hoje + 5
+dias, A/M/B) das doencas com germinacao, do pais da fazenda
+(`_favorabilidade_ponto`). **Filtro previo pelas culturas do cliente**
+(pedido do Alan, 08/11/2026): so' entram doencas marcadas (Doenças/Culturas)
+pra alguma cultura que ele informou no cadastro/fazendas
+(`_culturas_do_cliente`); doenca sem cultura marcada fica de fora; cliente
+sem nenhuma cultura da lista ve todas.
 Com o recurso de plano `graficos_app` ("Gráficos: 7 dias de histórico e 5
 de previsão"; Premium e Premium + Estacao, migrado 1x pelo setting
 `recursos_graficos_migrados`): um grafico por doenca (Chart.js) com
