@@ -126,3 +126,43 @@ class PinoDoPlanoTest(unittest.TestCase):
         novo = models.update_virtual_farm(site, "Zzz Lavoura Plano Pino 2", lat + 0.05, lon + 0.05, 30)
         self.assertIn(novo, models.sites_de_clientes())
         self.assertEqual(models.get_cliente_pontos(uid)[0]["site_name"], novo)
+
+
+class EnvioPorPlanoTest(unittest.TestCase):
+    """Relatorio da fazenda estimada do cliente: Free so' texto; Premium tambem PDF
+    (pedido do Alan, 08/11/2026)."""
+
+    def test_formatos_pelo_plano(self):
+        import whatsapp
+        webapp.app.config["TESTING"] = True
+        lookup = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
+        real = max((v[-1]["data"], s) for (s, d), v in lookup.items() if d == DOENCA and v)[1]
+        lat, lon = data_reader.read_site_coordinates()[real]
+        site = _virtual("Zzz Envio Por Plano", lat, lon)
+        p_free = models.salvar_plano(None, "Zzz Free Envio", "", 0, "MONTHLY", 1, 30, ["clima", "whatsapp_texto"], True, 9)
+        p_prem = models.salvar_plano(None, "Zzz Prem Envio", "", 0, "MONTHLY", 1, 30,
+                                     ["clima", "whatsapp_texto", "whatsapp_pdf"], True, 9)
+        free = models.criar_cliente("Zzz Cli Envio Free", "segredo1", "", "5565999990141", "", p_free)
+        prem = models.criar_cliente("Zzz Cli Envio Prem", "segredo1", "", "5565999990142", "", p_prem)
+        sem = models.criar_cliente("Zzz Cli Envio Vencido", "segredo1", "", "5565999990143", "", p_prem)
+        for uid in (free, prem):
+            models.atualizar_assinatura(uid, status="ativa", cortesia_ate="2099-01-01")
+        for uid in (free, prem, sem):
+            models.receber_relatorio_da_fazenda(uid, site)
+        conn = models.get_db()
+        conn.execute("UPDATE assinaturas SET criado_em = '2026-01-01 08:00:00' WHERE user_id = ?", (sem,))
+        conn.commit()
+        conn.close()
+        textos, docs = [], []
+        # dados de exemplo do repo sao antigos: trata como leitura recente (senao nao sai PDF nenhum)
+        with webapp.app.app_context(), \
+                mock.patch.object(webapp, "_nivel_dados_site", return_value="ok"), \
+                mock.patch.object(whatsapp, "usa_modelo_oficial", return_value=False), \
+                mock.patch.object(whatsapp, "send_whatsapp", side_effect=lambda tel, txt: textos.append(tel) or (True, "ok")), \
+                mock.patch.object(whatsapp, "send_whatsapp_document",
+                                  side_effect=lambda tel, b, n, caption=None: docs.append(tel) or (True, "ok")):
+            webapp._send_site_whatsapp(site, enviar_texto=True, enviar_pdf=True)
+        self.assertIn("5565999990141", textos)          # Free: so' texto
+        self.assertNotIn("5565999990141", docs)
+        self.assertIn("5565999990142", docs)            # Premium: PDF (com o texto junto ou separado)
+        self.assertNotIn("5565999990143", textos + docs)  # sem acesso (Free vencido): nada

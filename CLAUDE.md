@@ -154,7 +154,17 @@ se o plano liberar (recursos "site_*" em `RECURSOS_PLANO`, logo depois de
 Graficos/Manejos/Recomendacoes (`ABAS_SITE_CLIENTE` em `_restringir_cliente`;
 menu do `base.html` so' com essas abas + "📱 App"; no app, aba "🌐 Site").
 Nelas o cliente e' como um Usuario: so' as fazendas liberadas pra ele.
-Basico/Premium (recurso "fazenda_estimada"): cada lavoura nova vira uma
+**Toda lavoura vira fazenda estimada, sem configuracao da OneAgro**
+(pedido do Alan, 08/11/2026 -- antes so' com o recurso "fazenda_estimada"):
+ja' entra na Programacao de Envios (agenda padrao do `create_virtual_farm`)
+com o proprio cliente recebendo (`models.receber_relatorio_da_fazenda`).
+**Relatorio por WhatsApp pelo plano**: recursos `whatsapp_texto` e
+`whatsapp_pdf` (linhas na tabela de Planos e Valores; padrao: texto em
+todos, PDF so' no Premium e Premium + Estacao -- migrado 1x, setting
+`recursos_whatsapp_migrados`). `_send_site_whatsapp` manda a cada cliente
+so' o formato do plano que vale agora (`_formatos_whatsapp_clientes` /
+`_acesso_do_cliente`, que funciona sem requisicao); cliente sem acesso
+nao recebe nada. Cada lavoura nova vira uma
 fazenda ESTIMADA (mesmo processo do Mapa Interpolado, raio do plano, nome
 "<lavoura> (<usuario>)", `_criar_fazenda_estimada_da_lavoura`) liberada so'
 pra ele; apagar a lavoura ou o cliente apaga a fazenda estimada. O Master
