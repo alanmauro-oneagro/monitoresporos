@@ -765,6 +765,16 @@ def init_db():
         conn.execute("ALTER TABLE assinatura_pagamentos ADD COLUMN subscription_id TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
+    # Fazenda adicional do cliente (pedido do Alan, 08/11/2026): cobranca propria
+    # pela area a mais, Free de 7 dias e depois so' com pagamento.
+    for tabela, coluna in (("cliente_pontos", "area_preco_ha REAL"), ("cliente_pontos", "adicional_status TEXT"),
+                           ("cliente_pontos", "adicional_subscription_id TEXT"), ("cliente_pontos", "adicional_total REAL"),
+                           ("cliente_pontos", "adicional_moeda TEXT"), ("cliente_pontos", "adicional_pago_ate TEXT"),
+                           ("assinatura_pagamentos", "ponto_id INTEGER"), ("assinaturas", "forma_pagamento TEXT")):
+        try:
+            conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna}")
+        except sqlite3.OperationalError:
+            pass  # coluna ja existe
     # Culturas e area de cada local de plantio informado no cadastro (pedido do Alan, 08/11/2026).
     for coluna in ("culturas TEXT", "area_ha REAL", "cidade TEXT", "uf TEXT"):
         try:
@@ -3407,7 +3417,9 @@ def get_user_permitted_site_names(user_id):
         (user_id,),
     ).fetchall()
     conn.close()
-    return [r["site_name"] for r in rows]
+    # Fazenda adicional do cliente sem pagamento depois dos 7 dias some das telas dele.
+    bloqueadas = sites_bloqueados_de_clientes(user_id)
+    return [r["site_name"] for r in rows if r["site_name"] not in bloqueadas]
 
 
 def get_user_permitted_site_ids(user_id):
@@ -3842,7 +3854,8 @@ def get_assinatura_por_subscription(asaas_subscription_id):
 
 
 def atualizar_assinatura(user_id, **campos):
-    permitidos = {"plano_id", "status", "cpf_cnpj", "asaas_customer_id", "asaas_subscription_id", "cortesia_ate"}
+    permitidos = {"plano_id", "status", "cpf_cnpj", "asaas_customer_id", "asaas_subscription_id", "cortesia_ate",
+                  "forma_pagamento"}
     campos = {k: v for k, v in campos.items() if k in permitidos}
     if not campos:
         return
@@ -3911,7 +3924,7 @@ def credito_para_upgrade(user_id, subscription_id):
     conn = get_db()
     rows = conn.execute(
         f"SELECT valor, vencimento FROM assinatura_pagamentos WHERE user_id = ? AND status IN ({marcadores})"
-        " AND vencimento IS NOT NULL AND (subscription_id IS NULL OR subscription_id = ?)",
+        " AND vencimento IS NOT NULL AND ponto_id IS NULL AND (subscription_id IS NULL OR subscription_id = ?)",
         (user_id,) + PAGAMENTO_CONFIRMADO + (subscription_id or "",),
     ).fetchall()
     conn.close()
@@ -3923,31 +3936,51 @@ def fechar_pagamentos_sem_assinatura(user_id, subscription_id):
     """Depois do upgrade: pagamentos sem assinatura anotada passam a ser da
     antiga, pra o credito nao ser usado de novo num proximo upgrade."""
     conn = get_db()
-    conn.execute("UPDATE assinatura_pagamentos SET subscription_id = ? WHERE user_id = ? AND subscription_id IS NULL",
+    conn.execute("UPDATE assinatura_pagamentos SET subscription_id = ? WHERE user_id = ? AND subscription_id IS NULL"
+                 " AND ponto_id IS NULL",
                  (subscription_id or "(antiga)", user_id))
     conn.commit()
     conn.close()
 
 
-def registrar_pagamento(user_id, asaas_payment_id, valor, status, vencimento, invoice_url, subscription_id=None):
+def registrar_pagamento(user_id, asaas_payment_id, valor, status, vencimento, invoice_url, subscription_id=None,
+                        ponto_id=None):
     """Grava/atualiza um pagamento (webhook do Asaas, que pode chegar
     repetido -- idempotente) e recalcula ate' quando o cliente tem
     acesso: cada pagamento confirmado vale 1 ano a partir do vencimento
-    (`MESES_VALIDADE_PAGO`). Estorno/exclusao tira o periodo."""
+    (`MESES_VALIDADE_PAGO`). Estorno/exclusao tira o periodo. Com
+    `ponto_id` (cobranca de fazenda adicional) so' mexe na validade daquela
+    fazenda (`adicional_pago_ate`), nunca na assinatura do plano."""
     conn = get_db()
     conn.execute(
         "INSERT INTO assinatura_pagamentos (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, atualizado_em,"
-        " subscription_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        " subscription_id, ponto_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         " ON CONFLICT(asaas_payment_id) DO UPDATE SET valor=excluded.valor, status=excluded.status,"
         " vencimento=excluded.vencimento, invoice_url=COALESCE(excluded.invoice_url, invoice_url),"
-        " atualizado_em=excluded.atualizado_em, subscription_id=COALESCE(excluded.subscription_id, subscription_id)",
-        (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, _agora_cuiaba(), subscription_id),
+        " atualizado_em=excluded.atualizado_em, subscription_id=COALESCE(excluded.subscription_id, subscription_id),"
+        " ponto_id=COALESCE(excluded.ponto_id, ponto_id)",
+        (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, _agora_cuiaba(), subscription_id, ponto_id),
     )
+    marcadores = ",".join("?" * len(PAGAMENTO_CONFIRMADO))
+    if ponto_id:
+        pago_ate = None
+        for r in conn.execute(
+            f"SELECT vencimento FROM assinatura_pagamentos WHERE ponto_id = ? AND status IN ({marcadores})"
+            " AND vencimento IS NOT NULL", (ponto_id,) + PAGAMENTO_CONFIRMADO,
+        ):
+            fim = _somar_meses(r["vencimento"], MESES_VALIDADE_PAGO).isoformat()
+            pago_ate = max(pago_ate or fim, fim)
+        conn.execute("UPDATE cliente_pontos SET adicional_pago_ate = ?,"
+                     " adicional_status = CASE WHEN ? IS NOT NULL AND adicional_status = 'pendente' THEN 'ativa'"
+                     " ELSE adicional_status END WHERE id = ?", (pago_ate, pago_ate, ponto_id))
+        conn.commit()
+        conn.close()
+        return
     assinatura = conn.execute("SELECT status FROM assinaturas WHERE user_id = ?", (user_id,)).fetchone()
     pago_ate = None
-    marcadores = ",".join("?" * len(PAGAMENTO_CONFIRMADO))
     for r in conn.execute(
-        f"SELECT vencimento FROM assinatura_pagamentos WHERE user_id = ? AND status IN ({marcadores}) AND vencimento IS NOT NULL",
+        f"SELECT vencimento FROM assinatura_pagamentos WHERE user_id = ? AND status IN ({marcadores}) AND vencimento IS NOT NULL"
+        " AND ponto_id IS NULL",
         (user_id,) + PAGAMENTO_CONFIRMADO,
     ):
         fim = _somar_meses(r["vencimento"], MESES_VALIDADE_PAGO).isoformat()
@@ -4000,6 +4033,78 @@ def get_cliente_ponto(user_id, ponto_id):
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+# Situacao da cobranca de cada fazenda do cliente (`cliente_pontos.adicional_status`):
+# NULL = coberta pelo plano; "incluida" = area a mais sem custo extra; "pendente" =
+# cobranca gerada, aguardando pagamento; "ativa" = paga; "sob_consulta" = faixa sem
+# preco na tabela de apoio; "cancelada" = cobranca cancelada.
+ADICIONAL_COBERTA = (None, "", "incluida")
+
+
+def fim_free_ponto(ponto):
+    """Ultimo dia (ISO) dos 7 dias de acesso gratis da fazenda adicional."""
+    criado = (ponto.get("criado_em") or _hoje_cuiaba())[:10]
+    return (datetime.strptime(criado, "%Y-%m-%d").date() + timedelta(days=DIAS_FREE)).isoformat()
+
+
+def ponto_liberado(ponto):
+    """Fazenda do cliente com acesso: coberta pelo plano, paga, ou nos 7
+    dias gratis depois de criada (pedido do Alan, 08/11/2026)."""
+    if ponto.get("adicional_status") in ADICIONAL_COBERTA:
+        return True
+    hoje = _hoje_cuiaba()
+    return (ponto.get("adicional_pago_ate") or "") >= hoje or fim_free_ponto(ponto) >= hoje
+
+
+def sites_bloqueados_de_clientes(user_id=None):
+    """site_name das fazendas adicionais sem pagamento depois dos 7 dias."""
+    conn = get_db()
+    sql = ("SELECT * FROM cliente_pontos WHERE site_name IS NOT NULL AND adicional_status IS NOT NULL"
+           " AND adicional_status NOT IN ('', 'incluida')")
+    rows = conn.execute(sql + (" AND user_id = ?" if user_id else ""), (user_id,) if user_id else ()).fetchall()
+    conn.close()
+    return {r["site_name"] for r in rows if not ponto_liberado(dict(r))}
+
+
+def set_adicional_ponto(ponto_id, **campos):
+    permitidos = {"area_preco_ha", "adicional_status", "adicional_subscription_id", "adicional_total", "adicional_moeda"}
+    campos = {k: v for k, v in campos.items() if k in permitidos}
+    if not campos:
+        return
+    conn = get_db()
+    conn.execute(f"UPDATE cliente_pontos SET {', '.join(f'{k} = ?' for k in campos)} WHERE id = ?",
+                 tuple(campos.values()) + (ponto_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_ponto_por_subscription(subscription_id):
+    if not subscription_id:
+        return None
+    conn = get_db()
+    row = conn.execute("SELECT * FROM cliente_pontos WHERE adicional_subscription_id = ?", (subscription_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_ponto_por_id(ponto_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM cliente_pontos WHERE id = ?", (ponto_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def somar_ao_cadastro(user_id, culturas, area_ha, area_preco_ha, grupo_cultura):
+    """Fazenda nova do cliente entra no total do cadastro (culturas, area,
+    area do preco e tipos) -- base do preco pela area dali pra frente."""
+    conn = get_db()
+    row = conn.execute("SELECT id FROM solicitacoes_acesso WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,)).fetchone()
+    if row:
+        conn.execute("UPDATE solicitacoes_acesso SET culturas = ?, area_ha = ?, area_preco_ha = ?, grupo_cultura = ? WHERE id = ?",
+                     (culturas, area_ha, area_preco_ha, grupo_cultura, row["id"]))
+        conn.commit()
+    conn.close()
 
 
 def criar_cliente_ponto(user_id, nome, lat, lon, cultura=""):

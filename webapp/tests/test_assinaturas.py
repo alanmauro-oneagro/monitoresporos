@@ -32,6 +32,9 @@ _WEATHER = {
 }
 
 
+# Campos da tela "Nova fazenda" (tipo de cultura, cultura e area; 08/11/2026).
+NOVA_FAZENDA = {"grupo_cultura": "cereais", "culturas": "Soja", "area_cultura__Soja": "100"}
+
 class AssinaturasTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -141,7 +144,7 @@ class AssinaturasTest(unittest.TestCase):
         conn.execute("UPDATE assinaturas SET criado_em = '2026-01-01 08:00:00' WHERE user_id = ?", (user["id"],))
         conn.commit()
         conn.close()
-        self.assertIn("/app/assinatura", self.client.get("/app").headers["Location"])
+        self.assertIn("/app/assinatura", self.client.get("/app/regiao").headers["Location"])
 
     def test_cadastro_direto_virou_solicitacao(self):
         resp = self.client.post("/cadastro", data={"username": "Zzz Teste Direto", "plano_id": str(self.plano_pro)})
@@ -189,7 +192,7 @@ class AssinaturasTest(unittest.TestCase):
         self._cadastrar("Zzz Teste Lavoura")
         self._liberar("Zzz Teste Lavoura")
         site, (lat, lon) = next(iter(data_reader.read_site_coordinates().items()))
-        resp = self.client.post("/app/pontos/novo", data={"nome": "Talhao Zzz", "lat": lat + 0.05, "lon": lon, "cultura": ""})
+        resp = self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao Zzz", "lat": lat + 0.05, "lon": lon, "cultura": ""})
         self.assertEqual(resp.status_code, 302)
         html = self.client.get(resp.headers["Location"]).get_data(as_text=True)
         self.assertIn("Talhao Zzz", html)
@@ -200,7 +203,7 @@ class AssinaturasTest(unittest.TestCase):
         self.assertEqual(self.client.get("/app").status_code, 200)
         # sem limite de lavouras (pedido do Alan, 07/11/2026): o plano libera acessos ao site
         for i in range(4):
-            self.client.post("/app/pontos/novo", data={"nome": f"Extra {i}", "lat": lat, "lon": lon})
+            self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": f"Extra {i}", "lat": lat, "lon": lon})
         user = models.get_user_by_username("Zzz Teste Lavoura")
         self.assertEqual(len(models.get_cliente_pontos(user["id"])), 5)
         home = self.client.get("/app").get_data(as_text=True)
@@ -210,7 +213,7 @@ class AssinaturasTest(unittest.TestCase):
     def test_plano_basico_bloqueia_recursos(self):
         self._cadastrar("Zzz Teste Basico", plano_id=self.plano_basico)
         self._liberar("Zzz Teste Basico")
-        resp = self.client.post("/app/pontos/novo", data={"nome": "Talhao B", "lat": -15.6, "lon": -56.1})
+        resp = self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao B", "lat": -15.6, "lon": -56.1})
         html = self.client.get(resp.headers["Location"]).get_data(as_text=True)
         self.assertIn("não faz parte do seu plano", html)
         self.assertIn("Temperatura", html)
@@ -243,7 +246,7 @@ class AssinaturasTest(unittest.TestCase):
         self.assertIn("Adicionar fazenda monitorada", self.client.get("/app/regiao").get_data(as_text=True))
         coords = data_reader.read_site_coordinates()
         site, (lat, lon) = next(iter(coords.items()))
-        self.client.post("/app/pontos/novo", data={"nome": "Talhao R", "lat": lat, "lon": lon})
+        self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao R", "lat": lat, "lon": lon})
         hoje = models._hoje_cuiaba()
         leitura = {"doenca": "Ferrugem Zzz", "doenca_en": "Rust Zzz", "concentracao": 12.0, "status": "Perigo", "data": hoje}
         with mock.patch.object(webapp, "get_dashboard_data", return_value={site: [leitura]}), \

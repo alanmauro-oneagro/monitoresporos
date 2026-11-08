@@ -70,12 +70,19 @@ def criar_cliente(nome, cpf_cnpj, email, telefone, referencia):
     return resposta["id"]
 
 
-def criar_assinatura(customer_id, valor, ciclo, descricao, vencimento_iso, referencia, max_cobrancas=None):
+# Forma de pagamento escolhida pelo cliente em Minha assinatura (pedido do
+# Alan, 08/11/2026); sem escolha, "UNDEFINED" (escolhe na fatura).
+FORMAS_PAGAMENTO = {"PIX": "PIX", "CREDIT_CARD": "Cartão de crédito"}
+
+
+def criar_assinatura(customer_id, valor, ciclo, descricao, vencimento_iso, referencia, max_cobrancas=None,
+                     forma_pagamento=None):
     """`max_cobrancas`: limita quantas cobrancas a assinatura gera (Asaas
     `maxPayments`) -- usado no upgrade com desconto, pra o desconto valer so'
     no 1o ano."""
     dados = {
-        "customer": customer_id, "billingType": "UNDEFINED", "value": round(float(valor), 2),
+        "customer": customer_id,
+        "billingType": forma_pagamento if forma_pagamento in FORMAS_PAGAMENTO else "UNDEFINED", "value": round(float(valor), 2),
         "nextDueDate": vencimento_iso, "cycle": ciclo, "description": descricao,
         "externalReference": referencia,
     }
@@ -92,3 +99,11 @@ def pagamentos_da_assinatura(subscription_id):
 
 def cancelar_assinatura(subscription_id):
     _chamar("DELETE", f"/subscriptions/{subscription_id}")
+
+
+def alterar_forma_pagamento(subscription_id, forma_pagamento):
+    """Troca a forma de pagamento da assinatura e das faturas em aberto."""
+    _chamar("PUT", f"/subscriptions/{subscription_id}", {
+        "billingType": forma_pagamento if forma_pagamento in FORMAS_PAGAMENTO else "UNDEFINED",
+        "updatePendingPayments": True,
+    })

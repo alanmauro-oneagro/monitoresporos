@@ -19,6 +19,9 @@ import models  # noqa: E402
 CPF_VALIDO = "52998224725"
 
 
+# Campos da tela "Nova fazenda" (tipo de cultura, cultura e area; 08/11/2026).
+NOVA_FAZENDA = {"grupo_cultura": "cereais", "culturas": "Soja", "area_cultura__Soja": "100"}
+
 class PlanosTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -96,7 +99,7 @@ class PlanosTest(unittest.TestCase):
                          follow_redirects=True)
         self.assertIn("Escolha um plano", forcado.get_data(as_text=True))
         self.assertIsNone(models.get_assinatura(uid)["plano_id"])
-        self.assertIn("/app/assinatura", c.get("/app").headers["Location"])  # sem plano: bloqueado
+        self.assertIn("/app/assinatura", c.get("/app/regiao").headers["Location"])  # sem plano: bloqueado
         resp = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Free"]["id"])})
         self.assertTrue(resp.headers["Location"].endswith("/app"))
         assinatura = models.get_assinatura(uid)
@@ -257,7 +260,7 @@ class PlanosTest(unittest.TestCase):
         self.assertIn("🌐", c.get("/app").get_data(as_text=True))
 
         # lavoura nova vira fazenda estimada liberada so' pra ele
-        resp = c.post("/app/pontos/novo", data={"nome": "Talhao Zzz", "lat": "-12.5", "lon": "-55.7"})
+        resp = c.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao Zzz", "lat": "-12.5", "lon": "-55.7"})
         self.assertEqual(resp.status_code, 302)
         ponto = models.get_cliente_pontos(uid)[0]
         self.assertTrue(ponto["site_name"])
@@ -274,7 +277,7 @@ class PlanosTest(unittest.TestCase):
         uid = self._cliente_no_plano("Estacao", ["clima", "site_mapa"])
         models.set_user_contato(uid, "", "5565999990131")
         c = self._logado(uid)
-        c.post("/app/pontos/novo", data={"nome": "Talhao Estacao", "lat": "-12.5", "lon": "-55.7"})
+        c.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao Estacao", "lat": "-12.5", "lon": "-55.7"})
         site = models.get_cliente_pontos(uid)[0]["site_name"]
         self.assertIsNotNone(models.get_virtual_farm(site))
         self.assertIn(site, models.get_user_permitted_site_names(uid))
@@ -286,7 +289,7 @@ class PlanosTest(unittest.TestCase):
 
     def test_excluir_cliente_apaga_fazendas_estimadas(self):
         uid = self._cliente_no_plano("Excluir Site", ["clima", "site_mapa", "fazenda_estimada"])
-        self._logado(uid).post("/app/pontos/novo", data={"nome": "Talhao Exc", "lat": "-12.5", "lon": "-55.7"})
+        self._logado(uid).post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao Exc", "lat": "-12.5", "lon": "-55.7"})
         site_name = models.get_cliente_pontos(uid)[0]["site_name"]
         self.assertIsNotNone(models.get_virtual_farm(site_name))
         models.delete_user(uid)

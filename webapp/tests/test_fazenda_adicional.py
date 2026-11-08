@@ -1,0 +1,171 @@
+"""Fazenda adicional do cliente (pedido do Alan, 08/11/2026): tela nova com
+tipo/culturas/area, cobranca da area a mais (diferenca pela tabela de apoio,
+mesmas parcelas do plano), 7 dias gratis e depois bloqueio; cliente sem
+acesso cai na Assinatura so' com Conta e Assinatura; forma de pagamento.
+
+Rodar a partir de webapp/:  python -m unittest tests.test_fazenda_adicional
+"""
+import json
+import os
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+os.environ.setdefault("BIOSCOUT_DB_PATH", os.path.join(tempfile.mkdtemp(), "teste.db"))
+os.environ.pop("ASAAS_API_KEY", None)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import app as webapp  # noqa: E402
+import models  # noqa: E402
+
+FAIXAS = [100, 250, 500, 1000, 2000, 3000, 5000, 10000, None]
+
+
+class FazendaAdicionalTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        webapp.app.config["TESTING"] = True
+        models.init_db()
+        cls.basico = next(p for p in models.get_planos() if p["nome"] == "Básico")
+        models.salvar_plano(cls.basico["id"], "Básico", "", 120.0, "MONTHLY", 3, 50, ["clima", "esporos", "regiao"], True, 2)
+
+    def setUp(self):
+        import cotacao
+        self.patch = mock.patch.object(cotacao, "dolar", return_value={"valor": 5.0, "data": "2026-11-06"})
+        self.patch.start()
+        models.set_setting("tabela_precificacao", json.dumps([{"ate_ha": f, "usd_ha": 2.0} for f in FAIXAS]))
+
+    def tearDown(self):
+        self.patch.stop()
+        models.set_setting("tabela_precificacao", "")
+
+    def _cliente_pagante(self, nome):
+        if models.get_user_by_username(nome):
+            models.delete_user(models.get_user_by_username(nome)["id"])
+        uid = models.criar_cliente(nome, "segredo1", "", "5565999991234", "52998224725", self.basico["id"])
+        models.registrar_cadastro({"username": nome, "tipo": "cliente", "user_id": uid, "grupo_cultura": "cereais",
+                                   "culturas": "Soja (300 ha)", "area_ha": 300, "area_preco_ha": 300})
+        models.atualizar_assinatura(uid, asaas_customer_id="cus_x", asaas_subscription_id="sub_principal", status="ativa")
+        models.registrar_pagamento(uid, "pay_principal", 10.0, "CONFIRMED", models._hoje_cuiaba(), None, "sub_principal")
+        return uid
+
+    def _logado(self, uid):
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(uid)
+            s["_fresh"] = True
+        return c
+
+    def _nova(self, c, **extra):
+        dados = {"nome": "Faz Mourão", "cidade": "Sorriso", "uf": "MT", "grupo_cultura": "cereais",
+                 "culturas": ["Soja", "Milho"], "area_cultura__Soja": "100", "area_cultura__Milho": "50",
+                 "lat": "-12.5", "lon": "-55.7"}
+        dados.update(extra)
+        return c.post("/app/pontos/novo", data=dados)
+
+    def test_tela_tem_tipo_cultura_e_area(self):
+        uid = self._cliente_pagante("Zzz Adic Tela")
+        html = self._logado(uid).get("/app/pontos/novo").get_data(as_text=True)
+        self.assertIn('placeholder="Nome (ex.: Faz Mourão)"', html)
+        for rotulo in ("Cereais", "HF", "Outros", "Área total", 'name="area_cultura__Soja"'):
+            self.assertIn(rotulo, html)
+        # sem tipo de cultura / sem area: nao cria
+        c = self._logado(uid)
+        self._nova(c, grupo_cultura="")
+        self._nova(c, area_cultura__Soja="", area_cultura__Milho="")
+        self.assertEqual(models.get_cliente_pontos(uid), [])
+
+    def test_area_a_mais_gera_cobranca_e_bloqueia_depois_de_7_dias(self):
+        uid = self._cliente_pagante("Zzz Adic Cobra")
+        c = self._logado(uid)
+        with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                mock.patch.object(webapp.asaas, "criar_assinatura", return_value="sub_fazenda") as criar, \
+                mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[
+                    {"id": "pay_faz", "value": 83.33, "status": "PENDING", "dueDate": models._hoje_cuiaba(),
+                     "invoiceUrl": "https://fatura/faz"}]):
+            resp = self._nova(c)
+        ponto = models.get_cliente_pontos(uid)[0]
+        # area do preco: Cereais = Soja -> 300 + 100 ha; (400 - 300) x U$ 2 = U$ 200 = R$ 1.000 em 12x
+        self.assertEqual((ponto["adicional_status"], ponto["adicional_total"]), ("pendente", 200.0))
+        args = criar.call_args[0]
+        self.assertEqual((args[0], args[1], args[2], args[5]), ("cus_x", 83.33, "MONTHLY", f"fazenda:{ponto['id']}"))
+        self.assertEqual(ponto["culturas"], "Soja (100 ha), Milho (50 ha)")
+        cad = models.get_cadastro_do_usuario(uid)
+        self.assertEqual((cad["area_ha"], cad["area_preco_ha"]), (450, 400))
+        self.assertIn("Soja (400 ha)", cad["culturas"])
+        site = ponto["site_name"]
+        # 7 dias gratis: a fazenda aparece
+        self.assertIn(site, models.get_user_permitted_site_names(uid))
+        self.assertIn("Aguardando pagamento", c.get("/app").get_data(as_text=True))
+        assin = c.get("/app/assinatura").get_data(as_text=True)
+        self.assertIn("Fazendas adicionais", assin)
+        self.assertIn("https://fatura/faz", assin)
+        # passou dos 7 dias sem pagar: some das telas, pagina bloqueada, sem relatorio
+        conn = models.get_db()
+        conn.execute("UPDATE cliente_pontos SET criado_em = '2026-01-01 08:00:00' WHERE id = ?", (ponto["id"],))
+        conn.commit()
+        conn.close()
+        self.assertNotIn(site, models.get_user_permitted_site_names(uid))
+        self.assertIn("O acesso a esta fazenda terminou", c.get(f"/app/pontos/{ponto['id']}").get_data(as_text=True))
+        self.assertEqual(webapp._send_site_whatsapp(site)[2], "Fazenda adicional sem pagamento -- relatório não enviado.")
+        # o plano continua valendo
+        self.assertEqual(c.get("/app/regiao").status_code, 200)
+        # pagou (webhook): volta, e o pagamento nao mexe na validade do plano
+        pago_antes = models.get_assinatura(uid)["pago_ate"]
+        with mock.patch.object(webapp.asaas, "token_webhook", return_value="tok"):
+            webapp.app.test_client().post("/webhooks/asaas", headers={"asaas-access-token": "tok"}, json={
+                "event": "PAYMENT_CONFIRMED", "payment": {"id": "pay_faz", "value": 83.33, "status": "CONFIRMED",
+                                                          "dueDate": models._hoje_cuiaba(), "subscription": "sub_fazenda"}})
+        self.assertIn(site, models.get_user_permitted_site_names(uid))
+        self.assertEqual(models.get_cliente_ponto(uid, ponto["id"])["adicional_status"], "ativa")
+        self.assertEqual(models.get_assinatura(uid)["pago_ate"], pago_antes)
+        self.assertEqual(models.credito_para_upgrade(uid, "sub_principal"), 10.0)  # fazenda nao vira credito
+
+    def test_free_nao_cobra_area_a_mais(self):
+        uid = models.criar_cliente("Zzz Adic Free", "segredo1", "", "5565999991235", "", models.plano_free()["id"])
+        models.atualizar_assinatura(uid, status="ativa", cortesia_ate="2099-01-01")
+        with mock.patch.object(webapp.asaas, "criar_assinatura") as criar:
+            self._nova(self._logado(uid))
+        criar.assert_not_called()
+        ponto = models.get_cliente_pontos(uid)[0]
+        self.assertIsNone(ponto["adicional_status"])
+        self.assertTrue(models.ponto_liberado(ponto))
+
+    def test_sem_acesso_cai_na_assinatura_so_com_conta_e_assinatura(self):
+        uid = models.criar_cliente("Zzz Adic Vencido", "segredo1", "", "5565999991236", "", self.basico["id"])
+        conn = models.get_db()
+        conn.execute("UPDATE assinaturas SET criado_em = '2026-01-01 08:00:00' WHERE user_id = ?", (uid,))
+        conn.commit()
+        conn.close()
+        c = webapp.app.test_client()
+        resp = c.post("/login", data={"username": "Zzz Adic Vencido", "password": "segredo1"}, follow_redirects=True)
+        self.assertEqual(resp.request.path, "/app/assinatura")
+        assin = c.get("/app/assinatura").get_data(as_text=True)
+        self.assertNotIn("</span>Região</a>", assin)
+        self.assertNotIn("</span>Site</a>", assin)
+        self.assertIn("</span>Assinatura</a>", assin)
+        self.assertIn("</span>Conta</a>", assin)
+        conta = c.get("/app")
+        self.assertEqual(conta.status_code, 200)
+        self.assertNotIn("+ Adicionar fazenda monitorada", conta.get_data(as_text=True))
+        self.assertIn("/app/assinatura", c.get("/app/regiao").headers["Location"])
+
+    def test_forma_de_pagamento(self):
+        uid = self._cliente_pagante("Zzz Adic Forma")
+        c = self._logado(uid)
+        html = c.get("/app/assinatura").get_data(as_text=True)
+        self.assertIn("Forma de pagamento", html)
+        self.assertIn("PIX", html)
+        self.assertIn("Cartão de crédito", html)
+        with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                mock.patch.object(webapp.asaas, "alterar_forma_pagamento") as alterar:
+            c.post("/app/assinatura/forma-pagamento", data={"forma_pagamento": "CREDIT_CARD"})
+        alterar.assert_called_once_with("sub_principal", "CREDIT_CARD")
+        self.assertEqual(models.get_assinatura(uid)["forma_pagamento"], "CREDIT_CARD")
+        c.post("/app/assinatura/forma-pagamento", data={"forma_pagamento": "BOLETO"})
+        self.assertEqual(models.get_assinatura(uid)["forma_pagamento"], "CREDIT_CARD")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1856,6 +1856,9 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     e pelo agendado."""
     if not enviar_texto and not enviar_pdf:
         return False, False, "Nada a enviar (nem texto nem PDF agendado pra hoje)."
+    if site in models.sites_bloqueados_de_clientes():
+        # Fazenda adicional do cliente sem pagamento depois dos 7 dias (pedido do Alan, 08/11/2026).
+        return True, True, "Fazenda adicional sem pagamento -- relatório não enviado."
     translations = _load_translations()
     raw_cards = _resolve_site_cards(site, translations)
     dias_sem_leitura = _dias_sem_leitura(raw_cards)
@@ -2690,7 +2693,10 @@ def index():
 
 def _inicio_cliente():
     """Cliente entra direto no Site (1a aba do site que o plano libera);
-    sem aba do site no plano, nas Culturas do app (pedido do Alan, 08/11/2026)."""
+    sem aba do site no plano, nas Culturas do app (pedido do Alan, 08/11/2026).
+    Sem acesso (prazo vencido sem pagamento): direto na Assinatura."""
+    if not _acesso_cliente()[1]:
+        return url_for("cliente_assinatura")
     abas = _abas_site_do_cliente()
     for recurso, _rotulo, endpoint in ABAS_SITE_MENU:
         if recurso in abas:
@@ -6671,8 +6677,10 @@ def _restringir_cliente():
 def _inject_abas_site_cliente():
     if current_user.is_authenticated and getattr(current_user, "is_cliente", False):
         abas = _abas_site_do_cliente()
-        return {"menu_site_cliente": [(rot, ep) for rec, rot, ep in ABAS_SITE_MENU if rec in abas]}
-    return {"menu_site_cliente": None}
+        return {"menu_site_cliente": [(rot, ep) for rec, rot, ep in ABAS_SITE_MENU if rec in abas],
+                # Sem acesso: a barra de baixo so' tem Assinatura e Conta (pedido do Alan, 08/11/2026).
+                "cliente_bloqueado": not _acesso_cliente()[1]}
+    return {"menu_site_cliente": None, "cliente_bloqueado": False}
 
 
 def _cpf_cnpj_valido(numero):
@@ -6794,6 +6802,7 @@ def _iniciar_cobranca(user_id, plano, credito=0):
         descricao += f" - desconto de {_dinheiro(credito)} do plano anterior"
     subscription_id = asaas.criar_assinatura(
         customer_id, valor, plano["ciclo"], descricao, _hoje_cuiaba().isoformat(), referencia, max_cobrancas,
+        assinatura.get("forma_pagamento"),
     )
     models.atualizar_assinatura(user_id, asaas_subscription_id=subscription_id, plano_id=plano["id"], status="pendente")
     link = None
@@ -7264,8 +7273,26 @@ def cliente_assinatura():
         pedir_local=not models.get_cliente_pontos(int(current_user.id)), nome_area=cad.get("empresa") or "",
         area_total=(models.get_cadastro_do_usuario(int(current_user.id)) or {}).get("area_ha"),
         recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO, free_ate=_acesso_cliente()[2],
-        dias_free=models.DIAS_FREE,
+        dias_free=models.DIAS_FREE, formas_pagamento=asaas.FORMAS_PAGAMENTO,
+        fazendas_adicionais=_fazendas_adicionais(int(current_user.id)),
     )
+
+
+def _fazendas_adicionais(user_id):
+    """Fazendas com cobranca propria (area a mais), com situacao, valor e a
+    fatura em aberto."""
+    pagamentos = models.get_pagamentos(user_id)
+    lista = []
+    for p in models.get_cliente_pontos(user_id):
+        situacao = _situacao_adicional(p)
+        if not situacao:
+            continue
+        p["situacao"] = situacao
+        p["fatura"] = next((pg["invoice_url"] for pg in pagamentos if pg.get("ponto_id") == p["id"]
+                            and pg.get("status") not in models.PAGAMENTO_CONFIRMADO + ("DELETED", "REFUNDED")
+                            and pg.get("invoice_url")), None)
+        lista.append(p)
+    return lista
 
 
 def _total_em_reais(plano, cot=None):
@@ -7387,6 +7414,49 @@ def cliente_cancelar_assinatura():
     return redirect(url_for("cliente_assinatura"))
 
 
+@app.route("/app/assinatura/forma-pagamento", methods=["POST"])
+@login_required
+def cliente_forma_pagamento():
+    """PIX ou cartao de credito (pedido do Alan, 08/11/2026): vale pras
+    proximas cobrancas e as faturas em aberto, do plano e das fazendas
+    adicionais."""
+    if not current_user.is_cliente or _no_app_loja():
+        abort(403)
+    forma = request.form.get("forma_pagamento", "")
+    if forma not in asaas.FORMAS_PAGAMENTO:
+        flash("Escolha PIX ou cartão de crédito.", "error")
+        return redirect(url_for("cliente_assinatura"))
+    user_id = int(current_user.id)
+    assinatura = models.get_assinatura(user_id) or {}
+    subs = [assinatura.get("asaas_subscription_id")] if assinatura.get("status") != "cancelada" else []
+    subs += [p["adicional_subscription_id"] for p in models.get_cliente_pontos(user_id)
+             if p.get("adicional_subscription_id") and p.get("adicional_status") != "cancelada"]
+    if asaas.configurado():
+        for sub in filter(None, subs):
+            try:
+                asaas.alterar_forma_pagamento(sub, forma)
+            except asaas.AsaasErro as e:
+                flash(f"Não foi possível trocar a forma de pagamento agora ({e}). Tente de novo em alguns minutos.", "error")
+                return redirect(url_for("cliente_assinatura"))
+    models.atualizar_assinatura(user_id, forma_pagamento=forma)
+    flash(f"Forma de pagamento: {asaas.FORMAS_PAGAMENTO[forma]}.", "success")
+    return redirect(url_for("cliente_assinatura"))
+
+
+@app.route("/app/assinatura/fazenda/<int:ponto_id>/cobrar", methods=["POST"])
+@login_required
+def cliente_cobrar_fazenda(ponto_id):
+    """Gera de novo a cobranca da fazenda adicional que falhou na hora."""
+    if not current_user.is_cliente or _no_app_loja():
+        abort(403)
+    ponto = models.get_cliente_ponto(int(current_user.id), ponto_id)
+    if not ponto or ponto.get("adicional_status") != "pendente" or ponto.get("adicional_subscription_id"):
+        abort(404)
+    erro = _gerar_cobranca_adicional(int(current_user.id), ponto_id)
+    flash(f"Não foi possível gerar a cobrança agora ({erro})." if erro else "Cobrança gerada.", "error" if erro else "success")
+    return redirect(url_for("cliente_assinatura"))
+
+
 @app.route("/app/conta", methods=["GET", "POST"])
 @login_required
 def cliente_conta():
@@ -7433,18 +7503,27 @@ def _excluir_cliente(user_id):
 
 
 @app.route("/app")
-@cliente_required
+@login_required
 def cliente_home():
+    """Aba Conta -- abre mesmo sem acesso liberado (prazo vencido sem
+    pagamento so' tem Conta e Assinatura; pedido do Alan, 08/11/2026)."""
+    if not current_user.is_cliente:
+        abort(403)
+    plano, liberada, _free_ate = _acesso_cliente()
+    plano = plano if liberada else None
     pontos = models.get_cliente_pontos(int(current_user.id))
+    for p in pontos:
+        p["liberado"] = bool(plano) and models.ponto_liberado(p)
+        p["situacao_adicional"] = _situacao_adicional(p)
     cad = models.get_cadastro_do_usuario(int(current_user.id)) or {}
     return render_template(
-        "cliente_home.html", pontos=pontos, plano=g.cliente_plano,
+        "cliente_home.html", pontos=pontos, plano=plano,
         # Culturas do cadastro (pedido do Alan, 08/11/2026: "Lavouras" virou "Culturas").
         cadastro=cad, culturas_lista=_culturas_com_area(cad.get("culturas")),
         user=models.get_user_by_id(int(current_user.id)),
         extras=_extras_do_cliente(int(current_user.id), pontos), max_extras=MAX_EXTRAS_RELATORIO,
         voltar=_caminho_interno(request.referrer) or "",
-        resumos={p["id"]: _resumo_ponto_cliente(p, g.cliente_plano) for p in pontos},
+        resumos={p["id"]: _resumo_ponto_cliente(p, plano) for p in pontos if p["liberado"]},
         urls_offline=[url_for("cliente_ponto", ponto_id=p["id"]) for p in pontos] + [url_for("cliente_regiao")],
     )
 
@@ -7464,11 +7543,13 @@ def _caminho_interno(url):
 
 
 @app.route("/app/destinatarios", methods=["POST"])
-@cliente_required
+@login_required
 def cliente_destinatarios():
     """Cliente troca as (ate' 2) pessoas que tambem recebem o relatorio e
     de quais areas (pedido do Alan, 08/11/2026). Substitui as anteriores.
     A aba Conta salva sozinha (`X-Autosave`, responde JSON)."""
+    if not current_user.is_cliente:
+        abort(403)
     autosave = request.headers.get("X-Autosave") == "1"
     user_id = int(current_user.id)
     pontos = models.get_cliente_pontos(user_id)
@@ -7504,28 +7585,136 @@ def cliente_destinatarios():
 @app.route("/app/pontos/novo", methods=["GET", "POST"])
 @cliente_required
 def cliente_ponto_novo():
+    """Nova fazenda do cliente com as mesmas opcoes do cadastro (tipo de
+    cultura, culturas e area de cada uma; pedido do Alan, 08/11/2026). A area
+    a mais gera cobranca adicional (`_cobrar_fazenda_adicional`)."""
     user_id = int(current_user.id)
     plano = g.cliente_plano  # sem limite de lavouras: o plano libera acessos ao site (pedido do Alan, 07/11/2026)
+    culturas = _culturas_cliente()
+    form = request.form
     if request.method == "POST":
-        nome = request.form.get("nome", "").strip()[:60]
-        try:
-            lat, lon = float(request.form.get("lat")), float(request.form.get("lon"))
-        except (TypeError, ValueError):
-            lat = lon = None
+        grupos = [gr for gr in GRUPOS_CULTURA if gr in form.getlist("grupo_cultura")]
+        loc = _locais_do_form(form, culturas, grupos)[0]
+        nome = (form.get("nome") or "").strip()[:60]
+        lat, lon = _coordenada(form.get("lat")), _coordenada(form.get("lon"))
+        areas = [(c, a) for c, a, _g in loc["areas_grupo"]]
+        erro = None
         if not nome:
-            flash("Dê um nome para a lavoura.", "error")
-        elif lat is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            flash("Marque o local da fazenda no mapa.", "error")
+            erro = "Dê um nome para a fazenda."
+        elif not grupos:
+            erro = "Escolha o tipo de cultura (Cereais, HF ou Outros)."
+        elif not areas or any(a <= 0 for _c, a in areas):
+            erro = "Marque as culturas e informe a área (ha) de cada uma."
+        elif lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            erro = "Marque o local da fazenda no mapa."
+        if erro:
+            flash(erro, "error")
         else:
-            cultura = request.form.get("cultura", "")
-            ponto_id = models.criar_cliente_ponto(user_id, nome, lat, lon, cultura if cultura in _culturas_cliente() else "")
+            area_total = sum(a for _c, a in areas)
+            area_preco = _area_preco_grupos(grupos, loc["areas_grupo"])
+            cad = models.get_cadastro_do_usuario(user_id) or {}
+            area_antes = _area_preco_do_cliente(user_id) or 0
+            ponto_id = models.criar_cliente_ponto(user_id, nome, lat, lon, "")
+            models.set_culturas_do_ponto(ponto_id, ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in areas), area_total,
+                                         (form.get("cidade") or "").strip()[:80], form.get("uf") or "")
+            models.set_adicional_ponto(ponto_id, area_preco_ha=area_preco)
             # Toda lavoura vira fazenda estimada (interpolacao da regiao), sem
             # configuracao da OneAgro (pedido do Alan, 08/11/2026).
             site = _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano)
-            _preencher_safras(site, _pares_cultura_area(models.get_cliente_ponto(user_id, ponto_id) or {},
-                                                        models.get_cadastro_do_usuario(user_id)))
+            _preencher_safras(site, areas)
+            # A fazenda nova entra no total do cadastro (culturas, area e area do preco).
+            somadas = dict((c, _area_de_texto(a)) for c, a in _culturas_com_area(cad.get("culturas")))
+            for c, a in areas:
+                somadas[c] = (somadas.get(c) or 0) + a
+            tipos = [t for t in GRUPOS_CULTURA if t in (cad.get("grupo_cultura") or "").split(",") or t in grupos]
+            models.somar_ao_cadastro(user_id, ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in somadas.items()),
+                                     (cad.get("area_ha") or 0) + area_total, area_antes + area_preco, ",".join(tipos))
+            mensagem, categoria = _cobrar_fazenda_adicional(user_id, ponto_id, area_antes, area_preco)
+            flash(mensagem, categoria)
             return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
-    return render_template("cliente_ponto_novo.html", culturas=_culturas_cliente())
+    return render_template("cliente_ponto_novo.html", culturas=culturas, grupos=GRUPOS_CULTURA,
+                           grupo_de={c: _grupo_da_cultura(c) for c in culturas}, ufs=UFS_BR, form=form)
+
+
+def _plano_pago(plano):
+    return bool(plano) and (plano["valor"] > 0 or bool(plano.get("preco_por_area")))
+
+
+def _cobrar_fazenda_adicional(user_id, ponto_id, area_antes, area_nova):
+    """Area a mais = cobranca adicional (pedido do Alan, 08/11/2026): o preco
+    da area total nova pela Tabela de apoio menos o da area que o cliente ja'
+    tinha, nas mesmas parcelas do plano, numa assinatura propria no Asaas.
+    A fazenda tem 7 dias gratis; depois so' com pagamento. Free (ou plano
+    ainda sem cobranca) nao cobra a mais. Devolve (mensagem, categoria)."""
+    assinatura = models.get_assinatura(user_id) or {}
+    plano = models.get_plano(assinatura["plano_id"]) if assinatura.get("plano_id") else None
+    if not _plano_pago(plano) or not assinatura.get("asaas_subscription_id") or assinatura.get("status") == "cancelada":
+        return "Fazenda adicionada.", "success"
+    antes = preco_pela_area(area_antes) if area_antes else None
+    depois = preco_pela_area(area_antes + area_nova)
+    fim = models.fim_free_ponto(models.get_ponto_por_id(ponto_id))
+    if not depois or depois["total_usd"] is None or (antes and antes["total_usd"] is None):
+        models.set_adicional_ponto(ponto_id, adicional_status="sob_consulta")
+        return (f"Fazenda adicionada. O valor da área a mais é sob consulta -- a OneAgro vai entrar em contato "
+                f"({CONTATO_COMERCIAL['celular']}). Acesso liberado até {models.fmt_data_br(fim)}."), "success"
+    extra_usd = round(depois["total_usd"] - ((antes or {}).get("total_usd") or 0), 2)
+    if extra_usd <= 0:
+        models.set_adicional_ponto(ponto_id, adicional_status="incluida")
+        return "Fazenda adicionada, sem custo a mais.", "success"
+    models.set_adicional_ponto(ponto_id, adicional_status="pendente", adicional_total=extra_usd, adicional_moeda="USD")
+    aviso = (f"Fazenda adicionada. Área a mais: {_dinheiro(extra_usd, 'U$')} por ano, em {plano['parcelas']}x. "
+             f"Você tem acesso a ela até {models.fmt_data_br(fim)}; depois, só com o pagamento.")
+    erro = _gerar_cobranca_adicional(user_id, ponto_id)
+    if erro:
+        return aviso + f" A cobrança será gerada depois ({erro}) -- veja em Assinatura.", "error"
+    return aviso + " A fatura está em Assinatura.", "success"
+
+
+def _gerar_cobranca_adicional(user_id, ponto_id):
+    """Cria no Asaas a assinatura da fazenda adicional (mesmo ciclo do plano,
+    U$ convertido pela cotacao do dia). Devolve None ou o motivo da falha."""
+    if not asaas.configurado():
+        return "pagamento online ainda não disponível"
+    assinatura = models.get_assinatura(user_id) or {}
+    plano = models.get_plano(assinatura["plano_id"]) if assinatura.get("plano_id") else None
+    ponto = models.get_ponto_por_id(ponto_id)
+    if not plano or not ponto or not assinatura.get("asaas_customer_id") or not ponto.get("adicional_total"):
+        return "assinatura sem cobrança no Asaas"
+    total = ponto["adicional_total"]
+    if (ponto.get("adicional_moeda") or "USD") == "USD":
+        cot = cotacao.dolar()
+        if not cot:
+            return "cotação do dólar indisponível no momento"
+        total = round(total * cot["valor"], 2)
+    parcela = round(total / plano["parcelas"], 2)
+    try:
+        sub_id = asaas.criar_assinatura(
+            assinatura["asaas_customer_id"], parcela, plano["ciclo"],
+            f"OneAgro Monitor - fazenda adicional {ponto['nome']} ({_fmt_ha(ponto.get('area_preco_ha') or 0)} ha)",
+            _hoje_cuiaba().isoformat(), f"fazenda:{ponto_id}", None, assinatura.get("forma_pagamento"),
+        )
+        models.set_adicional_ponto(ponto_id, adicional_subscription_id=sub_id, adicional_status="pendente")
+        for pagamento in asaas.pagamentos_da_assinatura(sub_id):
+            models.registrar_pagamento(user_id, pagamento["id"], pagamento.get("value"), pagamento.get("status"),
+                                       pagamento.get("dueDate"), pagamento.get("invoiceUrl"), sub_id, ponto_id)
+    except asaas.AsaasErro as e:
+        print(f"[fazenda adicional] cliente {user_id}, fazenda {ponto_id}: {e}")
+        return str(e)
+    return None
+
+
+def _situacao_adicional(ponto):
+    """Texto curto da cobranca da fazenda adicional (None = coberta pelo plano)."""
+    status = ponto.get("adicional_status")
+    if status in models.ADICIONAL_COBERTA:
+        return None
+    hoje = _hoje_cuiaba().isoformat()
+    if (ponto.get("adicional_pago_ate") or "") >= hoje:
+        return {"chave": "paga", "texto": f"Paga até {models.fmt_data_br(ponto['adicional_pago_ate'])}"}
+    fim = models.fim_free_ponto(ponto)
+    if fim >= hoje:
+        return {"chave": "free", "texto": f"Aguardando pagamento -- acesso até {models.fmt_data_br(fim)}"}
+    return {"chave": "bloqueada", "texto": "Bloqueada -- falta o pagamento"}
 
 
 def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano, username=None):
@@ -7631,9 +7820,13 @@ def cliente_ponto(ponto_id):
     ponto = models.get_cliente_ponto(int(current_user.id), ponto_id)
     if not ponto:
         abort(404)
+    if not models.ponto_liberado(ponto):
+        # Fazenda adicional sem pagamento depois dos 7 dias (pedido do Alan, 08/11/2026).
+        return render_template("cliente_ponto.html", ponto=ponto, plano=g.cliente_plano, culturas=_culturas_cliente(),
+                               dados=None, bloqueado=True)
     return render_template(
         "cliente_ponto.html", ponto=ponto, plano=g.cliente_plano, culturas=_culturas_cliente(),
-        dados=_dados_ponto_cliente(ponto, g.cliente_plano),
+        dados=_dados_ponto_cliente(ponto, g.cliente_plano), bloqueado=False,
     )
 
 
@@ -7653,6 +7846,13 @@ def cliente_ponto_editar(ponto_id):
 @app.route("/app/pontos/<int:ponto_id>/excluir", methods=["POST"])
 @cliente_required
 def cliente_ponto_excluir(ponto_id):
+    ponto = models.get_cliente_ponto(int(current_user.id), ponto_id)
+    if ponto and ponto.get("adicional_subscription_id") and ponto.get("adicional_status") != "cancelada":
+        try:
+            asaas.cancelar_assinatura(ponto["adicional_subscription_id"])
+        except asaas.AsaasErro as e:
+            flash(f"Não foi possível cancelar a cobrança dessa fazenda agora ({e}). Tente de novo em alguns minutos.", "error")
+            return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
     models.excluir_cliente_ponto(int(current_user.id), ponto_id)
     return redirect(url_for("cliente_home"))
 
@@ -7816,7 +8016,20 @@ def asaas_webhook():
     evento = request.get_json(silent=True) or {}
     tipo = evento.get("event", "")
     pagamento = evento.get("payment")
+    ponto = None
     if pagamento:
+        # Cobranca de fazenda adicional (pedido do Alan, 08/11/2026): so' libera aquela fazenda.
+        ponto = models.get_ponto_por_subscription(pagamento.get("subscription") or "")
+        ref = pagamento.get("externalReference") or ""
+        if not ponto and ref.startswith("fazenda:") and ref[8:].isdigit():
+            ponto = models.get_ponto_por_id(int(ref[8:]))
+    if ponto:
+        status = "DELETED" if tipo == "PAYMENT_DELETED" else pagamento.get("status")
+        models.registrar_pagamento(
+            ponto["user_id"], pagamento["id"], pagamento.get("value"), status,
+            pagamento.get("dueDate"), pagamento.get("invoiceUrl"), pagamento.get("subscription"), ponto["id"],
+        )
+    elif pagamento:
         assinatura = models.get_assinatura_por_subscription(pagamento.get("subscription") or "")
         if not assinatura:
             ref = pagamento.get("externalReference") or ""
@@ -7829,8 +8042,12 @@ def asaas_webhook():
                 pagamento.get("dueDate"), pagamento.get("invoiceUrl"), pagamento.get("subscription"),
             )
     elif tipo in ("SUBSCRIPTION_DELETED", "SUBSCRIPTION_INACTIVATED"):
-        assinatura = models.get_assinatura_por_subscription((evento.get("subscription") or {}).get("id") or "")
-        if assinatura:
+        sub_id = (evento.get("subscription") or {}).get("id") or ""
+        assinatura = models.get_assinatura_por_subscription(sub_id)
+        ponto = models.get_ponto_por_subscription(sub_id)
+        if ponto:
+            models.set_adicional_ponto(ponto["id"], adicional_status="cancelada")
+        elif assinatura:
             models.atualizar_assinatura(assinatura["user_id"], status="cancelada")
     return jsonify({"ok": True})
 
@@ -7924,7 +8141,7 @@ def admin_solicitacoes():
         # Areas monitoradas (ex-"lavouras"), cada uma com a fazenda estimada e o sinal
         pontos = models.get_cliente_pontos(p["user_id"])
         p["areas"] = [{**pt, "sinal": sinal_celular.estimar(pt["lat"], pt["lon"], buscar_frequencias=False)
-                       if _no_brasil(pt["lat"], pt["lon"]) else None} for pt in pontos]
+                       if _no_brasil(pt["lat"], pt["lon"]) else None, "adicional": _situacao_adicional(pt)} for pt in pontos]
         das_areas = {pt["site_name"] for pt in pontos if pt.get("site_name")}
         p["extras"] = _extras_do_cliente(p["user_id"], pontos)
         locais = [(pt["lat"], pt["lon"]) for pt in pontos if _no_brasil(pt["lat"], pt["lon"])]
