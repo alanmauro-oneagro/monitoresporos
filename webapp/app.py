@@ -8104,25 +8104,27 @@ def cliente_relatorio_txt(ponto_id):
 _SEP_RELATORIO = "━" * 20
 
 
-def _cabecalho_relatorio_cliente(user_id):
-    """Cabecalho do relatorio do cliente (formato pedido pelo Alan, 08/11/2026):
-    *RELATÓRIO ONEAGRO* / ━━ / *<grupo ou nome>*  dd/mm/aaaa hh:mm / ━━."""
-    cad = models.get_cadastro_do_usuario(user_id) or {}
-    quem = (cad.get("grupo_economico") or cad.get("nome_completo") or current_user.username).strip()
-    agora = weather_forecast._agora_cuiaba().strftime("%d/%m/%Y %H:%M")
-    return ["*RELATÓRIO ONEAGRO*", _SEP_RELATORIO, f"*{quem}*  {agora}", _SEP_RELATORIO]
+def _cabecalho_relatorio_cliente():
+    """Cabecalho do relatorio do cliente (formato do Alan, 08/11/2026, tudo
+    em negrito): ━━ / *RELATÓRIO DE MONITORAMENTO* / *ONEAGRO - dd/mm/aaaa*."""
+    hoje = weather_forecast._agora_cuiaba().strftime("%d/%m/%Y")
+    return [_SEP_RELATORIO, "*RELATÓRIO DE MONITORAMENTO*", f"*ONEAGRO - {hoje}*"]
 
 
 def _bloco_relatorio_fazenda(ponto, grupo=""):
-    """Relatorio de uma fazenda sem o grupo no titulo (ja' vai no cabecalho):
-    *FAZ X - OneAgro* / Recomendações ... · Cultura: *SOJA / MILHO* / ━━ / resto."""
+    """Titulo da fazenda + culturas, em negrito, e o resto do relatorio:
+    *Grupo Mauro - FAZ X* / *Informações relevantes ... de: SOJA / MILHO* / ━━ / resto."""
     linhas = _texto_relatorio(ponto["site_name"]).split("\n")
     titulo = linhas[0].strip("*")
+    if titulo.endswith(" - OneAgro"):
+        titulo = titulo[:-len(" - OneAgro")]
     if grupo and titulo.upper().startswith(grupo.upper() + " - "):
-        titulo = titulo[len(grupo) + 3:]
-    bloco, resto = [f"*{titulo}*"], linhas[1:]
+        titulo = f"{grupo} - {titulo[len(grupo) + 3:]}"
+    bloco, resto = ["", f"*{titulo}*"], linhas[1:]
     if resto and resto[0].startswith("_") and resto[0].endswith("_"):
-        bloco.append(re.sub(r"Cultura: (.+)$", r"Cultura: *\1*", resto[0].strip("_")))
+        cultura = re.search(r"Cultura: (.+)$", resto[0].strip("_"))
+        if cultura:
+            bloco += ["", f"*Informações relevantes para manejo da(s) cultura(s) de: {cultura.group(1)}*"]
         resto = resto[1:]
     while resto and not resto[0].strip():
         resto = resto[1:]
@@ -8131,7 +8133,7 @@ def _bloco_relatorio_fazenda(ponto, grupo=""):
 
 def _texto_relatorio_cliente(ponto):
     grupo = ((models.get_cadastro_do_usuario(ponto["user_id"]) or {}).get("grupo_economico") or "").strip()
-    return "\n".join(_cabecalho_relatorio_cliente(ponto["user_id"]) + _bloco_relatorio_fazenda(ponto, grupo))
+    return "\n".join(_cabecalho_relatorio_cliente() + _bloco_relatorio_fazenda(ponto, grupo))
 
 
 @app.route("/app/relatorios/todos.txt")
@@ -8142,7 +8144,7 @@ def cliente_relatorios_todos_txt():
     user_id = int(current_user.id)
     grupo = ((models.get_cadastro_do_usuario(user_id) or {}).get("grupo_economico") or "").strip()
     pontos = [p for p in models.get_cliente_pontos(user_id) if models.ponto_liberado(p) and p.get("site_name")]
-    linhas = _cabecalho_relatorio_cliente(user_id)
+    linhas = _cabecalho_relatorio_cliente()
     for i, p in enumerate(pontos):
         if i:
             linhas += ["", _SEP_RELATORIO]

@@ -221,11 +221,11 @@ class FazendaAdicionalTest(unittest.TestCase):
         self.assertIn('class="toggle-icon">▶</span>Faz Mourão', tela)
         self.assertIn(f"/app/relatorios/{ponto['id']}.txt?ver=1", tela)
         self.assertNotIn("Content-Disposition", ver.headers)
-        self.assertTrue(ver.get_data(as_text=True).startswith("*RELATÓRIO ONEAGRO*\n━"))
+        self.assertTrue(ver.get_data(as_text=True).startswith("━" * 20 + "\n*RELATÓRIO DE MONITORAMENTO*\n*ONEAGRO - "))
         self.assertIn("Clima ok", ver.get_data(as_text=True))
         self.assertEqual(txt.mimetype, "text/plain")
         self.assertIn("attachment", txt.headers["Content-Disposition"])
-        self.assertTrue(txt.get_data(as_text=True).startswith("*RELATÓRIO ONEAGRO*"))
+        self.assertIn("*RELATÓRIO DE MONITORAMENTO*", txt.get_data(as_text=True))
         # edicao automatica: sem botao Salvar, devolve JSON
         tela = c.get(f"/app/pontos/{ponto['id']}/editar").get_data(as_text=True)
         self.assertNotIn("Salvar alterações", tela)
@@ -258,11 +258,10 @@ class FazendaAdicionalTest(unittest.TestCase):
             todos = c.get("/app/relatorios/todos.txt?ver=1").get_data(as_text=True)
             tela = c.get("/app/relatorios").get_data(as_text=True)
         linhas = um.split("\n")
-        self.assertEqual(linhas[0], "*RELATÓRIO ONEAGRO*")
-        self.assertTrue(linhas[2].startswith("*Grupo Cab*  "))
-        self.assertEqual(linhas[4:7], ["*FAZ MOURÃO - OneAgro*",
-                                       "Recomendações todas as safras · Cultura: *SOJA / MILHO*", "━" * 20])
-        self.assertEqual(todos.count("*RELATÓRIO ONEAGRO*"), 1)
+        self.assertEqual(linhas[:3], ["━" * 20, "*RELATÓRIO DE MONITORAMENTO*", f"*ONEAGRO - {webapp._hoje_cuiaba():%d/%m/%Y}*"])
+        self.assertEqual(linhas[3:9], ["", "*Grupo Cab - FAZ MOURÃO*", "",
+                                       "*Informações relevantes para manejo da(s) cultura(s) de: SOJA / MILHO*", "━" * 20, "Clima ok"])
+        self.assertEqual(todos.count("*RELATÓRIO DE MONITORAMENTO*"), 1)
         self.assertEqual(todos.count("Clima ok"), 2)
         self.assertIn("Todas as fazendas (uma mensagem só)", tela)
         # Free: sem Clima agora, Ultima leitura e Produtos

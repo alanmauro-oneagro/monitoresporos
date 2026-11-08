@@ -238,9 +238,10 @@ cache offline). **Aba Relatorios** (`/app/relatorios`, `cliente_relatorios`):
 um cartao RECOLHIDO por fazenda ("▶ <nome>", mesmo modelo de Manejos);
 abrir carrega por fetch (`/app/relatorios/<id>.txt?ver=1`) e mostra o texto do relatorio (`_texto_relatorio`, o
 mesmo do WhatsApp -- `_preparar_relatorio` monta os dados pros dois) com
-cabecalho no formato do Alan (08/11/2026): "*RELATÓRIO ONEAGRO*" / ━━ /
-"*<grupo economico ou nome>*  dd/mm/aaaa hh:mm" / ━━ / "*<FAZENDA sem o
-grupo> - OneAgro*" / "Recomendações ... · Cultura: *SOJA / MILHO*" / ━━
+cabecalho no formato do Alan (08/11/2026, TUDO em negrito): ━━ /
+"*RELATÓRIO DE MONITORAMENTO*" / "*ONEAGRO - dd/mm/aaaa*" / (linha) /
+"*<Grupo economico> - <FAZENDA>*" / (linha) / "*Informações relevantes para
+manejo da(s) cultura(s) de: SOJA / MILHO*" / ━━
 (`_cabecalho_relatorio_cliente` + `_bloco_relatorio_fazenda`); cartao
 "Todas as fazendas (uma mensagem só)" no topo quando ha' mais de uma
 (`/app/relatorios/todos.txt`: 1 cabecalho + o bloco de cada fazenda) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
