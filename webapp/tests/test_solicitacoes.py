@@ -276,6 +276,29 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual([(p["nome"], round(p["lat"], 4), round(p["lon"], 4)) for p in pontos], [("Sede Zzz", -15.601, -56.097)])
         self.assertNotIn("Onde será a área monitorada?", c.get("/app/assinatura").get_data(as_text=True))  # ja' tem area
 
+    def test_gerenciar_clientes_situacao_e_areas(self):
+        """Cartao com a situacao em palavras, formato do relatorio e areas monitoradas (08/11/2026)."""
+        plano = models.salvar_plano(None, "Zzz Plano Gerenciar", "", 1200, "MONTHLY", 1, 30,
+                                    ["clima", "whatsapp_texto", "whatsapp_pdf"], True, 9)
+        free_uid = models.criar_cliente("Zzz Cli Ger Free", "segredo1", "", "5565999990211", "", plano)
+        site = models.create_virtual_farm("Zzz Area Ger", -12.5, -55.7, 30)
+        models.ligar_ponto_a_fazenda(models.criar_cliente_ponto(free_uid, "Area Ger", -12.5, -55.7), site)
+        bloq = models.criar_cliente("Zzz Cli Ger Bloq", "segredo1", "", "5565999990212", "", plano)
+        conn = models.get_db()
+        conn.execute("UPDATE assinaturas SET criado_em = '2026-01-01 08:00:00' WHERE user_id = ?", (bloq,))
+        conn.commit()
+        conn.close()
+        html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        self.assertIn("Usando o Free até", html)            # pago aguardando pagamento
+        self.assertIn("Bloqueado", html)                    # passou dos 7 dias
+        self.assertIn('data-situacao="free"', html)
+        self.assertIn('data-situacao="bloqueado"', html)
+        self.assertIn('data-filtro="free"', html)
+        self.assertIn("Relatório por WhatsApp:</span> texto", html)  # no Free: so' texto
+        self.assertIn('<span class="fw-semibold">Area Ger</span>', html)
+        self.assertIn("🟢 no Mapas de Estudo", html)
+        self.assertNotIn(" lavoura", html.split("Gerenciar Clientes</h4>", 1)[1])
+
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
                          ["cereais", "cereais", "cereais", "cereais", "outros", "outros", "hf", "hf"])

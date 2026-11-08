@@ -26,6 +26,10 @@
     <button type="button" class="btn btn-outline-secondary" data-filtro="novo">Novos ({{ n_novos }})</button>
     <button type="button" class="btn btn-outline-secondary" data-filtro="cliente">Clientes ({{ n_clientes }})</button>
     <button type="button" class="btn btn-outline-secondary" data-filtro="usuario">Acesso à fazenda ({{ pessoas | length - n_clientes }})</button>
+    {% set n_free = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'equalto', 'free') | list | length %}
+    {% set n_bloq = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'in', ['bloqueado', 'sem_plano']) | list | length %}
+    <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Free ({{ n_free }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="bloqueado">Bloqueados / sem plano ({{ n_bloq }})</button>
 </div>
 
 {% if not pessoas %}
@@ -35,7 +39,9 @@
 {% for c in pessoas %}
 {% set telefone_digitos = (c.telefone or '') | replace('+', '') %}
 {% set cl = c.cliente %}
-<div class="card shadow-sm mb-3 cad-card" data-tipo="{{ 'cliente' if c.tipo == 'cliente' else 'usuario' }}" data-novo="{{ 0 if c.visto else 1 }}">
+{% set sit = c.situacao %}
+<div class="card shadow-sm mb-3 cad-card" data-tipo="{{ 'cliente' if c.tipo == 'cliente' else 'usuario' }}" data-novo="{{ 0 if c.visto else 1 }}"
+     data-situacao="{{ ('bloqueado' if sit.chave in ('bloqueado', 'sem_plano') else sit.chave) if sit else '' }}">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-center gap-2">
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-{{ loop.index0 }}">
@@ -44,6 +50,10 @@
             {% if not c.visto %}<span class="badge bg-danger">Novo</span>{% endif %}
             <span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Cliente do app' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
             {% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
+            {% if sit %}{# situacao visivel com o cartao fechado #}
+            {% set cor = {'ativo': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueado': 'bg-secondary', 'sem_plano': 'bg-light text-dark border'}[sit.chave] %}
+            <span class="badge {{ cor }}" title="{{ sit.texto }}">{{ cl.plano_nome or 'Sem plano' }} · {{ {'ativo': 'ativo', 'free': 'Free', 'bloqueado': 'bloqueado', 'sem_plano': 'escolher plano'}[sit.chave] }}</span>
+            {% endif %}
             {% if c.data %}<span class="text-muted small ms-auto">{{ c.data | data_br }}</span>{% endif %}
         </div>
         <div class="d-none mt-3" id="cad-body-{{ loop.index0 }}">
@@ -67,19 +77,18 @@
         </dl>
 
         {% if cl %}
-        {% set fim = [cl.pago_ate or '', cl.cortesia_ate or ''] | max %}
         <div class="cad-assinatura small mb-3">
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <strong>Assinatura:</strong> {{ cl.plano_nome or 'sem plano escolhido' }}
                 {% set pl = c.plano_cliente %}
-                {% if pl and pl.sob_consulta %}<span class="text-muted">· preço pela área -- sem valor na tabela de apoio</span>
-                {% elif pl and pl.valor > 0 %}<span class="plano-parcelas">· <strong>{{ pl.parcelas }}x de {{ pl.valor_parcela | dinheiro(pl.simbolo) }}</strong>
+                {% if pl and pl.sob_consulta %}<span class="text-muted">preço pela área -- sem valor na tabela de apoio</span>
+                {% elif pl and pl.valor > 0 %}<span class="plano-parcelas"><strong>{{ pl.parcelas }}x de {{ pl.valor_parcela | dinheiro(pl.simbolo) }}</strong>
                     <span class="text-muted" style="font-size: 0.75rem;">(total {{ pl.valor | dinheiro(pl.simbolo) }})</span>
-                    {% if c.por_ha_ano %}<span class="badge rounded-pill text-bg-success bg-opacity-25 text-success-emphasis" title="Total do plano em reais / área plantada total">{{ c.por_ha_ano | dinheiro }} por ha/ano</span>{% endif %}</span>{% elif pl %}<span class="text-muted">· grátis</span>{% endif %}
-                <span class="text-muted">· {{ cl.status or '—' }}</span>
-                {% if fim and fim >= hoje %}<span class="badge bg-success">liberado</span>{% else %}<span class="badge bg-secondary">bloqueado</span>{% endif %}
-                <span class="text-muted">· pago até {{ cl.pago_ate | data_br if cl.pago_ate else '—' }} · {{ cl.n_pontos }} lavoura{{ '' if cl.n_pontos == 1 else 's' }}</span>
+                    {% if c.por_ha_ano %}<span class="badge rounded-pill text-bg-success bg-opacity-25 text-success-emphasis" title="Total do plano em reais / área plantada total">{{ c.por_ha_ano | dinheiro }} por ha/ano</span>{% endif %}</span>{% elif pl %}<span class="text-muted">grátis</span>{% endif %}
             </div>
+            <div class="mb-1"><span class="text-muted">Situação:</span> <strong>{{ sit.texto }}</strong></div>
+            <div class="mb-2"><span class="text-muted">Relatório por WhatsApp:</span> {{ sit.formato }}
+                <span class="text-muted">· {{ c.areas | length }} área{{ '' if c.areas | length == 1 else 's' }} monitorada{{ '' if c.areas | length == 1 else 's' }}</span></div>
             <form method="post" action="{{ url_for('admin_cliente_cortesia', user_id=cl.id) }}" class="d-flex flex-wrap align-items-center gap-1">
                 <label class="text-muted me-1" for="cortesia_{{ cl.id }}">Cortesia até</label>
                 <input class="form-control form-control-sm" style="max-width: 160px;" type="date" name="cortesia_ate" id="cortesia_{{ cl.id }}" value="{{ cl.cortesia_ate or '' }}">
@@ -92,13 +101,31 @@
         </div>
         {% endif %}
 
+        {% if c.areas %}
+        {# Areas monitoradas (ex-"lavouras"): cada uma ja' e' uma fazenda estimada no Mapas de Estudo. #}
+        <div class="small mb-3">
+            <div class="fw-semibold mb-1">Áreas monitoradas</div>
+            {% for a in c.areas %}
+            <div class="border rounded px-2 py-1 mb-1 bg-white">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="fw-semibold">{{ a.nome }}</span>
+                    <span class="text-muted">{{ ('%.4f' | format(a.lat)) | replace('.', ',') }}; {{ ('%.4f' | format(a.lon)) | replace('.', ',') }}</span>
+                    {% if a.site_name %}<a class="ms-auto" href="{{ url_for('mapa_interpolado') }}" title="Fazenda estimada no Mapas de Estudo (pino verde-claro)">🟢 no Mapas de Estudo</a>
+                    {% else %}<span class="ms-auto text-muted">sem fazenda estimada</span>{% endif %}
+                </div>
+                {% if a.sinal is not none %}{{ sinal_cel.linha(a.sinal) }}{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% for nome, sinal in c.sinal_locais if sinal is not none %}
         <div class="mb-2"><span class="small text-muted">📶 {{ nome }}</span>{{ sinal_cel.linha(sinal) }}</div>
         {% endfor %}
 
         <div class="d-flex flex-wrap gap-2">
             <a href="{{ url_for('admin_user_permissions', user_id=c.user_id) }}" class="btn btn-sm btn-outline-primary"
-               title="{{ 'Fazendas que o cliente vê nas abas do site: as estimadas das lavouras dele e, no Premium + Estação, a fazenda real da estação dele' if cl else 'Fazendas que essa pessoa passa a ver' }}">Liberar fazendas</a>
+               title="{{ 'Fazendas que o cliente vê nas abas do site: as estimadas das áreas monitoradas dele (já liberadas) e outras que você liberar, como a fazenda real da estação no Premium + Estação' if cl else 'Fazendas que essa pessoa passa a ver' }}">Liberar fazendas</a>
             {% if cl %}
             <form method="post" action="{{ url_for('admin_cliente_excluir', user_id=cl.id) }}" onsubmit="return confirm('Excluir este cliente? A cobrança no Asaas é cancelada.');">
                 <button class="btn btn-sm btn-outline-danger" type="submit">Excluir cliente</button>
@@ -127,7 +154,8 @@ document.querySelectorAll('.cad-toggle').forEach(function (btn) {
             botoes.forEach(function (x) { x.classList.toggle('active', x === b); });
             var f = b.dataset.filtro;
             cartoes.forEach(function (c) {
-                var mostra = f === 'todos' || (f === 'novo' ? c.dataset.novo === '1' : c.dataset.tipo === f);
+                var mostra = f === 'todos' || (f === 'novo' ? c.dataset.novo === '1'
+                    : (f === 'free' || f === 'bloqueado') ? c.dataset.situacao === f : c.dataset.tipo === f);
                 c.classList.toggle('d-none', !mostra);
             });
         });
