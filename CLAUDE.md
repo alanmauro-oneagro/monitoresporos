@@ -232,10 +232,15 @@ Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o
 preco). Valor 0 = gratis: em "Minha assinatura" (cartoes com TODOS os
 planos; os fora de venda aparecem como "Em breve", sem escolha; o quadro
 de situacao/"Aguardando pagamento" so' aparece depois de escolher um
-plano) o Free ativa na hora, sem CPF nem Asaas (`cortesia_ate =
-models.SEM_PRAZO`, tela mostra "Sem prazo"); trocar pra um pago pede
-CPF/CNPJ e so' entao tira o "sem prazo" (acesso passa a depender do
-pagamento). Clientes nao aparecem na aba Usuarios. App Android/iOS em
+plano) o Free ativa na hora, sem CPF nem Asaas. **Free = 7 dias**
+(pedido do Alan, 08/11/2026): `cortesia_ate = models.fim_free(assinatura)`
+= criacao da conta + `DIAS_FREE` (7); depois disso o Free nao ativa mais
+(aviso). Quem ja' estava com `SEM_PRAZO` (antes da regra) continua assim.
+**Plano pago sem pagamento aprovado usa o Free** nesses mesmos 7 dias
+(`app._acesso_cliente` -> plano efetivo = `models.plano_free()`; Minha
+assinatura avisa "voce usa o plano Free ate' DD/MM"); passou dos 7 dias
+sem pagamento = bloqueado. Trocar do Free pra um pago pede CPF/CNPJ e
+limpa a cortesia do Free (o pago so' vale com pagamento). Clientes nao aparecem na aba Usuarios. App Android/iOS em
 `mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
 app nao aparece preco nem link de pagamento (regra das lojas).
 Recurso de plano "regiao" (`/app/regiao`, pedido do Alan, 26/10/2026):

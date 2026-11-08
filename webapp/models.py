@@ -3824,6 +3824,25 @@ def acesso_ate(assinatura):
     return max(datas) if datas else None
 
 
+# Plano Free vale 7 dias a partir da abertura do cadastro (pedido do Alan,
+# 08/11/2026); quem escolheu plano pago usa o Free nesse periodo ate' o
+# pagamento ser aprovado.
+DIAS_FREE = 7
+
+
+def fim_free(assinatura):
+    """Ultimo dia (ISO) do periodo Free: criacao da conta + DIAS_FREE."""
+    criado = ((assinatura or {}).get("criado_em") or _hoje_cuiaba())[:10]
+    return (datetime.strptime(criado, "%Y-%m-%d").date() + timedelta(days=DIAS_FREE)).isoformat()
+
+
+def plano_free():
+    """O plano gratis (pelo nome "Free"; senao o 1o de valor 0 sem preco pela area)."""
+    planos = get_planos()
+    return (next((p for p in planos if p["nome"].strip().lower() == "free"), None)
+            or next((p for p in planos if p["valor"] <= 0 and not p.get("preco_por_area")), None))
+
+
 def assinatura_liberada(assinatura):
     fim = acesso_ate(assinatura)
     return bool(fim) and fim >= _hoje_cuiaba()

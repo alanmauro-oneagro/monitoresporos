@@ -6619,7 +6619,7 @@ def _abas_site_do_cliente():
     """Recursos "site_*" do plano do cliente logado (vazio sem plano em dia)."""
     abas = getattr(g, "_abas_site_cliente", None)
     if abas is None:
-        _assinatura, plano, liberada = _cliente_contexto()
+        plano, liberada, _free_ate = _acesso_cliente()
         abas = g._abas_site_cliente = {r for r in (plano or {}).get("recursos", []) if r.startswith("site_")} if liberada else set()
     return abas
 
@@ -6671,6 +6671,24 @@ def _cliente_contexto():
     return assinatura, plano, models.assinatura_liberada(assinatura)
 
 
+def _acesso_cliente():
+    """(plano que vale agora, liberada, free_ate) do cliente logado. Plano
+    pago ainda sem pagamento aprovado usa o Free ate' o fim dos 7 dias do
+    cadastro (pedido do Alan, 08/11/2026); `free_ate` so' vem nesse caso."""
+    cache = getattr(g, "_acesso_cliente", None)
+    if cache is not None:
+        return cache
+    assinatura, plano, liberada = _cliente_contexto()
+    free_ate = None
+    if plano and not liberada and (plano["valor"] > 0 or plano.get("preco_por_area")):
+        fim = models.fim_free(assinatura)
+        free = models.plano_free()
+        if free and fim >= _hoje_cuiaba().isoformat():
+            plano, liberada, free_ate = free, True, fim
+    g._acesso_cliente = (plano, liberada, free_ate)
+    return g._acesso_cliente
+
+
 def cliente_required(view):
     """Rota da area /app que exige assinatura em dia -- sem ela, vai pra
     tela da assinatura."""
@@ -6679,7 +6697,7 @@ def cliente_required(view):
     def wrapped(*args, **kwargs):
         if not current_user.is_cliente:
             abort(403)
-        assinatura, plano, liberada = _cliente_contexto()
+        plano, liberada, _free_ate = _acesso_cliente()
         if not liberada or not plano:
             return redirect(url_for("cliente_assinatura"))
         g.cliente_plano = plano
@@ -6998,7 +7016,7 @@ def solicitar_acesso():
                 if plano_escolhido and not plano_escolhido["preco_por_area"] and plano_escolhido["valor"] <= 0:
                     # Plano gratis escolhido no cadastro: ja' libera (mesmo caminho de cliente_assinar).
                     models.atualizar_assinatura(user_id, plano_id=plano_escolhido["id"], status="ativa",
-                                                cortesia_ate=models.SEM_PRAZO)
+                                                cortesia_ate=models.fim_free(models.get_assinatura(user_id)))
                     flash(f"Conta criada e plano {plano_escolhido['nome']} ativado!", "success")
                     return redirect(url_for("cliente_home"))
                 if plano_escolhido:
@@ -7074,7 +7092,8 @@ def cliente_assinatura():
         # Sem nenhuma lavoura ainda: marca no mapa onde sera' a area monitorada.
         pedir_local=not models.get_cliente_pontos(int(current_user.id)), nome_area=cad.get("empresa") or "",
         area_total=(models.get_cadastro_do_usuario(int(current_user.id)) or {}).get("area_ha"),
-        recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO,
+        recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO, free_ate=_acesso_cliente()[2],
+        dias_free=models.DIAS_FREE,
     )
 
 
@@ -7119,15 +7138,23 @@ def cliente_assinar():
             _criar_fazenda_estimada_da_lavoura(int(current_user.id), ponto_id, nome, lat, lon, plano)
     if plano["valor"] <= 0:
         # Plano gratis: libera na hora, sem cobranca nem CPF/CNPJ.
-        models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"], status="ativa", cortesia_ate=models.SEM_PRAZO)
+        # Free vale 7 dias a partir do cadastro (pedido do Alan, 08/11/2026).
+        fim = models.fim_free(assinatura)
+        if fim < _hoje_cuiaba().isoformat():
+            flash(f"O plano {plano['nome']} vale {models.DIAS_FREE} dias a partir do cadastro e já terminou -- escolha um plano pago.", "error")
+            return redirect(url_for("cliente_assinatura"))
+        models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"], status="ativa", cortesia_ate=fim)
         flash(f"Plano {plano['nome']} ativado!", "success")
         return redirect(url_for("cliente_home"))
     cpf_cnpj = _CPF_CNPJ_RE.sub("", request.form.get("cpf_cnpj", "")) or (assinatura or {}).get("cpf_cnpj") or ""
     if not _cpf_cnpj_valido(cpf_cnpj):
         flash("Informe um CPF ou CNPJ válido para a cobrança.", "error")
         return redirect(url_for("cliente_assinatura"))
-    if (assinatura or {}).get("cortesia_ate") == models.SEM_PRAZO:
-        # Saindo do gratis pra um pago: o acesso passa a depender do pagamento.
+    plano_atual = models.get_plano(assinatura["plano_id"]) if assinatura and assinatura.get("plano_id") else None
+    if (assinatura or {}).get("cortesia_ate") == models.SEM_PRAZO or (
+            plano_atual and plano_atual["valor"] <= 0 and not plano_atual.get("preco_por_area")):
+        # Saindo do gratis pra um pago: o acesso do plano pago depende do
+        # pagamento (ate' la', o Free dos 7 dias -- `_acesso_cliente`).
         models.atualizar_assinatura(int(current_user.id), cortesia_ate=None, status="pendente")
     models.atualizar_assinatura(int(current_user.id), plano_id=plano["id"], cpf_cnpj=cpf_cnpj)
     return _cobrar_ou_avisar(int(current_user.id), plano)
