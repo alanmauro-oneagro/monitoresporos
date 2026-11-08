@@ -112,7 +112,25 @@ Doenças/Culturas, quadro Culturas, um seletor Cereais/HF/Cana ao lado de
 cada nome (Cereais/HF/Outros, `cultura_grupo__<slot>`, setting `grupos_culturas` = lista dos
 12 slots, `models.get_grupos_culturas`) -- e' ele que decide em que tipo a
 cultura aparece no cadastro e como entra no preco
-(`app._grupo_da_cultura`: escolhido > regra pelo nome). A pessoa escolhe **Assinar plano** ou **Ter acesso
+(`app._grupo_da_cultura`: escolhido > regra pelo nome). **Locais de plantio + quem mais recebe**
+(pedido do Alan, 08/11/2026): no cadastro, blocos "Local 1, 2..." ("+
+Adicionar outro local", ate' 10): nome, culturas/areas do local
+(`culturas__<i>`, `area_cultura__<i>__<cultura>`, `cultura_outra__<i>`,
+`area_outra__<i>`) e ponto no mapa Leaflet/coordenadas (`local_lat__<i>`,
+`local_lon__<i>`; `local_idx` lista os locais). Cada local vira area
+monitorada (`cliente_pontos.culturas`/`area_ha`) + fazenda estimada
+(`_criar_locais_e_extras`); o cadastro guarda o total (culturas somadas
+por nome, area, area do preco = soma da regra de cada local). Form sem
+`local_idx` (antigo) = um local sem mapa (`_locais_do_form`). "Quem mais
+recebe o relatorio": ate' `MAX_EXTRAS_RELATORIO` (2) pessoas -- nome,
+celular (`codigo_pais__extra<k>`/`numero_telefone__extra<k>`) e de quais
+locais (`extra_locais__<k>`) -- viram **subordinados** do cliente
+recebendo so' das fazendas daqueles locais, no mesmo formato (texto/PDF)
+do plano do cliente (`_formatos_whatsapp_clientes`). Integracao: Gerenciar
+Clientes (culturas de cada area + "Tambem recebem o relatorio"), app aba
+Culturas (culturas por area + form "Quem mais recebe", rota
+`cliente_destinatarios`, substitui as pessoas) e Excel aba Clientes
+(colunas "Locais de plantio" e "Também recebem o relatório"). A pessoa escolhe **Assinar plano** ou **Ter acesso
 a fazenda cadastrada**, marca Produtor e/ou Tecnico do setor e preenche
 (tudo obrigatorio, menos e-mail e mensagem): nome completo, usuario (sugerido como
 "Nome Ultimo-sobrenome" por `_sugerir_usuario`, duplicidade checada ao

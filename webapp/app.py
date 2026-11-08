@@ -6731,11 +6731,14 @@ def _formatos_whatsapp_clientes():
     acesso liberado nao recebe nada."""
     formatos = {}
     for c in models.get_all_clientes():
-        if not c.get("telefone"):
-            continue
         plano, liberada, _ = _acesso_do_cliente(c["id"])
         recursos = (plano or {}).get("recursos", []) if liberada else []
-        formatos[c["telefone"]] = ("whatsapp_texto" in recursos, "whatsapp_pdf" in recursos)
+        formato = ("whatsapp_texto" in recursos, "whatsapp_pdf" in recursos)
+        if c.get("telefone"):
+            formatos[c["telefone"]] = formato
+        # Pessoas que o cliente indicou pra receber o relatorio: mesmo formato do plano dele.
+        for sub in models.get_owner_subordinados(c["id"]):
+            formatos.setdefault(sub["telefone"], formato)
     return formatos
 
 
@@ -6945,6 +6948,88 @@ CONTATO_COMERCIAL = {"nome": "Alan Mauro", "celular": "(43) 99114-7595", "whatsa
                      "email": "contato@oneagro.com.br"}
 
 
+def _area_txt(texto):
+    try:
+        return float((texto or "").strip().replace(".", "").replace(",", "."))
+    except ValueError:
+        return 0
+
+
+def _locais_do_form(form, culturas, grupos):
+    """Locais de plantio do cadastro: [{"nome", "lat", "lon", "com_mapa",
+    "areas_grupo": [(cultura, area, grupo)]}]. Sem `local_idx` no form
+    (formulario antigo), um local so' com os campos sem sufixo e sem mapa."""
+    idxs = [i for i in form.getlist("local_idx") if i.isdigit()][:10]
+    sufixos = [f"__{i}" for i in idxs] if idxs else [""]
+    empresa = form.get("empresa", "").strip()
+    locais = []
+    for n, suf in enumerate(sufixos, 1):
+        marcadas = [c for c in form.getlist(f"culturas{suf}") if c in culturas and _grupo_da_cultura(c) in grupos]
+        areas_grupo = [(c, _area_txt(form.get(f"area_cultura{suf}__{c}" if suf else f"area_cultura__{c}")), _grupo_da_cultura(c))
+                       for c in marcadas]
+        outra = form.get(f"cultura_outra{suf}", "").strip() if "hf" in grupos else ""
+        if outra:
+            areas_grupo.append((outra, _area_txt(form.get(f"area_outra{suf}")), "hf"))
+        lat, lon = _coordenada(form.get(f"local_lat{suf}")), _coordenada(form.get(f"local_lon{suf}"))
+        if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            lat = lon = None
+        nome = (form.get(f"local_nome{suf}") or "").strip()[:60] or (empresa if n == 1 and empresa else f"Local {n}")
+        locais.append({"nome": nome, "lat": lat, "lon": lon, "com_mapa": bool(idxs), "areas_grupo": areas_grupo})
+    return locais
+
+
+def _somar_por_cultura(areas_grupo):
+    """[(cultura, area somada de todos os locais)] na ordem em que apareceram."""
+    total = {}
+    for c, a, _g in areas_grupo:
+        total[c] = total.get(c, 0) + a
+    return list(total.items())
+
+
+MAX_EXTRAS_RELATORIO = 2
+
+
+def _extras_do_form(form, n_locais):
+    """Ate' 2 pessoas que tambem recebem o relatorio (pedido do Alan,
+    08/11/2026): [{"nome", "telefone", "locais": [indices]}], erro."""
+    extras = []
+    for k in range(1, MAX_EXTRAS_RELATORIO + 1):
+        nome = " ".join((form.get(f"extra_nome__{k}") or "").split())[:60]
+        numero = re.sub(r"\D", "", form.get(f"numero_telefone__extra{k}", ""))
+        if not nome and not numero:
+            continue
+        telefone = re.sub(r"\D", "", form.get(f"codigo_pais__extra{k}", "55")) + numero
+        if not nome or not _is_valid_phone(telefone):
+            return [], f"Pessoa {k} que recebe o relatório: informe o nome e um celular válido (DDD + número)."
+        locais = [int(i) for i in form.getlist(f"extra_locais__{k}") if i.isdigit() and int(i) < n_locais]
+        if not locais:
+            locais = list(range(n_locais))
+        extras.append({"nome": nome, "telefone": telefone, "locais": locais})
+    return extras, None
+
+
+def _criar_locais_e_extras(user_id, username, locais, extras, plano):
+    """Cada local com coordenada vira area monitorada + fazenda estimada (com
+    as culturas/area dele); cada pessoa extra vira subordinado do cliente,
+    recebendo o relatorio so' das fazendas dos locais marcados."""
+    plano = plano or models.plano_free()
+    sites = []
+    for loc in locais:
+        site = None
+        if loc["lat"] is not None:
+            ponto_id = models.criar_cliente_ponto(user_id, loc["nome"], loc["lat"], loc["lon"], "")
+            models.set_culturas_do_ponto(
+                ponto_id, ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a, _g in loc["areas_grupo"]),
+                sum(a for _c, a, _g in loc["areas_grupo"]))
+            site = _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, loc["nome"], loc["lat"], loc["lon"], plano,
+                                                      username=username)
+        sites.append(site)
+    ids = models.site_ids_por_nome(sites)
+    for ex in extras:
+        sub_id = models.create_subordinado(user_id, ex["nome"], ex["telefone"])
+        models.set_subordinado_report_sites(sub_id, [ids[sites[i]] for i in ex["locais"] if sites[i] in ids])
+
+
 def _contexto_cadastro(culturas):
     """Culturas por grupo e planos (com o que a tela precisa pra calcular o
     preco pela area enquanto a pessoa digita)."""
@@ -6954,7 +7039,7 @@ def _contexto_cadastro(culturas):
         "grupo_de": {c: _grupo_da_cultura(c) for c in culturas},
         "planos": models.get_planos(apenas_ativos=True), "recursos": models.RECURSOS_PLANO,
         "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"]} for f in _tabela_precificacao()],
-        "cotacao_valor": cot["valor"] if cot else None, "contato_comercial": CONTATO_COMERCIAL,
+        "cotacao_valor": cot["valor"] if cot else None, "contato_comercial": CONTATO_COMERCIAL, "max_extras": MAX_EXTRAS_RELATORIO,
     }
 
 
@@ -6980,25 +7065,18 @@ def solicitar_acesso():
         uf = form.get("uf", "")
         # Mais de um tipo de cultura ao mesmo tempo (pedido do Alan, 08/11/2026).
         grupos = [g for g in GRUPOS_CULTURA if g in form.getlist("grupo_cultura")]
-        # so' as culturas dos grupos escolhidos contam (a tela esconde as outras)
-        culturas_sel = [c for c in form.getlist("culturas") if c in culturas and _grupo_da_cultura(c) in grupos]
-        outra = form.get("cultura_outra", "").strip() if "hf" in grupos else ""
         planos_venda = models.get_planos(apenas_ativos=True)
         # Tecnico do setor nao escolhe plano: fala com a OneAgro (pedido do Alan, 08/11/2026).
         plano_escolhido = None if "tecnico" in perfis else next(
             (p for p in planos_venda if str(p["id"]) == form.get("plano_id")), None)
 
-        def _area(texto):
-            try:
-                return float((texto or "").strip().replace(".", "").replace(",", "."))
-            except ValueError:
-                return 0
-        # Area de cada cultura (pedido do Alan, 08/11/2026); a area total e' a soma.
-        areas_grupo = [(c, _area(form.get(f"area_cultura__{c}")), _grupo_da_cultura(c)) for c in culturas_sel]
-        if outra:
-            areas_grupo.append((outra, _area(form.get("area_outra")), "hf"))
-        areas = [(c, a) for c, a, _g in areas_grupo]
+        # Locais de plantio (pedido do Alan, 08/11/2026): cada um com nome,
+        # coordenadas e as culturas/areas dele; o total do cadastro soma todos.
+        locais = _locais_do_form(form, culturas, grupos)
+        areas_grupo = [x for loc in locais for x in loc["areas_grupo"]]
+        areas = _somar_por_cultura(areas_grupo)
         area_ha = sum(a for _c, a in areas)
+        extras, erro_extras = _extras_do_form(form, len(locais))
         senha = form.get("senha", "")
         erro = None
         if not perfis:
@@ -7023,10 +7101,15 @@ def solicitar_acesso():
             erro = "Informe a cidade e o estado (UF)."
         elif not grupos:
             erro = "Escolha o tipo de cultura: Cereais, HF e/ou Outros."
-        elif not culturas_sel and not outra:
-            erro = "Marque pelo menos uma cultura."
-        elif (sem_area := [c for c, a in areas if a <= 0]):
+        elif (sem_cultura := [loc["nome"] for loc in locais if not loc["areas_grupo"]]):
+            erro = f"Marque pelo menos uma cultura em: {', '.join(sem_cultura)}."
+        elif (sem_area := [f"{c} ({loc['nome']})" if len(locais) > 1 else c
+                           for loc in locais for c, a, _g in loc["areas_grupo"] if a <= 0]):
             erro = f"Informe a área (hectares) de: {', '.join(sem_area)}."
+        elif (sem_local := [loc["nome"] for loc in locais if loc["com_mapa"] and loc["lat"] is None]):
+            erro = f"Marque no mapa (ou digite as coordenadas) de: {', '.join(sem_local)}."
+        elif erro_extras:
+            erro = erro_extras
         elif len(senha) < 6:
             erro = "A senha precisa ter pelo menos 6 caracteres."
         elif senha != form.get("senha_confirmar", ""):
@@ -7051,10 +7134,13 @@ def solicitar_acesso():
                 "telefone": telefone, "tipo": "cliente" if modalidade == "plano" else "usuario",
                 "empresa": form.get("empresa", "").strip(), "cidade": form.get("cidade", "").strip(), "uf": uf,
                 "culturas": ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a in areas), "area_ha": area_ha,
-                "grupo_cultura": ",".join(grupos), "area_preco_ha": _area_preco_grupos(grupos, areas_grupo),
+                "grupo_cultura": ",".join(grupos),
+                "area_preco_ha": sum(_area_preco_grupos(grupos, loc["areas_grupo"]) for loc in locais),
                 "mensagem": form.get("mensagem", "").strip(), "user_id": user_id,
             }
             models.registrar_cadastro(registro)
+            if modalidade == "plano":
+                _criar_locais_e_extras(user_id, username, locais, extras, plano_escolhido)
             _avisar_master_cadastro(registro)
             login_user(User(models.get_user_by_id(user_id)), remember=True)
             if modalidade == "plano" and "tecnico" in perfis:
@@ -7292,9 +7378,40 @@ def cliente_home():
         "cliente_home.html", pontos=pontos, plano=g.cliente_plano,
         # Culturas do cadastro (pedido do Alan, 08/11/2026: "Lavouras" virou "Culturas").
         cadastro=cad, culturas_lista=_culturas_com_area(cad.get("culturas")),
+        extras=_extras_do_cliente(int(current_user.id), pontos), max_extras=MAX_EXTRAS_RELATORIO,
         resumos={p["id"]: _resumo_ponto_cliente(p, g.cliente_plano) for p in pontos},
         urls_offline=[url_for("cliente_ponto", ponto_id=p["id"]) for p in pontos] + [url_for("cliente_regiao")],
     )
+
+
+@app.route("/app/destinatarios", methods=["POST"])
+@cliente_required
+def cliente_destinatarios():
+    """Cliente troca as (ate' 2) pessoas que tambem recebem o relatorio e
+    de quais areas (pedido do Alan, 08/11/2026). Substitui as anteriores."""
+    user_id = int(current_user.id)
+    pontos = models.get_cliente_pontos(user_id)
+    por_id = {str(p["id"]): p for p in pontos}
+    form = request.form
+    novos = []
+    for k in range(1, MAX_EXTRAS_RELATORIO + 1):
+        nome = " ".join((form.get(f"extra_nome__{k}") or "").split())[:60]
+        numero = re.sub(r"\D", "", form.get(f"numero_telefone__extra{k}", ""))
+        if not nome and not numero:
+            continue
+        telefone = re.sub(r"\D", "", form.get(f"codigo_pais__extra{k}", "55")) + numero
+        if not nome or not _is_valid_phone(telefone):
+            flash(f"Pessoa {k}: informe o nome e um celular válido (DDD + número).", "error")
+            return redirect(url_for("cliente_home"))
+        sites = [por_id[i]["site_name"] for i in form.getlist(f"extra_pontos__{k}") if i in por_id and por_id[i].get("site_name")]
+        novos.append((nome, telefone, sites))
+    for sub in models.get_owner_subordinados(user_id):
+        models.delete_subordinado(sub["id"])
+    for nome, telefone, sites in novos:
+        sub_id = models.create_subordinado(user_id, nome, telefone)
+        models.set_subordinado_report_sites(sub_id, list(models.site_ids_por_nome(sites).values()))
+    flash("Pronto! Quem recebe o relatório foi atualizado.", "success")
+    return redirect(url_for("cliente_home"))
 
 
 @app.route("/app/pontos/novo", methods=["GET", "POST"])
@@ -7587,6 +7704,19 @@ def asaas_webhook():
     return jsonify({"ok": True})
 
 
+def _extras_do_cliente(user_id, pontos):
+    """Pessoas que o cliente indicou pra receber o relatorio, com o nome das
+    areas de cada uma: [{"id", "nome", "telefone", "areas": [nome], "ponto_ids"}]."""
+    ids = models.site_ids_por_nome([pt.get("site_name") for pt in pontos])
+    por_site_id = {ids[pt["site_name"]]: pt for pt in pontos if pt.get("site_name") in ids}
+    extras = []
+    for sub in models.get_owner_subordinados(user_id):
+        dele = [por_site_id[i] for i in sub["site_ids"] if i in por_site_id]
+        extras.append({"id": sub["id"], "nome": sub["nome"], "telefone": sub["telefone"],
+                       "areas": [pt["nome"] for pt in dele], "ponto_ids": [pt["id"] for pt in dele]})
+    return extras
+
+
 def _situacao_cliente(cl):
     """{"chave": ativo|free|bloqueado|sem_plano, "texto", "formato"} da
     assinatura do cliente, pelo plano que vale hoje (`_acesso_do_cliente`)."""
@@ -7665,6 +7795,7 @@ def admin_solicitacoes():
         p["areas"] = [{**pt, "sinal": sinal_celular.estimar(pt["lat"], pt["lon"], buscar_frequencias=False)
                        if _no_brasil(pt["lat"], pt["lon"]) else None} for pt in pontos]
         das_areas = {pt["site_name"] for pt in pontos if pt.get("site_name")}
+        p["extras"] = _extras_do_cliente(p["user_id"], pontos)
         locais = [(pt["lat"], pt["lon"]) for pt in pontos if _no_brasil(pt["lat"], pt["lon"])]
         outras = [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(p["user_id"])
                   if s not in das_areas and s in coords and paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY]

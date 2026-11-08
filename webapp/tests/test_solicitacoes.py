@@ -114,7 +114,7 @@ class CadastroTest(unittest.TestCase):
         html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
         self.assertNotIn("O que você quer?", html)
         self.assertIn('<input type="hidden" name="modalidade" value="plano">', html)
-        self.assertIn('name="area_cultura__Milho"', html)
+        self.assertIn('name="area_cultura__0__Milho"', html)  # campos por local (Local 1 = indice 0)
         for grupo in ('value="cereais"', 'value="hf"', 'value="outros"'):
             self.assertIn(grupo, html)
         self.assertIn('data-grupo="cereais"', html)
@@ -205,7 +205,8 @@ class CadastroTest(unittest.TestCase):
             with webapp.app.test_request_context():
                 self.assertEqual(webapp._grupo_da_cultura("Feijao"), "cereais")
             cad = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
-            self.assertIn('data-grupo="cereais" style="min-height: 2.1rem;">\n            <div class="form-check mb-0" style="min-width: 7rem;">\n                <input class="form-check-input" type="checkbox" name="culturas" id="cultura_%d" value="Feijao"' % (models.get_culturas_ativas().index("Feijao") + 1), cad)
+            import re
+            self.assertRegex(cad, r'data-grupo="cereais"[^>]*>\s*<div class="form-check mb-0"[^>]*>\s*<input class="form-check-input" type="checkbox" name="culturas__0" id="cultura_0_\d+" value="Feijao"')
         finally:
             models.set_grupos_culturas(antes)
 
@@ -298,6 +299,67 @@ class CadastroTest(unittest.TestCase):
         self.assertIn('<span class="fw-semibold">Area Ger</span>', html)
         self.assertIn("🟢 no Mapas de Estudo", html)
         self.assertNotIn(" lavoura", html.split("Gerenciar Clientes</h4>", 1)[1])
+
+    def test_varios_locais_e_pessoas_extras(self):
+        """Locais de plantio (cada um com culturas/area e ponto no mapa) e ate' 2
+        pessoas que recebem o relatorio, escolhendo os locais (pedido do Alan, 08/11/2026)."""
+        dados = _form(username="Zzz Cad Locais", numero_telefone="65999990241", modalidade="plano", grupo_cultura=["cereais"])
+        for k in ("cultura_outra", "area_outra"):
+            dados.pop(k)
+        dados.update({
+            "local_idx": ["0", "3"],
+            "local_nome__0": "Sede", "culturas__0": ["Soja", "Milho"], "area_cultura__0__Soja": "500", "area_cultura__0__Milho": "200",
+            "local_lat__0": "-12,50", "local_lon__0": "-55,70",
+            "local_nome__3": "Retiro", "culturas__3": ["Soja"], "area_cultura__3__Soja": "300",
+            "local_lat__3": "-13.10", "local_lon__3": "-56.20",
+            "extra_nome__1": "Zzz Gerente", "codigo_pais__extra1": "55", "numero_telefone__extra1": "(65)99999-0242", "extra_locais__1": ["1"],
+            "extra_nome__2": "Zzz Agronomo", "codigo_pais__extra2": "55", "numero_telefone__extra2": "65999990243",
+            "extra_locais__2": ["0", "1"],
+        })
+        resp = webapp.app.test_client().post("/solicitar-acesso", data=dados)
+        self.assertEqual(resp.status_code, 302, resp.get_data(as_text=True)[-600:])
+        uid = models.get_user_by_username("Zzz Cad Locais")["id"]
+        reg = self._cadastro("Zzz Cad Locais")
+        self.assertEqual((reg["area_ha"], reg["area_preco_ha"], reg["culturas"]), (1000.0, 800.0, "Soja (800 ha), Milho (200 ha)"))
+        pontos = models.get_cliente_pontos(uid)
+        self.assertEqual([(p["nome"], p["culturas"], p["area_ha"]) for p in pontos],
+                         [("Sede", "Soja (500 ha), Milho (200 ha)", 700.0), ("Retiro", "Soja (300 ha)", 300.0)])
+        sede, retiro = pontos[0]["site_name"], pontos[1]["site_name"]
+        self.assertTrue(models.get_virtual_farm(sede) and models.get_virtual_farm(retiro))
+        recebe = lambda site: sorted(r["username"] for r in models.get_site_whatsapp_recipients(site))
+        self.assertEqual(recebe(sede), ["Zzz Agronomo", "Zzz Cad Locais"])
+        self.assertEqual(recebe(retiro), ["Zzz Agronomo", "Zzz Cad Locais", "Zzz Gerente"])
+        # integracao: Gerenciar Clientes, app (Culturas) e Excel
+        adm = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        self.assertIn("Também recebem o relatório", adm)
+        self.assertIn("Zzz Gerente · (65)99999-0242 <span class=\"text-muted\">-- Retiro</span>", adm)
+        self.assertIn("Soja (500 ha), Milho (200 ha) · 700 ha", adm)
+        import export_excel
+        from openpyxl import load_workbook
+        wb = load_workbook(export_excel.build_workbook())
+        linhas = list(wb["Clientes"].iter_rows(values_only=True))
+        linha = dict(zip(linhas[0], next(r for r in linhas if r[1] == "Zzz Cad Locais")))
+        self.assertEqual(linha["Locais de plantio"], "Sede: Soja (500 ha), Milho (200 ha); Retiro: Soja (300 ha)")
+        self.assertIn("Zzz Gerente (65)99999-0242 -- Retiro", linha["Também recebem o relatório"])
+        # cliente troca quem recebe pelo app
+        models.atualizar_assinatura(uid, plano_id=models.plano_free()["id"], status="ativa", cortesia_ate="2099-01-01")
+        c = self._logado("Zzz Cad Locais")
+        home = c.get("/app").get_data(as_text=True)
+        self.assertIn("Quem mais recebe o relatório", home)
+        self.assertIn('value="Zzz Gerente"', home)
+        c.post("/app/destinatarios", data={"extra_nome__1": "Zzz Novo", "codigo_pais__extra1": "55",
+                                           "numero_telefone__extra1": "65999990249", "extra_pontos__1": [str(pontos[0]["id"])]})
+        self.assertEqual([s["nome"] for s in models.get_owner_subordinados(uid)], ["Zzz Novo"])
+        self.assertEqual(recebe(sede), ["Zzz Cad Locais", "Zzz Novo"])
+        self.assertEqual(recebe(retiro), ["Zzz Cad Locais"])
+        # local sem coordenada: nao segue
+        ruim = dict(dados, username="Zzz Cad Locais 2", numero_telefone="65999990244", local_lat__3="")
+        ruim.pop("extra_nome__1"); ruim.pop("numero_telefone__extra1"); ruim.pop("extra_nome__2"); ruim.pop("numero_telefone__extra2")
+        html = webapp.app.test_client().post("/solicitar-acesso", data=ruim).get_data(as_text=True)
+        self.assertIn("Marque no mapa (ou digite as coordenadas) de: Retiro", html)
+        # pessoa extra com celular invalido: nao segue
+        ruim2 = dict(dados, username="Zzz Cad Locais 3", numero_telefone="65999990245", numero_telefone__extra1="123")
+        self.assertIn("Pessoa 1 que recebe o relatório", webapp.app.test_client().post("/solicitar-acesso", data=ruim2).get_data(as_text=True))
 
     def test_grupo_da_cultura(self):
         self.assertEqual([webapp._grupo_da_cultura(c) for c in ("Soja", "Milho", "Algodão", "Algodao", "Cana", "Cana-de-açúcar", "Feijao", "Batata")],
