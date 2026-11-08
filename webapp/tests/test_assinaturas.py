@@ -284,6 +284,31 @@ class AssinaturasTest(unittest.TestCase):
         self.assertIn(f"inicio={(hoje - webapp.timedelta(days=6)).isoformat()}&fim={hoje.isoformat()}", html)
         self.assertEqual(self.client.get("/graficos/dados?inicio=2026-01-01&fim=2026-01-02").status_code, 200)
 
+    def test_caixas_alto_medio_baixo_sem_esporos_numero(self):
+        """So' o Premium + Estacao (recurso "esporos_numero") ve o numero de
+        esporos; os outros planos veem Alto/Medio/Baixo (pedido do Alan, 08/11/2026)."""
+        estacao = next(p for p in models.get_planos() if p["nome"] == "Premium + Estação")
+        self.assertIn("esporos_numero", estacao["recursos"])
+        self.assertNotIn("esporos_numero", next(p for p in models.get_planos() if p["nome"] == "Premium")["recursos"])
+        cards = [{"doenca": "Ferrugem Zzz", "doenca_en": "Rust Zzz", "concentracao": 123.4, "status": "Perigo",
+                  "data": webapp._hoje_cuiaba().isoformat()},
+                 {"doenca": "Mancha Zzz", "doenca_en": "Spot Zzz", "concentracao": 7.5, "status": "Normal",
+                  "data": webapp._hoje_cuiaba().isoformat()}]
+        for nome, recursos, ve_numero in (("Zzz Nivel", ["clima", "esporos"], False),
+                                          ("Zzz Numero", ["clima", "esporos", "esporos_numero"], True)):
+            models.salvar_plano(None, nome, "", 99.0, "MONTHLY", 2, 50, recursos, True, 9)
+            plano = next(p for p in models.get_planos() if p["nome"] == nome)
+            self._cadastrar(f"Zzz Teste {nome}", plano_id=plano["id"])
+            self._liberar(f"Zzz Teste {nome}")
+            self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao N", "lat": -12.5, "lon": -55.7})
+            ponto = models.get_cliente_pontos(models.get_user_by_username(f"Zzz Teste {nome}")["id"])[0]
+            with mock.patch.object(webapp, "_cards_ponto_cliente", return_value=(cards, 2)), \
+                    mock.patch.object(webapp, "_weather_ponto_cliente", return_value=None):
+                html = self.client.get(f"/app/pontos/{ponto['id']}").get_data(as_text=True)
+            self.assertEqual("123.4" in html, ve_numero)
+            self.assertEqual('fw-bold">Alto</div>' in html, not ve_numero)
+            self.assertEqual('fw-bold">Baixo</div>' in html, not ve_numero)
+
     def test_master_gerencia_planos_e_cortesia(self):
         models.create_user(models.MASTER_PRINCIPAL, "segredo1")
         self.client.post("/login", data={"username": models.MASTER_PRINCIPAL, "password": "segredo1"})

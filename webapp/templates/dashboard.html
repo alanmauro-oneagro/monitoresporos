@@ -53,7 +53,7 @@
     {% for card in cards %}
     <div class="col-disease-5">
         <div class="disease-card card-{{ 'perigo' if card.status == 'Perigo' else ('atencao' if card.status == 'Atencao' else 'normal') }}">
-            <div class="valor">{{ card.concentracao if card.concentracao is not none else '-' }}</div>
+            <div class="valor">{{ card | valor_esporo }}</div>
             <div class="doenca">{{ card.doenca }}</div>
             {% if card.cientifico %}<div class="cientifico">{{ card.cientifico }}</div>{% endif %}
         </div>

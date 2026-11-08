@@ -76,6 +76,7 @@
 (function () {
     var alvo = document.getElementById('graficos');
     var permitidas = {{ doencas_da_cultura | tojson }};
+    var NUMERO = {{ esporos_numero | tojson }};
     var url = '{{ url_for("graficos_dados") }}?estacao=' + encodeURIComponent({{ ponto.site_name | tojson }}) +
               '&inicio={{ inicio }}&fim={{ fim }}';
     fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (dados) {
@@ -104,10 +105,20 @@
                 type: 'line', label: 'Favorabilidade (%)', data: d.risco_pct, yAxisID: 'risco',
                 borderColor: '#1c7ed6', backgroundColor: '#1c7ed6', cubicInterpolationMode: 'monotone', spanGaps: true, pointRadius: 2
             }];
+            var nivel = function (v) {
+                if (v === null || v === undefined) { return null; }
+                if (serie.limite_danger != null && v >= serie.limite_danger) { return 3; }
+                if (serie.limite_warn != null && v >= serie.limite_warn) { return 2; }
+                return 1;
+            };
             if (serie) {
+                // Sem "esporos_numero" (so' Premium + Estacao tem): nivel Baixo/Medio/Alto em vez do numero.
                 conjuntos.push({
-                    type: 'bar', label: 'Esporos/m³', data: serie.esporos, yAxisID: 'esporos',
-                    backgroundColor: 'rgba(40,40,40,0.55)'
+                    type: 'bar', label: NUMERO ? 'Esporos/m³' : 'Esporos (nível)', yAxisID: 'esporos',
+                    data: NUMERO ? serie.esporos : serie.esporos.map(nivel),
+                    backgroundColor: NUMERO ? 'rgba(40,40,40,0.55)' : serie.esporos.map(function (v) {
+                        return ['', '#51cf66', '#ffd43b', '#ff6b6b'][nivel(v) || 0] || 'transparent';
+                    })
                 });
             }
             new Chart(card.querySelector('canvas'), {
@@ -118,7 +129,10 @@
                     scales: {
                         x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true } },
                         risco: { position: 'left', min: 0, max: 100, ticks: { font: { size: 9 } }, title: { display: true, text: '%', font: { size: 9 } } },
-                        esporos: { position: 'right', display: !!serie, beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 9 } } }
+                        esporos: NUMERO
+                            ? { position: 'right', display: !!serie, beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 9 } } }
+                            : { position: 'right', display: !!serie, min: 0, max: 3, grid: { drawOnChartArea: false },
+                                ticks: { stepSize: 1, font: { size: 9 }, callback: function (v) { return ['', 'Baixo', 'Médio', 'Alto'][v] || ''; } } }
                     }
                 },
                 plugins: [sombra]

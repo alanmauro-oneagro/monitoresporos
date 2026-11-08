@@ -212,7 +212,7 @@ html { font-size: 14px; }
         <div class="mini-thumbs">
             {% for t in site_group.thumbnails %}
             <div class="mini-card card-{{ 'perigo' if t.status == 'Perigo' else ('atencao' if t.status == 'Atencao' else 'normal') }}">
-                <div class="valor">{{ t.concentracao if t.concentracao is not none else '-' }}</div>
+                <div class="valor">{{ t | valor_esporo }}</div>
                 <div class="doenca">{{ t.doenca }}</div>
             </div>
             {% endfor %}

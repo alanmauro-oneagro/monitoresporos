@@ -384,7 +384,17 @@ favorabilidade % e esporos estimados, 7 dias + 5 de previsao (area cinza),
 lendo o JSON do site `/graficos/dados?estacao=<fazenda estimada>` --
 `_restringir_cliente` libera `graficos_dados` so' pra cliente com
 `graficos_app`. Sem ele: aviso "fazem parte dos planos Premium". O recurso
-"regiao" ficou sem uso. Offline: `static/sw.js`
+"regiao" ficou sem uso. **Numero de esporos so' no Premium + Estacao** (pedido do Alan,
+08/11/2026): recurso de plano `esporos_numero` ("Número de esporos (sem ele:
+Alto, Médio e Baixo)", linha visivel em Planos e Valores; migrado 1x pelo
+setting `recursos_esporos_numero_migrados`). Cliente sem ele ve Alto/Medio/
+Baixo (status Perigo/Atencao/Normal) nas caixas: Alertas (dashboard.html),
+miniaturas de Recomendacoes, balao do Mapa (o numero nem vai pra pagina) e
+"Esporos na regiao" do app -- filtro `valor_esporo` e `esporos_numero` nos
+templates (`app._ve_numero_esporos`; equipe OneAgro sempre ve o numero). Nos
+graficos do app as barras viram nivel 1-3 (Baixo/Medio/Alto pelos limites
+warn/danger da serie). A aba Graficos do site, o PDF e o texto do WhatsApp
+continuam com o numero. Offline: `static/sw.js`
 guarda cada pagina /app aberta (cache `oneagro-app-dados`, apagado no
 logout) e devolve com `data-offline="1"` sem sinal; a home pre-carrega
 lavouras + regiao. iOS so' roda service worker com WKAppBoundDomains

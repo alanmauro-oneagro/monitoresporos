@@ -49,6 +49,7 @@
 <script>
 (function () {
     var sites = {{ sites_data | tojson }};
+    var ESPOROS_NUMERO = {{ esporos_numero | tojson }};
 
     // A logo (static/oneagro-logo.png) e' bem larga (folha + "oneagro"
     // escrito) -- preserveAspectRatio="xMinYMid slice" com uma caixa
@@ -115,7 +116,8 @@
         }
         var rows = site.cards.map(function (c) {
             var cls = c.status === 'Perigo' ? 'perigo' : (c.status === 'Atencao' ? 'atencao' : 'normal');
-            var valor = (c.concentracao === null || c.concentracao === undefined) ? '-' : c.concentracao;
+            var valor = !ESPOROS_NUMERO ? ({Perigo: 'Alto', Atencao: 'Médio'}[c.status] || 'Baixo')
+                : ((c.concentracao === null || c.concentracao === undefined) ? '-' : c.concentracao);
             return '<div class="mapa-tt-row mapa-tt-' + cls + '">' +
                 '<span class="mapa-tt-dot"></span>' +
                 '<span class="mapa-tt-doenca">' + escapeHtml(c.doenca) + '</span>' +
