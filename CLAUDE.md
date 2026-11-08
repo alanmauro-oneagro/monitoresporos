@@ -380,7 +380,9 @@ dias, A/M/B) das doencas com germinacao, do pais da fazenda
 (pedido do Alan, 08/11/2026): so' entram doencas marcadas (Doenças/Culturas)
 pra alguma cultura que ele informou no cadastro/fazendas
 (`_culturas_do_cliente`); doenca sem cultura marcada fica de fora; cliente
-sem nenhuma cultura da lista ve todas.
+sem nenhuma cultura da lista ve todas. Doenca sem leitura recente de esporos nas estacoes do raio
+da fazenda (`_cards_ponto_cliente`) vem com "(-)" ao lado do nome e a
+legenda "(-) Sem medição" (pedido do Alan, 08/11/2026).
 Com o recurso de plano `graficos_app` ("Gráficos: 7 dias de histórico e 5
 de previsão"; Premium e Premium + Estacao, migrado 1x pelo setting
 `recursos_graficos_migrados`): um grafico por doenca (Chart.js) com

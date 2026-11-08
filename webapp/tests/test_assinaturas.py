@@ -252,7 +252,9 @@ class AssinaturasTest(unittest.TestCase):
                                 "germ_temp_max": 25, "germ_umidade_min": 85, "germ_horas_molhamento": 10},
                    "Gray Zzz": {"nome_pt": "Mofo Cinzento Zzz", "nome_cientifico": "Botrytis zzz", "germ_temp_min": 10,
                                 "germ_temp_max": 25, "germ_umidade_min": 85, "germ_horas_molhamento": 10}}
+        medido = [{"doenca": "Ferrugem Zzz", "doenca_en": "Rust Zzz", "concentracao": 5.0, "status": "Normal", "data": "2026-11-08"}]
         with mock.patch.object(webapp, "_disease_info_cached", return_value=doencas), \
+                mock.patch.object(webapp, "_cards_ponto_cliente", return_value=(medido, 1)), \
                 mock.patch.object(models, "get_doenca_culturas",
                                   return_value={"Rust Zzz": {"Soja"}, "Mold Zzz": {"Milho", "Soja"}, "Gray Zzz": {"Uva"}}), \
                 mock.patch.object(webapp, "_weather_ponto_cliente", return_value=None), \
@@ -272,6 +274,10 @@ class AssinaturasTest(unittest.TestCase):
         self.assertNotIn("Mofo Cinzento Zzz", uva)  # cultura que o cliente nao marcou nao vale como filtro
         self.assertNotIn('<option value="Uva"', todas)
         self.assertIn('risco-vermelho">A<', todas)
+        # doenca sem leitura de esporos perto = "(-)" + legenda "Sem medicao" (pedido do Alan, 08/11/2026)
+        self.assertIn('Mofo Zzz <span class="text-muted fw-normal">(-)</span>', todas)
+        self.assertNotIn('Ferrugem Zzz <span class="text-muted fw-normal">(-)</span>', todas)
+        self.assertIn("(-) Sem medição", todas)
         # Basico: sem graficos 7 + 5 dias, e o JSON do site fica fechado
         self.assertIn("fazem parte dos planos Premium", todas)
         self.assertEqual(self.client.get("/graficos/dados").status_code, 302)

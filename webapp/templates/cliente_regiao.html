@@ -44,7 +44,7 @@
     {% for d in riscos %}
     {% set rot = {'vermelho': 'A', 'amarelo': 'M', 'verde': 'B'} %}
     <tr>
-        <td><span class="fw-semibold">{{ d.rotulo }}</span>{% if d.cientifico %}<div class="text-muted fst-italic" style="font-size: 0.7rem;">{{ d.cientifico }}</div>{% endif %}</td>
+        <td><span class="fw-semibold">{{ d.rotulo }}{% if d.sem_medicao %} <span class="text-muted fw-normal">(-)</span>{% endif %}</span>{% if d.cientifico %}<div class="text-muted fst-italic" style="font-size: 0.7rem;">{{ d.cientifico }}</div>{% endif %}</td>
         {% if d.risco %}<td class="text-center risco-{{ d.risco }}">{{ rot[d.risco] }}</td>{% else %}<td class="text-center text-muted">-</td>{% endif %}
         {% for dt in datas %}
         {% set p = (d.previsao_risco or []) | selectattr('data_fmt', 'equalto', dt) | first %}
@@ -55,7 +55,7 @@
     </tbody>
 </table>
 </div>
-<div class="small text-muted mb-3">A = Alta · M = Média · B = Baixa</div>
+<div class="small text-muted mb-3">A = Alta · M = Média · B = Baixa{% if riscos | selectattr('sem_medicao') | list %} · (-) Sem medição{% endif %}</div>
 {% else %}
 <div class="alert alert-secondary small">Sem previsão do tempo disponível agora para calcular a favorabilidade.</div>
 {% endif %}
