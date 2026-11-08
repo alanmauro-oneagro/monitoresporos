@@ -156,6 +156,10 @@
     var FAIXAS = {{ faixas_preco | tojson }}, COTACAO = {{ cotacao_valor | tojson }};
     function numero(v) { v = (v || '').trim().replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
     function dinheiro(v, s) { return s + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    // So' troca o HTML se mudou: sair do campo de area dispara "change" no mesmo
+    // toque que escolhe o plano -- refazer o quadro debaixo do dedo perdia o toque.
+    var montado = new WeakMap();
+    function trocar(el, html) { if (montado.get(el) !== html) { el.innerHTML = html; montado.set(el, html); } }
     function precoHtml(totalPlano, n, simbolo, usd, areaTotal) {
         var parcela = Math.round(totalPlano / n * 100) / 100;
         var totalBrl = usd ? (COTACAO ? totalPlano * COTACAO : null) : totalPlano;
@@ -200,7 +204,7 @@
             if (el.dataset.porArea) {
                 var faixa = areaPreco > 0 ? FAIXAS.filter(function (f) { return f.ate === null || areaPreco <= f.ate; })[0] : null;
                 if (!faixa || faixa.usd_ha === null) {
-                    el.innerHTML = '<div class="preco-box"><div class="preco-sub">' + (areaPreco > 0 ? 'Sob consulta' : 'Informe a área para calcular') + '</div></div>';
+                    trocar(el, '<div class="preco-box"><div class="preco-sub">' + (areaPreco > 0 ? 'Sob consulta' : 'Informe a área para calcular') + '</div></div>');
                     return;
                 }
                 totalPlano = Math.round(areaPreco * faixa.usd_ha * 100) / 100; simbolo = 'U$'; usd = true;
@@ -208,7 +212,7 @@
                 totalPlano = parseFloat(el.dataset.valor);
                 if (!(totalPlano > 0)) return;  // Free: fica "Gratis"
             }
-            el.innerHTML = precoHtml(totalPlano, n, simbolo, usd, total);
+            trocar(el, precoHtml(totalPlano, n, simbolo, usd, total));
         });
     }
     document.getElementById('grupo-cultura').addEventListener('change', atualizar);

@@ -268,6 +268,9 @@ class CadastroTest(unittest.TestCase):
                         mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[]):
                     c.post("/app/assinatura/assinar", data={"plano_id": str(premium["id"]), "cpf_cnpj": CPF_VALIDO})
                 self.assertEqual(criar.call_args[0][1], 400.0)  # parcela U$ 80 x 5,00
+                # Gerenciar Clientes: mesmo R$ por ha/ano (U$ 960 x 5,00 / 1.200 ha)
+                adm = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+                self.assertIn("R$ 4,00 por ha/ano</span>", adm)
         finally:
             models.set_setting("tabela_precificacao", "")
             models.salvar_plano(premium["id"], premium["nome"], premium["descricao"], premium["valor"], premium["ciclo"],
