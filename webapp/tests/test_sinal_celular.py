@@ -354,7 +354,7 @@ class SinalCelularTest(unittest.TestCase):
         html = master.get("/admin/solicitacoes").get_data(as_text=True)
         # linha de sinal compacta dentro de cada area monitorada (Gerenciar Clientes, 08/11/2026)
         self.assertIn('<span class="fw-semibold">Talhao Sinal</span>', html)
-        self.assertIn("Áreas monitoradas", html)
+        self.assertIn("Fazendas monitoradas", html)
         self.assertIn('title="TIM: fraco -- 3G mínimo', html)
 
 

@@ -19,8 +19,8 @@
         </select>
         <button class="btn btn-success btn-sm w-100" type="submit">Salvar</button>
     </form>
-    <form method="post" action="{{ url_for('cliente_ponto_excluir', ponto_id=ponto.id) }}" class="mt-2" onsubmit="return confirm('Excluir esta lavoura?');">
-        <button class="btn btn-outline-danger btn-sm w-100" type="submit">Excluir lavoura</button>
+    <form method="post" action="{{ url_for('cliente_ponto_excluir', ponto_id=ponto.id) }}" class="mt-2" onsubmit="return confirm('Excluir esta fazenda monitorada?');">
+        <button class="btn btn-outline-danger btn-sm w-100" type="submit">Excluir fazenda</button>
     </form>
 </div></div>
 
@@ -89,7 +89,7 @@
     </div>
     <p class="small text-muted mb-3">Estimativa a partir de {{ dados.n_estacoes }} estação(ões) da rede OneAgro num raio de {{ plano.raio_km | round | int }} km.</p>
     {% else %}
-    <div class="alert alert-secondary small">Nenhuma estação com leitura recente num raio de {{ plano.raio_km | round | int }} km desta lavoura.</div>
+    <div class="alert alert-secondary small">Nenhuma estação com leitura recente num raio de {{ plano.raio_km | round | int }} km desta fazenda.</div>
     {% endif %}
 {% else %}{{ bloqueado('A estimativa de esporos') }}{% endif %}
 

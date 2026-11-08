@@ -259,7 +259,7 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("Plano escolhido", tela)
         self.assertEqual(tela.count('type="radio" name="plano_id"'), 1)  # so' o plano escolhido
         self.assertIn(f'<span class="plano-nome">{plano["nome"]}</span>', tela)
-        self.assertIn("Onde será a área monitorada?", tela)
+        self.assertIn("Onde será a fazenda monitorada?", tela)
         self.assertIn('id="mapaArea"', tela)
         self.assertIn('value="Fazenda Zzz"', tela)  # nome da area = fazenda do cadastro
         self.assertIn("Ver todos os planos", tela)
@@ -275,7 +275,7 @@ class CadastroTest(unittest.TestCase):
                                                 "nome_area": "Sede Zzz", "lat": "-15,6010", "lon": "-56.0970"})
         pontos = models.get_cliente_pontos(user["id"])
         self.assertEqual([(p["nome"], round(p["lat"], 4), round(p["lon"], 4)) for p in pontos], [("Sede Zzz", -15.601, -56.097)])
-        self.assertNotIn("Onde será a área monitorada?", c.get("/app/assinatura").get_data(as_text=True))  # ja' tem area
+        self.assertNotIn("Onde será a fazenda monitorada?", c.get("/app/assinatura").get_data(as_text=True))  # ja' tem area
 
     def test_gerenciar_clientes_situacao_e_areas(self):
         """Cartao com a situacao em palavras, formato do relatorio e areas monitoradas (08/11/2026)."""
