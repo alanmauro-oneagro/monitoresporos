@@ -486,6 +486,12 @@ site tem que entrar la'.
   5G_SA_NSA_VIVO -110 da Anatel tem um poligono grosseiro cobrindo o
   Sudeste inteiro (onde o 4G da Vivo cobre ~6%). Substituiu a
   1a versao por distancia de antena (ERBs, tabela `erbs` apagada).
+- **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
+  "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
+  (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no
+  formato antigo. Campos `numero_telefone*` com o `codigo_pais*` = 55 ganham
+  a mesma mascara ao digitar (`_mascara_telefone.html`, incluido em
+  base.html e cliente_base.html); o servidor sempre le so' os digitos.
 - **WhatsApp desconectado = botoes de envio desativados** (pedido do Alan,
   01/11/2026): `whatsapp.conectado()` (status do provedor guardado
   `STATUS_CACHE_S`=30 s), `whatsapp_conectado()` nos templates. Desativa
