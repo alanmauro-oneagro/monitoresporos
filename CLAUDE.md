@@ -235,7 +235,12 @@ de situacao/"Aguardando pagamento" so' aparece depois de escolher um
 plano) o Free ativa na hora, sem CPF nem Asaas. **Free = 7 dias**
 (pedido do Alan, 08/11/2026): `cortesia_ate = models.fim_free(assinatura)`
 = criacao da conta + `DIAS_FREE` (7); depois disso o Free nao ativa mais
-(aviso). Quem ja' estava com `SEM_PRAZO` (antes da regra) continua assim.
+(aviso). Os Free antigos com `SEM_PRAZO` tambem passaram a 7 dias do
+cadastro (`init_db`, so' assinatura de plano de valor 0 sem preco pela
+area; pedido do Alan, 08/11/2026). **Plano pago vale 1 ano a partir do
+pagamento** (`models.MESES_VALIDADE_PAGO` = 12; `registrar_pagamento`:
+pago_ate = vencimento do pagamento confirmado + 12 meses, sem a antiga
+tolerancia de 5 dias por ciclo).
 **Plano pago sem pagamento aprovado usa o Free** nesses mesmos 7 dias
 (`app._acesso_cliente` -> plano efetivo = `models.plano_free()`; Minha
 assinatura avisa "voce usa o plano Free ate' DD/MM"); passou dos 7 dias

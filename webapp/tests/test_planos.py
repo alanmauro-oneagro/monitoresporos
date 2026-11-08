@@ -113,6 +113,22 @@ class PlanosTest(unittest.TestCase):
         self.assertIn("vale 7 dias", velho.get_data(as_text=True))
         self.assertFalse(models.assinatura_liberada(models.get_assinatura(uid)))
 
+    def test_free_antigo_sem_prazo_vira_7_dias(self):
+        """Free "sem prazo" de antes da regra passa a 7 dias do cadastro no init_db (pedido do Alan, 08/11/2026)."""
+        uid = self._cliente("Zzz Cliente Free Antigo")
+        models.atualizar_assinatura(uid, plano_id=self.planos["Free"]["id"], status="ativa", cortesia_ate=models.SEM_PRAZO)
+        conn = models.get_db()
+        conn.execute("UPDATE assinaturas SET criado_em = '2026-10-20 09:00:00' WHERE user_id = ?", (uid,))
+        conn.commit()
+        conn.close()
+        cortesia_pago = self._cliente("Zzz Cliente Cortesia Paga")
+        pago = models.salvar_plano(None, "Zzz Plano Pago Cortesia", "", 300, "MONTHLY", 1, 50, ["clima"], True, 9)
+        models.atualizar_assinatura(cortesia_pago, plano_id=pago, cortesia_ate=models.SEM_PRAZO)
+        models.init_db()
+        self.assertEqual(models.get_assinatura(uid)["cortesia_ate"], "2026-10-27")
+        self.assertFalse(models.assinatura_liberada(models.get_assinatura(uid)))
+        self.assertEqual(models.get_assinatura(cortesia_pago)["cortesia_ate"], models.SEM_PRAZO)  # so' o Free muda
+
     def test_trocar_free_por_pago(self):
         basico = self.planos["Básico"]
         models.salvar_plano(basico["id"], "Básico", "", 49.9, "MONTHLY", 3, 50, ["clima", "esporos"], True, 2)

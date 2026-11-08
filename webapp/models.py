@@ -795,6 +795,13 @@ def init_db():
             conn.execute(f"ALTER TABLE solicitacoes_acesso ADD COLUMN {coluna}")
         except sqlite3.OperationalError:
             pass  # coluna ja existe
+    # Free "sem prazo" de antes da regra dos 7 dias passa a valer 7 dias do
+    # cadastro tambem (pedido do Alan, 08/11/2026).
+    conn.execute(
+        "UPDATE assinaturas SET cortesia_ate = date(substr(criado_em, 1, 10), '+7 days')"
+        " WHERE cortesia_ate = '2999-12-31' AND criado_em IS NOT NULL AND plano_id IN"
+        " (SELECT id FROM planos WHERE valor <= 0 AND COALESCE(preco_por_area, 0) = 0)"
+    )
     # Tipo de cultura "Cana" virou "Outros" (pedido do Alan, 08/11/2026).
     conn.execute("UPDATE solicitacoes_acesso SET grupo_cultura = replace(grupo_cultura, 'cana', 'outros')"
                  " WHERE grupo_cultura LIKE '%cana%'")
@@ -3556,9 +3563,8 @@ PLANOS_PADRAO = [  # (nome, recursos, lavouras, a venda ja' de inicio)
 # "sem prazo" (cortesia_ate nessa data) ate' o cliente trocar de plano.
 SEM_PRAZO = "2999-12-31"
 CICLOS_PLANO = {"MONTHLY": ("Mensal", 1), "QUARTERLY": ("Trimestral", 3), "SEMIANNUALLY": ("Semestral", 6), "YEARLY": ("Anual", 12)}
-# Dias de acesso alem do vencimento seguinte -- boleto/Pix da renovacao
-# leva uns dias pra compensar, o cliente nao perde o acesso nesse meio tempo.
-DIAS_TOLERANCIA_PAGAMENTO = 5
+# Plano pago vale 1 ano a partir do pagamento (pedido do Alan, 08/11/2026).
+MESES_VALIDADE_PAGO = 12
 PAGAMENTO_CONFIRMADO = ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH")
 
 
@@ -3860,8 +3866,8 @@ def _somar_meses(data_iso, meses):
 def registrar_pagamento(user_id, asaas_payment_id, valor, status, vencimento, invoice_url):
     """Grava/atualiza um pagamento (webhook do Asaas, que pode chegar
     repetido -- idempotente) e recalcula ate' quando o cliente tem
-    acesso: cada pagamento confirmado cobre do vencimento ate' o
-    vencimento seguinte (+ tolerancia). Estorno/exclusao tira o periodo."""
+    acesso: cada pagamento confirmado vale 1 ano a partir do vencimento
+    (`MESES_VALIDADE_PAGO`). Estorno/exclusao tira o periodo."""
     conn = get_db()
     conn.execute(
         "INSERT INTO assinatura_pagamentos (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, atualizado_em)"
@@ -3871,18 +3877,14 @@ def registrar_pagamento(user_id, asaas_payment_id, valor, status, vencimento, in
         " atualizado_em=excluded.atualizado_em",
         (asaas_payment_id, user_id, valor, status, vencimento, invoice_url, _agora_cuiaba()),
     )
-    assinatura = conn.execute(
-        "SELECT a.status, p.ciclo FROM assinaturas a LEFT JOIN planos p ON p.id = a.plano_id WHERE a.user_id = ?",
-        (user_id,),
-    ).fetchone()
-    meses = CICLOS_PLANO.get(assinatura["ciclo"] if assinatura else None, ("", 1))[1]
+    assinatura = conn.execute("SELECT status FROM assinaturas WHERE user_id = ?", (user_id,)).fetchone()
     pago_ate = None
     marcadores = ",".join("?" * len(PAGAMENTO_CONFIRMADO))
     for r in conn.execute(
         f"SELECT vencimento FROM assinatura_pagamentos WHERE user_id = ? AND status IN ({marcadores}) AND vencimento IS NOT NULL",
         (user_id,) + PAGAMENTO_CONFIRMADO,
     ):
-        fim = (_somar_meses(r["vencimento"], meses) + timedelta(days=DIAS_TOLERANCIA_PAGAMENTO)).isoformat()
+        fim = _somar_meses(r["vencimento"], MESES_VALIDADE_PAGO).isoformat()
         pago_ate = max(pago_ate or fim, fim)
     novo_status = assinatura["status"] if assinatura else "pendente"
     if status in PAGAMENTO_CONFIRMADO and novo_status != "cancelada":
