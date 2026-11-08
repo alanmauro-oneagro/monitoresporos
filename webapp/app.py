@@ -7390,10 +7390,12 @@ def cliente_cancelar_assinatura():
 @app.route("/app/conta", methods=["GET", "POST"])
 @login_required
 def cliente_conta():
+    """Troca de senha. A tela "Conta" e' a cliente_home (Culturas + Conta
+    juntas, pedido do Alan, 08/11/2026)."""
     if not current_user.is_cliente:
         abort(403)
-    user_id = int(current_user.id)
     if request.method == "POST":
+        user_id = int(current_user.id)
         row = models.get_user_by_id(user_id)
         atual = request.form.get("senha_atual", "")
         nova = request.form.get("senha_nova", "")
@@ -7406,30 +7408,7 @@ def cliente_conta():
         else:
             models.set_user_password(user_id, nova)
             flash("Senha alterada.", "success")
-        return redirect(url_for("cliente_conta"))
-    return render_template("cliente_conta.html", user=models.get_user_by_id(user_id))
-
-
-@app.route("/app/conta/excluir", methods=["POST"])
-@login_required
-def cliente_excluir_conta():
-    """Exclusao da propria conta (exigencia da App Store/Google Play pra
-    app com cadastro): cancela a cobranca e apaga usuario, assinatura e
-    pontos."""
-    if not current_user.is_cliente:
-        abort(403)
-    user_id = int(current_user.id)
-    row = models.get_user_by_id(user_id)
-    if not check_password_hash(row["password_hash"], request.form.get("senha", "")):
-        flash("Senha incorreta -- a conta não foi excluída.", "error")
-        return redirect(url_for("cliente_conta"))
-    erro = _excluir_cliente(user_id)
-    if erro:
-        flash(f"Não foi possível cancelar a cobrança ({erro}). Tente de novo em alguns minutos.", "error")
-        return redirect(url_for("cliente_conta"))
-    logout_user()
-    flash("Sua conta foi excluída.", "success")
-    return redirect(url_for("login"))
+    return redirect(url_for("cliente_home"))
 
 
 def _excluir_cliente(user_id):
@@ -7452,6 +7431,7 @@ def cliente_home():
         "cliente_home.html", pontos=pontos, plano=g.cliente_plano,
         # Culturas do cadastro (pedido do Alan, 08/11/2026: "Lavouras" virou "Culturas").
         cadastro=cad, culturas_lista=_culturas_com_area(cad.get("culturas")),
+        user=models.get_user_by_id(int(current_user.id)),
         extras=_extras_do_cliente(int(current_user.id), pontos), max_extras=MAX_EXTRAS_RELATORIO,
         voltar=_caminho_interno(request.referrer) or "",
         resumos={p["id"]: _resumo_ponto_cliente(p, g.cliente_plano) for p in pontos},

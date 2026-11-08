@@ -596,10 +596,10 @@ class AppClienteCulturasSiteTest(unittest.TestCase):
         self.assertIn('<nav class="abas">', html)  # barra de baixo tambem no Site
         self.assertIn("position: fixed; bottom: 0", html)
         home = c.get("/app").get_data(as_text=True)
-        self.assertIn("Minhas culturas", home)
+        self.assertIn("Minha conta", home)
         self.assertIn('<span class="fw-semibold">Soja</span><span>1.200 ha</span>', home)
         self.assertIn("Cereais", home)
-        self.assertIn("</span>Culturas</a>", home)
+        self.assertIn("</span>Conta</a>", home)
         self.assertNotIn("</span>Lavouras</a>", home)
         d = webapp.app.test_client()
         resp = d.post("/login", data={"username": "Zzz Cli Sem Site", "password": "segredo1"}, follow_redirects=True)

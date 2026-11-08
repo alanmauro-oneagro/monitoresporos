@@ -222,16 +222,18 @@ class AssinaturasTest(unittest.TestCase):
         self._liberar("Zzz Teste Curioso")
         self.assertEqual(self.client.get(f"/app/pontos/{ponto}").status_code, 404)
 
-    def test_excluir_propria_conta(self):
-        self._cadastrar("Zzz Teste Excluir")
-        uid = models.get_user_by_username("Zzz Teste Excluir")["id"]
-        models.criar_cliente_ponto(uid, "P", -15.6, -56.1)
-        self.client.post("/app/conta/excluir", data={"senha": "errada"})
-        self.assertIsNotNone(models.get_user_by_username("Zzz Teste Excluir"))
+    def test_conta_junta_culturas_e_sem_excluir(self):
+        self._cadastrar("Zzz Teste Conta")
+        html = self.client.get("/app").get_data(as_text=True)
+        self.assertIn("Minha conta", html)
+        self.assertIn("Trocar senha", html)
+        self.assertIn("Áreas monitoradas", html)
+        self.assertNotIn("Excluir minha conta", html)
+        self.assertNotIn(">Culturas</a>", html)
+        self.assertIn('class="ativa"><span class="ic">👤</span>Conta', html)
+        self.assertEqual(self.client.get("/app/conta").status_code, 302)
         self.client.post("/app/conta/excluir", data={"senha": "segredo1"})
-        self.assertIsNone(models.get_user_by_username("Zzz Teste Excluir"))
-        self.assertIsNone(models.get_assinatura(uid))
-        self.assertEqual(models.get_cliente_pontos(uid), [])
+        self.assertIsNotNone(models.get_user_by_username("Zzz Teste Conta"))
 
     def test_regiao_sem_nome_de_fazenda_e_posicao_aproximada(self):
         models.salvar_plano(None, "Zzz Regiao", "", 199.9, "MONTHLY", 2, 300, ["regiao"], True, 9)
