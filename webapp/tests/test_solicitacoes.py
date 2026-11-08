@@ -329,6 +329,10 @@ class CadastroTest(unittest.TestCase):
         recebe = lambda site: sorted(r["username"] for r in models.get_site_whatsapp_recipients(site))
         self.assertEqual(recebe(sede), ["Zzz Agronomo", "Zzz Cad Locais"])
         self.assertEqual(recebe(retiro), ["Zzz Agronomo", "Zzz Cad Locais", "Zzz Gerente"])
+        # Safras ja' preenchidas pelas culturas de maior area de cada local (pedido do Alan, 08/11/2026)
+        fc = models.get_all_farm_culturas()
+        self.assertEqual([fc.get((sede, sf), {}).get("cultura") for sf, _ in models.SAFRAS], ["Soja", "Milho", None])
+        self.assertEqual([fc.get((retiro, sf), {}).get("cultura") for sf, _ in models.SAFRAS], ["Soja", None, None])
         # integracao: Gerenciar Clientes, app (Culturas) e Excel
         adm = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("Também recebem o relatório", adm)
