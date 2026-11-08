@@ -1,7 +1,13 @@
 {% extends "cliente_base.html" %}
-{% block title %}Minhas culturas - OneAgro App{% endblock %}
+{% block title %}Conta - OneAgro App{% endblock %}
 {% block content %}
-<h1 class="titulo">Minhas culturas</h1>
+<h1 class="titulo">Minha conta</h1>
+<div class="card shadow-sm mb-3"><div class="card-body small">
+    <div><span class="text-muted">Usuário:</span> {{ user.username }}</div>
+    <div><span class="text-muted">E-mail:</span> {{ user.email or '—' }}</div>
+    <div><span class="text-muted">Celular:</span> {{ user.telefone | telefone_br if user.telefone else '—' }}</div>
+</div></div>
+<h6 class="mb-2">Culturas</h6>
 {# Dados do cadastro (pedido do Alan, 08/11/2026). #}
 <div class="card shadow-sm mb-3"><div class="card-body">
     {% if cadastro.grupo_cultura %}<div class="small text-muted mb-1">{{ cadastro.grupo_cultura | grupos_cultura }}</div>{% endif %}
@@ -65,6 +71,14 @@
     {% endfor %}
     <button class="btn btn-outline-success w-100" type="submit">Salvar quem recebe</button>
 </form>
+
+<form method="post" action="{{ url_for('cliente_conta') }}" class="card shadow-sm mb-3"><div class="card-body">
+    <h6>Trocar senha</h6>
+    <input class="form-control mb-2" type="password" name="senha_atual" placeholder="Senha atual" autocomplete="current-password" required>
+    <input class="form-control mb-2" type="password" name="senha_nova" placeholder="Nova senha" minlength="6" autocomplete="new-password" required>
+    <input class="form-control mb-2" type="password" name="senha_confirmar" placeholder="Confirmar nova senha" minlength="6" autocomplete="new-password" required>
+    <button class="btn btn-success w-100" type="submit">Salvar senha</button>
+</div></form>
 {% endblock %}
 {% block extra_scripts %}
 <script>

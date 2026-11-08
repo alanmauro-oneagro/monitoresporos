@@ -136,7 +136,7 @@ locais (`extra_locais__<k>`) -- viram **subordinados** do cliente
 recebendo so' das fazendas daqueles locais, no mesmo formato (texto/PDF)
 do plano do cliente (`_formatos_whatsapp_clientes`). Integracao: Gerenciar
 Clientes (culturas de cada area + "Tambem recebem o relatorio"), app aba
-Culturas (culturas por area + form "Quem mais recebe", rota
+Conta (ex-Culturas; culturas por area + form "Quem mais recebe", rota
 `cliente_destinatarios`, substitui as pessoas; ao salvar volta pra tela
 de onde o cliente veio -- campo `voltar` = Referer da Culturas, so' caminho
 interno, `_caminho_interno`) e Excel aba Clientes
@@ -198,11 +198,16 @@ se o plano liberar (recursos "site_*" em `RECURSOS_PLANO`, logo depois de
 Graficos/Manejos/Recomendacoes (`ABAS_SITE_CLIENTE` em `_restringir_cliente`;
 menu do `base.html` so' com essas abas + "📱 App"; no app, aba "🌐 Site").
 **App do cliente** (pedido do Alan, 08/11/2026): a barra de baixo
-(`_abas_cliente.html`: Site, Culturas, Regiao, Assinatura, Conta) e' fixa
+(`_abas_cliente.html`: Site, Regiao, Assinatura, Conta) e' fixa
 no rodape e aparece TAMBEM nas abas do Site (incluida em base.html e
-cliente_base.html). A aba "Lavouras" virou **Culturas** (`cliente_home`):
-tipo(s), cada cultura com a area e a area total vindos do cadastro, e
-abaixo as "Areas monitoradas" (as antigas lavouras). Depois do login o
+cliente_base.html); a aba aberta fica numa caixa verde-clara. **Conta**
+(`cliente_home`, `/app`; Culturas + Conta juntas, pedido do Alan,
+08/11/2026): dados da conta, tipo(s), cada cultura com a area e a area
+total vindos do cadastro, as "Areas monitoradas" (as antigas lavouras),
+quem mais recebe e "Trocar senha" (`cliente_conta` so' recebe o POST;
+GET volta pra `/app`). **Sem "Excluir conta"** no app (pedido do Alan,
+08/11/2026; rota `/app/conta/excluir` retirada) -- o Master exclui em
+Gerenciar Clientes. Depois do login o
 cliente entra direto no Site (`_inicio_cliente`: 1a aba do Site que o plano
 libera; sem nenhuma, nas Culturas).
 Nelas o cliente e' como um Usuario: so' as fazendas liberadas pra ele.
