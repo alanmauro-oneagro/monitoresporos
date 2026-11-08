@@ -44,8 +44,9 @@
     {% for d in riscos %}
     {% set rot = {'vermelho': 'A', 'amarelo': 'M', 'verde': 'B'} %}
     <tr>
-        <td><span class="fw-semibold">{{ d.rotulo }}{% if d.sem_medicao %} <span class="text-muted fw-normal">(-)</span>{% endif %}</span>{% if d.cientifico %}<div class="text-muted fst-italic" style="font-size: 0.7rem;">{{ d.cientifico }}</div>{% endif %}</td>
-        {% if d.risco %}<td class="text-center risco-{{ d.risco }}">{{ rot[d.risco] }}</td>{% else %}<td class="text-center text-muted">-</td>{% endif %}
+        <td><span class="fw-semibold">{{ d.rotulo }}</span>{% if d.cientifico %}<div class="text-muted fst-italic" style="font-size: 0.7rem;">{{ d.cientifico }}</div>{% endif %}</td>
+        {% if d.sem_medicao %}<td class="text-center text-muted fw-semibold" title="Sem medição de esporos perto da fazenda">(-)</td>
+        {% elif d.risco %}<td class="text-center risco-{{ d.risco }}">{{ rot[d.risco] }}</td>{% else %}<td class="text-center text-muted">-</td>{% endif %}
         {% for dt in datas %}
         {% set p = (d.previsao_risco or []) | selectattr('data_fmt', 'equalto', dt) | first %}
         {% if p and p.risco %}<td class="text-center risco-{{ p.risco }}">{{ rot[p.risco] }}</td>{% else %}<td class="text-center text-muted">-</td>{% endif %}

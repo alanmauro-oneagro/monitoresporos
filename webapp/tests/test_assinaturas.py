@@ -275,8 +275,8 @@ class AssinaturasTest(unittest.TestCase):
         self.assertNotIn('<option value="Uva"', todas)
         self.assertIn('risco-vermelho">A<', todas)
         # doenca sem leitura de esporos perto = "(-)" + legenda "Sem medicao" (pedido do Alan, 08/11/2026)
-        self.assertIn('Mofo Zzz <span class="text-muted fw-normal">(-)</span>', todas)
-        self.assertNotIn('Ferrugem Zzz <span class="text-muted fw-normal">(-)</span>', todas)
+        self.assertEqual(todas.count('title="Sem medição de esporos perto da fazenda">(-)</td>'), 1)  # so' o Mofo, na coluna Hoje
+        self.assertNotIn("Mofo Zzz <span", todas)
         self.assertIn("(-) Sem medição", todas)
         # Basico: sem graficos 7 + 5 dias, e o JSON do site fica fechado
         self.assertIn("fazem parte dos planos Premium", todas)
