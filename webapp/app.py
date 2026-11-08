@@ -7947,14 +7947,10 @@ def cliente_ponto(ponto_id):
     ponto = models.get_cliente_ponto(int(current_user.id), ponto_id)
     if not ponto:
         abort(404)
-    if not models.ponto_liberado(ponto):
-        # Fazenda adicional sem pagamento depois dos 7 dias (pedido do Alan, 08/11/2026).
-        return render_template("cliente_ponto.html", ponto=ponto, plano=g.cliente_plano, culturas=_culturas_cliente(),
-                               dados=None, bloqueado=True)
-    return render_template(
-        "cliente_ponto.html", ponto=ponto, plano=g.cliente_plano, culturas=_culturas_cliente(),
-        dados=_dados_ponto_cliente(ponto, g.cliente_plano), bloqueado=False,
-    )
+    # So' os dados da fazenda (pedido do Alan, 08/11/2026); bloqueada = aviso da
+    # cobranca da fazenda adicional sem pagamento depois dos 7 dias.
+    return render_template("cliente_ponto.html", ponto=ponto, bloqueado=not models.ponto_liberado(ponto),
+                           culturas_lista=_culturas_com_area(ponto.get("culturas")))
 
 
 @app.route("/app/pontos/<int:ponto_id>/editar", methods=["GET", "POST"])
@@ -8115,50 +8111,6 @@ def _cards_ponto_cliente(ponto, plano):
 def _weather_ponto_cliente(ponto):
     chave = f"cliente-ponto:{ponto['id']}"
     return _get_weather_for_site(chave, {chave: (ponto["lat"], ponto["lon"])})
-
-
-def _riscos_ponto_cliente(ponto, weather):
-    """Risco de infeccao pelo clima de TODA doenca com germinacao
-    cadastrada que vale pra cultura e pais da lavoura -- nao depende de
-    haver estacao BioScout perto (e' 100% clima)."""
-    info = _disease_info_cached()
-    doenca_culturas = models.get_doenca_culturas()
-    doenca_paises = models.get_doenca_paises()
-    pais = countries.get_country(countries.detectar_pais_por_coordenada(ponto["lat"], ponto["lon"]))["nome"]
-    cultura = ponto["cultura"]
-    cards = [
-        {"doenca_en": en, "doenca": d["nome_pt"]} for en, d in info.items()
-        if (not cultura or not doenca_culturas.get(en) or cultura in doenca_culturas[en])
-        and (not doenca_paises.get(en) or pais in doenca_paises[en])
-    ]
-    riscos = _build_riscos_climaticos_sem_leitura(cards)
-    for d in riscos:
-        d["risco"] = _calc_risco_germinacao(d, weather)
-        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
-    ordem = {"vermelho": 0, "amarelo": 1, "verde": 2}
-    riscos = [d for d in riscos if d["risco"]]
-    riscos.sort(key=lambda d: (ordem.get(d["risco"], 3), d["doenca"]))
-    return riscos
-
-
-def _dados_ponto_cliente(ponto, plano):
-    recursos = set(plano["recursos"])
-    dados = {"recursos": recursos}
-    weather = _weather_ponto_cliente(ponto) if recursos & {"clima", "risco"} else None
-    if "clima" in recursos:
-        dados["weather"] = weather
-    if "risco" in recursos:
-        dados["riscos"] = _riscos_ponto_cliente(ponto, weather)
-    if recursos & {"esporos", "fungicidas"}:
-        cards, n_estacoes = _cards_ponto_cliente(ponto, plano)
-        dados["n_estacoes"] = n_estacoes
-        if "esporos" in recursos:
-            dados["cards"] = cards
-        if "fungicidas" in recursos:
-            dados["diseases"] = _build_site_diseases(
-                f"cliente-ponto:{ponto['id']}", cards, {}, cultura=ponto["cultura"] or None,
-            )
-    return dados
 
 
 def _resumo_ponto_cliente(ponto, plano):

@@ -196,8 +196,10 @@ class AssinaturasTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 302)
         html = self.client.get(resp.headers["Location"]).get_data(as_text=True)
         self.assertIn("Talhao Zzz", html)
-        self.assertIn("Risco de infecção", html)
-        self.assertIn("24.0°C", html)
+        # pagina da fazenda so' com culturas, municipio, UF, coordenadas e mapa (pedido do Alan, 08/11/2026)
+        for trecho in ("Soja", "Município", "Estado", "Coordenadas", 'id="mapaFazenda"', "/editar"):
+            self.assertIn(trecho, html)
+        self.assertNotIn("Risco de infecção", html)
         for nome_real in data_reader.read_sites():
             self.assertNotIn(nome_real, html, f"nome de fazenda real vazou: {nome_real}")
         self.assertEqual(self.client.get("/app").status_code, 200)
@@ -215,8 +217,8 @@ class AssinaturasTest(unittest.TestCase):
         self._liberar("Zzz Teste Basico")
         resp = self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao B", "lat": -15.6, "lon": -56.1})
         html = self.client.get(resp.headers["Location"]).get_data(as_text=True)
-        self.assertIn("não faz parte do seu plano", html)
-        self.assertIn("Temperatura", html)
+        self.assertIn("Coordenadas", html)
+        self.assertNotIn("Temperatura", html)  # clima saiu da pagina da fazenda (08/11/2026)
 
     def test_lavoura_de_outro_cliente_nao_abre(self):
         outro = models.criar_cliente("Zzz Teste Outro", "segredo1", "a@b.com", "5565999990000", CPF_VALIDO, self.plano_pro)
@@ -313,14 +315,11 @@ class AssinaturasTest(unittest.TestCase):
             plano = next(p for p in models.get_planos() if p["nome"] == nome)
             self._cadastrar(f"Zzz Teste {nome}", plano_id=plano["id"])
             self._liberar(f"Zzz Teste {nome}")
-            self.client.post("/app/pontos/novo", data={**NOVA_FAZENDA, "nome": "Talhao N", "lat": -12.5, "lon": -55.7})
-            ponto = models.get_cliente_pontos(models.get_user_by_username(f"Zzz Teste {nome}")["id"])[0]
-            with mock.patch.object(webapp, "_cards_ponto_cliente", return_value=(cards, 2)), \
-                    mock.patch.object(webapp, "_weather_ponto_cliente", return_value=None):
-                html = self.client.get(f"/app/pontos/{ponto['id']}").get_data(as_text=True)
-            self.assertEqual("123.4" in html, ve_numero)
-            self.assertEqual('fw-bold">Alto</div>' in html, not ve_numero)
-            self.assertEqual('fw-bold">Baixo</div>' in html, not ve_numero)
+            user = webapp.User(models.get_user_by_username(f"Zzz Teste {nome}"))
+            with webapp.app.test_request_context():
+                webapp.login_user(user)
+                valores = [webapp._valor_esporo(c) for c in cards]
+            self.assertEqual(valores, [123.4, 7.5] if ve_numero else ["Alto", "Baixo"])
 
     def test_master_gerencia_planos_e_cortesia(self):
         models.create_user(models.MASTER_PRINCIPAL, "segredo1")
