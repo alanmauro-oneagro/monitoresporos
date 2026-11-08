@@ -243,7 +243,11 @@ So' apoio: nao muda plano nem cobranca. **Pino verde-claro**
 pelo plano (lavoura de cliente, `models.sites_de_clientes()` =
 `cliente_pontos.site_name`) no Mapa e no Mapas de Estudo (`de_plano` no
 `sites_data`); `cliente_pontos` entra na cascata de rename da fazenda
-virtual (`_VIRTUAL_FARM_RENAME_TABLES`). Planos padrao
+virtual (`_VIRTUAL_FARM_RENAME_TABLES`). No Mapas de Estudo a fazenda do
+cliente aparece SEMPRE (mesmo sem fazenda real no raio ainda: pino normal,
+balao "Sem fazenda real com leitura no raio ainda") e, em Pontos Criados,
+com o selo "🟢 Cliente: <usuario>" (`models.clientes_por_site`; pedido do
+Alan, 08/11/2026). Planos padrao
 (`models.PLANOS_PADRAO`, criados pelo `init_db` so' se faltar o nome --
 pedido do Alan, 31/10/2026): **Free** (valor 0, a venda), Basico, Premium e
 Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o

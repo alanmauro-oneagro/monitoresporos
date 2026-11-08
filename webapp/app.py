@@ -3522,7 +3522,8 @@ def mapa_interpolado():
     # (IDW) dos pontos virtuais logo abaixo (nao pode encolher so' porque
     # uma fazenda vizinha foi desativada).
     desativadas = models.get_deactivated_site_names()
-    sites_plano = models.sites_de_clientes()
+    clientes_site = models.clientes_por_site()
+    sites_plano = set(clientes_site)
 
     sites_data = []
     for site, cards in cards_reais.items():
@@ -3565,8 +3566,11 @@ def mapa_interpolado():
             "country_code": _pais_code_vf,
             "pais_nome": countries.get_country(_pais_code_vf)["nome"],
             "ativo": vf["site_name"] not in desativadas,
+            "cliente": clientes_site.get(vf["site_name"]),
         })
-        if (cards or tipo == "clima") and vf["site_name"] not in desativadas:
+        # Fazenda do cliente (plano) aparece sempre, com o pino verde-claro, mesmo
+        # sem fazenda real no raio ainda (pedido do Alan, 08/11/2026).
+        if (cards or tipo == "clima" or vf["site_name"] in sites_plano) and vf["site_name"] not in desativadas:
             sites_data.append({
                 "site": vf["site_name"], "nome_exibicao": vf["nome"], "lat": vf["lat"], "lon": vf["lon"], "virtual": True,
                 "de_plano": vf["site_name"] in sites_plano,
@@ -3575,7 +3579,7 @@ def mapa_interpolado():
                 "ultima_leitura": models.fmt_data_br(max(c["data"] for c in cards)) if cards else "-",
                 "raio_km": vf["raio_km"],
                 "estacoes_usadas": estacoes_usadas,
-                "inativo": _nivel_dados_site(vf["site_name"], cards) == "bloqueado",
+                "inativo": bool(cards) and _nivel_dados_site(vf["site_name"], cards) == "bloqueado",
             })
 
     sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))

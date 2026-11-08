@@ -153,6 +153,9 @@
         {% if ponto.tipo == 'clima' %}
         <span class="badge bg-info text-dark">☁️ So clima</span>
         {% endif %}
+        {% if ponto.cliente %}
+        <span class="badge text-dark" style="background: #b2f2bb;" title="Criada pelo cliente ao marcar a fazenda no mapa (plano)">🟢 Cliente: {{ ponto.cliente }}</span>
+        {% endif %}
         {% if not ponto.ativo %}
         <span class="badge bg-secondary" title="Reativar em Configurações > Gerenciar Fazendas Ocultas">Oculto</span>
         {% endif %}
@@ -296,6 +299,11 @@
             // normal, nao mostra leitura antiga nem concentracao de
             // doenca, so' o nome do pino.
             return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div></div>';
+        }
+        if (!site.cards.length) {
+            // Fazenda do cliente ainda sem fazenda real com leitura no raio do plano.
+            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
+                '<div class="mapa-tt-data">Sem fazenda real com leitura no raio ainda</div></div>';
         }
         var rows = site.cards.map(function (c) {
             var cls = c.status === 'Perigo' ? 'perigo' : (c.status === 'Atencao' ? 'atencao' : 'normal');

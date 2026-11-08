@@ -166,3 +166,26 @@ class EnvioPorPlanoTest(unittest.TestCase):
         self.assertNotIn("5565999990141", docs)
         self.assertIn("5565999990142", docs)            # Premium: PDF (com o texto junto ou separado)
         self.assertNotIn("5565999990143", textos + docs)  # sem acesso (Free vencido): nada
+
+
+class FazendaClienteNoMapaDeEstudoTest(unittest.TestCase):
+    """Fazenda marcada pelo cliente: pino verde-claro no Mapas de Estudo mesmo sem
+    fazenda real no raio, e em Pontos Criados com o nome do cliente (pedido do Alan, 08/11/2026)."""
+
+    def test_aparece_sem_fazenda_real_no_raio(self):
+        import json
+        webapp.app.config["TESTING"] = True
+        site = _virtual("Zzz Cliente Longe", -2.0, -60.0)  # no meio do Amazonas, longe das fazendas reais
+        uid = models.criar_cliente("Zzz Cli Longe", "segredo1", "", "5565999990191", "", None)
+        models.ligar_ponto_a_fazenda(models.criar_cliente_ponto(uid, "Area Longe", -1.95, -59.95), site)
+        if not models.get_user_by_username("Zzz Teste Master Longe"):
+            models.create_user("Zzz Teste Master Longe", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Teste Master Longe")["id"])
+            s["_fresh"] = True
+        html = c.get("/mapa-interpolado").get_data(as_text=True)
+        dados = {d["site"]: d for d in json.loads(html.split("var sites = ", 1)[1].split(";\n", 1)[0])}
+        self.assertIn(site, dados)
+        self.assertEqual((dados[site]["de_plano"], dados[site]["cards"], dados[site]["inativo"]), (True, [], False))
+        self.assertIn("🟢 Cliente: Zzz Cli Longe", html)  # em Pontos Criados
