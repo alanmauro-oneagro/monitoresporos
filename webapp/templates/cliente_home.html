@@ -2,25 +2,22 @@
 {% block title %}Conta - OneAgro App{% endblock %}
 {% block content %}
 <h1 class="titulo">Minha conta</h1>
-<div class="card shadow-sm mb-3"><div class="card-body py-2">
-    <div><span class="text-muted">Usuário:</span> {{ user.username }}</div>
-    <div><span class="text-muted">E-mail:</span> {{ user.email or '—' }}</div>
-    <div><span class="text-muted">Celular:</span> {{ user.telefone | telefone_br if user.telefone else '—' }}</div>
+<div class="card shadow-sm mb-3"><div class="card-body py-2" style="font-size: 1rem;">
+    <div><span class="text-muted">Usuário:</span> <strong>{{ user.username }}</strong></div>
+    <div><span class="text-muted">E-mail:</span> <strong>{{ user.email or '—' }}</strong></div>
+    <div><span class="text-muted">Celular:</span> <strong>{{ user.telefone | telefone_br if user.telefone else '—' }}</strong></div>
 </div></div>
 <h6 class="mb-2">Culturas</h6>
 {# Dados do cadastro (pedido do Alan, 08/11/2026). #}
-{# Total de todas as fazendas, em nome do dono da conta (pedido do Alan, 08/11/2026). #}
 <div class="card shadow-sm mb-3"><div class="card-body py-2">
-    <div class="d-flex justify-content-between align-items-baseline pb-1 border-bottom">
-        <span class="fw-semibold">{{ cadastro.nome_completo or user.username }}</span>
-        {% if cadastro.grupo_cultura %}<span class="text-muted">{{ cadastro.grupo_cultura | grupos_cultura }}</span>{% endif %}
-    </div>
+    {# Tipo maior, culturas menores, total em nome do dono da conta (pedidos do Alan, 08/11/2026). #}
+    {% if cadastro.grupo_cultura %}<div class="fw-semibold pb-1 border-bottom" style="font-size: 1.05rem;">{{ cadastro.grupo_cultura | grupos_cultura }}</div>{% endif %}
     {% for nome, area in culturas_lista %}
-    <div class="d-flex justify-content-between border-bottom py-1"><span>{{ nome }}</span><span>{{ area or '' }}</span></div>
+    <div class="d-flex justify-content-between border-bottom py-1 small"><span>{{ nome }}</span><span>{{ area or '' }}</span></div>
     {% else %}
-    <div class="text-muted py-1">Nenhuma cultura informada no cadastro.</div>
+    <div class="text-muted py-1 small">Nenhuma cultura informada no cadastro.</div>
     {% endfor %}
-    {% if cadastro.area_ha %}<div class="d-flex justify-content-between pt-1 fw-semibold"><span>Área total</span><span>{{ '{:,.0f}'.format(cadastro.area_ha).replace(',', '.') }} ha</span></div>{% endif %}
+    {% if cadastro.area_ha %}<div class="d-flex justify-content-between pt-1 fw-semibold"><span>Área total · {{ cadastro.nome_completo or user.username }}</span><span class="text-nowrap ms-2">{{ '{:,.0f}'.format(cadastro.area_ha).replace(',', '.') }} ha</span></div>{% endif %}
 </div></div>
 
 <h6 class="mb-2">Fazendas monitoradas</h6>

@@ -662,10 +662,11 @@ site tem que entrar la'.
   h4/h1.titulo pro titulo e h6 pras secoes, sem tamanho proprio. No app,
   "Quem mais recebe o relatorio" virou **"Receber relatório"** com
   "Contato 1/2" (ex-"Pessoa"), tambem no cadastro; "Trocar senha" e' uma
-  secao como as outras (h6 + campos pequenos). Caixa "Culturas" da Conta: 1a linha = nome do
-  dono da conta (`nome_completo`, senao o usuario) + tipo(s), culturas e
-  "Area total" no mesmo tamanho -- o total e' de todas as fazendas, nao da
-  1a (antes mostrava "<fazenda> · <cidade>").
+  secao como as outras (h6 + campos pequenos). Conta: usuario/e-mail/celular em negrito e um
+  pouco maiores; caixa "Culturas" com o tipo (Cereais/HF/Outros) maior no
+  topo, culturas menores e "Area total · <nome do dono da conta>"
+  (`nome_completo`, senao o usuario) -- o total e' de todas as fazendas,
+  nao da 1a (antes mostrava "<fazenda> · <cidade>"; pedidos do Alan, 08/11/2026).
 - **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
   "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
   (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no
