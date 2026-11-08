@@ -1,11 +1,11 @@
 {% extends "cliente_base.html" %}
-{% block title %}Nova lavoura - OneAgro App{% endblock %}
+{% block title %}Nova fazenda monitorada - OneAgro App{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>#mapaPonto { height: 52vh; border-radius: 0.5rem; }</style>
 {% endblock %}
 {% block content %}
-<h1 class="titulo">Nova lavoura</h1>
+<h1 class="titulo">Nova fazenda monitorada</h1>
 <form method="post" id="formPonto">
     <input class="form-control mb-2" name="nome" placeholder="Nome (ex.: Talhão Sede)" maxlength="60" required>
     <select class="form-select mb-2" name="cultura" aria-label="Cultura">
@@ -14,9 +14,9 @@
     </select>
     <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" id="btnMinhaLocalizacao">📍 Usar minha localização</button>
     <div id="mapaPonto" class="mb-2"></div>
-    <p class="small text-muted mb-2" id="ajudaMapa">Toque no mapa para marcar a lavoura.</p>
+    <p class="small text-muted mb-2" id="ajudaMapa">Toque no mapa para marcar a fazenda.</p>
     <input type="hidden" name="lat" id="lat"><input type="hidden" name="lon" id="lon">
-    <button class="btn btn-success w-100" type="submit">Salvar lavoura</button>
+    <button class="btn btn-success w-100" type="submit">Salvar fazenda</button>
 </form>
 {% endblock %}
 {% block extra_scripts %}
@@ -43,7 +43,7 @@
         }, function () { alert('Não foi possível obter a localização. Marque no mapa.'); }, { enableHighAccuracy: true, timeout: 15000 });
     });
     document.getElementById('formPonto').addEventListener('submit', function (e) {
-        if (!document.getElementById('lat').value) { e.preventDefault(); alert('Marque o local da lavoura no mapa.'); }
+        if (!document.getElementById('lat').value) { e.preventDefault(); alert('Marque o local da fazenda no mapa.'); }
     });
 })();
 </script>

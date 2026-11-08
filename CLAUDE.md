@@ -203,7 +203,9 @@ no rodape e aparece TAMBEM nas abas do Site (incluida em base.html e
 cliente_base.html); a aba aberta fica numa caixa verde-clara. **Conta**
 (`cliente_home`, `/app`; Culturas + Conta juntas, pedido do Alan,
 08/11/2026): dados da conta, tipo(s), cada cultura com a area e a area
-total vindos do cadastro, as "Areas monitoradas" (as antigas lavouras),
+total vindos do cadastro, as "Fazendas monitoradas" (as antigas lavouras;
+ex-"Areas monitoradas", nome trocado pelo Alan em 08/11/2026 no app e em
+Gerenciar Clientes),
 quem mais recebe e "Trocar senha" (`cliente_conta` so' recebe o POST;
 GET volta pra `/app`). **Sem "Excluir conta"** no app (pedido do Alan,
 08/11/2026; rota `/app/conta/excluir` retirada) -- o Master exclui em

@@ -204,7 +204,7 @@ class AssinaturasTest(unittest.TestCase):
         user = models.get_user_by_username("Zzz Teste Lavoura")
         self.assertEqual(len(models.get_cliente_pontos(user["id"])), 5)
         home = self.client.get("/app").get_data(as_text=True)
-        self.assertIn("+ Adicionar área monitorada", home)
+        self.assertIn("+ Adicionar fazenda monitorada", home)
         self.assertNotIn("lavouras.</p>", home)
 
     def test_plano_basico_bloqueia_recursos(self):
@@ -227,7 +227,7 @@ class AssinaturasTest(unittest.TestCase):
         html = self.client.get("/app").get_data(as_text=True)
         self.assertIn("Minha conta", html)
         self.assertIn("Trocar senha", html)
-        self.assertIn("Áreas monitoradas", html)
+        self.assertIn("Fazendas monitoradas", html)
         self.assertNotIn("Excluir minha conta", html)
         self.assertNotIn(">Culturas</a>", html)
         self.assertIn('class="ativa"><span class="ic">👤</span>Conta', html)
@@ -240,7 +240,7 @@ class AssinaturasTest(unittest.TestCase):
         plano = next(p for p in models.get_planos() if p["nome"] == "Zzz Regiao")
         self._cadastrar("Zzz Teste Regiao", plano_id=plano["id"])
         self._liberar("Zzz Teste Regiao")
-        self.assertIn("Adicionar área monitorada", self.client.get("/app/regiao").get_data(as_text=True))
+        self.assertIn("Adicionar fazenda monitorada", self.client.get("/app/regiao").get_data(as_text=True))
         coords = data_reader.read_site_coordinates()
         site, (lat, lon) = next(iter(coords.items()))
         self.client.post("/app/pontos/novo", data={"nome": "Talhao R", "lat": lat, "lon": lon})

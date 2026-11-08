@@ -7332,9 +7332,9 @@ def cliente_assinar():
         # Area monitorada marcada no mapa da assinatura (pedido do Alan, 08/11/2026) vira a 1a lavoura.
         lat, lon = _coordenada(request.form.get("lat")), _coordenada(request.form.get("lon"))
         if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            flash("Marque no mapa (ou digite as coordenadas) onde será a área monitorada.", "error")
+            flash("Marque no mapa (ou digite as coordenadas) onde será a fazenda monitorada.", "error")
             return redirect(url_for("cliente_assinatura", plano=plano["id"]))
-        nome = (request.form.get("nome_area") or "").strip()[:60] or "Área monitorada"
+        nome = (request.form.get("nome_area") or "").strip()[:60] or "Fazenda monitorada"
         ponto_id = models.criar_cliente_ponto(int(current_user.id), nome, lat, lon, "")
         site = _criar_fazenda_estimada_da_lavoura(int(current_user.id), ponto_id, nome, lat, lon, plano)
         _preencher_safras(site, _pares_cultura_area({}, models.get_cadastro_do_usuario(int(current_user.id))))
@@ -7498,7 +7498,7 @@ def cliente_ponto_novo():
         if not nome:
             flash("Dê um nome para a lavoura.", "error")
         elif lat is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            flash("Marque o local da lavoura no mapa.", "error")
+            flash("Marque o local da fazenda no mapa.", "error")
         else:
             cultura = request.form.get("cultura", "")
             ponto_id = models.criar_cliente_ponto(user_id, nome, lat, lon, cultura if cultura in _culturas_cliente() else "")
