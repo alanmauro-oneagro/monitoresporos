@@ -258,8 +258,9 @@ class PlanoEmDolarTest(unittest.TestCase):
         self.assertEqual(webapp._preco_plano(p), "U$ 20,00 (≈ R$ 110,00)")
         uid = models.criar_cliente("Zzz Cliente Dolar", "segredo1", "", "5565999990066", "", None)
         tela = self._logado(uid).get("/app/assinatura").get_data(as_text=True)
-        self.assertIn("4x de U$ 5,00 (≈ R$ 27,50)", tela)  # trimestral = 4 parcelas
-        self.assertIn("Total U$ 20,00 (≈ R$ 110,00)", tela)
+        self.assertIn('<span class="preco-n">4x de</span> U$ 5,00</div>', tela)  # trimestral = 4 parcelas
+        self.assertIn('<div class="preco-sub">≈ R$ 27,50 por parcela</div>', tela)
+        self.assertIn('<div class="preco-sub">Total U$ 20,00 · ≈ R$ 110,00</div>', tela)
         self.assertIn("Cobrado em reais, pela cotação do dólar do dia", tela)
         # cobranca sai em reais no Asaas
         with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
@@ -281,9 +282,14 @@ class PlanoEmDolarTest(unittest.TestCase):
             models.excluir_plano(pid)
         pid = models.salvar_plano(None, "Zzz Parcelas Tela", "", 1200, "MONTHLY", 1, 50, ["clima"], True, 9)
         tela = webapp.app.test_client().get("/planos").get_data(as_text=True)
-        self.assertIn('<span class="plano-parcela">12x de R$ 100,00</span>', tela)
-        self.assertIn(">Total R$ 1.200,00</span>", tela)
-        self.assertLess(tela.index("12x de R$ 100,00"), tela.index("Total R$ 1.200,00"))  # total por ultimo
+        self.assertIn('<div class="preco-parcela"><span class="preco-n">12x de</span> R$ 100,00</div>', tela)
+        self.assertIn('<div class="preco-sub">Total R$ 1.200,00</div>', tela)
+        self.assertLess(tela.index("R$ 100,00</div>"), tela.index("Total R$ 1.200,00"))  # total por ultimo
+        # com a area plantada total: "R$ X por ha/ano" (pedido do Alan, 08/11/2026)
+        p = models.get_plano(pid)
+        with webapp.app.test_request_context():
+            self.assertIn('<div class="preco-ha">R$ 2,40 por ha/ano</div>', str(webapp._parcelas_plano(p, 500)))
+            self.assertNotIn("preco-ha", str(webapp._parcelas_plano(p)))
         models.excluir_plano(pid)
 
     def test_sem_cotacao_nao_cobra(self):
