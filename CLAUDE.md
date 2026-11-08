@@ -82,7 +82,16 @@ Soja, soma); Cana = Cana; HF = as demais + "Outra cultura" (soma)
 `area_preco_ha`. A tela "Criar conta" ja' traz os planos (cartoes com
 preco; no app da loja sem preco); plano gratis escolhido ativa na hora,
 pago vai pra Minha assinatura com o plano ja' marcado (`?plano=<id>`,
-CPF/CNPJ continua la'). **Preco pela area** (`planos.preco_por_area`,
+CPF/CNPJ continua la'). **"Criar conta" so' libera com os termos aceitos**
+(botao `#botao-criar` desativado ate' marcar `aceite`). **Minha assinatura
+vindo do cadastro** (pedido do Alan, 08/11/2026): com `?plano=<id>` mostra
+SO' esse plano ("Ver todos os planos" volta a lista) e, se o cliente ainda
+nao tem lavoura, o quadro "Onde sera' a area monitorada?" (nome da area =
+fazenda do cadastro, latitude/longitude digitaveis com virgula ou ponto,
+"Usar minha localizacao" e mapa Leaflet onde tocar/arrastar marca). Ao
+continuar (`cliente_assinar`, campo `pedir_local`), o ponto vira a 1a
+lavoura (`criar_cliente_ponto` + fazenda estimada se o plano tiver); sem
+local = aviso e volta. **Preco pela area** (`planos.preco_por_area`,
 caixa "Preço pela área" em Planos e Valores; ja' ligado no Premium): o
 valor total = area do preco x U$/ha da faixa da tabela de apoio, em U$,
 parcelas pelo ciclo (`app._plano_para_area`), calculado ao digitar no
