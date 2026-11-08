@@ -1,5 +1,43 @@
 {% extends "cliente_base.html" %}
 {% block title %}Criar conta - OneAgro App{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />{% endblock %}
+{% macro bloco_local(i, form, primeiro) %}
+<div class="card shadow-sm mb-2 local-bloco"><div class="card-body p-2">
+    <input type="hidden" name="local_idx" value="{{ i }}">
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="small fw-semibold text-nowrap local-titulo">Local</span>
+        <input class="form-control form-control-sm local-nome" name="local_nome__{{ i }}" value="{{ form.get('local_nome__' ~ i, '') if form else '' }}" maxlength="60" placeholder="Nome do local (ex.: Fazenda Sede)" aria-label="Nome do local">
+        <button type="button" class="btn btn-sm btn-outline-danger local-remover{{ ' d-none' if primeiro }}" title="Tirar este local">✕</button>
+    </div>
+    {% set marcadas = form.getlist('culturas__' ~ i) if form else [] %}
+    {% for c in culturas %}
+    <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="{{ grupo_de[c] }}" style="min-height: 2.1rem;">
+        <div class="form-check mb-0" style="min-width: 7rem;">
+            <input class="form-check-input" type="checkbox" name="culturas__{{ i }}" id="cultura_{{ i }}_{{ loop.index }}" value="{{ c }}" {% if c in marcadas %}checked{% endif %}>
+            <label class="form-check-label small" for="cultura_{{ i }}_{{ loop.index }}">{{ c }}</label>
+        </div>
+        <div class="input-group input-group-sm cultura-area{{ '' if c in marcadas else ' d-none' }}" style="max-width: 11rem;">
+            <input class="form-control" name="area_cultura__{{ i }}__{{ c }}" value="{{ form.get('area_cultura__' ~ i ~ '__' ~ c, '') if form else '' }}" inputmode="decimal" placeholder="Área" aria-label="Área de {{ c }} (ha)">
+            <span class="input-group-text">ha</span>
+        </div>
+    </div>
+    {% endfor %}
+    <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="hf">
+        <input class="form-control form-control-sm cultura-outra" style="max-width: 9rem;" name="cultura_outra__{{ i }}" value="{{ form.get('cultura_outra__' ~ i, '') if form else '' }}" placeholder="Outra cultura" aria-label="Outra cultura">
+        <div class="input-group input-group-sm cultura-area{{ '' if form and form.get('cultura_outra__' ~ i) else ' d-none' }}" style="max-width: 11rem;">
+            <input class="form-control" name="area_outra__{{ i }}" value="{{ form.get('area_outra__' ~ i, '') if form else '' }}" inputmode="decimal" placeholder="Área" aria-label="Área da outra cultura (ha)">
+            <span class="input-group-text">ha</span>
+        </div>
+    </div>
+    <div class="small text-muted mt-2 mb-1">Onde fica este local? Toque no mapa, use a sua localização ou digite as coordenadas.</div>
+    <div class="row g-2 mb-1">
+        <div class="col-6"><input class="form-control form-control-sm local-lat" name="local_lat__{{ i }}" value="{{ form.get('local_lat__' ~ i, '') if form else '' }}" inputmode="decimal" placeholder="Latitude (ex.: -15,6010)" aria-label="Latitude" required></div>
+        <div class="col-6"><input class="form-control form-control-sm local-lon" name="local_lon__{{ i }}" value="{{ form.get('local_lon__' ~ i, '') if form else '' }}" inputmode="decimal" placeholder="Longitude (ex.: -56,0970)" aria-label="Longitude" required></div>
+    </div>
+    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-1 local-gps">📍 Usar minha localização</button>
+    <div class="local-mapa" style="height: 220px; border-radius: 0.5rem;"></div>
+</div></div>
+{% endmacro %}
 {% block content %}
 <h1 class="titulo">Criar conta</h1>
 {# "O que voce quer?" saiu (pedido do Alan, 08/11/2026): quem clica em cadastrar assina
@@ -63,31 +101,37 @@
         <label class="btn btn-outline-success" for="grupo_{{ chave }}">{{ rotulo }}</label>
         {% endfor %}
     </div>
+    {# Locais de plantio (pedido do Alan, 08/11/2026): cada local com nome, culturas/areas
+       e o ponto no mapa (ou coordenadas); cada um vira uma area monitorada. #}
+    {% set idxs = (form.getlist('local_idx') if form else []) or ['0'] %}
     <div id="bloco-culturas" class="{{ '' if grupos_sel else 'd-none' }}">
-    <div class="small mb-1">Culturas e área plantada / atendida de cada uma</div>
-    <div class="mb-2" id="culturas-area">
-        {% for c in culturas %}
-        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="{{ grupo_de[c] }}" style="min-height: 2.1rem;">
-            <div class="form-check mb-0" style="min-width: 7rem;">
-                <input class="form-check-input" type="checkbox" name="culturas" id="cultura_{{ loop.index }}" value="{{ c }}" {% if c in culturas_sel %}checked{% endif %}>
-                <label class="form-check-label small" for="cultura_{{ loop.index }}">{{ c }}</label>
-            </div>
-            <div class="input-group input-group-sm cultura-area{{ '' if c in culturas_sel else ' d-none' }}" style="max-width: 11rem;">
-                <input class="form-control" name="area_cultura__{{ c }}" value="{{ form.get('area_cultura__' ~ c, '') }}" inputmode="decimal" placeholder="Área" aria-label="Área de {{ c }} (ha)">
-                <span class="input-group-text">ha</span>
-            </div>
-        </div>
-        {% endfor %}
-        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="hf">
-            <input class="form-control form-control-sm" style="max-width: 9rem;" name="cultura_outra" id="cultura_outra" value="{{ form.get('cultura_outra', '') }}" placeholder="Outra cultura" aria-label="Outra cultura">
-            <div class="input-group input-group-sm cultura-area{{ '' if form.get('cultura_outra') else ' d-none' }}" style="max-width: 11rem;">
-                <input class="form-control" name="area_outra" value="{{ form.get('area_outra', '') }}" inputmode="decimal" placeholder="Área" aria-label="Área da outra cultura (ha)">
-                <span class="input-group-text">ha</span>
-            </div>
-        </div>
+    <div class="small mb-1">Locais de plantio -- culturas e área de cada um</div>
+    <div id="locais">
+        {% for i in idxs %}{{ bloco_local(i, form, loop.first) }}{% endfor %}
     </div>
+    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" id="btn-add-local">+ Adicionar outro local</button>
     <div class="small text-muted mb-3">Área total: <strong id="area-total">-</strong></div>
     </div>
+    <template id="tpl-local">{{ bloco_local('__IDX__', {}, False) }}</template>
+
+    {% if modalidade_sel == 'plano' %}
+    {# Ate' 2 pessoas que tambem recebem o relatorio, escolhendo de quais locais. #}
+    <h6 class="mt-4 mb-1">Quem mais recebe o relatório <span class="small text-muted fw-normal">(opcional)</span></h6>
+    <p class="small text-muted mb-2">Até 2 pessoas (ex.: gerente, agrônomo) recebem o relatório no WhatsApp.</p>
+    {% for k in range(1, max_extras + 1) %}
+    <div class="card shadow-sm mb-2 extra-bloco" data-k="{{ k }}"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1">Pessoa {{ k }}</div>
+        <input class="form-control form-control-sm mb-1" name="extra_nome__{{ k }}" value="{{ form.get('extra_nome__' ~ k, '') }}" placeholder="Nome" aria-label="Nome da pessoa {{ k }}">
+        <div class="input-group input-group-sm mb-1">
+            <span class="input-group-text">+</span>
+            <input class="form-control" style="max-width: 4rem;" name="codigo_pais__extra{{ k }}" value="{{ form.get('codigo_pais__extra' ~ k, '55') }}" inputmode="numeric" aria-label="Código do país da pessoa {{ k }}">
+            <input class="form-control" name="numero_telefone__extra{{ k }}" value="{{ form.get('numero_telefone__extra' ~ k, '') }}" placeholder="Celular (DDD + número)" inputmode="tel" aria-label="Celular da pessoa {{ k }}">
+        </div>
+        <div class="small text-muted">Recebe dos locais:</div>
+        <div class="extra-locais d-flex flex-wrap gap-2 small" data-marcados="{{ (form.getlist('extra_locais__' ~ k) if form else []) | join(',') }}"></div>
+    </div></div>
+    {% endfor %}
+    {% endif %}
 
     {% if modalidade_sel == 'plano' and planos %}
     {# Planos ja' no cadastro (pedido do Alan, 08/11/2026); o plano com preco pela area
@@ -149,11 +193,12 @@
     <button class="btn btn-success w-100" type="submit" id="botao-criar" {% if not form.get('aceite') %}disabled{% endif %}>Criar conta</button>
 </div></form>
 <div class="text-center small mb-4"><a href="{{ url_for('login') }}">Já tenho conta</a></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function () {
     // Grupo escolhido mostra so' as culturas dele; marcar a cultura (ou escrever
     // outra) abre o campo da area; soma a area total e calcula o preco pela area.
-    var bloco = document.getElementById('culturas-area');
+    var locaisEl = document.getElementById('locais');
     var FAIXAS = {{ faixas_preco | tojson }}, COTACAO = {{ cotacao_valor | tojson }};
     function numero(v) { v = (v || '').trim().replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
     function dinheiro(v, s) { return s + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -175,28 +220,35 @@
         return '<div class="preco-box">' + h + '</div>';
     }
     function gruposAtuais() { return Array.prototype.map.call(document.querySelectorAll('input[name=grupo_cultura]:checked'), function (g) { return g.value; }); }
+    function blocos() { return Array.prototype.slice.call(locaisEl.querySelectorAll('.local-bloco')); }
     function atualizar() {
-        var grupos = gruposAtuais(), total = 0, porGrupo = {cereais: 0, hf: 0, outros: 0}, soja = 0;
+        var grupos = gruposAtuais(), total = 0, areaPreco = 0, lista = blocos();
         document.getElementById('bloco-culturas').classList.toggle('d-none', !grupos.length);
-        bloco.querySelectorAll('.cultura-linha').forEach(function (linha) {
-            var doGrupo = grupos.indexOf(linha.dataset.grupo) >= 0;
-            linha.classList.toggle('d-none', !doGrupo);
-            var marca = linha.querySelector('input[type=checkbox]');
-            var outra = linha.querySelector('#cultura_outra');
-            if (!doGrupo) { if (marca) marca.checked = false; if (outra) outra.value = ''; }
-            var ativo = doGrupo && (marca ? marca.checked : outra.value.trim() !== '');
-            var caixa = linha.querySelector('.cultura-area');
-            caixa.classList.toggle('d-none', !ativo);
-            var area = caixa.querySelector('input');
-            area.required = ativo;
-            if (ativo) {
-                total += numero(area.value);
-                porGrupo[linha.dataset.grupo] += numero(area.value);
-                if (marca && marca.value.toLowerCase() === 'soja') soja = numero(area.value);
-            }
+        lista.forEach(function (b, n) {
+            b.querySelector('.local-titulo').textContent = 'Local ' + (n + 1);
+            b.querySelector('.local-remover').classList.toggle('d-none', lista.length === 1);
+            var soja = 0, porGrupo = {cereais: 0, hf: 0, outros: 0};
+            b.querySelectorAll('.cultura-linha').forEach(function (linha) {
+                var doGrupo = grupos.indexOf(linha.dataset.grupo) >= 0;
+                linha.classList.toggle('d-none', !doGrupo);
+                var marca = linha.querySelector('input[type=checkbox]');
+                var outra = linha.querySelector('.cultura-outra');
+                if (!doGrupo) { if (marca) marca.checked = false; if (outra) outra.value = ''; }
+                var ativo = doGrupo && (marca ? marca.checked : outra.value.trim() !== '');
+                var caixa = linha.querySelector('.cultura-area');
+                caixa.classList.toggle('d-none', !ativo);
+                var area = caixa.querySelector('input');
+                area.required = ativo;
+                if (ativo) {
+                    total += numero(area.value);
+                    porGrupo[linha.dataset.grupo] += numero(area.value);
+                    if (marca && marca.value.toLowerCase() === 'soja') soja = numero(area.value);
+                }
+            });
+            // mesma conta de app._area_preco_grupos, local por local
+            areaPreco += (soja > 0 ? soja : porGrupo.cereais) + porGrupo.outros + porGrupo.hf;
         });
-        // mesma conta de app._area_preco_grupos: Cereais pela Soja (sem Soja, soma), Outros e HF pela soma
-        var areaPreco = (soja > 0 ? soja : porGrupo.cereais) + porGrupo.outros + porGrupo.hf;
+        atualizarExtras();
         document.getElementById('area-total').textContent = total > 0 ? total.toLocaleString('pt-BR') + ' ha' : '-';
         // Quadro de preco de cada plano pago (mesmo HTML de app._parcelas_plano) + "R$ X por ha/ano"
         // pela area plantada TOTAL; o plano com preco pela area calcula o total pela tabela de apoio.
@@ -216,7 +268,6 @@
             trocar(el, precoHtml(totalPlano, n, simbolo, usd, total));
         });
     }
-    document.getElementById('grupo-cultura').addEventListener('change', atualizar);
     // Tecnico do setor: sem planos, so' o contato da OneAgro.
     var tecnico = document.getElementById('perfil_tecnico'), planosBloco = document.getElementById('bloco-planos');
     function perfil() {
@@ -232,11 +283,76 @@
     // radio desmarcado nao dispara "change": escuta as duas opcoes
     document.querySelectorAll('input[name=perfil]').forEach(function (r) { r.addEventListener('change', perfil); });
     perfil();
-    bloco.addEventListener('input', atualizar);
-    bloco.addEventListener('change', function (e) {
+    // "Recebe dos locais" das pessoas extras: um quadradinho por local (todos marcados de inicio).
+    function atualizarExtras() {
+        var nomes = blocos().map(function (b, n) { return b.querySelector('.local-nome').value.trim() || ('Local ' + (n + 1)); });
+        document.querySelectorAll('.extra-bloco').forEach(function (eb) {
+            var k = eb.dataset.k, cx = eb.querySelector('.extra-locais'), estado = {};
+            var atuais = cx.querySelectorAll('input');
+            if (atuais.length) { atuais.forEach(function (x) { estado[x.value] = x.checked; }); }
+            else if (cx.dataset.marcados) { nomes.forEach(function (_n, i) { estado[i] = cx.dataset.marcados.split(',').indexOf(String(i)) >= 0; }); }
+            var html = nomes.map(function (nome, i) {
+                var marcado = estado[i] === undefined ? true : estado[i];
+                return '<label class="form-check-label"><input type="checkbox" class="form-check-input me-1" name="extra_locais__' + k +
+                    '" value="' + i + '"' + (marcado ? ' checked' : '') + '>' + nome.replace(/[<>&"]/g, '') + '</label>';
+            }).join('');
+            trocar(cx, html);
+        });
+    }
+    // Mapa de cada local: tocar marca, arrastar ajusta, coordenadas digitadas movem o marcador.
+    function iniciarMapa(b) {
+        if (!window.L) return;
+        var latC = b.querySelector('.local-lat'), lonC = b.querySelector('.local-lon');
+        var mapa = L.map(b.querySelector('.local-mapa')).setView([-14.5, -54.5], 4);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri' }).addTo(mapa);
+        var marcador = null;
+        function mostrar(la, lo, centralizar) {
+            if (marcador) { marcador.setLatLng([la, lo]); }
+            else { marcador = L.marker([la, lo], { draggable: true }).addTo(mapa); marcador.on('dragend', function () { var q = marcador.getLatLng(); marcar(q.lat, q.lng, false); }); }
+            if (centralizar) mapa.setView([la, lo], Math.max(mapa.getZoom(), 13));
+        }
+        function marcar(la, lo, centralizar) {
+            latC.value = la.toFixed(6).replace('.', ','); lonC.value = lo.toFixed(6).replace('.', ',');
+            mostrar(la, lo, centralizar);
+        }
+        function digitadas() {
+            var la = parseFloat(latC.value.replace(',', '.')), lo = parseFloat(lonC.value.replace(',', '.'));
+            if (!isNaN(la) && !isNaN(lo) && la >= -90 && la <= 90 && lo >= -180 && lo <= 180) mostrar(la, lo, true);
+        }
+        mapa.on('click', function (e) { marcar(e.latlng.lat, e.latlng.lng, false); });
+        latC.addEventListener('change', digitadas); lonC.addEventListener('change', digitadas);
+        b.querySelector('.local-gps').addEventListener('click', function () {
+            if (!navigator.geolocation) { alert('Este aparelho não informa a localização. Marque no mapa.'); return; }
+            navigator.geolocation.getCurrentPosition(function (pos) { marcar(pos.coords.latitude, pos.coords.longitude, true); },
+                function () { alert('Não foi possível obter a localização. Marque no mapa ou digite as coordenadas.'); },
+                { enableHighAccuracy: true, timeout: 15000 });
+        });
+        digitadas();
+        b._mapa = mapa;
+    }
+    var proximo = blocos().reduce(function (m, b) { return Math.max(m, parseInt(b.querySelector('[name=local_idx]').value, 10) + 1); }, 0);
+    document.getElementById('btn-add-local').addEventListener('click', function () {
+        var html = document.getElementById('tpl-local').innerHTML.replace(/__IDX__/g, String(proximo++));
+        var tmp = document.createElement('div'); tmp.innerHTML = html.trim();
+        var b = tmp.firstElementChild; locaisEl.appendChild(b);
+        iniciarMapa(b); atualizar();
+        b.querySelector('.local-nome').focus();
+    });
+    locaisEl.addEventListener('click', function (e) {
+        if (!e.target.classList.contains('local-remover')) return;
+        e.target.closest('.local-bloco').remove(); atualizar();
+    });
+    locaisEl.addEventListener('input', atualizar);
+    locaisEl.addEventListener('change', function (e) {
         atualizar();
         if (e.target.type === 'checkbox' && e.target.checked) e.target.closest('.cultura-linha').querySelector('.cultura-area input').focus();
     });
+    document.getElementById('grupo-cultura').addEventListener('change', function () {
+        atualizar();
+        // o mapa nasce com a secao escondida: re-mede depois que ela aparece
+        setTimeout(function () { blocos().forEach(function (b) { if (b._mapa) b._mapa.invalidateSize(); }); }, 50);
+    });
+    blocos().forEach(iniciarMapa);
     atualizar();
 })();
 (function () {

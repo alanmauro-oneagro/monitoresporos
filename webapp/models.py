@@ -760,6 +760,12 @@ def init_db():
         conn.execute("ALTER TABLE cliente_pontos ADD COLUMN site_name TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
+    # Culturas e area de cada local de plantio informado no cadastro (pedido do Alan, 08/11/2026).
+    for coluna in ("culturas TEXT", "area_ha REAL"):
+        try:
+            conn.execute(f"ALTER TABLE cliente_pontos ADD COLUMN {coluna}")
+        except sqlite3.OperationalError:
+            pass  # coluna ja existe
     try:
         # Moeda do valor do plano: BRL ou USD (pedido do Alan, 07/11/2026).
         conn.execute("ALTER TABLE planos ADD COLUMN moeda TEXT NOT NULL DEFAULT 'BRL'")
@@ -3973,6 +3979,25 @@ def criar_cliente_ponto(user_id, nome, lat, lon, cultura=""):
     conn.commit()
     conn.close()
     return cur.lastrowid
+
+
+def set_culturas_do_ponto(ponto_id, culturas, area_ha):
+    """Culturas ("Soja (500 ha), Milho (300 ha)") e area do local de plantio."""
+    conn = get_db()
+    conn.execute("UPDATE cliente_pontos SET culturas = ?, area_ha = ? WHERE id = ?", (culturas, area_ha, ponto_id))
+    conn.commit()
+    conn.close()
+
+
+def site_ids_por_nome(site_names):
+    """{site_name: id} das fazendas pedidas (tabela `sites`)."""
+    nomes = [s for s in site_names if s]
+    if not nomes:
+        return {}
+    conn = get_db()
+    rows = conn.execute(f"SELECT id, site_name FROM sites WHERE site_name IN ({','.join('?' * len(nomes))})", nomes).fetchall()
+    conn.close()
+    return {r["site_name"]: r["id"] for r in rows}
 
 
 def atualizar_cliente_ponto(user_id, ponto_id, nome, cultura):
