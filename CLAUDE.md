@@ -198,7 +198,7 @@ se o plano liberar (recursos "site_*" em `RECURSOS_PLANO`, logo depois de
 Graficos/Manejos/Recomendacoes (`ABAS_SITE_CLIENTE` em `_restringir_cliente`;
 menu do `base.html` so' com essas abas + "📱 App"; no app, aba "🌐 Site").
 **App do cliente** (pedido do Alan, 08/11/2026): a barra de baixo
-(`_abas_cliente.html`: Site, Regiao, Assinatura, Conta) e' fixa
+(`_abas_cliente.html`: Alertas (ex-"Site"), Graficos (ex-"Regiao"), Assinatura, Conta -- nomes trocados pelo Alan em 08/11/2026) e' fixa
 no rodape e aparece TAMBEM nas abas do Site (incluida em base.html e
 cliente_base.html); a aba aberta fica numa caixa verde-clara. **Conta**
 (`cliente_home`, `/app`; Culturas + Conta juntas, pedido do Alan,
@@ -371,10 +371,20 @@ nao e' reaproveitado. A tela do upgrade mostra "Com o desconto: ..." em
 cada plano. Clientes nao aparecem na aba Usuarios. App Android/iOS em
 `mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
 app nao aparece preco nem link de pagamento (regra das lojas).
-Recurso de plano "regiao" (`/app/regiao`, pedido do Alan, 26/10/2026):
-estacoes reais ate' o raio do plano das lavouras do cliente, agrupadas em
-celulas de 0,1 grau (~11 km) e rotuladas so' pela cidade INMET mais
-proxima ("Regiao de X/UF") -- nunca site_name. Offline: `static/sw.js`
+**Aba Graficos do app** (`/app/regiao`, endpoint `cliente_regiao`; ex-"Regiao",
+cujo mapa de estacoes por celula saiu -- pedido do Alan, 08/11/2026): filtro
+por cultura no topo (culturas das fazendas do cliente; doenca sem cultura
+marcada sempre entra) e por fazenda (se tiver mais de uma); tabela de
+**favorabilidade climatica** (hoje + 5 dias, A/M/B) de TODAS as doencas
+cadastradas com germinacao, do pais da fazenda (`_favorabilidade_ponto`).
+Com o recurso de plano `graficos_app` ("Gráficos: 7 dias de histórico e 5
+de previsão"; Premium e Premium + Estacao, migrado 1x pelo setting
+`recursos_graficos_migrados`): um grafico por doenca (Chart.js) com
+favorabilidade % e esporos estimados, 7 dias + 5 de previsao (area cinza),
+lendo o JSON do site `/graficos/dados?estacao=<fazenda estimada>` --
+`_restringir_cliente` libera `graficos_dados` so' pra cliente com
+`graficos_app`. Sem ele: aviso "fazem parte dos planos Premium". O recurso
+"regiao" ficou sem uso. Offline: `static/sw.js`
 guarda cada pagina /app aberta (cache `oneagro-app-dados`, apagado no
 logout) e devolve com `data-offline="1"` sem sinal; a home pre-carrega
 lavouras + regiao. iOS so' roda service worker com WKAppBoundDomains

@@ -6669,6 +6669,8 @@ def _restringir_cliente():
         return
     if endpoint in ("change_password", "salvar_preferencia"):
         return
+    if endpoint == "graficos_dados" and _acesso_cliente()[1] and "graficos_app" in (_acesso_cliente()[0] or {}).get("recursos", []):
+        return
     if not endpoint.startswith("cliente_") and endpoint not in _ENDPOINTS_LIVRES_CLIENTE:
         return redirect(url_for("cliente_home"))
 
@@ -7857,72 +7859,64 @@ def cliente_ponto_excluir(ponto_id):
     return redirect(url_for("cliente_home"))
 
 
-# Posicao das estacoes no mapa da regiao do cliente arredondada pra 0,1
-# grau (~11 km): mostra onde esta' o risco sem apontar a fazenda.
-REGIAO_PRECISAO_GRAUS = 1
-REGIAO_ROTULO_MAX_KM = 150  # cidade INMET mais longe que isso nao serve de rotulo
-
-
-def _rotulo_regiao(lat, lon):
-    estacao = inmet_stations.estacao_mais_proxima(lat, lon)
-    if estacao and estacao["distancia_km"] <= REGIAO_ROTULO_MAX_KM:
-        return f"Região de {estacao['cidade']}/{estacao['uf']}"
-    return f"Região {lat:.1f}, {lon:.1f}"
-
-
-def _regioes_cliente(pontos, raio_km):
-    """Estacoes reais ativas (com leitura recente) dentro do raio do plano
-    de alguma lavoura do cliente, agrupadas por celula de 0,1 grau -- cada
-    regiao leva so' o rotulo da cidade, a posicao arredondada e, por
-    doenca, a leitura mais alta das estacoes da celula. Nunca o nome
-    (site_name) da fazenda."""
-    if not pontos:
-        return []
-    cards_reais = get_dashboard_data(None, _load_translations())
-    ocultas = models.get_deactivated_site_names()
-    corte = (_hoje_cuiaba() - timedelta(days=DADOS_BLOQUEIO_DIAS)).isoformat()
-    celulas = {}
-    for site, (lat, lon) in data_reader.read_site_coordinates().items():
-        if site in ocultas:
-            continue
-        distancia = min(virtual_farms._haversine_km(p["lat"], p["lon"], lat, lon) for p in pontos)
-        if distancia > raio_km:
-            continue
-        cards = [c for c in cards_reais.get(site, []) if c.get("data") and c["data"] >= corte and c.get("concentracao") is not None]
-        if not cards:
-            continue
-        chave = (round(lat, REGIAO_PRECISAO_GRAUS), round(lon, REGIAO_PRECISAO_GRAUS))
-        celula = celulas.setdefault(chave, {"distancia_km": distancia, "doencas": {}})
-        celula["distancia_km"] = min(celula["distancia_km"], distancia)
-        for c in cards:
-            atual = celula["doencas"].get(c["doenca_en"])
-            if atual is None or c["concentracao"] > atual["concentracao"]:
-                celula["doencas"][c["doenca_en"]] = {
-                    "doenca": c["doenca"], "concentracao": c["concentracao"], "status": c["status"], "data": c["data"],
-                }
-    ordem_status = {"Perigo": 0, "Atencao": 1}
-    regioes = []
-    for (lat, lon), celula in celulas.items():
-        doencas = sorted(celula["doencas"].values(), key=lambda d: (ordem_status.get(d["status"], 2), d["doenca"]))
-        regioes.append({
-            "lat": lat, "lon": lon, "rotulo": _rotulo_regiao(lat, lon),
-            "distancia_km": round(celula["distancia_km"]), "doencas": doencas,
-            "pior": doencas[0]["status"] if doencas else None,
-        })
-    regioes.sort(key=lambda r: r["distancia_km"])
-    return regioes
-
-
 @app.route("/app/regiao")
 @cliente_required
 def cliente_regiao():
+    """Aba "Graficos" do app (ex-"Regiao", pedido do Alan, 08/11/2026): filtro
+    por cultura no topo; tabela de favorabilidade climatica de todas as
+    doencas cadastradas (hoje + 5 dias) e, com o recurso "graficos_app"
+    (Premium), os graficos de esporos/favorabilidade de 7 dias + 5 de previsao."""
     plano = g.cliente_plano
-    pontos = models.get_cliente_pontos(int(current_user.id))
-    liberado = "regiao" in plano["recursos"]
+    pontos = [p for p in models.get_cliente_pontos(int(current_user.id)) if models.ponto_liberado(p)]
+    ponto = next((p for p in pontos if str(p["id"]) == request.args.get("fazenda")), pontos[0] if pontos else None)
+    culturas = _culturas_dos_pontos(pontos)
+    cultura = request.args.get("cultura", "")
+    cultura = cultura if cultura in culturas else ""
+    riscos, datas = [], []
+    if ponto:
+        riscos = _favorabilidade_ponto(ponto, _weather_ponto_cliente(ponto), cultura)
+        for d in riscos:
+            for p in d.get("previsao_risco") or []:
+                if p["data_fmt"] not in datas:
+                    datas.append(p["data_fmt"])
+    com_graficos = "graficos_app" in plano["recursos"] and bool(ponto and ponto.get("site_name"))
     return render_template(
-        "cliente_regiao.html", plano=plano, pontos=pontos, liberado=liberado,
-        regioes=_regioes_cliente(pontos, plano["raio_km"]) if liberado else [],
+        "cliente_regiao.html", plano=plano, pontos=pontos, ponto=ponto, culturas=culturas, cultura=cultura,
+        riscos=riscos, datas=datas, com_graficos=com_graficos,
+        doencas_da_cultura=sorted({d["doenca_en"] for d in riscos}),
+        inicio=(_hoje_cuiaba() - timedelta(days=6)).isoformat(), fim=_hoje_cuiaba().isoformat(),
     )
+
+
+def _culturas_dos_pontos(pontos):
+    """Culturas das fazendas do cliente (as da lista do site), pro filtro."""
+    ativas = models.get_culturas_ativas()
+    vistas = set()
+    for p in pontos:
+        vistas |= {c for c, _a in _pares_cultura_area(p)}
+    return [c for c in ativas if c in vistas] or ativas
+
+
+def _favorabilidade_ponto(ponto, weather, cultura=""):
+    """Favorabilidade climatica (hoje + 5 dias) de TODAS as doencas cadastradas
+    com germinacao, do pais da fazenda; com `cultura`, so' as dela (doenca sem
+    cultura marcada sempre entra). Na ordem da aba Doencas."""
+    info = _disease_info_cached()
+    doenca_culturas = models.get_doenca_culturas()
+    doenca_paises = models.get_doenca_paises()
+    pais = countries.get_country(countries.detectar_pais_por_coordenada(ponto["lat"], ponto["lon"]))["nome"]
+    cards = [
+        {"doenca_en": en, "doenca": d["nome_pt"]} for en, d in info.items()
+        if (not cultura or not doenca_culturas.get(en) or cultura in doenca_culturas[en])
+        and (not doenca_paises.get(en) or pais in doenca_paises[en])
+    ]
+    riscos = _build_riscos_climaticos_sem_leitura(cards)
+    for d in riscos:
+        d["risco"] = _calc_risco_germinacao(d, weather)
+        d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    traducoes = models.get_all_disease_translations()
+    riscos.sort(key=lambda d: _chave_alfabetica(traducoes.get(d["doenca_en"], {}).get("nome_cientifico") or d["doenca"]))
+    return riscos
 
 
 def _cards_ponto_cliente(ponto, plano):

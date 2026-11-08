@@ -828,6 +828,16 @@ def init_db():
             recursos += [r for r in novos if r not in recursos]
             conn.execute("UPDATE planos SET recursos = ? WHERE id = ?", (json.dumps(recursos), row["id"]))
         conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('recursos_whatsapp_migrados', '1')")
+    if not conn.execute("SELECT 1 FROM app_settings WHERE key = 'recursos_graficos_migrados'").fetchone():
+        # Graficos 7 + 5 dias nos Premium (pedido do Alan, 08/11/2026) -- 1x so'.
+        for row in conn.execute("SELECT id, nome, recursos FROM planos").fetchall():
+            try:
+                recursos = json.loads(row["recursos"] or "[]")
+            except ValueError:
+                recursos = []
+            if row["nome"].strip().lower().startswith("premium") and "graficos_app" not in recursos:
+                conn.execute("UPDATE planos SET recursos = ? WHERE id = ?", (json.dumps(recursos + ["graficos_app"]), row["id"]))
+        conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('recursos_graficos_migrados', '1')")
     # Free "sem prazo" de antes da regra dos 7 dias passa a valer 7 dias do
     # cadastro tambem (pedido do Alan, 08/11/2026).
     conn.execute(
@@ -3599,16 +3609,19 @@ RECURSOS_PLANO = [
     # Premium e Premium + Estacao tambem o PDF.
     ("whatsapp_texto", "Relatório por WhatsApp (texto)"),
     ("whatsapp_pdf", "Relatório em PDF por WhatsApp"),
+    # Aba Graficos do app (pedido do Alan, 08/11/2026): sem ele, so' a tabela de
+    # favorabilidade; com ele, tambem os graficos de 7 dias + 5 de previsao.
+    ("graficos_app", "Gráficos: 7 dias de histórico e 5 de previsão"),
 ]
 _ABAS_SITE = ["site_mapa", "site_alertas", "site_graficos", "site_manejos", "site_recomendacoes"]
 PLANOS_PADRAO = [  # (nome, recursos, lavouras, a venda ja' de inicio)
     ("Free", ["clima", "whatsapp_texto"], 1, True),
     ("Básico", ["clima", "site_mapa", "site_alertas", "fazenda_estimada", "esporos", "whatsapp_texto"], 3, False),
     ("Premium", ["clima"] + _ABAS_SITE + ["fazenda_estimada", "esporos", "risco", "fungicidas", "regiao",
-                                          "whatsapp_texto", "whatsapp_pdf"], 10, False),
+                                          "whatsapp_texto", "whatsapp_pdf", "graficos_app"], 10, False),
     # Fazenda real (estacao BioScout do cliente), liberada pelo Master -- sem fazenda estimada.
     ("Premium + Estação", ["clima"] + _ABAS_SITE + ["esporos", "risco", "fungicidas", "regiao",
-                                                    "whatsapp_texto", "whatsapp_pdf"], 10, False),
+                                                    "whatsapp_texto", "whatsapp_pdf", "graficos_app"], 10, False),
 ]
 # Plano de valor zero (Free) nao tem cobranca: a assinatura fica liberada
 # "sem prazo" (cortesia_ate nessa data) ate' o cliente trocar de plano.

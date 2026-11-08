@@ -1,70 +1,130 @@
 {% extends "cliente_base.html" %}
-{% block title %}Região - OneAgro App{% endblock %}
+{% block title %}Gráficos - OneAgro App{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<style>#mapaRegiao { height: 45vh; border-radius: 0.5rem; }</style>
+<style>
+    .fav-tabela td, .fav-tabela th { font-size: 0.78rem; padding: 0.25rem 0.3rem; }
+    .fav-tabela td.risco-vermelho { background: #ff6b6b; } .fav-tabela td.risco-amarelo { background: #ffd43b; } .fav-tabela td.risco-verde { background: #51cf66; }
+    .grafico-doenca { height: 220px; }
+</style>
 {% endblock %}
 {% block content %}
-<h1 class="titulo">Região</h1>
-{% if not liberado %}
-<div class="bloqueado mb-3">🔒 O mapa da região não faz parte do seu plano.{% if not no_app_loja %} <a href="{{ url_for('planos_publico') }}">Ver planos</a>{% endif %}</div>
-{% elif not pontos %}
+{# Aba "Graficos" do app (ex-"Regiao", pedido do Alan, 08/11/2026). #}
+<h1 class="titulo">Gráficos</h1>
+{% if not ponto %}
 <div class="card shadow-sm"><div class="card-body">
-    <p class="mb-2">Marque uma lavoura para ver as estações da região dela.</p>
+    <p class="mb-2">Marque uma fazenda para ver a favorabilidade das doenças.</p>
     <a class="btn btn-success w-100" href="{{ url_for('cliente_ponto_novo') }}">+ Adicionar fazenda monitorada</a>
 </div></div>
 {% else %}
-<p class="small text-muted">Estações da rede OneAgro até {{ plano.raio_km | round | int }} km das suas lavouras. A posição é aproximada (cerca de 10 km), e as fazendas não são identificadas.</p>
-<div id="mapaRegiao" class="mb-3"></div>
-{% if not regioes %}
-<div class="alert alert-secondary small">Nenhuma estação com leitura recente perto das suas lavouras.</div>
-{% endif %}
-{% for r in regioes %}
-<div class="card shadow-sm mb-2"><div class="card-body py-2">
-    <div class="d-flex justify-content-between">
-        <span class="fw-semibold">{{ r.rotulo }}</span>
-        <span class="small text-muted">{{ r.distancia_km }} km</span>
+<form method="get" class="row g-2 mb-3" id="filtros">
+    <div class="col-{{ '6' if pontos | length > 1 else '12' }}">
+        <label class="form-label small text-muted mb-0" for="filtroCultura">Cultura</label>
+        <select class="form-select form-select-sm" name="cultura" id="filtroCultura" onchange="this.form.submit()">
+            <option value="">Todas as culturas</option>
+            {% for c in culturas %}<option value="{{ c }}" {% if c == cultura %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
     </div>
-    <div class="d-flex flex-wrap gap-1 mt-1">
-        {% for d in r.doencas %}
-        <span class="badge card-{{ 'perigo' if d.status == 'Perigo' else ('atencao' if d.status == 'Atencao' else 'normal') }}" title="{{ d.data | data_br }}">{{ d.doenca }}: {{ d.concentracao }}</span>
+    {% if pontos | length > 1 %}
+    <div class="col-6">
+        <label class="form-label small text-muted mb-0" for="filtroFazenda">Fazenda</label>
+        <select class="form-select form-select-sm" name="fazenda" id="filtroFazenda" onchange="this.form.submit()">
+            {% for p in pontos %}<option value="{{ p.id }}" {% if p.id == ponto.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
+        </select>
+    </div>
+    {% else %}<input type="hidden" name="fazenda" value="{{ ponto.id }}">{% endif %}
+</form>
+
+<h6 class="mb-1">🌡️ Favorabilidade climática para doenças</h6>
+<p class="small text-muted mb-2">Condições do clima hoje e nos próximos 5 dias para o desenvolvimento de cada doença, independente da presença de esporos.</p>
+{% if riscos %}
+<div class="table-responsive mb-1">
+<table class="table table-sm table-bordered align-middle fav-tabela bg-white">
+    <thead class="table-light"><tr><th>Doença</th><th class="text-center">Hoje</th>{% for dt in datas %}<th class="text-center">{{ dt }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for d in riscos %}
+    {% set rot = {'vermelho': 'A', 'amarelo': 'M', 'verde': 'B'} %}
+    <tr>
+        <td><span class="fw-semibold">{{ d.rotulo }}</span>{% if d.cientifico %}<div class="text-muted fst-italic" style="font-size: 0.7rem;">{{ d.cientifico }}</div>{% endif %}</td>
+        {% if d.risco %}<td class="text-center risco-{{ d.risco }}">{{ rot[d.risco] }}</td>{% else %}<td class="text-center text-muted">-</td>{% endif %}
+        {% for dt in datas %}
+        {% set p = (d.previsao_risco or []) | selectattr('data_fmt', 'equalto', dt) | first %}
+        {% if p and p.risco %}<td class="text-center risco-{{ p.risco }}">{{ rot[p.risco] }}</td>{% else %}<td class="text-center text-muted">-</td>{% endif %}
         {% endfor %}
-    </div>
-    <div class="small text-muted mt-1">Leitura até {{ r.doencas | map(attribute='data') | max | data_br }}</div>
-</div></div>
-{% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+<div class="small text-muted mb-3">A = Alta · M = Média · B = Baixa</div>
+{% else %}
+<div class="alert alert-secondary small">Sem previsão do tempo disponível agora para calcular a favorabilidade.</div>
+{% endif %}
+
+{% if com_graficos %}
+<h6 class="mt-3 mb-1">📈 Esporos e favorabilidade</h6>
+<p class="small text-muted mb-2">Últimos 7 dias e previsão para os próximos 5 (área cinza). Esporos estimados pelas estações próximas.</p>
+<div id="graficos" class="small text-muted">Carregando...</div>
+{% elif not no_app_loja %}
+<div class="bloqueado mb-3">🔒 Gráficos com 7 dias de histórico e 5 de previsão fazem parte dos planos Premium. <a href="{{ url_for('cliente_assinatura') }}">Ver planos</a></div>
+{% endif %}
 {% endif %}
 {% endblock %}
 {% block extra_scripts %}
-{% if liberado and pontos %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% if com_graficos %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
 <script>
 (function () {
-    if (typeof L === 'undefined') { document.getElementById('mapaRegiao').style.display = 'none'; return; }
-    var regioes = {{ regioes | tojson }};
-    var pontos = {{ pontos | map(attribute='lat') | list | tojson }}.map(function (lat, i) {
-        return { lat: lat, lon: {{ pontos | map(attribute='lon') | list | tojson }}[i], nome: {{ pontos | map(attribute='nome') | list | tojson }}[i] };
-    });
-    var cores = { Perigo: '#e03131', Atencao: '#f59f00' };
-    var mapa = L.map('mapaRegiao');
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 18, attribution: 'Esri'
-    }).addTo(mapa);
-    var limites = [];
-    pontos.forEach(function (p) {
-        L.marker([p.lat, p.lon]).addTo(mapa).bindPopup(document.createTextNode(p.nome).textContent);
-        limites.push([p.lat, p.lon]);
-    });
-    regioes.forEach(function (r) {
-        var linhas = r.doencas.map(function (d) { return d.doenca + ': ' + d.concentracao; });
-        var popup = document.createElement('div');
-        var titulo = document.createElement('strong'); titulo.textContent = r.rotulo; popup.appendChild(titulo);
-        linhas.forEach(function (t) { var div = document.createElement('div'); div.textContent = t; popup.appendChild(div); });
-        L.circle([r.lat, r.lon], { radius: 5000, color: cores[r.pior] || '#2f9e44', fillOpacity: 0.35, weight: 2 })
-            .addTo(mapa).bindPopup(popup);
-        limites.push([r.lat, r.lon]);
-    });
-    mapa.fitBounds(limites, { padding: [30, 30], maxZoom: 11 });
+    var alvo = document.getElementById('graficos');
+    var permitidas = {{ doencas_da_cultura | tojson }};
+    var url = '{{ url_for("graficos_dados") }}?estacao=' + encodeURIComponent({{ ponto.site_name | tojson }}) +
+              '&inicio={{ inicio }}&fim={{ fim }}';
+    fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (dados) {
+        var doencas = (dados.doencas || []).filter(function (d) { return permitidas.indexOf(d.doenca_en) >= 0; });
+        alvo.textContent = '';
+        if (!doencas.length) { alvo.textContent = 'Nenhuma doença com dados para esta fazenda e cultura.'; return; }
+        var nPrev = dados.num_dias_previsao || 0, nDias = dados.dias.length;
+        var rotulos = dados.dias.map(function (d) { return d.slice(8, 10) + '/' + d.slice(5, 7); });
+        var sombra = {
+            id: 'previsao',
+            beforeDraw: function (chart) {
+                if (!nPrev) { return; }
+                var x = chart.scales.x, area = chart.chartArea, ctx = chart.ctx;
+                var ini = x.getPixelForValue(nDias - nPrev) - (x.getPixelForValue(1) - x.getPixelForValue(0)) / 2;
+                ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.06)'; ctx.fillRect(ini, area.top, area.right - ini, area.bottom - area.top); ctx.restore();
+            }
+        };
+        doencas.forEach(function (d) {
+            var card = document.createElement('div');
+            card.className = 'card shadow-sm mb-2';
+            card.innerHTML = '<div class="card-body p-2"><div class="fw-semibold text-dark mb-1"></div><div class="grafico-doenca"><canvas></canvas></div></div>';
+            card.querySelector('.fw-semibold').textContent = d.doenca_pt;
+            alvo.appendChild(card);
+            var serie = (d.series || [])[0];
+            var conjuntos = [{
+                type: 'line', label: 'Favorabilidade (%)', data: d.risco_pct, yAxisID: 'risco',
+                borderColor: '#1c7ed6', backgroundColor: '#1c7ed6', cubicInterpolationMode: 'monotone', spanGaps: true, pointRadius: 2
+            }];
+            if (serie) {
+                conjuntos.push({
+                    type: 'bar', label: 'Esporos/m³', data: serie.esporos, yAxisID: 'esporos',
+                    backgroundColor: 'rgba(40,40,40,0.55)'
+                });
+            }
+            new Chart(card.querySelector('canvas'), {
+                data: { labels: rotulos, datasets: conjuntos },
+                options: {
+                    maintainAspectRatio: false, animation: false,
+                    plugins: { legend: { labels: { boxWidth: 10, font: { size: 10 } } } },
+                    scales: {
+                        x: { ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true } },
+                        risco: { position: 'left', min: 0, max: 100, ticks: { font: { size: 9 } }, title: { display: true, text: '%', font: { size: 9 } } },
+                        esporos: { position: 'right', display: !!serie, beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 9 } } }
+                    }
+                },
+                plugins: [sombra]
+            });
+        });
+    }).catch(function () { alvo.textContent = 'Não foi possível carregar os gráficos agora.'; });
 })();
 </script>
 {% endif %}
