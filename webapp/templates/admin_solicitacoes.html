@@ -74,7 +74,8 @@
                 {% set pl = c.plano_cliente %}
                 {% if pl and pl.sob_consulta %}<span class="text-muted">· preço pela área -- sem valor na tabela de apoio</span>
                 {% elif pl and pl.valor > 0 %}<span class="plano-parcelas">· <strong>{{ pl.parcelas }}x de {{ pl.valor_parcela | dinheiro(pl.simbolo) }}</strong>
-                    <span class="text-muted" style="font-size: 0.75rem;">(total {{ pl.valor | dinheiro(pl.simbolo) }})</span></span>{% elif pl %}<span class="text-muted">· grátis</span>{% endif %}
+                    <span class="text-muted" style="font-size: 0.75rem;">(total {{ pl.valor | dinheiro(pl.simbolo) }})</span>
+                    {% if c.por_ha_ano %}<span class="badge rounded-pill text-bg-success bg-opacity-25 text-success-emphasis" title="Total do plano em reais / área plantada total">{{ c.por_ha_ano | dinheiro }} por ha/ano</span>{% endif %}</span>{% elif pl %}<span class="text-muted">· grátis</span>{% endif %}
                 <span class="text-muted">· {{ cl.status or '—' }}</span>
                 {% if fim and fim >= hoje %}<span class="badge bg-success">liberado</span>{% else %}<span class="badge bg-secondary">bloqueado</span>{% endif %}
                 <span class="text-muted">· pago até {{ cl.pago_ate | data_br if cl.pago_ate else '—' }} · {{ cl.n_pontos }} lavoura{{ '' if cl.n_pontos == 1 else 's' }}</span>

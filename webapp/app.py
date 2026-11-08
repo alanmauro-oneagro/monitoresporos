@@ -7488,6 +7488,12 @@ def admin_solicitacoes():
         p["area_preco"] = area_preco
         cl = p.get("cliente")
         p["plano_cliente"] = _plano_para_area(planos_por_id.get(cl["plano_id"]), area_preco, cot) if cl and cl.get("plano_id") else None
+        # R$ por ha/ano pela area plantada total (pedido do Alan, 08/11/2026), igual aos cartoes de plano
+        pc = p["plano_cliente"]
+        total_brl = None
+        if pc and not pc.get("sob_consulta") and pc["valor"] > 0:
+            total_brl = pc["valor"] * cot["valor"] if pc.get("moeda") == "USD" and cot else (pc["valor"] if pc.get("moeda") != "USD" else None)
+        p["por_ha_ano"] = total_brl / float(p["area_ha"]) if total_brl and p.get("area_ha") else None
         p["culturas_lista"] = _culturas_com_area(p.get("culturas"))
         locais = [(l["nome"], l["lat"], l["lon"]) for l in models.get_cliente_pontos(p["user_id"]) if _no_brasil(l["lat"], l["lon"])]
         locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(p["user_id"])

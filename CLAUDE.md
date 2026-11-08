@@ -192,7 +192,12 @@ quadro verde (`.preco-box` em cliente_base.html): "12x de U$ 60,00",
 em U$ "≈ R$ X por parcela", "Total U$ 720,00 · ≈ R$ 3.960,94" e, com a
 area plantada TOTAL (todas as culturas), o selo "R$ X por ha/ano" (total
 em R$ / area; todos os planos pagos, nunca o Free). `_parcelas_plano(plano,
-area_ha)` no servidor e `precoHtml` no JS do cadastro montam o MESMO HTML. Gerenciar Clientes mostra as
+area_ha)` no servidor e `precoHtml` no JS do cadastro montam o MESMO HTML. No
+JS, o quadro so' e' trocado se o HTML mudou (`trocar`): sair do campo de
+area dispara "change" no mesmo toque que escolhe o plano e refazer o
+quadro debaixo do dedo perdia o toque. Gerenciar Clientes mostra o mesmo
+"R$ X por ha/ano" no quadro da assinatura (`por_ha_ano`, area total do
+cadastro). Gerenciar Clientes mostra as
 parcelas no quadro da assinatura ("12x de R$ 99,90 (total ...)") e no
 seletor de plano da cortesia. **Tabela de apoio** (Planos e
 Valores, pedido do Alan, 07/11/2026): faixas FIXAS de area
