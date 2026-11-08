@@ -47,7 +47,7 @@ class FazendaAdicionalTest(unittest.TestCase):
         models.registrar_cadastro({"username": nome, "tipo": "cliente", "user_id": uid, "grupo_cultura": "cereais",
                                    "culturas": "Soja (300 ha)", "area_ha": 300, "area_preco_ha": 300})
         models.atualizar_assinatura(uid, asaas_customer_id="cus_x", asaas_subscription_id="sub_principal", status="ativa")
-        models.registrar_pagamento(uid, "pay_principal", 10.0, "CONFIRMED", models._hoje_cuiaba(), None, "sub_principal")
+        models.registrar_pagamento(uid, f"pay_principal_{uid}", 10.0, "CONFIRMED", models._hoje_cuiaba(), None, "sub_principal")
         return uid
 
     def _logado(self, uid):
@@ -221,11 +221,11 @@ class FazendaAdicionalTest(unittest.TestCase):
         self.assertIn('class="toggle-icon">▶</span>Faz Mourão', tela)
         self.assertIn(f"/app/relatorios/{ponto['id']}.txt?ver=1", tela)
         self.assertNotIn("Content-Disposition", ver.headers)
-        self.assertIn("📋 *RELATÓRIO ONEAGRO*", ver.get_data(as_text=True))
+        self.assertTrue(ver.get_data(as_text=True).startswith("*RELATÓRIO ONEAGRO*\n━"))
         self.assertIn("Clima ok", ver.get_data(as_text=True))
         self.assertEqual(txt.mimetype, "text/plain")
         self.assertIn("attachment", txt.headers["Content-Disposition"])
-        self.assertTrue(txt.get_data(as_text=True).startswith("━"))
+        self.assertTrue(txt.get_data(as_text=True).startswith("*RELATÓRIO ONEAGRO*"))
         # edicao automatica: sem botao Salvar, devolve JSON
         tela = c.get(f"/app/pontos/{ponto['id']}/editar").get_data(as_text=True)
         self.assertNotIn("Salvar alterações", tela)
@@ -241,6 +241,48 @@ class FazendaAdicionalTest(unittest.TestCase):
             "nome_completo": "Zzz Auto Nome", "grupo_economico": "", "codigo_pais": "55", "numero_telefone": "65999991400"})
         self.assertEqual(r.get_json(), {"ok": True})
         self.assertNotIn("Salvar alterações", c.get("/app/conta/editar").get_data(as_text=True))
+
+    def test_cabecalho_todos_os_relatorios_e_free_enxuto(self):
+        """Cabecalho no formato do Alan, todas as fazendas numa mensagem so',
+        relatorio do Free sem Clima agora/Ultima leitura/Produtos (08/11/2026)."""
+        uid = self._cliente_pagante("Zzz Adic Cabec")
+        models.atualizar_dados_cadastro(uid, grupo_economico="Grupo Cab")
+        c = self._logado(uid)
+        with mock.patch.object(webapp.asaas, "configurado", return_value=False):
+            self._nova(c)
+            self._nova(c, nome="Faz Retiro", lat="-12.9")
+        pontos = models.get_cliente_pontos(uid)
+        corpo = "*GRUPO CAB - FAZ MOURÃO - OneAgro*\n_Recomendações todas as safras · Cultura: SOJA / MILHO_\n\nClima ok"
+        with mock.patch.object(webapp, "_texto_relatorio", return_value=corpo):
+            um = c.get(f"/app/relatorios/{pontos[0]['id']}.txt?ver=1").get_data(as_text=True)
+            todos = c.get("/app/relatorios/todos.txt?ver=1").get_data(as_text=True)
+            tela = c.get("/app/relatorios").get_data(as_text=True)
+        linhas = um.split("\n")
+        self.assertEqual(linhas[0], "*RELATÓRIO ONEAGRO*")
+        self.assertTrue(linhas[2].startswith("*Grupo Cab*  "))
+        self.assertEqual(linhas[4:7], ["*FAZ MOURÃO - OneAgro*",
+                                       "Recomendações todas as safras · Cultura: *SOJA / MILHO*", "━" * 20])
+        self.assertEqual(todos.count("*RELATÓRIO ONEAGRO*"), 1)
+        self.assertEqual(todos.count("Clima ok"), 2)
+        self.assertIn("Todas as fazendas (uma mensagem só)", tela)
+        # Free: sem Clima agora, Ultima leitura e Produtos
+        weather = {"temperatura_atual": 25, "umidade_atual": 80, "previsao_5_dias": [{"data": "2026-11-09", "chuva_mm": 3}]}
+        args = dict(weather=weather, produtos={}, leitura_bioscout="07/11/26")
+        with webapp.app.test_request_context():
+            cheio = webapp._format_whatsapp_message(pontos[0]["site_name"], [], **args)
+            enxuto = webapp._format_whatsapp_message(pontos[0]["site_name"], [], simples=True, **args)
+        self.assertIn("Clima agora", cheio)
+        self.assertNotIn("Clima agora", enxuto)
+        self.assertNotIn("Última leitura BioScout", enxuto)
+        self.assertIn("Previsão de chuva", enxuto)
+        with webapp.app.test_request_context():
+            self.assertFalse(webapp._relatorio_simples(pontos[0]["site_name"]))  # Basico
+        free = models.criar_cliente("Zzz Adic Free2", "segredo1", "", "5565999991401", "", models.plano_free()["id"])
+        models.atualizar_assinatura(free, status="ativa", cortesia_ate="2099-01-01")
+        with mock.patch.object(webapp.asaas, "configurado", return_value=False):
+            self._nova(self._logado(free), nome="Faz Free")
+        with webapp.app.test_request_context():
+            self.assertTrue(webapp._relatorio_simples(models.get_cliente_pontos(free)[0]["site_name"]))
 
 if __name__ == "__main__":
     unittest.main()

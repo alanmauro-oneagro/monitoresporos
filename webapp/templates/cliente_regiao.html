@@ -41,7 +41,10 @@
 <table class="table table-sm table-bordered align-middle fav-tabela bg-white">
     <thead class="table-light"><tr><th>Doença</th><th class="text-center">Hoje</th>{% for dt in datas %}<th class="text-center">{{ dt }}</th>{% endfor %}</tr></thead>
     <tbody>
-    {% for d in riscos %}
+    {# Agrupado pela ordem das culturas do cliente (pedido do Alan, 08/11/2026). #}
+    {% for nome_cultura, lista in grupos %}
+    {% if nome_cultura %}<tr class="table-success"><td colspan="{{ datas | length + 2 }}" class="fw-semibold">🌱 {{ nome_cultura }}</td></tr>{% endif %}
+    {% for d in lista %}
     {% set rot = {'vermelho': 'A', 'amarelo': 'M', 'verde': 'B'} %}
     <tr>
         <td><span class="fw-semibold">{{ d.rotulo }}</span>{% if d.cientifico %}<div class="text-muted fst-italic" style="font-size: 0.7rem;">{{ d.cientifico }}</div>{% endif %}</td>
@@ -52,6 +55,7 @@
         {% if p and p.risco %}<td class="text-center risco-{{ p.risco }}">{{ rot[p.risco] }}</td>{% else %}<td class="text-center text-muted">-</td>{% endif %}
         {% endfor %}
     </tr>
+    {% endfor %}
     {% endfor %}
     </tbody>
 </table>
@@ -81,7 +85,8 @@
     var url = '{{ url_for("graficos_dados") }}?estacao=' + encodeURIComponent({{ ponto.site_name | tojson }}) +
               '&inicio={{ inicio }}&fim={{ fim }}';
     fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (dados) {
-        var doencas = (dados.doencas || []).filter(function (d) { return permitidas.indexOf(d.doenca_en) >= 0; });
+        var doencas = (dados.doencas || []).filter(function (d) { return permitidas.indexOf(d.doenca_en) >= 0; })
+            .sort(function (a, b) { return permitidas.indexOf(a.doenca_en) - permitidas.indexOf(b.doenca_en); });
         alvo.textContent = '';
         if (!doencas.length) { alvo.textContent = 'Nenhuma doença com dados para esta fazenda e cultura.'; return; }
         var nPrev = dados.num_dias_previsao || 0, nDias = dados.dias.length;

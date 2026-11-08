@@ -1427,7 +1427,7 @@ def _format_whatsapp_message(
     site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None,
     safra_label=None, plantio_linhas=None, aplicacoes_linhas=None, leitura_bioscout=None,
     mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
-    vento_dia=None, ponto_clima=False,
+    vento_dia=None, ponto_clima=False, simples=False,
 ):
     """Monta o relatorio inteiro de uma fazenda numa unica mensagem de
     texto -- MESMO conteudo e ordem do PDF (`export_pdf.build_recommendation_pdf`),
@@ -1491,7 +1491,16 @@ def _format_whatsapp_message(
         -- tambem usado no caminho curto (sem doenca em Atencao/Perigo,
         sempre o caso dos pontos "so clima" da aba Alertas Clima)."""
         linhas = []
-        if weather:
+        # `simples` (cliente do plano Free, pedido do Alan, 08/11/2026): sem
+        # "Clima agora", sem "Ultima leitura BioScout" e sem "Produtos
+        # disponiveis na fazenda" -- fica a previsao de chuva e as doencas.
+        if weather and simples:
+            if weather.get("previsao_5_dias"):
+                linhas.append("🌧️ *Previsão de chuva*")
+                linhas.extend(
+                    f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" for d in weather["previsao_5_dias"]
+                )
+        elif weather:
             partes = []
             if weather.get("temperatura_atual") is not None:
                 partes.append(f"🌡️ {weather['temperatura_atual']} °C")
@@ -1512,7 +1521,7 @@ def _format_whatsapp_message(
                 linhas.extend(
                     f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" for d in weather["previsao_5_dias"]
                 )
-        if leitura_bioscout:
+        if leitura_bioscout and not simples:
             linhas.append("")
             linhas.append(f"_Última leitura BioScout: {leitura_bioscout}_")
         if anotacao:
@@ -1582,8 +1591,9 @@ def _format_whatsapp_message(
         ]
         if nomes:
             linhas_produtos.append(f"{emoji} {titulo}: {', '.join(nomes)}")
-    lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DISPONÍVEIS NA FAZENDA*"]
-    lines += linhas_produtos or ["Nenhum produto cadastrado."]
+    if not simples:
+        lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DISPONÍVEIS NA FAZENDA*"]
+        lines += linhas_produtos or ["Nenhum produto cadastrado."]
 
     lines += ["", f"_{_AVISO_AGRONOMO}_"]
     return "\n".join(lines).strip()
@@ -1868,8 +1878,18 @@ def _texto_relatorio(site, safra=None, ctx=None):
         aplicacoes_linhas=aplicacoes_linhas, leitura_bioscout=ctx["leitura_bioscout"],
         mostrar_secao_doencas=ctx["mostrar_secao_doencas"], riscos_climaticos=ctx["riscos_climaticos"],
         vento_dia=_rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]) if ctx["is_clima_point"] else None,
-        ponto_clima=ctx["is_clima_point"],
+        ponto_clima=ctx["is_clima_point"], simples=_relatorio_simples(site),
     )
+
+
+def _relatorio_simples(site):
+    """Fazenda de cliente no plano Free (o plano que vale hoje): relatorio
+    enxuto (pedido do Alan, 08/11/2026)."""
+    dono = models.dono_da_fazenda_cliente(site)
+    if not dono:
+        return False
+    plano, _liberada, _ = _acesso_do_cliente(dono)
+    return bool(plano) and plano["valor"] <= 0 and not plano.get("preco_por_area")
 
 
 def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, destinos_override=None):
@@ -8081,12 +8101,55 @@ def cliente_relatorio_txt(ponto_id):
     return Response(_texto_relatorio_cliente(ponto), mimetype="text/plain; charset=utf-8", headers=cabecalhos)
 
 
+_SEP_RELATORIO = "━" * 20
+
+
+def _cabecalho_relatorio_cliente(user_id):
+    """Cabecalho do relatorio do cliente (formato pedido pelo Alan, 08/11/2026):
+    *RELATÓRIO ONEAGRO* / ━━ / *<grupo ou nome>*  dd/mm/aaaa hh:mm / ━━."""
+    cad = models.get_cadastro_do_usuario(user_id) or {}
+    quem = (cad.get("grupo_economico") or cad.get("nome_completo") or current_user.username).strip()
+    agora = weather_forecast._agora_cuiaba().strftime("%d/%m/%Y %H:%M")
+    return ["*RELATÓRIO ONEAGRO*", _SEP_RELATORIO, f"*{quem}*  {agora}", _SEP_RELATORIO]
+
+
+def _bloco_relatorio_fazenda(ponto, grupo=""):
+    """Relatorio de uma fazenda sem o grupo no titulo (ja' vai no cabecalho):
+    *FAZ X - OneAgro* / Recomendações ... · Cultura: *SOJA / MILHO* / ━━ / resto."""
+    linhas = _texto_relatorio(ponto["site_name"]).split("\n")
+    titulo = linhas[0].strip("*")
+    if grupo and titulo.upper().startswith(grupo.upper() + " - "):
+        titulo = titulo[len(grupo) + 3:]
+    bloco, resto = [f"*{titulo}*"], linhas[1:]
+    if resto and resto[0].startswith("_") and resto[0].endswith("_"):
+        bloco.append(re.sub(r"Cultura: (.+)$", r"Cultura: *\1*", resto[0].strip("_")))
+        resto = resto[1:]
+    while resto and not resto[0].strip():
+        resto = resto[1:]
+    return bloco + [_SEP_RELATORIO] + resto
+
+
 def _texto_relatorio_cliente(ponto):
-    """Cabecalho bem visivel + o mesmo texto do relatorio do WhatsApp."""
-    agora = weather_forecast._agora_cuiaba()
-    cabecalho = ["━━━━━━━━━━━━━━━━━━━━", "📋 *RELATÓRIO ONEAGRO*", f"*{_nome_exibicao(ponto['site_name'])}*",
-                 f"📅 {agora.strftime('%d/%m/%Y %H:%M')}", "━━━━━━━━━━━━━━━━━━━━", ""]
-    return "\n".join(cabecalho) + _texto_relatorio(ponto["site_name"])
+    grupo = ((models.get_cadastro_do_usuario(ponto["user_id"]) or {}).get("grupo_economico") or "").strip()
+    return "\n".join(_cabecalho_relatorio_cliente(ponto["user_id"]) + _bloco_relatorio_fazenda(ponto, grupo))
+
+
+@app.route("/app/relatorios/todos.txt")
+@cliente_required
+def cliente_relatorios_todos_txt():
+    """Todos os relatorios numa mensagem so': um cabecalho e as fazendas em
+    seguida (pedido do Alan, 08/11/2026)."""
+    user_id = int(current_user.id)
+    grupo = ((models.get_cadastro_do_usuario(user_id) or {}).get("grupo_economico") or "").strip()
+    pontos = [p for p in models.get_cliente_pontos(user_id) if models.ponto_liberado(p) and p.get("site_name")]
+    linhas = _cabecalho_relatorio_cliente(user_id)
+    for i, p in enumerate(pontos):
+        if i:
+            linhas += ["", _SEP_RELATORIO]
+        linhas += _bloco_relatorio_fazenda(p, grupo)
+    cabecalhos = {} if request.args.get("ver") else {
+        "Content-Disposition": f'attachment; filename="relatorios-{_hoje_cuiaba().isoformat()}.txt"'}
+    return Response("\n".join(linhas), mimetype="text/plain; charset=utf-8", headers=cabecalhos)
 
 
 @app.route("/app/regiao")
@@ -8118,18 +8181,41 @@ def cliente_regiao():
     return render_template(
         "cliente_regiao.html", plano=plano, pontos=pontos, ponto=ponto, culturas=culturas, cultura=cultura,
         riscos=riscos, datas=datas, com_graficos=com_graficos,
-        doencas_da_cultura=sorted({d["doenca_en"] for d in riscos}),
+        grupos=_agrupar_por_cultura(riscos, [cultura] if cultura else culturas),
+        doencas_da_cultura=[d["doenca_en"] for _c, lista in _agrupar_por_cultura(riscos, [cultura] if cultura else culturas)
+                            for d in lista],
         inicio=(_hoje_cuiaba() - timedelta(days=6)).isoformat(), fim=_hoje_cuiaba().isoformat(),
     )
 
 
+def _agrupar_por_cultura(riscos, culturas):
+    """[(cultura, [doencas])] na ordem das culturas do cliente (pedido do Alan,
+    08/11/2026); doenca de mais de uma cultura fica so' na 1a. Sem cultura
+    nenhuma do cliente: um grupo so' sem titulo."""
+    if not culturas:
+        return [("", riscos)] if riscos else []
+    doenca_culturas = models.get_doenca_culturas()
+    grupos, usadas = [], set()
+    for c in culturas:
+        lista = [d for d in riscos if d["doenca_en"] not in usadas and c in doenca_culturas.get(d["doenca_en"], set())]
+        usadas |= {d["doenca_en"] for d in lista}
+        if lista:
+            grupos.append((c, lista))
+    return grupos
+
+
 def _culturas_do_cliente(user_id, pontos):
     """Culturas que o cliente marcou (cadastro + fazendas), so' as da lista do site."""
-    ativas = models.get_culturas_ativas()
-    vistas = {c for c, _a in _culturas_com_area((models.get_cadastro_do_usuario(user_id) or {}).get("culturas"))}
+    ativas = set(models.get_culturas_ativas())
+    # na ordem do cliente: as do cadastro primeiro, depois as das fazendas
+    ordem = [c for c, _a in _culturas_com_area((models.get_cadastro_do_usuario(user_id) or {}).get("culturas"))]
     for p in pontos:
-        vistas |= {c for c, _a in _pares_cultura_area(p)}
-    return [c for c in ativas if c in vistas]
+        ordem += [c for c, _a in _pares_cultura_area(p)]
+    vistas = []
+    for c in ordem:
+        if c in ativas and c not in vistas:
+            vistas.append(c)
+    return vistas
 
 
 def _favorabilidade_ponto(ponto, weather, culturas=None):
