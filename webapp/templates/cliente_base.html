@@ -26,6 +26,15 @@
         .risco { display: inline-block; min-width: 3.6rem; text-align: center; border-radius: 0.3rem; padding: 0.05rem 0.35rem; font-size: 0.75rem; font-weight: 600; }
         .risco-vermelho { background: #ff6b6b; } .risco-amarelo { background: #ffd43b; } .risco-verde { background: #51cf66; }
         .bloqueado { background: #eef1ee; color: #6c757d; border: 1px dashed #c5cbc5; border-radius: 0.5rem; padding: 0.75rem; font-size: 0.9rem; }
+        /* Cartao de plano (pedido do Alan, 08/11/2026): nome na 1a linha, preco num quadro. */
+        .plano-card .card-body { padding: 0.7rem 0.85rem; }
+        .plano-nome { font-size: 1.05rem; font-weight: 700; line-height: 1.25; }
+        .preco-box { background: #f3faf5; border: 1px solid #cfe8d6; border-radius: 0.5rem; padding: 0.45rem 0.7rem; margin: 0.45rem 0 0.5rem; }
+        .preco-parcela { font-size: 1.2rem; font-weight: 700; color: #198754; line-height: 1.25; }
+        .preco-n { font-size: 0.85rem; font-weight: 500; color: #495057; }
+        .preco-sub { font-size: 0.8rem; color: #6c757d; line-height: 1.35; }
+        .preco-ha { display: inline-block; margin-top: 0.3rem; font-size: 0.78rem; font-weight: 600; color: #0a3622; background: #d1e7dd; border-radius: 999px; padding: 0.05rem 0.6rem; }
+        .plano-card ul { margin-bottom: 0; }
         h1.titulo { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0; }
     </style>
     {% block extra_head %}{% endblock %}

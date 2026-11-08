@@ -30,18 +30,21 @@
     <h6>{{ 'Trocar de plano' if liberada else ('Assinar novamente' if assinatura and assinatura.status == 'cancelada' else 'Escolha o seu plano') }}</h6>
     {% for p in planos %}
     {% set disponivel = p.ativo and not p.sob_consulta %}
-    <label class="card shadow-sm mb-2 plano-opcao{% if not disponivel %} opacity-50{% endif %}" for="plano_{{ p.id }}" style="cursor: {{ 'pointer' if disponivel else 'default' }};">
-        <div class="card-body py-2">
-            <div class="d-flex align-items-baseline gap-2">
+    <label class="card shadow-sm mb-2 plano-opcao plano-card{% if not disponivel %} opacity-50{% endif %}" for="plano_{{ p.id }}" style="cursor: {{ 'pointer' if disponivel else 'default' }};">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-2">
                 <input class="form-check-input mt-0" type="radio" name="plano_id" id="plano_{{ p.id }}" value="{{ p.id }}"
                        data-gratis="{{ 1 if p.valor <= 0 else 0 }}" {% if not disponivel %}disabled{% elif (plano and plano.id == p.id) or plano_sel == p.id|string %}checked{% endif %} required>
-                <strong>{{ p.nome }}</strong>
-                <span class="ms-auto fw-bold {{ 'text-success' if disponivel else 'text-muted' }}">{% if p.ativo and p.sob_consulta %}Sob consulta{% elif not disponivel %}Em breve{% elif p.valor <= 0 %}Grátis{% else %}{{ p | parcelas_plano }}{% endif %}</span>
+                <span class="plano-nome">{{ p.nome }}</span>
             </div>
+            {% if p.ativo and p.sob_consulta %}<div class="preco-box"><div class="preco-sub">Sob consulta</div></div>
+            {% elif not disponivel %}<div class="preco-box"><div class="preco-sub">Em breve</div></div>
+            {% elif p.valor <= 0 %}<div class="preco-box"><div class="preco-parcela">Grátis</div></div>
+            {% else %}{{ p | parcelas_plano(area_total) }}{% endif %}
             {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
             {% if p.preco_por_area and p.area_preco_ha %}<div class="small text-muted">Preço pela sua área: {{ '{:,.0f}'.format(p.area_preco_ha).replace(',', '.') }} ha{% if p.faixa %} ({{ p.faixa }}){% endif %}.</div>{% endif %}
             {% if p.moeda == 'USD' and p.valor > 0 and disponivel %}<div class="small text-muted">Cobrado em reais, pela cotação do dólar do dia (Banco Central).</div>{% endif %}
-            <ul class="small mb-0 ps-4 mt-1">
+            <ul class="small ps-4 mt-1">
                 {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}
             </ul>
         </div>

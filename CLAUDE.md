@@ -185,7 +185,14 @@ Semestral 2x, Anual 1x (`plano["parcelas"]`/`plano["valor_parcela"]` em
 `models._plano_row_to_dict`). O Asaas cobra UMA parcela por ciclo
 (`_iniciar_cobranca`; plano em U$ converte a parcela). Telas do cliente
 (Minha assinatura, /planos) mostram "12x de R$ 99,90" em destaque e
-"Total R$ 1.198,80" por ultimo em letra menor (filtro `parcelas_plano`). Gerenciar Clientes mostra as
+"Total R$ 1.198,80" por ultimo em letra menor (filtro `parcelas_plano`).
+**Cartao de plano** (pedido do Alan, 08/11/2026; cadastro, Minha
+assinatura e /planos): nome do plano sozinho na 1a linha e o preco num
+quadro verde (`.preco-box` em cliente_base.html): "12x de U$ 60,00",
+em U$ "≈ R$ X por parcela", "Total U$ 720,00 · ≈ R$ 3.960,94" e, com a
+area plantada TOTAL (todas as culturas), o selo "R$ X por ha/ano" (total
+em R$ / area; todos os planos pagos, nunca o Free). `_parcelas_plano(plano,
+area_ha)` no servidor e `precoHtml` no JS do cadastro montam o MESMO HTML. Gerenciar Clientes mostra as
 parcelas no quadro da assinatura ("12x de R$ 99,90 (total ...)") e no
 seletor de plano da cortesia. **Tabela de apoio** (Planos e
 Valores, pedido do Alan, 07/11/2026): faixas FIXAS de area

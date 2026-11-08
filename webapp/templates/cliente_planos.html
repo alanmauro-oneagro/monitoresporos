@@ -16,10 +16,8 @@
 {% for p in planos %}
 <div class="card shadow-sm mb-3">
     <div class="card-body">
-        <div class="d-flex justify-content-between align-items-baseline">
-            <h5 class="mb-1">{{ p.nome }}</h5>
-            <div class="fw-bold text-success">{% if p.preco_por_area %}<span class="small fw-normal">Preço pela área plantada</span>{% elif p.valor <= 0 %}Grátis{% else %}{{ p | parcelas_plano }}{% endif %}</div>
-        </div>
+        <h5 class="mb-1">{{ p.nome }}</h5>
+        {% if p.preco_por_area %}<div class="preco-box"><div class="preco-sub">Preço pela área plantada</div></div>{% elif p.valor <= 0 %}<div class="preco-box"><div class="preco-parcela">Grátis</div></div>{% else %}{{ p | parcelas_plano }}{% endif %}
         {% if p.descricao %}<p class="small text-muted mb-2">{{ p.descricao }}</p>{% endif %}
         <ul class="small mb-3 ps-3">
             {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}

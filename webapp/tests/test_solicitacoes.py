@@ -255,7 +255,10 @@ class CadastroTest(unittest.TestCase):
                 resp = c.post("/solicitar-acesso", data=dados)
                 self.assertIn(f"/app/assinatura?plano={premium['id']}", resp.headers["Location"])
                 tela = c.get(resp.headers["Location"]).get_data(as_text=True)
-                self.assertIn('<span class="plano-parcela">12x de U$ 80,00 (≈ R$ 400,00)</span>', tela)
+                self.assertIn('<span class="preco-n">12x de</span> U$ 80,00</div>', tela)
+                self.assertIn('<div class="preco-sub">≈ R$ 400,00 por parcela</div>', tela)
+                # area plantada total 1.200 ha: U$ 960 x 5,00 / 1.200 = R$ 4,00 por ha/ano
+                self.assertIn('<div class="preco-ha">R$ 4,00 por ha/ano</div>', tela)
                 self.assertIn("Preço pela sua área: 800 ha (até 1.000 ha).", tela)
                 import re
                 self.assertRegex(tela, rf'value="{premium["id"]}"\s+data-gratis="0"\s+checked')  # ja' vem marcado

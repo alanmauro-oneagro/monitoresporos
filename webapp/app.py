@@ -589,19 +589,24 @@ def _preco_plano(plano):
     return texto
 
 
-def _parcelas_plano(plano):
-    """Pras telas do cliente (pedido do Alan, 08/11/2026): parcelas e valor
-    da parcela em destaque, o total por ultimo em letra menor. Plano em
-    dolar mostra tambem o ≈ R$ da parcela."""
+def _parcelas_plano(plano, area_ha=None):
+    """Quadro de preco dos cartoes de plano (pedidos do Alan, 08/11/2026):
+    parcelas em destaque; em U$ o ≈ R$ da parcela; o total por ultimo; e,
+    com a area plantada total, "R$ X por ha/ano". Mesmo HTML que o
+    `precoHtml` do cadastro monta ao digitar (solicitar_acesso.html)."""
     simbolo = plano.get("simbolo") or "R$"
-    parcela = f"{plano['parcelas']}x de {_dinheiro(plano['valor_parcela'], simbolo)}"
-    total = f"Total {_dinheiro(plano['valor'], simbolo)}"
-    if plano.get("moeda") == "USD":
-        cot = cotacao.dolar()
-        if cot:
-            parcela += f" (≈ {_dinheiro(plano['valor_parcela'] * cot['valor'])})"
-            total += f" (≈ {_dinheiro(plano['valor'] * cot['valor'])})"
-    return Markup('<span class="plano-parcela">{}</span> <span class="plano-total small text-muted fw-normal d-block">{}</span>').format(parcela, total)
+    cot = cotacao.dolar() if plano.get("moeda") == "USD" else None
+    linhas = [Markup('<div class="preco-parcela"><span class="preco-n">{}x de</span> {}</div>').format(
+        plano["parcelas"], _dinheiro(plano["valor_parcela"], simbolo))]
+    total_brl = plano["valor"] if plano.get("moeda") != "USD" else (plano["valor"] * cot["valor"] if cot else None)
+    if plano.get("moeda") == "USD" and cot:
+        linhas.append(Markup('<div class="preco-sub">≈ {} por parcela</div>').format(_dinheiro(plano["valor_parcela"] * cot["valor"])))
+        linhas.append(Markup('<div class="preco-sub">Total {} · ≈ {}</div>').format(_dinheiro(plano["valor"], simbolo), _dinheiro(total_brl)))
+    else:
+        linhas.append(Markup('<div class="preco-sub">Total {}</div>').format(_dinheiro(plano["valor"], simbolo)))
+    if area_ha and total_brl:
+        linhas.append(Markup('<div class="preco-ha">{} por ha/ano</div>').format(_dinheiro(total_brl / float(area_ha))))
+    return Markup('<div class="preco-box">{}</div>').format(Markup("").join(linhas))
 
 
 app.jinja_env.filters["dinheiro"] = _dinheiro
@@ -7061,6 +7066,7 @@ def cliente_assinatura():
         # Plano com preco pela area ja' vem com o preco da area do cliente.
         planos=[_plano_para_area(p, area, cot) for p in models.get_planos()], pode_assinar=_pode_assinar(assinatura),
         plano_sel=request.args.get("plano", ""),
+        area_total=(models.get_cadastro_do_usuario(int(current_user.id)) or {}).get("area_ha"),
         recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO,
     )
 
