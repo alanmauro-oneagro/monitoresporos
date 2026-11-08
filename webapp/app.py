@@ -7559,6 +7559,31 @@ def asaas_webhook():
     return jsonify({"ok": True})
 
 
+def _situacao_cliente(cl):
+    """{"chave": ativo|free|bloqueado|sem_plano, "texto", "formato"} da
+    assinatura do cliente, pelo plano que vale hoje (`_acesso_do_cliente`)."""
+    plano, liberada, free_ate = _acesso_do_cliente(cl["id"])
+    hoje = _hoje_cuiaba().isoformat()
+    if not cl.get("plano_id"):
+        chave, texto = "sem_plano", "Ainda não escolheu o plano"
+    elif free_ate:
+        chave, texto = "free", f"Usando o Free até {models.fmt_data_br(free_ate)} (aguardando pagamento)"
+    elif liberada and (cl.get("pago_ate") or "") >= hoje:
+        chave, texto = "ativo", f"Pago até {models.fmt_data_br(cl['pago_ate'])}"
+    elif liberada:
+        fim = cl.get("cortesia_ate") or ""
+        gratis = plano and plano["valor"] <= 0 and not plano.get("preco_por_area")
+        chave = "free" if gratis else "ativo"
+        texto = "Sem prazo" if fim == models.SEM_PRAZO else (
+            f"{'Free' if gratis else 'Cortesia'} até {models.fmt_data_br(fim)}")
+    else:
+        fim = models.acesso_ate(cl)
+        chave, texto = "bloqueado", f"Bloqueado{' desde ' + models.fmt_data_br(fim) if fim else ''} -- sem pagamento"
+    recursos = (plano or {}).get("recursos", []) if liberada else []
+    formato = " + ".join(r for c, r in (("whatsapp_texto", "texto"), ("whatsapp_pdf", "PDF")) if c in recursos) or "nenhum"
+    return {"chave": chave, "texto": texto, "formato": formato}
+
+
 @app.route("/admin/solicitacoes")
 @master_required
 def admin_solicitacoes():
@@ -7603,12 +7628,22 @@ def admin_solicitacoes():
             total_brl = pc["valor"] * cot["valor"] if pc.get("moeda") == "USD" and cot else (pc["valor"] if pc.get("moeda") != "USD" else None)
         p["por_ha_ano"] = total_brl / float(p["area_ha"]) if total_brl and p.get("area_ha") else None
         p["culturas_lista"] = _culturas_com_area(p.get("culturas"))
-        locais = [(l["nome"], l["lat"], l["lon"]) for l in models.get_cliente_pontos(p["user_id"]) if _no_brasil(l["lat"], l["lon"])]
-        locais += [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(p["user_id"])
-                   if s in coords and paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY]
-        p["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon, buscar_frequencias=False)) for nome, lat, lon in locais]
+        # Situacao da assinatura em palavras + formato do relatorio pelo plano
+        # que vale agora (Gerenciar Clientes atualizado -- pedido do Alan, 08/11/2026).
+        if cl:
+            p["situacao"] = _situacao_cliente(cl)
+        # Areas monitoradas (ex-"lavouras"), cada uma com a fazenda estimada e o sinal
+        pontos = models.get_cliente_pontos(p["user_id"])
+        p["areas"] = [{**pt, "sinal": sinal_celular.estimar(pt["lat"], pt["lon"], buscar_frequencias=False)
+                       if _no_brasil(pt["lat"], pt["lon"]) else None} for pt in pontos]
+        das_areas = {pt["site_name"] for pt in pontos if pt.get("site_name")}
+        locais = [(pt["lat"], pt["lon"]) for pt in pontos if _no_brasil(pt["lat"], pt["lon"])]
+        outras = [(_nome_exibicao(s), *coords[s]) for s in models.get_user_permitted_site_names(p["user_id"])
+                  if s not in das_areas and s in coords and paises.get(s, countries.DEFAULT_COUNTRY) == countries.DEFAULT_COUNTRY]
+        locais += [(lat, lon) for _n, lat, lon in outras]
+        p["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon, buscar_frequencias=False)) for nome, lat, lon in outras]
         sinal_celular.buscar_frequencias_em_segundo_plano(
-            [(lat, lon) for _n, lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])
+            [(lat, lon) for lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])
     return render_template("admin_solicitacoes.html", pessoas=pessoas, perfis=PERFIS_CADASTRO,
                            planos=models.get_planos(), hoje=_hoje_cuiaba().isoformat())
 

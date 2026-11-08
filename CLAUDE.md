@@ -131,7 +131,14 @@ vistos, abrir a tela marca como visto): UM cartao por pessoa com data,
 nome, usuario, perfil, celular (link wa.me), e-mail, fazenda, cidade,
 culturas, area, mensagem, sinal e "Liberar fazendas"; se for cliente,
 quadro da assinatura (plano, situacao, pago ate', lavouras, cortesia) e
-"Excluir cliente". Cliente sem registro de cadastro (de antes do
+"Excluir cliente". **Atualizado em 08/11/2026** (pedido do Alan): selo de
+situacao ja' no cartao fechado ("<plano> · ativo/Free/bloqueado/escolher
+plano"); no quadro da assinatura "Situacao" em palavras (`app._situacao_cliente`:
+pago ate' X / usando o Free ate' X (aguardando pagamento) / cortesia /
+bloqueado) e "Relatorio por WhatsApp: texto + PDF" pelo plano que vale
+hoje; secao "Areas monitoradas" (ex-lavouras: nome, coordenadas, link
+"🟢 no Mapas de Estudo", sinal de cada uma); filtros "No Free" e
+"Bloqueados / sem plano". Cliente sem registro de cadastro (de antes do
 cadastro direto) entra so' com os dados da conta. Filtros Todos/Novos/
 Clientes/Acesso a' fazenda (no navegador). Cartoes RECOLHIDOS como em
 Manejos (so' nome, selos e data; clicar abre), sem texto explicativo no
