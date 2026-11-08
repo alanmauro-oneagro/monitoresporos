@@ -7386,9 +7386,24 @@ def cliente_home():
         # Culturas do cadastro (pedido do Alan, 08/11/2026: "Lavouras" virou "Culturas").
         cadastro=cad, culturas_lista=_culturas_com_area(cad.get("culturas")),
         extras=_extras_do_cliente(int(current_user.id), pontos), max_extras=MAX_EXTRAS_RELATORIO,
+        voltar=_caminho_interno(request.referrer) or "",
         resumos={p["id"]: _resumo_ponto_cliente(p, g.cliente_plano) for p in pontos},
         urls_offline=[url_for("cliente_ponto", ponto_id=p["id"]) for p in pontos] + [url_for("cliente_regiao")],
     )
+
+
+def _caminho_interno(url):
+    """Caminho (com query) se `url` e' deste site e nao e' a propria Culturas;
+    senao None -- evita redirecionar pra fora do site."""
+    from urllib.parse import urlsplit
+    if not url:
+        return None
+    partes = urlsplit(url)
+    if partes.netloc and partes.netloc != request.host:
+        return None
+    if not partes.path.startswith("/") or partes.path.startswith("//") or partes.path.rstrip("/") == "/app":
+        return None
+    return partes.path + (f"?{partes.query}" if partes.query else "")
 
 
 @app.route("/app/destinatarios", methods=["POST"])
@@ -7418,7 +7433,8 @@ def cliente_destinatarios():
         sub_id = models.create_subordinado(user_id, nome, telefone)
         models.set_subordinado_report_sites(sub_id, list(models.site_ids_por_nome(sites).values()))
     flash("Pronto! Quem recebe o relatório foi atualizado.", "success")
-    return redirect(url_for("cliente_home"))
+    # Volta pra tela de onde o cliente veio (pedido do Alan, 08/11/2026).
+    return redirect(_caminho_interno(form.get("voltar")) or url_for("cliente_home"))
 
 
 @app.route("/app/pontos/novo", methods=["GET", "POST"])

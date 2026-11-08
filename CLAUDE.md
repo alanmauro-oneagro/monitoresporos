@@ -137,7 +137,9 @@ recebendo so' das fazendas daqueles locais, no mesmo formato (texto/PDF)
 do plano do cliente (`_formatos_whatsapp_clientes`). Integracao: Gerenciar
 Clientes (culturas de cada area + "Tambem recebem o relatorio"), app aba
 Culturas (culturas por area + form "Quem mais recebe", rota
-`cliente_destinatarios`, substitui as pessoas) e Excel aba Clientes
+`cliente_destinatarios`, substitui as pessoas; ao salvar volta pra tela
+de onde o cliente veio -- campo `voltar` = Referer da Culturas, so' caminho
+interno, `_caminho_interno`) e Excel aba Clientes
 (colunas "Locais de plantio" e "Também recebem o relatório"). **Safras pelo cadastro** (pedido do Alan, 08/11/2026): a
 fazenda de cada area do cliente ja' nasce com Safra / 2a / 3a Safra =
 as 3 culturas de MAIOR area daquele local (`app._preencher_safras`;
