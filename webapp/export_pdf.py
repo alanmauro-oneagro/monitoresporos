@@ -28,6 +28,11 @@ VERDE_FAIXA = colors.HexColor("#d7ecd2")
 AMARELO_FAIXA = colors.HexColor("#fdf0c4")
 VERMELHO_FAIXA = colors.HexColor("#f6d4d0")
 
+# Rodape do relatorio, igual no texto do WhatsApp (pedido do Alan, 08/11/2026).
+AVISO_AGRONOMO = ("Este relatório é uma ferramenta de monitoramento e não substitui "
+                  "a avaliação de um agrônomo responsável.")
+CONTATO_RELATORIO = "Quer ter essa ferramenta para sua lavoura, entre em contato com a OneAgro. (43)99114-7595"
+
 _styles = getSampleStyleSheet()
 _ESTILO_TITULO = ParagraphStyle(
     "TituloFazenda", parent=_styles["Heading1"], textColor=AZUL_MARCA, fontSize=14, leading=17, spaceBefore=0, spaceAfter=1,
@@ -678,10 +683,8 @@ def build_recommendation_pdf(
                 f"Instituicoes de pesquisa consultadas para as recomendacoes acima: {' · '.join(fontes_unicas)}.",
                 _ESTILO_RODAPE,
             ))
-        story.append(Paragraph(
-            "Isso nao substitui a avaliacao de um agronomo responsavel.",
-            _ESTILO_RODAPE,
-        ))
+        story.append(Paragraph(AVISO_AGRONOMO, _ESTILO_RODAPE))
+        story.append(Paragraph(CONTATO_RELATORIO, _ESTILO_RODAPE))
         story.append(Paragraph(
             "Powered by BioScout",
             _ESTILO_RODAPE,
