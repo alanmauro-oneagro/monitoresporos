@@ -4119,10 +4119,12 @@ def recommendations(safra):
 
 
 def _grupo_economico_da_fazenda(site):
-    """Grupo economico do cliente dono da fazenda (ou "")."""
+    """Grupo economico da fazenda: do cadastro do cliente dono ou, nas do
+    Mapas de Estudo, o digitado no quadro do plano (ou "")."""
     dono = models.donos_das_fazendas_clientes().get(site)
     if not dono:
-        return ""
+        # Fazenda do Mapas de Estudo: o grupo digitado no "💳 Plano" (09/11/2026).
+        return ((models.get_plano_fazenda(site) or {}).get("grupo_economico") or "").strip()
     cadastros = g.setdefault("_grupo_por_dono", {})
     if dono not in cadastros:
         cadastros[dono] = ((models.get_cadastro_do_usuario(dono) or {}).get("grupo_economico") or "").strip()
@@ -8552,7 +8554,8 @@ def salvar_plano_fazenda_estudo():
         _cancelar_cobranca_plano_fazenda(site)
     novo_cliente = antes.get("cpf_cnpj") != pagador["cpf_cnpj"]
     models.salvar_plano_fazenda(
-        site, plano_id=plano["id"] if plano else None, validade=None if cobrar else validade, cobrar=1 if cobrar else 0,
+        site, grupo_economico=(request.form.get("grupo_economico") or "").strip()[:40] or None,
+        plano_id=plano["id"] if plano else None, validade=None if cobrar else validade, cobrar=1 if cobrar else 0,
         area_ha=area, **pagador, **({"asaas_customer_id": None} if novo_cliente else {}),
         **({} if cobrar else {"status": None, "link_fatura": None}),
     )
@@ -8563,7 +8566,7 @@ def salvar_plano_fazenda_estudo():
             return voltar
         flash("Plano salvo e cobrança gerada no Asaas -- o link da fatura está no cartão da fazenda.", "success")
         return voltar
-    flash("Plano da fazenda salvo.", "success")
+    flash("Plano e grupo da fazenda salvos.", "success")
     return voltar
 
 

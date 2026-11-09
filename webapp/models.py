@@ -809,6 +809,11 @@ def init_db():
         conn.execute("UPDATE planos SET preco_por_area = 1 WHERE lower(nome) = 'premium'")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
+    try:
+        # Grupo economico da fazenda do Mapas de Estudo (agrupa em Recomendacoes; pedido do Alan, 09/11/2026).
+        conn.execute("ALTER TABLE planos_fazenda ADD COLUMN grupo_economico TEXT")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
     # Nomes novos dos planos (pedido do Alan, 09/11/2026): Free = Essencial,
     # Premium = Avancado, Premium + Estacao = Inteligencia.
     for antigo, novo in PLANOS_RENOMEADOS:
@@ -4292,7 +4297,8 @@ def excluir_cliente_ponto(user_id, ponto_id):
 # --- Plano de cada fazenda (pedido do Alan, 09/11/2026) ---------------------
 
 _CAMPOS_PLANO_FAZENDA = ("plano_id", "validade", "cobrar", "pagador_nome", "cpf_cnpj", "email", "celular", "area_ha",
-                         "asaas_customer_id", "asaas_subscription_id", "status", "pago_ate", "link_fatura")
+                         "asaas_customer_id", "asaas_subscription_id", "status", "pago_ate", "link_fatura",
+                         "grupo_economico")
 
 
 @_cache_requisicao

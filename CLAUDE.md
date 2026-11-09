@@ -226,7 +226,10 @@ Alan, 09/11/2026): `_ordem_fazenda` comeca por `_ordem_do_plano` --
 Inteligência, Avançado, Básico (ou outro plano), Essencial, sem plano --
 depois pais e nome; vale em toda tela que usa essa ordem. **Grupo economico em
 Recomendações** (mesmo pedido): 2+ fazendas de cliente com o mesmo grupo
-(`_grupo_economico_da_fazenda`, cadastro do dono) ficam numa caixa "<grupo>"
+(`_grupo_economico_da_fazenda`: cadastro do dono; nas do Mapas de Estudo, o
+campo "Grupo econômico" do botao "💳 Plano e grupo" -- `planos_fazenda.grupo_economico`,
+selo "👥 <grupo>" em Pontos Criados; mesmo nome = mesma caixa, misturando
+fazenda de cliente e do Mapas de Estudo) ficam numa caixa "<grupo>"
 (selo do plano + "N fazendas"; abre e mostra os cartoes das fazendas;
 `_agrupar_por_grupo_economico` marca `grupo`/`grupo_inicio`/`grupo_fim` e o
 template abre/fecha a caixa) com "Texto agrupado" (todas numa mensagem so':

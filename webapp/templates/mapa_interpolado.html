@@ -150,6 +150,7 @@
     <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
         <strong>{{ ponto.nome }}</strong>
         {{ selo_plano(ponto.site_name) }}
+        {% if ponto.plano_fazenda.grupo_economico %}<span class="badge rounded-pill bg-light text-dark border fw-normal" title="Grupo econômico (agrupa em Recomendações)">👥 {{ ponto.plano_fazenda.grupo_economico }}</span>{% endif %}
         <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
         {% if ponto.tipo == 'clima' %}
         <span class="badge bg-info text-dark">☁️ So clima</span>
@@ -163,7 +164,7 @@
         <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
         <div class="ms-auto d-flex gap-2">
             {% if current_user.is_master and not ponto.cliente %}
-            <button type="button" class="btn btn-sm btn-outline-success plano-ponto-toggle" data-target="plano-ponto-{{ loop.index0 }}">💳 Plano</button>
+            <button type="button" class="btn btn-sm btn-outline-success plano-ponto-toggle" data-target="plano-ponto-{{ loop.index0 }}">💳 Plano e grupo</button>
             {% endif %}
             <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}" data-site="{{ ponto.site_name }}">✏️ Editar</button>
             {% if ponto.ativo %}
@@ -187,6 +188,11 @@
     <div class="d-none border rounded p-2 mb-2 plano-ponto" id="plano-ponto-{{ loop.index0 }}" style="background:#fff;">
         <form method="post" action="{{ url_for('salvar_plano_fazenda_estudo') }}" class="row g-2 align-items-end">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <div class="col-12 col-md-3">
+                <label class="form-label small text-muted mb-1">Grupo econômico</label>
+                <input type="text" name="grupo_economico" class="form-control form-control-sm" value="{{ pf.grupo_economico or '' }}" maxlength="40"
+                       placeholder="ex.: Grupo Mauro" title="Fazendas do mesmo grupo ficam juntas em Recomendações">
+            </div>
             <div class="col-6 col-md-3">
                 <label class="form-label small text-muted mb-1">Plano</label>
                 <select name="plano_id" class="form-select form-select-sm">
@@ -225,7 +231,7 @@
                 </div>
                 {% endif %}
             </div>
-            <div class="col-12"><button type="submit" class="btn btn-sm btn-success">Salvar plano</button></div>
+            <div class="col-12"><button type="submit" class="btn btn-sm btn-success">Salvar</button></div>
         </form>
     </div>
     {% endif %}
