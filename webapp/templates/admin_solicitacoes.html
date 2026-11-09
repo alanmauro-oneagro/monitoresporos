@@ -19,6 +19,60 @@
 </style>
 <h4 class="mb-2">Gerenciar Clientes</h4>
 
+{# Fazenda no modelo unico (pedido do Alan, 09/11/2026): mesma linha e mesmo
+   editor pra fazenda da BioScout, do Mapas de Estudo ou do app. #}
+{% macro linha_fazenda(fz, cliente_id=None) %}
+<div class="border rounded px-2 py-1 mb-1 bg-white fazenda-linha" data-site="{{ fz.site }}">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <span class="fw-semibold">{{ fz.nome_exibicao }}</span>
+        {{ selo_plano(fz.site) }}
+        <span class="badge bg-light text-dark border fw-normal">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
+        {% if not fz.ativo %}<span class="badge bg-secondary">Oculta</span>{% endif %}
+        <div class="ms-auto d-flex gap-1">
+            <button type="button" class="btn btn-sm btn-outline-primary py-0 dados-toggle" data-site="{{ fz.site }}" data-idx="{{ fz.idx }}">✏️ Dados da fazenda</button>
+            {% if cliente_id and fz.ponto and fz.ponto.vinculada %}
+            <form method="post" action="{{ url_for('admin_cliente_desvincular', user_id=cliente_id, ponto_id=fz.ponto.id) }}" class="mb-0"
+                  onsubmit="return confirm('Tirar {{ fz.nome_exibicao }} deste cadastro? A fazenda continua no site.');">
+                <button class="btn btn-sm btn-outline-secondary py-0" type="submit">Desligar</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    {% set partes = [] %}
+    {% if fz.cidade %}{% set _ = partes.append(fz.cidade ~ ('/' ~ fz.uf if fz.uf else '')) %}{% endif %}
+    {% if fz.culturas %}{% set _ = partes.append(fz.culturas ~ ' · ' ~ fz.area_txt) %}{% endif %}
+    <div class="text-muted">{{ partes | join(' · ') if partes else 'Município e culturas ainda não informados' }}</div>
+    <div class="dados-corpo d-none mt-2 pt-2 border-top"></div>
+</div>
+{% endmacro %}
+
+<details class="card shadow-sm mb-3"><summary class="card-body py-2 fw-semibold text-success" style="cursor: pointer;">+ Novo cliente (ex.: fazendas da BioScout)</summary>
+    <form method="post" action="{{ url_for('admin_cliente_novo') }}" class="card-body pt-0 row g-2">
+        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">Nome completo</label><input class="form-control form-control-sm" name="nome_completo" required maxlength="80"></div>
+        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Usuário (login)</label><input class="form-control form-control-sm" name="username" required maxlength="60"></div>
+        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Senha (mín. 6)</label><input class="form-control form-control-sm" name="password" type="text" required minlength="6"></div>
+        <div class="col-4 col-md-1"><label class="form-label small text-muted mb-0">DDI</label><input class="form-control form-control-sm" name="codigo_pais" value="55" inputmode="numeric"></div>
+        <div class="col-8 col-md-3"><label class="form-label small text-muted mb-0">Celular</label><input class="form-control form-control-sm" name="numero_telefone" inputmode="tel"></div>
+        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">E-mail</label><input class="form-control form-control-sm" name="email" type="email"></div>
+        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">Grupo econômico</label><input class="form-control form-control-sm" name="grupo_economico" maxlength="40" placeholder="ex.: Grupo PIVA" list="lista-grupos"></div>
+        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Plano</label>
+            <select class="form-select form-select-sm" name="plano_id">
+                {% for p in planos %}<option value="{{ p.id }}" {% if p.nome == 'Inteligência' %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
+            </select></div>
+        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Cortesia até (sem cobrança)</label><input class="form-control form-control-sm" name="cortesia_ate" type="date"></div>
+        <div class="col-12"><div class="small text-muted mb-1">Fazendas deste cadastro (ainda sem cadastro):</div>
+            <div class="border rounded p-2 bg-white" style="max-height: 14rem; overflow: auto;">
+            {% for fz in sem_cadastro %}
+            <div class="form-check small"><input class="form-check-input" type="checkbox" name="site" value="{{ fz.site }}" id="novo_{{ loop.index }}">
+                <label class="form-check-label" for="novo_{{ loop.index }}">{{ fz.nome_exibicao }} <span class="text-muted">· {{ {'bioscout': 'BioScout', 'estudo': 'Mapas de Estudo', 'app': 'App'}[fz.origem] }}</span></label></div>
+            {% else %}<div class="small text-muted">Todas as fazendas já têm cadastro.</div>{% endfor %}
+            </div></div>
+        <div class="col-12"><button class="btn btn-success btn-sm" type="submit">Criar cliente</button>
+            <span class="small text-muted ms-2">O cliente entra no app com esse usuário e senha; a cobrança ele faz em Assinatura.</span></div>
+    </form>
+</details>
+<datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>
+
 {% set n_novos = pessoas | selectattr('visto', 'equalto', 0) | list | length %}
 {% set n_clientes = pessoas | selectattr('tipo', 'equalto', 'cliente') | list | length %}
 <div class="btn-group btn-group-sm flex-wrap mb-3" role="group" id="filtro-pessoas">
@@ -59,7 +113,11 @@
         <div class="d-none mt-3" id="cad-body-{{ loop.index0 }}">
         <dl class="mb-3">
             <dt>Usuário</dt><dd>{{ c.username }}</dd>
-            {% if c.grupo_economico %}<dt>Grupo econômico</dt><dd>{{ c.grupo_economico }}</dd>{% endif %}
+            <dt>Grupo econômico</dt><dd>
+                <form method="post" action="{{ url_for('admin_cliente_grupo', user_id=c.user_id) }}" class="d-flex align-items-center gap-2 mb-0" data-autosave>
+                    <input class="form-control form-control-sm" style="max-width: 260px;" name="grupo_economico" value="{{ c.grupo_economico or '' }}" maxlength="40" list="lista-grupos" placeholder="sem grupo" aria-label="Grupo econômico">
+                    <span class="autosave-status small"></span>
+                </form></dd>
             <dt>Celular</dt><dd>{% if c.telefone %}{{ c.telefone | telefone_br }}{% if telefone_digitos %} -- <a href="https://wa.me/{{ telefone_digitos }}" target="_blank" rel="noopener">abrir no WhatsApp</a>{% endif %}{% else %}-{% endif %}</dd>
             <dt>E-mail</dt><dd>{% if c.email %}<a href="mailto:{{ c.email }}">{{ c.email }}</a>{% else %}-{% endif %}</dd>
             {% if c.empresa or c.cidade or c.culturas or c.area_ha or c.mensagem %}
@@ -102,23 +160,28 @@
         </div>
         {% endif %}
 
-        {% if c.areas %}
-        {# Areas monitoradas (ex-"lavouras"): cada uma ja' e' uma fazenda estimada no Mapas de Estudo. #}
+        {% if c.fazendas or c.areas or cl %}
         <div class="small mb-3">
             <div class="fw-semibold mb-1">Fazendas monitoradas</div>
-            {% for a in c.areas %}
+            {% for fz in c.fazendas %}{{ linha_fazenda(fz, c.user_id) }}
+            {% set a = (c.areas | selectattr('site_name', 'equalto', fz.site) | first) %}
+            {% if a and a.adicional %}<div class="mb-1"><span class="badge {{ {'paga': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueada': 'bg-danger'}[a.adicional.chave] }}">Fazenda adicional: {{ a.adicional.texto }}</span>{% if a.adicional_total %} <span class="text-muted">{{ a.adicional_total | dinheiro('U$') }}/ano</span>{% endif %}</div>{% endif %}
+            {% if a and a.sinal is not none %}{{ sinal_cel.linha(a.sinal) }}{% endif %}
+            {% endfor %}
+            {% for a in c.areas if not a.site_name %}
             <div class="border rounded px-2 py-1 mb-1 bg-white">
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="fw-semibold">{{ a.nome }}</span>{% if a.cidade %}<span class="text-muted">{{ a.cidade }}/{{ a.uf }}</span>{% endif %}
-                    <span class="text-muted">{{ ('%.4f' | format(a.lat)) | replace('.', ',') }}; {{ ('%.4f' | format(a.lon)) | replace('.', ',') }}</span>
-                    {% if a.site_name %}<a class="ms-auto" href="{{ url_for('mapa_interpolado') }}" title="Fazenda estimada no Mapas de Estudo (pino verde-claro)">🟢 no Mapas de Estudo</a>
-                    {% else %}<span class="ms-auto text-muted">sem fazenda estimada</span>{% endif %}
-                </div>
-                {% if a.adicional %}<div><span class="badge {{ {'paga': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueada': 'bg-danger'}[a.adicional.chave] }}">Fazenda adicional: {{ a.adicional.texto }}</span>{% if a.adicional_total %} <span class="text-muted">{{ a.adicional_total | dinheiro('U$') }}/ano</span>{% endif %}</div>{% endif %}
-                {% if a.culturas %}<div class="text-muted">{{ a.culturas }}{% if a.area_ha %} · {{ '{:,.0f}'.format(a.area_ha).replace(',', '.') }} ha{% endif %}</div>{% endif %}
+                <span class="fw-semibold">{{ a.nome }}</span> <span class="text-muted">· ainda sem fazenda no site</span>
                 {% if a.sinal is not none %}{{ sinal_cel.linha(a.sinal) }}{% endif %}
             </div>
             {% endfor %}
+            {% if cl and sem_cadastro %}
+            <form method="post" action="{{ url_for('admin_cliente_vincular', user_id=cl.id) }}" class="d-flex flex-wrap gap-1 mt-1">
+                <select class="form-select form-select-sm" style="max-width: 320px;" name="site_name" aria-label="Fazenda para ligar">
+                    {% for fz in sem_cadastro %}<option value="{{ fz.site }}">{{ fz.nome_exibicao }} ({{ {'bioscout': 'BioScout', 'estudo': 'Mapas de Estudo', 'app': 'App'}[fz.origem] }})</option>{% endfor %}
+                </select>
+                <button class="btn btn-sm btn-outline-success" type="submit">+ Ligar fazenda a este cadastro</button>
+            </form>
+            {% endif %}
         </div>
         {% endif %}
         {% if c.extras %}
@@ -149,7 +212,55 @@
 </div>
 {% endfor %}
 
+{% if sem_cadastro %}
+<details class="card shadow-sm mb-3 mt-4" id="sem-cadastro"><summary class="card-body py-2 fw-semibold" style="cursor: pointer;">Fazendas sem cadastro ({{ sem_cadastro | length }})</summary>
+    <div class="card-body pt-0 small">
+        <div class="text-muted mb-2">Fazendas da BioScout e do Mapas de Estudo que ainda não pertencem a nenhum cliente. Complete os dados e ligue a um cadastro.</div>
+        {% for fz in sem_cadastro %}
+        {{ linha_fazenda(fz) }}
+        {% if clientes_lista %}
+        <form method="post" class="d-flex flex-wrap gap-1 mb-2 ligar-a-cliente" data-site="{{ fz.site }}">
+            <input type="hidden" name="site_name" value="{{ fz.site }}">
+            <select class="form-select form-select-sm" style="max-width: 280px;" aria-label="Cliente">
+                {% for cli in clientes_lista %}<option value="{{ url_for('admin_cliente_vincular', user_id=cli.id) }}">{{ cli.nome }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-sm btn-outline-success" type="submit">Ligar a este cliente</button>
+        </form>
+        {% endif %}
+        {% endfor %}
+    </div>
+</details>
+{% endif %}
+
 <script>
+// Editor de dados da fazenda, carregado na hora (pedido do Alan, 09/11/2026).
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.dados-toggle');
+    if (!btn) { return; }
+    var corpo = btn.closest('.fazenda-linha').querySelector('.dados-corpo');
+    var abrir = corpo.classList.contains('d-none');
+    corpo.classList.toggle('d-none');
+    if (!abrir || corpo.dataset.carregado) { return; }
+    corpo.textContent = 'Carregando...';
+    fetch('{{ url_for("admin_fazenda_dados") }}?site=' + encodeURIComponent(btn.dataset.site) + '&idx=' + encodeURIComponent(btn.dataset.idx),
+          { credentials: 'same-origin' })
+        .then(function (r) { if (!r.ok) { throw new Error(); } return r.text(); })
+        .then(function (html) { corpo.innerHTML = html; corpo.dataset.carregado = '1'; })
+        .catch(function () { corpo.textContent = 'Não foi possível abrir os dados agora.'; });
+});
+// Area total soma as culturas ao digitar ("Soja (1.200 ha), Milho (800 ha)").
+document.addEventListener('input', function (e) {
+    if (e.target.name !== 'culturas' || !e.target.closest('.dados-fazenda')) { return; }
+    var total = 0;
+    (e.target.value.match(/\(([\d.,]+)\s*ha\)/g) || []).forEach(function (m) {
+        var v = parseFloat(m.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.'));
+        if (!isNaN(v)) { total += v; }
+    });
+    e.target.closest('form').querySelector('.area-total').textContent = total ? total.toLocaleString('pt-BR') + ' ha' : '-';
+});
+document.querySelectorAll('.ligar-a-cliente').forEach(function (f) {
+    f.addEventListener('submit', function () { f.action = f.querySelector('select').value; });
+});
 document.querySelectorAll('.cad-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {
         var corpo = document.getElementById(btn.dataset.target);

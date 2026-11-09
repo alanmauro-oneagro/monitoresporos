@@ -296,8 +296,8 @@ class CadastroTest(unittest.TestCase):
         self.assertIn('data-situacao="bloqueado"', html)
         self.assertIn('data-filtro="free"', html)
         self.assertIn("Relatório por WhatsApp:</span> texto", html)  # no Free: so' texto
-        self.assertIn('<span class="fw-semibold">Area Ger</span>', html)
-        self.assertIn("🟢 no Mapas de Estudo", html)
+        self.assertIn('<span class="fw-semibold">Zzz Area Ger</span>', html)  # modelo unico (09/11/2026)
+        self.assertIn("✏️ Dados da fazenda", html)
         self.assertNotIn(" lavoura", html.split("Gerenciar Clientes</h4>", 1)[1])
 
     def test_grupo_economico_antes_do_nome_da_fazenda(self):
