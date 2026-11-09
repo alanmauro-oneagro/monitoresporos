@@ -236,8 +236,11 @@ economico editavel no cartao do cadastro (`admin_cliente_grupo`). Tudo
 `@master_required`. **Lista de Gerenciar Clientes** (pedido do Alan, 09/11/2026):
 as fazendas sem cadastro sao CARTOES iguais aos dos produtores (macros
 `cartao_pessoa`/`cartao_fazenda`, `data-tipo="fazenda"`, selo "Fazenda sem
-cadastro", origem e plano; abrir mostra a linha + "Dados da fazenda" +
-"Ligar a este cliente"); "Exibir por: Nome do produtor | Grupo"
+cadastro", origem e plano; abrir mostra a linha + "Dados da fazenda"; o
+"Ligar ao cliente" fica DENTRO do "Dados da fazenda", no topo, so' pra fazenda
+sem cadastro); a linha de cada fazenda mostra tambem a estacao do clima
+escolhida ("📡 SINOP/MT (A917) · 17,7 km", coordenada propria ou media das 3
+-- `_preencher_estacoes`, em lote); "Exibir por: Nome do produtor | Grupo"
 (`?exibir=`, lembrado em `session["gerenciar_clientes_exibir"]`; por grupo =
 caixa "👥 <grupo>" com os cadastros e as fazendas soltas daquele grupo, o
 resto depois); selo "⚠ Cadastro incompleto" ao lado do perfil (Produtor) com

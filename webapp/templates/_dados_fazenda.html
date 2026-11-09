@@ -7,6 +7,17 @@
                 {% if fz.lat is not none %} · {{ ('%.4f' | format(fz.lat)) | replace('.', ',') }}; {{ ('%.4f' | format(fz.lon)) | replace('.', ',') }}{% endif %}
                 {% if fz.origem == 'estudo' %} · coordenada e raio em <a href="{{ url_for('mapa_interpolado') }}#pontos-criados">Mapas de Estudo</a>{% endif %}
             </div>
+            {% if not fz.dono and clientes_lista %}
+            {# Fazenda sem cadastro: ligar a um cliente (pedido do Alan, 09/11/2026). #}
+            <form method="post" class="d-flex flex-wrap align-items-center gap-1 mb-3 ligar-a-cliente">
+                <input type="hidden" name="site_name" value="{{ fz.site }}">
+                <span class="text-muted me-1">Ligar ao cliente:</span>
+                <select class="form-select form-select-sm" style="max-width: 280px;" aria-label="Cliente">
+                    {% for cli in clientes_lista %}<option value="{{ url_for('admin_cliente_vincular', user_id=cli.id) }}">{{ cli.nome }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-sm btn-outline-success" type="submit">Ligar a este cliente</button>
+            </form>
+            {% endif %}
             {# Grupo: no cadastro (vale pra todas as fazendas dele) ou, sem cadastro, na propria fazenda. #}
             <form method="post" action="{{ url_for('admin_fazenda_grupo_salvar') }}" class="d-flex flex-wrap align-items-center gap-2 mb-2" data-autosave>
                 <input type="hidden" name="site_name" value="{{ fz.site }}">
