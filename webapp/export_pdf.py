@@ -675,8 +675,6 @@ def build_recommendation_pdf(
             ))
 
         story.append(Spacer(1, 10))
-        if weather and weather.get("fonte"):
-            story.append(Paragraph(f"Fonte do clima: {weather['fonte']}", _ESTILO_RODAPE))
         if fontes_pesquisadas:
             fontes_unicas = sorted(set(fontes_pesquisadas))
             story.append(Paragraph(
@@ -685,10 +683,6 @@ def build_recommendation_pdf(
             ))
         story.append(Paragraph(AVISO_AGRONOMO, _ESTILO_RODAPE))
         story.append(Paragraph(CONTATO_RELATORIO, _ESTILO_RODAPE))
-        story.append(Paragraph(
-            "Powered by BioScout",
-            _ESTILO_RODAPE,
-        ))
 
         return story
 

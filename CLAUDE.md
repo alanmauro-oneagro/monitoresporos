@@ -252,7 +252,8 @@ data_relatorio=)`). **Rodape** (texto e PDF, pedido do Alan, 09/11/2026):
 "Este relatório é uma ferramenta de monitoramento e não substitui a
 avaliação de um agrônomo responsável." + "Quer ter essa ferramenta para sua
 lavoura, entre em contato com a OneAgro. (43)99114-7595"
-(`export_pdf.AVISO_AGRONOMO`/`CONTATO_RELATORIO`; ponto so' clima continua
+(`export_pdf.AVISO_AGRONOMO`/`CONTATO_RELATORIO`; o PDF nao tem mais "Fonte do
+clima" nem "Powered by BioScout", 09/11/2026; ponto so' clima continua
 sem rodape no texto); cartao
 "Todas as fazendas (uma mensagem só)" no topo quando ha' mais de uma
 (`/app/relatorios/todos.txt`: 1 cabecalho + o bloco de cada fazenda) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
