@@ -368,6 +368,10 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         self.assertIn('data-tipo="fazenda"', tela)
         clima = models.create_virtual_farm("Zzz Modelo So Clima", -12.44, -55.7, 30, tipo="clima")
         self.assertNotIn(clima, webapp_sem_cadastro())  # ponto so' clima: so' no Mapas de Estudo (09/11/2026)
+        oculta = models.create_virtual_farm("Zzz Modelo Oculta", -12.45, -55.7, 30)
+        models.set_site_ativo(oculta, False)
+        self.assertNotIn(oculta, webapp_sem_cadastro())  # oculta vai pra Gerenciar Fazendas Ocultas
+        self.assertIn("🙈 Ocultar", tela)
         self.assertIn("⚠ Cadastro incompleto", tela)
         self.assertIn('data-filtro="incompleto"', tela)
         self.assertIn("Estação meteorológica de referência (muda em Dados da fazenda)", tela)  # estacao no cartao (09/11/2026)

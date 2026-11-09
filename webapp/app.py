@@ -8648,7 +8648,9 @@ def admin_solicitacoes():
             [(lat, lon) for lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])
     sem_cadastro = [_dados_da_fazenda(s, f"livre_{i}") for i, s in enumerate(_fazendas_sem_cadastro())]
     for p in pessoas:
-        p["fazendas"] = [_dados_da_fazenda(a["site_name"], f"{p['user_id']}_{a['id']}") for a in p["areas"] if a.get("site_name")]
+        ocultas = models.get_deactivated_site_names()
+        p["fazendas"] = [_dados_da_fazenda(a["site_name"], f"{p['user_id']}_{a['id']}") for a in p["areas"]
+                         if a.get("site_name") and a["site_name"] not in ocultas]
         p["faltando"] = _faltando_no_cadastro(p)
     for fz in sem_cadastro:
         fz["faltando"] = ["cadastro (cliente)"] + _faltando_na_fazenda(fz)
@@ -9124,7 +9126,8 @@ def _fazendas_sem_cadastro():
     clima" fica so' no Mapas de Estudo (pedido do Alan, 09/11/2026)."""
     donos = models.donos_das_fazendas_clientes()
     so_clima = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
-    todas = (set(read_sites()) | models.virtual_farm_site_names()) - so_clima
+    # Oculta vai pra Gerenciar Fazendas Ocultas e some daqui (pedido do Alan, 09/11/2026).
+    todas = (set(read_sites()) | models.virtual_farm_site_names()) - so_clima - models.get_deactivated_site_names()
     return sorted((s for s in todas if s not in donos), key=_ordem_fazenda)
 
 
