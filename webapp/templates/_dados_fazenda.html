@@ -7,7 +7,16 @@
                 {% if fz.lat is not none %} · {{ ('%.4f' | format(fz.lat)) | replace('.', ',') }}; {{ ('%.4f' | format(fz.lon)) | replace('.', ',') }}{% endif %}
                 {% if fz.origem == 'estudo' %} · coordenada e raio em <a href="{{ url_for('mapa_interpolado') }}#pontos-criados">Mapas de Estudo</a>{% endif %}
             </div>
-            <form method="post" action="{{ url_for('admin_fazenda_dados_salvar') }}" class="row g-2 align-items-end" data-autosave>
+            {# Grupo: no cadastro (vale pra todas as fazendas dele) ou, sem cadastro, na propria fazenda. #}
+            <form method="post" action="{{ url_for('admin_fazenda_grupo_salvar') }}" class="d-flex flex-wrap align-items-center gap-2 mb-2" data-autosave>
+                <input type="hidden" name="site_name" value="{{ fz.site }}">
+                <label class="form-label small text-muted mb-0" for="grupo_{{ fz.idx }}">Grupo econômico:</label>
+                <input type="text" name="grupo_economico" id="grupo_{{ fz.idx }}" class="form-control form-control-sm" style="max-width: 260px;"
+                       value="{{ fz.grupo }}" maxlength="40" list="lista-grupos" placeholder="ex.: Grupo PIVA (novo ou existente)">
+                {% if fz.dono %}<span class="text-muted">-- do cadastro (vale pra todas as fazendas dele)</span>{% endif %}
+                <span class="autosave-status small"></span>
+            </form>
+            <form method="post" action="{{ url_for('admin_fazenda_dados_salvar') }}" class="row g-2 align-items-end form-culturas" data-autosave>
                 <input type="hidden" name="site_name" value="{{ fz.site }}">
                 <div class="col-8 col-md-4">
                     <label class="form-label small text-muted mb-0" for="cid_{{ fz.idx }}">Município</label>
@@ -20,11 +29,40 @@
                         {% for uf in ufs %}<option value="{{ uf }}" {% if fz.uf == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}
                     </select>
                 </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label small text-muted mb-0" for="cult_{{ fz.idx }}">Culturas e área (ex.: Soja (1.200 ha), Milho (800 ha))</label>
-                    <input type="text" name="culturas" id="cult_{{ fz.idx }}" class="form-control form-control-sm" value="{{ fz.culturas or '' }}" maxlength="300">
+                {# Culturas no mesmo padrao do app (cliente_ponto_novo.html). #}
+                <div class="col-12">
+                    <div class="small fw-semibold mb-1">Tipo de cultura</div>
+                    <div class="btn-group w-100 mb-2" role="group">
+                        {% for chave, rotulo in fz.grupos_cultura.items() %}
+                        <input type="checkbox" class="btn-check" name="grupo_cultura" id="tipo_{{ fz.idx }}_{{ chave }}" value="{{ chave }}" autocomplete="off" {% if chave in fz.tipos %}checked{% endif %}>
+                        <label class="btn btn-outline-success btn-sm" for="tipo_{{ fz.idx }}_{{ chave }}">{{ rotulo }}</label>
+                        {% endfor %}
+                    </div>
+                    <div class="bloco-culturas border rounded p-2 bg-light{{ '' if fz.tipos else ' d-none' }}">
+                        <div class="small fw-semibold mb-1">Culturas e área plantada</div>
+                        {% for c in fz.lista_culturas %}
+                        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="{{ fz.grupo_de[c] }}" style="min-height: 2.1rem;">
+                            <div class="form-check mb-0" style="min-width: 7rem;">
+                                <input class="form-check-input" type="checkbox" name="culturas" id="cult_{{ fz.idx }}_{{ loop.index }}" value="{{ c }}" {% if c in fz.marcadas %}checked{% endif %}>
+                                <label class="form-check-label" for="cult_{{ fz.idx }}_{{ loop.index }}">{{ c }}</label>
+                            </div>
+                            <div class="input-group input-group-sm cultura-area{{ '' if c in fz.marcadas else ' d-none' }}" style="max-width: 10rem;">
+                                <input class="form-control area" name="area_cultura__{{ c }}" value="{{ fz.areas.get(c, '') }}" inputmode="decimal" placeholder="Área" aria-label="Área de {{ c }} (ha)">
+                                <span class="input-group-text">ha</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        <div class="d-flex align-items-center gap-2 mb-1 cultura-linha" data-grupo="hf">
+                            <input class="form-control form-control-sm cultura-outra" style="max-width: 9rem;" name="cultura_outra" value="{{ fz.outra }}" placeholder="Outra cultura" aria-label="Outra cultura">
+                            <div class="input-group input-group-sm cultura-area{{ '' if fz.outra else ' d-none' }}" style="max-width: 10rem;">
+                                <input class="form-control area" name="area_outra" value="{{ fz.area_outra }}" inputmode="decimal" placeholder="Área" aria-label="Área da outra cultura (ha)">
+                                <span class="input-group-text">ha</span>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between border-top pt-1 mt-1 small"><span class="text-muted">Área total</span><strong class="area-total">{{ fz.area_txt }}</strong></div>
+                    </div>
+                    <span class="autosave-status small"></span>
                 </div>
-                <div class="col-12"><span class="text-muted">Área total:</span> <strong class="area-total">{{ fz.area_txt }}</strong> <span class="autosave-status small ms-2"></span></div>
             </form>
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_site_display_name') }}" class="d-flex align-items-center gap-2" data-autosave data-autosave-reload>

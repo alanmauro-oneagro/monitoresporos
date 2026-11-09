@@ -222,8 +222,13 @@ voltam ao desligar). Cada fazenda (cliente, ligada ou sem cadastro) tem a MESMA
 linha (`linha_fazenda` em admin_solicitacoes.html: nome, selo do plano, origem
 📡 BioScout/🗺️ Mapas de Estudo/📱 App, municipio, culturas, area) e o MESMO editor
 "✏️ Dados da fazenda" (`_dados_fazenda.html`, carregado por fetch em
-`admin_fazenda_dados`; tudo salva sozinho: municipio/UF/culturas
-`admin_fazenda_dados_salvar` com area somada das culturas, nome de exibicao,
+`admin_fazenda_dados`; tudo salva sozinho: "Grupo econômico" (`admin_fazenda_grupo_salvar`:
+com cadastro muda o grupo do cadastro; sem cadastro fica em
+`fazendas_dados.grupo_economico` e ja' agrupa em Recomendações),
+municipio/UF e culturas NO MESMO PADRAO DO APP (tipo Cereais/HF/Outros,
+caixa por cultura com a area, "Outra cultura", Area total; JS
+`atualizarCulturas` no admin_solicitacoes.html; `admin_fazenda_dados_salvar`
+le com `_locais_do_form` e grava "Soja (1.200 ha), ..."), nome de exibicao,
 ocultar, pais e estacao do clima -- as mesmas rotas que Manejos usava). Grupo
 economico editavel no cartao do cadastro (`admin_cliente_grupo`). Tudo
 `@master_required`. Mapas de Estudo ficou so' com criar/editar ponto
@@ -243,7 +248,8 @@ Alan, 09/11/2026): `_ordem_fazenda` comeca por `_ordem_do_plano` --
 Inteligência, Avançado, Básico (ou outro plano), Essencial, sem plano --
 depois pais e nome; vale em toda tela que usa essa ordem. **Grupo economico em
 Recomendações** (mesmo pedido): 2+ fazendas com o mesmo grupo
-(`_grupo_economico_da_fazenda` = grupo do cadastro a que a fazenda pertence;
+(`_grupo_economico_da_fazenda` = grupo do cadastro a que a fazenda pertence,
+ou o digitado na fazenda sem cadastro;
 sugestoes dos grupos ja' usados `models.grupos_economicos`; mesmo nome = mesma
 caixa) ficam numa caixa "<grupo>"
 (selo do plano + "N fazendas"; abre e mostra os cartoes das fazendas;
