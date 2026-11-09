@@ -228,8 +228,11 @@ depois pais e nome; vale em toda tela que usa essa ordem. **Grupo economico em
 Recomendações** (mesmo pedido): 2+ fazendas de cliente com o mesmo grupo
 (`_grupo_economico_da_fazenda`: cadastro do dono; nas do Mapas de Estudo, o
 campo "Grupo econômico" do botao "💳 Plano e grupo" -- `planos_fazenda.grupo_economico`,
-selo "👥 <grupo>" em Pontos Criados; mesmo nome = mesma caixa, misturando
-fazenda de cliente e do Mapas de Estudo) ficam numa caixa "<grupo>"
+selo "👥 <grupo>" em Pontos Criados; e o campo "Grupo:" em Manejos, antes
+do Nome de exibicao, pra QUALQUER fazenda -- real, estimada ou de cliente
+(Master, salva sozinho, rota `save_site_grupo`, sugestoes dos grupos ja'
+usados `models.grupos_economicos`); o grupo digitado vale antes do cadastro
+do cliente, vazio volta ao do cadastro; mesmo nome = mesma caixa) ficam numa caixa "<grupo>"
 (selo do plano + "N fazendas"; abre e mostra os cartoes das fazendas;
 `_agrupar_por_grupo_economico` marca `grupo`/`grupo_inicio`/`grupo_fim` e o
 template abre/fecha a caixa) com "Texto agrupado" (todas numa mensagem so':
