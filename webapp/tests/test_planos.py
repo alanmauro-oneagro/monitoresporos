@@ -299,6 +299,11 @@ class PlanosTest(unittest.TestCase):
         self.assertIsNone(models.get_virtual_farm(site_name))
 
 
+def webapp_sem_cadastro():
+    with webapp.app.test_request_context():
+        return webapp._fazendas_sem_cadastro()
+
+
 class ModeloUnicoFazendasTest(unittest.TestCase):
     """Nomes novos dos planos e o modelo unico de fazenda em Gerenciar Clientes
     (pedidos do Alan, 09/11/2026): toda fazenda pertence a um cadastro, que da'
@@ -361,6 +366,8 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         self.assertIn("+ Novo cliente", tela)
         # fazenda sem cadastro = cartao igual ao dos produtores, com o selo e o filtro de incompleto (09/11/2026)
         self.assertIn('data-tipo="fazenda"', tela)
+        clima = models.create_virtual_farm("Zzz Modelo So Clima", -12.44, -55.7, 30, tipo="clima")
+        self.assertNotIn(clima, webapp_sem_cadastro())  # ponto so' clima: so' no Mapas de Estudo (09/11/2026)
         self.assertIn("⚠ Cadastro incompleto", tela)
         self.assertIn('data-filtro="incompleto"', tela)
         self.assertIn("Estação meteorológica de referência (muda em Dados da fazenda)", tela)  # estacao no cartao (09/11/2026)

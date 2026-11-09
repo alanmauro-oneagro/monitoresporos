@@ -9105,9 +9105,11 @@ def admin_fazenda_dados_salvar():
 
 def _fazendas_sem_cadastro():
     """Fazendas da BioScout e do Mapas de Estudo que ainda nao pertencem a
-    nenhum cadastro (inclusive as ocultas), na ordem do site."""
+    nenhum cadastro (inclusive as ocultas), na ordem do site. Ponto "so'
+    clima" fica so' no Mapas de Estudo (pedido do Alan, 09/11/2026)."""
     donos = models.donos_das_fazendas_clientes()
-    todas = set(read_sites()) | models.virtual_farm_site_names()
+    so_clima = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
+    todas = (set(read_sites()) | models.virtual_farm_site_names()) - so_clima
     return sorted((s for s in todas if s not in donos), key=_ordem_fazenda)
 
 

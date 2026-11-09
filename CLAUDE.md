@@ -247,7 +247,10 @@ resto depois); selo "⚠ Cadastro incompleto" ao lado do perfil (Produtor) com
 o que falta no `title` (`_faltando_no_cadastro`: nome completo, celular,
 plano, fazenda, municipio/estado e culturas de cada fazenda; fazenda sem
 cadastro sempre incompleta, `_faltando_na_fazenda`) e filtros "Cadastro
-incompleto" e "Fazendas sem cadastro". Mapas de Estudo ficou so' com criar/editar ponto
+incompleto" e "Fazendas sem cadastro". Ponto "so' clima" NAO entra em
+Gerenciar Clientes (nem nas sem cadastro, nem no "+ Novo cliente"/Ligar --
+`_fazendas_sem_cadastro`; pedido do Alan, 09/11/2026): fica so' no Mapas de
+Estudo. Mapas de Estudo ficou so' com criar/editar ponto
 (coordenada, raio, tipo) e remover.
 **Plano de cada fazenda** (`app._plano_da_fazenda`, selo `selo_plano(site)` --
 template global): fazenda REAL (BioScout) = Inteligência (`models.PLANO_FAZENDA_REAL`),
