@@ -221,7 +221,9 @@ verde-claro (`sites_de_clientes`). Fazenda ainda sem cadastro guarda os dados em
 voltam ao desligar). Cada fazenda (cliente, ligada ou sem cadastro) tem a MESMA
 linha (`linha_fazenda` em admin_solicitacoes.html: nome, selo do plano, origem
 📡 BioScout/🗺️ Mapas de Estudo/📱 App, municipio, culturas, area) e o MESMO editor
-"✏️ Dados da fazenda" (`_dados_fazenda.html`, carregado por fetch em
+"✏️ Dados da fazenda" (`_dados_fazenda.html`, nesta ordem -- pedido do Alan,
+09/11/2026: Grupo economico, Nome de exibicao, Pais, Municipio/Estado + Tipo de
+cultura, Estacao meteorologica, Ocultar; carregado por fetch em
 `admin_fazenda_dados`; tudo salva sozinho: "Grupo econômico" (`admin_fazenda_grupo_salvar`:
 com cadastro muda o grupo do cadastro; sem cadastro fica em
 `fazendas_dados.grupo_economico` e ja' agrupa em Recomendações),

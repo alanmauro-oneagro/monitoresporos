@@ -16,6 +16,31 @@
                 {% if fz.dono %}<span class="text-muted">-- do cadastro (vale pra todas as fazendas dele)</span>{% endif %}
                 <span class="autosave-status small"></span>
             </form>
+
+            <div class="mt-3 pt-3 border-top">
+                <form method="post" action="{{ url_for('save_site_display_name') }}" class="d-flex align-items-center gap-2" data-autosave data-autosave-reload>
+                    <input type="hidden" name="site_name" value="{{ fz.site }}">
+                    <label class="form-label small text-muted mb-0" for="nome_{{ fz.idx }}">Nome de exibição:</label>
+                    <input type="text" name="nome_exibicao" id="nome_{{ fz.idx }}" class="form-control form-control-sm"
+                           style="max-width: 260px;" value="{{ fz.nome_exibicao }}">
+                    <span class="autosave-status small"></span>
+                </form>
+            </div>
+
+            <div class="mt-3 pt-3 border-top">
+                <form method="post" action="{{ url_for('save_site_country') }}" class="d-flex align-items-center gap-2" data-autosave>
+                    <input type="hidden" name="site_name" value="{{ fz.site }}">
+                    <label class="form-label small text-muted mb-0" for="pais_{{ fz.idx }}">País:</label>
+                    <select name="country_code" id="pais_{{ fz.idx }}" class="form-select form-select-sm" style="width: auto;">
+                        {% for code, pais in countries.items() %}
+                        <option value="{{ code }}" {% if fz.country_code == code %}selected{% endif %}>{{ pais.nome }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="autosave-status small"></span>
+                </form>
+            </div>
+
+            <div class="mt-3 pt-3 border-top">
             <form method="post" action="{{ url_for('admin_fazenda_dados_salvar') }}" class="row g-2 align-items-end form-culturas" data-autosave>
                 <input type="hidden" name="site_name" value="{{ fz.site }}">
                 <div class="col-8 col-md-4">
@@ -64,49 +89,12 @@
                     <span class="autosave-status small"></span>
                 </div>
             </form>
-            <div class="mt-3 pt-3 border-top">
-                <form method="post" action="{{ url_for('save_site_display_name') }}" class="d-flex align-items-center gap-2" data-autosave data-autosave-reload>
-                    <input type="hidden" name="site_name" value="{{ fz.site }}">
-                    <label class="form-label small text-muted mb-0" for="nome_{{ fz.idx }}">Nome de exibicao:</label>
-                    <input type="text" name="nome_exibicao" id="nome_{{ fz.idx }}" class="form-control form-control-sm"
-                           style="max-width: 260px;" value="{{ fz.nome_exibicao }}">
-                    <span class="autosave-status small"></span>
-                </form>
-            </div>
-
-            <div class="mt-3 pt-3 border-top">
-                {% if not fz.ativo %}<span class="badge bg-secondary">Oculta</span> <span class="text-muted">-- reativar em Configurações &gt; Gerenciar Fazendas Ocultas.</span>
-                {% else %}
-                <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0"
-                      data-msg="Ocultar {{ fz.nome_exibicao }}? Ela some de todo o site (nada e' apagado) -- pra reativar: Configuracoes > Gerenciar Fazendas Ocultas."
-                      onsubmit="return confirm(this.dataset.msg);">
-                    <input type="hidden" name="site_name" value="{{ fz.site }}">
-                    <input type="hidden" name="ativo" value="0">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">🙈 Ocultar fazenda</button>
-                </form>
-                <div class="text-muted small mt-1">
-                    Some de todo o site, sem apagar nada. Reativar: Configurações &gt; Gerenciar Fazendas Ocultas.
-                </div>
-                {% endif %}
-            </div>
-
-            <div class="mt-3 pt-3 border-top">
-                <form method="post" action="{{ url_for('save_site_country') }}" class="d-flex align-items-center gap-2" data-autosave>
-                    <input type="hidden" name="site_name" value="{{ fz.site }}">
-                    <label class="form-label small text-muted mb-0" for="pais_{{ fz.idx }}">País:</label>
-                    <select name="country_code" id="pais_{{ fz.idx }}" class="form-select form-select-sm" style="width: auto;">
-                        {% for code, pais in countries.items() %}
-                        <option value="{{ code }}" {% if fz.country_code == code %}selected{% endif %}>{{ pais.nome }}</option>
-                        {% endfor %}
-                    </select>
-                    <span class="autosave-status small"></span>
-                </form>
             </div>
 
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
                     <input type="hidden" name="site_name" value="{{ fz.site }}">
-                    <label class="form-label small text-muted d-block mb-1">Estacao meteorologica de referencia para a previsao (clima da fazenda vem da Open-Meteo, na coordenada escolhida aqui):</label>
+                    <label class="form-label small text-muted d-block mb-1">Estação meteorológica de referência para a previsão (clima da fazenda vem da Open-Meteo, na coordenada escolhida aqui):</label>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="estacao_codigo" value=""
                             id="est_{{ fz.idx }}_fazenda" {% if not fz.estacao_selecionada %}checked{% endif %}>
@@ -147,5 +135,21 @@
                     {% endif %}
                     <span class="autosave-status small ms-2"></span>
                 </form>
+            </div>
+
+            <div class="mt-3 pt-3 border-top">
+                {% if not fz.ativo %}<span class="badge bg-secondary">Oculta</span> <span class="text-muted">-- reativar em Configurações &gt; Gerenciar Fazendas Ocultas.</span>
+                {% else %}
+                <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0"
+                      data-msg="Ocultar {{ fz.nome_exibicao }}? Ela some de todo o site (nada e' apagado) -- pra reativar: Configuracoes > Gerenciar Fazendas Ocultas."
+                      onsubmit="return confirm(this.dataset.msg);">
+                    <input type="hidden" name="site_name" value="{{ fz.site }}">
+                    <input type="hidden" name="ativo" value="0">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">🙈 Ocultar fazenda</button>
+                </form>
+                <div class="text-muted small mt-1">
+                    Some de todo o site, sem apagar nada. Reativar: Configurações &gt; Gerenciar Fazendas Ocultas.
+                </div>
+                {% endif %}
             </div>
 </div>
