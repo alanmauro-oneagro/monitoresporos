@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from markupsafe import Markup
+
 os.environ.setdefault("BIOSCOUT_DB_PATH", os.path.join(tempfile.mkdtemp(), "teste.db"))
 os.environ.pop("ASAAS_API_KEY", None)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -291,6 +293,61 @@ class FazendaAdicionalTest(unittest.TestCase):
             self._nova(self._logado(free), nome="Faz Free")
         with webapp.app.test_request_context():
             self.assertTrue(webapp._relatorio_simples(models.get_cliente_pontos(free)[0]["site_name"]))
+
+    def test_grupo_economico_em_recomendacoes(self):
+        """Fazendas do mesmo grupo economico numa caixa so' em Recomendacoes,
+        texto do grupo numa mensagem e PDFs juntos (pedido do Alan, 09/11/2026)."""
+        uid = self._cliente_pagante("Zzz Adic Grupo Rec")
+        models.atualizar_dados_cadastro(uid, grupo_economico="Grupo Zzz Rec")
+        c = self._logado(uid)
+        with mock.patch.object(webapp.asaas, "configurado", return_value=False):
+            self._nova(c, nome="Faz Um", lat="-12.51")
+            self._nova(c, nome="Faz Dois", lat="-12.52")
+        sites = [p["site_name"] for p in models.get_cliente_pontos(uid)]
+        if not models.get_user_by_username("Zzz Master Grupo Rec"):
+            models.create_user("Zzz Master Grupo Rec", "x", is_master=True)
+        master = self._logado(models.get_user_by_username("Zzz Master Grupo Rec")["id"])
+        with webapp.app.test_request_context():
+            topo = webapp._cabecalho_relatorio_cliente()
+            rodape = ["", f"_{webapp.AVISO_AGRONOMO}_", "", webapp.CONTATO_RELATORIO]
+            junto = webapp._juntar_relatorios([
+                "\n".join(topo + ["", "*A*", "━" * 20, "corpo A"] + rodape),
+                "\n".join(topo + ["", "*B*", "━" * 20, "corpo B"] + rodape)])
+        self.assertEqual(junto.count("RELATÓRIO DE MONITORAMENTO"), 1)
+        self.assertEqual(junto.count(webapp.CONTATO_RELATORIO), 1)
+        self.assertLess(junto.index("corpo A"), junto.index("*B*"))
+        with mock.patch.object(webapp, "_texto_relatorio", side_effect=lambda site, *a, **k: f"texto de {site}"), \
+                mock.patch.object(webapp, "_cards_by_site_all", return_value={s: [] for s in sites}), \
+                mock.patch.object(webapp, "_format_whatsapp_message", side_effect=lambda site, *a, **k: f"texto de {site}"):
+            html = master.get("/recommendations/safra1").get_data(as_text=True)
+        self.assertIn('data-grupo="Grupo Zzz Rec"', html)
+        self.assertIn("2 fazendas", html)
+        self.assertIn("Copiar texto do grupo", html)
+        self.assertLess(html.index('data-grupo="Grupo Zzz Rec"'), html.index(f'data-site="{Markup.escape(sites[0])}"'))
+
+        class SemThread:
+            def __init__(self, target, daemon=None):
+                self.target = target
+
+            def start(self):
+                self.target()
+        enviados, pdfs = [], []
+        with mock.patch.object(webapp, "_whatsapp_desconectado", return_value=None), \
+                mock.patch.object(webapp, "_texto_relatorio", side_effect=lambda site, *a, **k: f"texto de {site}"), \
+                mock.patch.object(webapp.threading, "Thread", SemThread), \
+                mock.patch.object(webapp, "_formatos_whatsapp_clientes", return_value={}), \
+                mock.patch.object(webapp.whatsapp, "send_whatsapp", side_effect=lambda tel, txt: enviados.append((tel, txt)) or (True, "ok")), \
+                mock.patch.object(webapp, "_send_site_whatsapp", side_effect=lambda s, **k: pdfs.append((s, k["enviar_pdf"], k["enviar_texto"]))):
+            r = master.post("/recommendations/grupo/whatsapp", data={
+                "safra": "safra1", "grupo": "Grupo Zzz Rec", "site": sites, "enviar_texto": "1", "enviar_pdf": "1",
+                "codigo_pais": "55", "numero_telefone": "65999990777"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(len(enviados), 1)  # um texto so' pro grupo
+        self.assertIn(f"texto de {sites[0]}", enviados[0][1])
+        self.assertIn(f"texto de {sites[1]}", enviados[0][1])
+        self.assertEqual(sorted(p[0] for p in pdfs), sorted(sites))  # um PDF por fazenda
+        self.assertTrue(all(p[1] and not p[2] for p in pdfs))
+
 
 if __name__ == "__main__":
     unittest.main()

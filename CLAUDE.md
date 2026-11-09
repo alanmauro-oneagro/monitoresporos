@@ -221,7 +221,20 @@ vermelho vencido; cinza sem plano) aparece na frente do nome em Alertas
 (dashboard.html), Manejos (fazendas.html), Recomendações e Pontos Criados. A
 aba **Gráficos do site** tem o filtro "Plano" (`planos_disponiveis`,
 `data-plano` em cada estacao; sem estacao marcada, manda todas as do plano;
-guardado nos filtros da conta).
+guardado nos filtros da conta). **Fazendas sempre por plano** (pedido do
+Alan, 09/11/2026): `_ordem_fazenda` comeca por `_ordem_do_plano` --
+Inteligência, Avançado, Básico (ou outro plano), Essencial, sem plano --
+depois pais e nome; vale em toda tela que usa essa ordem. **Grupo economico em
+Recomendações** (mesmo pedido): 2+ fazendas de cliente com o mesmo grupo
+(`_grupo_economico_da_fazenda`, cadastro do dono) ficam numa caixa "<grupo>"
+(selo do plano + "N fazendas"; abre e mostra os cartoes das fazendas;
+`_agrupar_por_grupo_economico` marca `grupo`/`grupo_inicio`/`grupo_fim` e o
+template abre/fecha a caixa) com "Texto agrupado" (todas numa mensagem so':
+topo e rodape 1 vez, `_juntar_relatorios` -- o mesmo do "Todas as fazendas"
+do app), "PDFs juntos" (o PDF de cada fazenda, um atras do outro), "Copiar
+texto do grupo" e "Enviar grupo por WhatsApp" (destinatarios = os de todas
+as fazendas do grupo + numero digitado; rota `send_grupo_whatsapp`, thread
+de fundo, respeita o formato do plano de cada cliente).
 
 **Cliente do app (pedido do Alan, 25/10/2026)**: 4o tipo de conta,
 `users.is_cliente=1` (nunca admin), criado pelo cadastro direto (acima,
