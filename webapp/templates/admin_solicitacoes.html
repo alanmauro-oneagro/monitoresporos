@@ -73,44 +73,29 @@
 </details>
 <datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>
 
-{% set n_novos = pessoas | selectattr('visto', 'equalto', 0) | list | length %}
-{% set n_clientes = pessoas | selectattr('tipo', 'equalto', 'cliente') | list | length %}
-<div class="btn-group btn-group-sm flex-wrap mb-3" role="group" id="filtro-pessoas">
-    <button type="button" class="btn btn-outline-secondary active" data-filtro="todos">Todos ({{ pessoas | length }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="novo">Novos ({{ n_novos }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="cliente">Clientes ({{ n_clientes }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="usuario">Acesso à fazenda ({{ pessoas | length - n_clientes }})</button>
-    {% set n_free = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'equalto', 'free') | list | length %}
-    {% set n_bloq = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'in', ['bloqueado', 'sem_plano']) | list | length %}
-    <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Essencial ({{ n_free }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="bloqueado">Bloqueados / sem plano ({{ n_bloq }})</button>
-</div>
-
-{% if not pessoas %}
-<div class="alert alert-secondary">Nenhum cadastro ainda.</div>
-{% endif %}
-
-{% for c in pessoas %}
+{% macro cartao_pessoa(c, idx) %}
 {% set telefone_digitos = (c.telefone or '') | replace('+', '') %}
 {% set cl = c.cliente %}
 {% set sit = c.situacao %}
 <div class="card shadow-sm mb-3 cad-card" data-tipo="{{ 'cliente' if c.tipo == 'cliente' else 'usuario' }}" data-novo="{{ 0 if c.visto else 1 }}"
+     data-incompleto="{{ 1 if c.faltando else 0 }}"
      data-situacao="{{ ('bloqueado' if sit.chave in ('bloqueado', 'sem_plano') else sit.chave) if sit else '' }}">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-{{ loop.index0 }}">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-{{ idx }}">
                 <span class="toggle-icon">▶</span> {{ c.nome_completo or c.username }}
             </button>
             {% if not c.visto %}<span class="badge bg-danger">Novo</span>{% endif %}
             <span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Cliente do app' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
             {% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
+            {% if c.faltando %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ c.faltando | join('; ') }}">⚠ Cadastro incompleto</span>{% endif %}
             {% if sit %}{# situacao visivel com o cartao fechado #}
             {% set cor = {'ativo': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueado': 'bg-secondary', 'sem_plano': 'bg-light text-dark border'}[sit.chave] %}
             <span class="badge {{ cor }}" title="{{ sit.texto }}">{{ cl.plano_nome or 'Sem plano' }} · {{ {'ativo': 'ativo', 'free': 'Essencial', 'bloqueado': 'bloqueado', 'sem_plano': 'escolher plano'}[sit.chave] }}</span>
             {% endif %}
             {% if c.data %}<span class="text-muted small ms-auto">{{ c.data | data_br }}</span>{% endif %}
         </div>
-        <div class="d-none mt-3" id="cad-body-{{ loop.index0 }}">
+        <div class="d-none mt-3" id="cad-body-{{ idx }}">
         <dl class="mb-3">
             <dt>Usuário</dt><dd>{{ c.username }}</dd>
             <dt>Grupo econômico</dt><dd>
@@ -210,26 +195,84 @@
         </div>
     </div>
 </div>
-{% endfor %}
+{% endmacro %}
 
-{% if sem_cadastro %}
-<details class="card shadow-sm mb-3 mt-4" id="sem-cadastro"><summary class="card-body py-2 fw-semibold" style="cursor: pointer;">Fazendas sem cadastro ({{ sem_cadastro | length }})</summary>
-    <div class="card-body pt-0 small">
-        <div class="text-muted mb-2">Fazendas da BioScout e do Mapas de Estudo que ainda não pertencem a nenhum cliente. Complete os dados e ligue a um cadastro.</div>
-        {% for fz in sem_cadastro %}
-        {{ linha_fazenda(fz) }}
-        {% if clientes_lista %}
-        <form method="post" class="d-flex flex-wrap gap-1 mb-2 ligar-a-cliente" data-site="{{ fz.site }}">
-            <input type="hidden" name="site_name" value="{{ fz.site }}">
-            <select class="form-select form-select-sm" style="max-width: 280px;" aria-label="Cliente">
-                {% for cli in clientes_lista %}<option value="{{ url_for('admin_cliente_vincular', user_id=cli.id) }}">{{ cli.nome }}</option>{% endfor %}
-            </select>
-            <button class="btn btn-sm btn-outline-success" type="submit">Ligar a este cliente</button>
-        </form>
-        {% endif %}
-        {% endfor %}
+{# Fazenda sem cadastro: cartao igual ao dos produtores (pedido do Alan, 09/11/2026). #}
+{% macro cartao_fazenda(fz) %}
+<div class="card shadow-sm mb-3 cad-card" data-tipo="fazenda" data-novo="0" data-incompleto="1" data-situacao="">
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-faz-{{ fz.idx }}">
+                <span class="toggle-icon">▶</span> {{ fz.nome_exibicao }}
+            </button>
+            <span class="badge bg-secondary">Fazenda sem cadastro</span>
+            <span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
+            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ fz.faltando | join('; ') }}">⚠ Cadastro incompleto</span>
+            {{ selo_plano(fz.site) }}
+        </div>
+        <div class="d-none mt-3 small" id="cad-body-faz-{{ fz.idx }}">
+            {{ linha_fazenda(fz) }}
+            {% if clientes_lista %}
+            <form method="post" class="d-flex flex-wrap gap-1 mb-0 ligar-a-cliente" data-site="{{ fz.site }}">
+                <input type="hidden" name="site_name" value="{{ fz.site }}">
+                <select class="form-select form-select-sm" style="max-width: 280px;" aria-label="Cliente">
+                    {% for cli in clientes_lista %}<option value="{{ url_for('admin_cliente_vincular', user_id=cli.id) }}">{{ cli.nome }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-sm btn-outline-success" type="submit">Ligar a este cliente</button>
+            </form>
+            {% endif %}
+        </div>
     </div>
-</details>
+</div>
+{% endmacro %}
+
+{% set n_novos = pessoas | selectattr('visto', 'equalto', 0) | list | length %}
+{% set n_clientes = pessoas | selectattr('tipo', 'equalto', 'cliente') | list | length %}
+<div class="btn-group btn-group-sm flex-wrap mb-3" role="group" id="filtro-pessoas">
+    <button type="button" class="btn btn-outline-secondary active" data-filtro="todos">Todos ({{ pessoas | length }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="novo">Novos ({{ n_novos }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="cliente">Clientes ({{ n_clientes }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="usuario">Acesso à fazenda ({{ pessoas | length - n_clientes }})</button>
+    {% set n_free = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'equalto', 'free') | list | length %}
+    {% set n_bloq = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'in', ['bloqueado', 'sem_plano']) | list | length %}
+    <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Essencial ({{ n_free }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="bloqueado">Bloqueados / sem plano ({{ n_bloq }})</button>
+    {% set n_incompletos = (pessoas | selectattr('faltando') | list | length) + (sem_cadastro | length) %}
+    <button type="button" class="btn btn-outline-secondary" data-filtro="incompleto">Cadastro incompleto ({{ n_incompletos }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="fazenda">Fazendas sem cadastro ({{ sem_cadastro | length }})</button>
+</div>
+<div class="d-flex align-items-center gap-2 mb-3 small">
+    <span class="text-muted">Exibir por:</span>
+    <div class="btn-group btn-group-sm" role="group">
+        <a class="btn btn-outline-success{{ ' active' if exibir == 'produtor' }}" href="{{ url_for('admin_solicitacoes', exibir='produtor') }}">Nome do produtor</a>
+        <a class="btn btn-outline-success{{ ' active' if exibir == 'grupo' }}" href="{{ url_for('admin_solicitacoes', exibir='grupo') }}">Grupo</a>
+    </div>
+</div>
+
+{% if not pessoas and not sem_cadastro %}
+<div class="alert alert-secondary">Nenhum cadastro ainda.</div>
+{% endif %}
+
+{% if exibir == 'grupo' %}
+{% for gr in grupos %}
+<div class="card shadow-sm mb-3 border-success grupo-box">
+    <div class="card-body">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="grupo-body-{{ loop.index0 }}">
+            <span class="toggle-icon">▶</span> 👥 {{ gr.nome }}
+        </button>
+        <span class="badge bg-light text-secondary border fw-normal">{{ gr.pessoas | length }} cadastro(s) · {{ gr.fazendas | length }} fazenda(s) sem cadastro</span>
+        <div class="d-none mt-3" id="grupo-body-{{ loop.index0 }}">
+            {% for c in gr.pessoas %}{{ cartao_pessoa(c, 'g' ~ c.user_id ~ '_' ~ loop.index0) }}{% endfor %}
+            {% for fz in gr.fazendas %}{{ cartao_fazenda(fz) }}{% endfor %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% for c in sem_grupo.pessoas %}{{ cartao_pessoa(c, 's' ~ c.user_id ~ '_' ~ loop.index0) }}{% endfor %}
+{% for fz in sem_grupo.fazendas %}{{ cartao_fazenda(fz) }}{% endfor %}
+{% else %}
+{% for c in pessoas %}{{ cartao_pessoa(c, 'p' ~ c.user_id ~ '_' ~ loop.index0) }}{% endfor %}
+{% for fz in sem_cadastro %}{{ cartao_fazenda(fz) }}{% endfor %}
 {% endif %}
 
 <script>
@@ -296,8 +339,13 @@ document.querySelectorAll('.cad-toggle').forEach(function (btn) {
             var f = b.dataset.filtro;
             cartoes.forEach(function (c) {
                 var mostra = f === 'todos' || (f === 'novo' ? c.dataset.novo === '1'
+                    : f === 'incompleto' ? c.dataset.incompleto === '1'
                     : (f === 'free' || f === 'bloqueado') ? c.dataset.situacao === f : c.dataset.tipo === f);
                 c.classList.toggle('d-none', !mostra);
+            });
+            // Exibir por grupo: caixa do grupo some se nada dentro passou no filtro.
+            document.querySelectorAll('.grupo-box').forEach(function (g) {
+                g.classList.toggle('d-none', !g.querySelector('.cad-card:not(.d-none)'));
             });
         });
     });

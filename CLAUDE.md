@@ -233,7 +233,18 @@ caixa por cultura com a area, "Outra cultura", Area total; JS
 le com `_locais_do_form` e grava "Soja (1.200 ha), ..."), nome de exibicao,
 ocultar, pais e estacao do clima -- as mesmas rotas que Manejos usava). Grupo
 economico editavel no cartao do cadastro (`admin_cliente_grupo`). Tudo
-`@master_required`. Mapas de Estudo ficou so' com criar/editar ponto
+`@master_required`. **Lista de Gerenciar Clientes** (pedido do Alan, 09/11/2026):
+as fazendas sem cadastro sao CARTOES iguais aos dos produtores (macros
+`cartao_pessoa`/`cartao_fazenda`, `data-tipo="fazenda"`, selo "Fazenda sem
+cadastro", origem e plano; abrir mostra a linha + "Dados da fazenda" +
+"Ligar a este cliente"); "Exibir por: Nome do produtor | Grupo"
+(`?exibir=`, lembrado em `session["gerenciar_clientes_exibir"]`; por grupo =
+caixa "👥 <grupo>" com os cadastros e as fazendas soltas daquele grupo, o
+resto depois); selo "⚠ Cadastro incompleto" ao lado do perfil (Produtor) com
+o que falta no `title` (`_faltando_no_cadastro`: nome completo, celular,
+plano, fazenda, municipio/estado e culturas de cada fazenda; fazenda sem
+cadastro sempre incompleta, `_faltando_na_fazenda`) e filtros "Cadastro
+incompleto" e "Fazendas sem cadastro". Mapas de Estudo ficou so' com criar/editar ponto
 (coordenada, raio, tipo) e remover.
 **Plano de cada fazenda** (`app._plano_da_fazenda`, selo `selo_plano(site)` --
 template global): fazenda REAL (BioScout) = Inteligência (`models.PLANO_FAZENDA_REAL`),

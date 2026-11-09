@@ -541,7 +541,7 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("Cortesia até", html)
         self.assertIn('data-filtro="cliente"', html)
         self.assertIn('class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle"', html)  # recolhido
-        self.assertIn('class="d-none mt-3" id="cad-body-0"', html)
+        self.assertIn('class="d-none mt-3" id="cad-body-p', html)
         self.assertNotIn("Todas as contas criadas", html)  # texto do topo saiu
         self.assertIn(">Gerenciar Clientes", html)  # menu
         self.assertIn(">Planos e Valores</a>", html)

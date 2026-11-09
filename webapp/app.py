@@ -8645,14 +8645,58 @@ def admin_solicitacoes():
         p["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon, buscar_frequencias=False)) for nome, lat, lon in outras]
         sinal_celular.buscar_frequencias_em_segundo_plano(
             [(lat, lon) for lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])
-    sem_cadastro = _fazendas_sem_cadastro()
+    sem_cadastro = [_dados_da_fazenda(s, f"livre_{i}") for i, s in enumerate(_fazendas_sem_cadastro())]
     for p in pessoas:
         p["fazendas"] = [_dados_da_fazenda(a["site_name"], f"{p['user_id']}_{a['id']}") for a in p["areas"] if a.get("site_name")]
+        p["faltando"] = _faltando_no_cadastro(p)
+    for fz in sem_cadastro:
+        fz["faltando"] = ["cadastro (cliente)"] + _faltando_na_fazenda(fz)
+    # Exibir por produtor ou por grupo economico (pedido do Alan, 09/11/2026), lembrado na sessao.
+    if request.args.get("exibir") in ("produtor", "grupo"):
+        session["gerenciar_clientes_exibir"] = request.args["exibir"]
+    exibir = session.get("gerenciar_clientes_exibir", "produtor")
+    grupos, sem_grupo = {}, {"pessoas": [], "fazendas": []}
+    for p in pessoas:
+        nome = (p.get("grupo_economico") or "").strip()
+        alvo = grupos.setdefault(nome.lower(), {"nome": nome, "pessoas": [], "fazendas": []}) if nome else sem_grupo
+        alvo["pessoas"].append(p)
+    for fz in sem_cadastro:
+        nome = (fz.get("grupo") or "").strip()
+        alvo = grupos.setdefault(nome.lower(), {"nome": nome, "pessoas": [], "fazendas": []}) if nome else sem_grupo
+        alvo["fazendas"].append(fz)
     return render_template("admin_solicitacoes.html", pessoas=pessoas, perfis=PERFIS_CADASTRO,
                            planos=models.get_planos(), hoje=_hoje_cuiaba().isoformat(),
-                           sem_cadastro=[_dados_da_fazenda(s, f"livre_{i}") for i, s in enumerate(sem_cadastro)],
+                           sem_cadastro=sem_cadastro, exibir=exibir,
+                           grupos=sorted(grupos.values(), key=lambda gr: _chave_alfabetica(gr["nome"])), sem_grupo=sem_grupo,
                            clientes_lista=[{"id": pe["user_id"], "nome": pe.get("nome_completo") or pe["username"]}
                                            for pe in pessoas if pe.get("cliente")])
+
+
+def _faltando_na_fazenda(fz):
+    falta = []
+    if not fz.get("cidade") or not fz.get("uf"):
+        falta.append(f"município/estado de {fz['nome_exibicao']}")
+    if not fz.get("culturas"):
+        falta.append(f"culturas de {fz['nome_exibicao']}")
+    return falta
+
+
+def _faltando_no_cadastro(p):
+    """O que falta pro cadastro ficar completo (selo "Cadastro incompleto" e
+    filtro em Gerenciar Clientes; pedido do Alan, 09/11/2026)."""
+    falta = []
+    if not (p.get("nome_completo") or "").strip():
+        falta.append("nome completo")
+    if not p.get("telefone"):
+        falta.append("celular")
+    if p.get("cliente"):
+        if not p["cliente"].get("plano_id"):
+            falta.append("plano")
+        if not p.get("areas"):
+            falta.append("fazenda")
+        for fz in p.get("fazendas") or []:
+            falta += _faltando_na_fazenda(fz)
+    return falta
 
 
 # Itens do menu Configuracoes (botao ⋮): (chave, rotulo, endpoint, quem ve
