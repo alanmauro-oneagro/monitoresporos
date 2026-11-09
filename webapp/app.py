@@ -1440,6 +1440,11 @@ def _whatsapp_titulo(site):
     return nome
 
 
+# Rodape do relatorio (texto e PDF; pedido do Alan, 08/11/2026).
+AVISO_AGRONOMO = export_pdf.AVISO_AGRONOMO
+CONTATO_RELATORIO = export_pdf.CONTATO_RELATORIO
+
+
 def _format_whatsapp_message(
     site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None,
     safra_label=None, plantio_linhas=None, aplicacoes_linhas=None, leitura_bioscout=None,
@@ -1501,7 +1506,7 @@ def _format_whatsapp_message(
     Clima agora como direcao predominante do vento. `ponto_clima=True`
     (pontos "so clima") tira o aviso de agronomo (pedido do Alan,
     19/10/2026)."""
-    _AVISO_AGRONOMO = "Isso não substitui a avaliação de um agrônomo responsável."
+    _AVISO_AGRONOMO = AVISO_AGRONOMO
 
     def _linhas_clima():
         """Clima agora + previsao de chuva (sem min/max, igual a tela/PDF)
@@ -1556,7 +1561,7 @@ def _format_whatsapp_message(
         if mostrar_secao_doencas:
             partes += ["", "✅ Nenhuma doença em atenção ou perigo nessa fazenda no momento."]
         if not ponto_clima:
-            partes += ["", f"_{_AVISO_AGRONOMO}_"]
+            partes += ["", f"_{_AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
         return "\n".join(partes)
 
     lines = cabecalho + _linhas_clima()
@@ -1606,7 +1611,7 @@ def _format_whatsapp_message(
         lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DISPONÍVEIS NA FAZENDA*"]
         lines += linhas_produtos or ["Nenhum produto cadastrado."]
 
-    lines += ["", f"_{_AVISO_AGRONOMO}_"]
+    lines += ["", f"_{_AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
     return "\n".join(lines).strip()
 
 

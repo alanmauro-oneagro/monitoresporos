@@ -248,7 +248,12 @@ toda fazenda, pedido do Alan, 08/11/2026; grupo economico do cliente fica
 como digitado, resto em maiusculas; ponto so' clima/fazenda sem cultura =
 sem a linha "Informações"; o PDF tem o mesmo cabecalho, tudo em negrito
 entre duas linhas -- `export_pdf.build_recommendation_pdf(titulo_fazenda=,
-data_relatorio=)`); cartao
+data_relatorio=)`). **Rodape** (texto e PDF, pedido do Alan, 09/11/2026):
+"Este relatório é uma ferramenta de monitoramento e não substitui a
+avaliação de um agrônomo responsável." + "Quer ter essa ferramenta para sua
+lavoura, entre em contato com a OneAgro. (43)99114-7595"
+(`export_pdf.AVISO_AGRONOMO`/`CONTATO_RELATORIO`; ponto so' clima continua
+sem rodape no texto); cartao
 "Todas as fazendas (uma mensagem só)" no topo quando ha' mais de uma
 (`/app/relatorios/todos.txt`: 1 cabecalho + o bloco de cada fazenda) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
 "Copiar texto" e "Baixar .txt" (`/app/relatorios/<id>.txt`). Na lista "Fazendas monitoradas" o "✏️ Editar" fica
