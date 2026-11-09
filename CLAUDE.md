@@ -258,8 +258,10 @@ sem rodape no texto). **Corpo do texto** (pedido do Alan, 09/11/2026):
 "🌧️ *Previsão de chuvas:*" com 2 dias por linha ("09/11: 12.2 mm // 10/11:
 3.7 mm", `_linhas_previsao_chuva`) e cada doenca como "- *Moniliophthora:*" /
 "Quantidade de esporos: 🔴 Alta" (Perigo; Atencao = 🟡 Média,
-`_QUANTIDADE_ESPOROS`) / "Risco de infecção:" / "09/11 🟢 · 10/11 🟡 ..."
-(so' a cor por dia); cartao
+`_QUANTIDADE_ESPOROS`) / "Risco de infecção:" / "09/11 🟢; 10/11 🟡; ..."
+(so' a cor por dia) / "Recomendações das instituições de pesquisa:" /
+🧪 Biológicos / ⚗️ Químicos (a linha "_Recomendações..._" embaixo do titulo
+"DOENÇAS EM ATENÇÃO / PERIGO" saiu); cartao
 "Todas as fazendas (uma mensagem só)" no topo quando ha' mais de uma
 (`/app/relatorios/todos.txt`: 1 cabecalho + o bloco de cada fazenda) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
 "Copiar texto" e "Baixar .txt" (`/app/relatorios/<id>.txt`). Na lista "Fazendas monitoradas" o "✏️ Editar" fica

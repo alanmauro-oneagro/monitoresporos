@@ -1558,16 +1558,17 @@ def _format_whatsapp_message(
         return "\n".join(partes)
 
     lines = cabecalho + _linhas_clima()
-    lines += ["", _WHATSAPP_SEPARADOR, "⚠️ *DOENÇAS EM ATENÇÃO / PERIGO*", "_Recomendações das instituições de pesquisa_"]
+    lines += ["", _WHATSAPP_SEPARADOR, "⚠️ *DOENÇAS EM ATENÇÃO / PERIGO*"]
 
     for d in diseases:
         # Formato do Alan (09/11/2026): "- *Doenca:*" / "Quantidade de esporos:
-        # 🔴 Alta" / "Risco de infecção:" + "09/11 🟢 · 10/11 🟡 ..." numa linha.
+        # 🔴 Alta" / "Risco de infecção:" + "09/11 🟢; 10/11 🟡 ..." numa linha /
+        # "Recomendações das instituições de pesquisa:" + biologicos/quimicos.
         lines += ["", f"- *{d['rotulo']}:*",
                   f"Quantidade de esporos: {_QUANTIDADE_ESPOROS.get(d['status'], d['status'])}"]
         previsao_risco = d.get("previsao_risco")
         if previsao_risco:
-            lines += ["Risco de infecção:", " · ".join(
+            lines += ["Risco de infecção:", "; ".join(
                 f"{p['data_fmt']} {_RISCO_EMOJI.get(p['risco'], '⚪')}" for p in previsao_risco)]
         else:
             # Sem previsao (falha da Open-Meteo, ou doenca sem limite
@@ -1578,6 +1579,8 @@ def _format_whatsapp_message(
                 lines.append(f"Risco de infecção: {_RISCO_EMOJI.get(d.get('risco'), '')} {risco_label}")
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
         quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None
+        if biologicos_itens or quimicos_itens:
+            lines.append("Recomendações das instituições de pesquisa:")
         if biologicos_itens:
             lines.append("🧪 Biológicos: " + " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens))
         if quimicos_itens:
