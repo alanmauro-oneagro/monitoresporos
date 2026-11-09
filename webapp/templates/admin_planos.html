@@ -59,7 +59,7 @@
                     {% elif p and p.valor > 0 %}<div class="text-muted" style="font-size: 0.72rem;">{{ p.parcelas }}x de {{ p.valor_parcela | dinheiro(p.simbolo) }}</div>{% endif %}
                     {% if p and p.moeda == 'USD' and p.valor > 0 and cotacao_dolar %}<div class="text-muted" style="font-size: 0.72rem;">≈ {{ (p.valor * cotacao_dolar.valor) | dinheiro }} hoje</div>{% endif %}
                 </td>{% endfor %}</tr>
-            <tr><td title="O valor total vem da tabela de apoio: área do cliente (Cereais = Soja, Cana = Cana, HF = soma) x U$/ha da faixa">Preço pela área <span class="fw-normal text-muted">(tabela de apoio)</span></td>
+            <tr><td title="O valor total vem da tabela de apoio: área do cliente (Cereais = Soja, Cana = Cana, HF = soma) x valor/ha da faixa, na moeda da tabela">Preço pela área <span class="fw-normal text-muted">(tabela de apoio)</span></td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
                 <td class="plano-col rec{{ ' plano-novo' if not p }}"><input class="form-check-input" type="checkbox" name="preco_area__{{ k }}" aria-label="Preço pela área" {% if p and p.preco_por_area %}checked{% endif %}></td>
                 {% endfor %}</tr>
@@ -99,17 +99,27 @@
 </form>
 
 <div class="card shadow-sm mb-4" id="tabela-precificacao"><div class="card-body px-2 px-sm-3">
-    <h6 class="mb-1">Tabela de apoio: preço em U$ pela área monitorada</h6>
+    {% set sm = 'R$' if moeda_tabela == 'BRL' else 'U$' %}
+    <h6 class="mb-1">Tabela de apoio: preço em <span class="moeda-simbolo">{{ sm }}</span> pela área monitorada</h6>
     <p class="small text-muted mb-2">Digite o valor por hectare de cada faixa. A área do cadastro do cliente busca a faixa dela
         (valor intermediário fica na faixa de cima: 300 ha usa a de "até 500 ha") e o preço aparece em
-        <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>. Raio = círculo com a área; R$ pelo dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.
+        <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>. Raio = círculo com a área; em U$, o ≈ R$ sai pelo dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.
         Não muda nenhum plano nem cobrança.</p>
     <form method="post" action="{{ url_for('admin_planos_tabela') }}">
+        {# Moeda da tabela: U$ ou R$ (pedido do Alan, 09/11/2026). #}
+        <div class="d-flex align-items-center gap-2 small mb-2">
+            <label for="moeda-tabela" class="text-muted">Moeda da tabela</label>
+            <select name="moeda" id="moeda-tabela" class="form-select form-select-sm" style="width: auto;">
+                <option value="USD" {% if moeda_tabela != 'BRL' %}selected{% endif %}>Dólar (U$)</option>
+                <option value="BRL" {% if moeda_tabela == 'BRL' %}selected{% endif %}>Real (R$)</option>
+            </select>
+            <span class="text-muted">vale para o preço pela área do plano e para a fazenda adicional</span>
+        </div>
         <div class="table-responsive">
-        <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem; max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}">
+        <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem; max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}" data-moeda="{{ moeda_tabela }}">
             <thead class="table-light"><tr>
                 <th title="Área monitorada">Área</th><th title="Raio monitorado no limite da faixa">Raio (km)</th>
-                <th title="Valor por hectare">U$/ha</th><th title="Valor total em dólar no limite da faixa">Total U$</th><th title="Valor total em reais, pela cotação de hoje">≈ Total R$</th>
+                <th title="Valor por hectare"><span class="moeda-simbolo">{{ sm }}</span>/ha</th><th title="Valor total no limite da faixa">Total <span class="moeda-simbolo">{{ sm }}</span></th><th class="col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" title="Valor total em reais, pela cotação de hoje">≈ Total R$</th>
             </tr></thead>
             <tbody>
                 {% for f in tabela_preco %}
@@ -117,8 +127,8 @@
                     <td class="text-nowrap">{{ f.rotulo }}</td>
                     <td class="text-end text-muted">{{ ('%.2f' | format(f.raio_km)) | replace('.', ',') if f.raio_km else '-' }}</td>
                     <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 3.6rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ f.usd_ha if f.usd_ha is not none else '' }}" aria-label="Valor por hectare {{ f.rotulo }}"></td>
-                    <td class="text-end fw-bold text-nowrap" data-saida="usd" data-col="{{ loop.index0 }}">{{ f.total_usd | dinheiro('U$') if f.total_usd is not none else '-' }}</td>
-                    <td class="text-end text-nowrap" data-saida="brl" data-col="{{ loop.index0 }}">{{ (f.total_usd * cotacao_dolar.valor) | dinheiro if f.total_usd is not none and cotacao_dolar else '-' }}</td>
+                    <td class="text-end fw-bold text-nowrap" data-saida="usd" data-col="{{ loop.index0 }}">{{ f.total_usd | dinheiro(sm) if f.total_usd is not none else '-' }}</td>
+                    <td class="text-end text-nowrap col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" data-saida="brl" data-col="{{ loop.index0 }}">{{ (f.total_usd * cotacao_dolar.valor) | dinheiro if f.total_usd is not none and cotacao_dolar else '-' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -138,7 +148,9 @@
 (function () {
     var tabela = document.querySelector('.tabela-preco');
     if (!tabela) return;
-    var cotacao = parseFloat(tabela.dataset.cotacao);
+    var cotacao = parseFloat(tabela.dataset.cotacao), seletor = document.getElementById('moeda-tabela');
+    function simbolo() { return seletor.value === 'BRL' ? 'R$' : 'U$'; }
+    function emDolar() { return seletor.value !== 'BRL'; }
     var linhas = Array.prototype.slice.call(tabela.querySelectorAll('tbody tr'));
     function dinheiro(v, simbolo) {
         return simbolo + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -150,17 +162,27 @@
         var tr = linhas.filter(function (l) { return !l.dataset.ate || area <= parseFloat(l.dataset.ate); })[0];
         var v = usdHa(tr), raio = Math.sqrt(area * 0.01 / Math.PI).toFixed(2).replace('.', ',');
         var faixa = tr.cells[0].textContent;
-        if (v === null) { saida.textContent = faixa + ' -- sem U$/ha na faixa · raio ' + raio + ' km'; return; }
+        if (v === null) { saida.textContent = faixa + ' -- sem ' + simbolo() + '/ha na faixa · raio ' + raio + ' km'; return; }
         var total = area * v;
-        saida.textContent = faixa + ': ' + dinheiro(total, 'U$') + (isNaN(cotacao) ? '' : ' (≈ ' + dinheiro(total * cotacao, 'R$') + ')') + ' · raio ' + raio + ' km';
+        saida.textContent = faixa + ': ' + dinheiro(total, simbolo()) + (!emDolar() || isNaN(cotacao) ? '' : ' (≈ ' + dinheiro(total * cotacao, 'R$') + ')') + ' · raio ' + raio + ' km';
+    }
+    function recalcular(col) {
+        var tr = linhas[col], ate = parseFloat(tr.dataset.ate), v = usdHa(tr);
+        var total = !isNaN(ate) && v !== null ? ate * v : null;
+        tabela.querySelector('[data-col="' + col + '"][data-saida="usd"]').textContent = total !== null ? dinheiro(total, simbolo()) : '-';
+        tabela.querySelector('[data-col="' + col + '"][data-saida="brl"]').textContent = total !== null && !isNaN(cotacao) ? dinheiro(total * cotacao, 'R$') : '-';
     }
     tabela.addEventListener('input', function (e) {
         var col = e.target.dataset.col;
         if (col === undefined) return;
-        var tr = linhas[col], ate = parseFloat(tr.dataset.ate), v = usdHa(tr);
-        var total = !isNaN(ate) && v !== null ? ate * v : null;
-        tabela.querySelector('[data-col="' + col + '"][data-saida="usd"]').textContent = total !== null ? dinheiro(total, 'U$') : '-';
-        tabela.querySelector('[data-col="' + col + '"][data-saida="brl"]').textContent = total !== null && !isNaN(cotacao) ? dinheiro(total * cotacao, 'R$') : '-';
+        recalcular(col);
+        simular();
+    });
+    // Trocar a moeda: troca o simbolo e esconde o "≈ Total R$" (em R$ nao ha conversao).
+    seletor.addEventListener('change', function () {
+        document.querySelectorAll('.moeda-simbolo').forEach(function (el) { el.textContent = simbolo(); });
+        document.querySelectorAll('.col-brl').forEach(function (el) { el.classList.toggle('d-none', !emDolar()); });
+        linhas.forEach(function (_l, i) { recalcular(i); });
         simular();
     });
     document.getElementById('simular-area').addEventListener('input', simular);

@@ -7164,7 +7164,7 @@ def _plano_para_area(plano, area_ha, cot=None):
         p.update(sob_consulta=True, valor=0.0, valor_parcela=0.0)
         return p
     total = round(preco["total_usd"], 2)
-    p.update(sob_consulta=False, moeda="USD", simbolo=models.MOEDAS["USD"], valor=total,
+    p.update(sob_consulta=False, moeda=preco["moeda"], simbolo=preco["simbolo"], valor=total,
              valor_parcela=round(total / p["parcelas"], 2), faixa=preco["faixa"], usd_ha=preco["usd_ha"])
     return p
 
@@ -7315,6 +7315,7 @@ def _contexto_cadastro(culturas):
         "grupo_de": {c: _grupo_da_cultura(c) for c in culturas},
         "planos": models.get_planos(apenas_ativos=True), "recursos": models.RECURSOS_PLANO,
         "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"]} for f in _tabela_precificacao()],
+        "moeda_tabela": _moeda_tabela(),
         "cotacao_valor": cot["valor"] if cot else None, "contato_comercial": CONTATO_COMERCIAL, "max_extras": MAX_EXTRAS_RELATORIO,
     }
 
@@ -7963,8 +7964,8 @@ def _cobrar_fazenda_adicional(user_id, ponto_id, area_antes, area_nova):
     if extra_usd <= 0:
         models.set_adicional_ponto(ponto_id, adicional_status="incluida")
         return "Fazenda adicionada, sem custo a mais.", "success"
-    models.set_adicional_ponto(ponto_id, adicional_status="pendente", adicional_total=extra_usd, adicional_moeda="USD")
-    aviso = (f"Fazenda adicionada. Área a mais: {_dinheiro(extra_usd, 'U$')} por ano, em {plano['parcelas']}x. "
+    models.set_adicional_ponto(ponto_id, adicional_status="pendente", adicional_total=extra_usd, adicional_moeda=depois["moeda"])
+    aviso = (f"Fazenda adicionada. Área a mais: {_dinheiro(extra_usd, depois['simbolo'])} por ano, em {plano['parcelas']}x. "
              f"Você tem acesso a ela até {models.fmt_data_br(fim)}; depois, só com o pagamento.")
     erro = _gerar_cobranca_adicional(user_id, ponto_id)
     if erro:
@@ -8828,7 +8829,7 @@ def admin_planos():
         "admin_planos.html", planos=models.get_planos(), recursos=models.RECURSOS_PLANO,
         recursos_ocultos=RECURSOS_FORA_DA_TELA,
         ciclos=models.CICLOS_PLANO, moedas=models.MOEDAS, cotacao_dolar=cotacao.dolar(),
-        tabela_preco=_tabela_precificacao(),
+        tabela_preco=_tabela_precificacao(), moeda_tabela=_moeda_tabela(),
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
         hoje=_hoje_cuiaba().isoformat(),
@@ -8843,6 +8844,14 @@ def admin_planos():
 # o preco e o raio (`preco_pela_area`, mostrado em Gerenciar Clientes).
 # Setting `tabela_precificacao`; so' apoio -- nao muda plano nem cobranca.
 _TABELA_PRECO_KEY = "tabela_precificacao"
+# Moeda da tabela de apoio: U$ ou R$ (pedido do Alan, 09/11/2026). Os campos
+# continuam "usd_ha"/"total_usd" por compatibilidade -- o valor esta' na moeda da tabela.
+_TABELA_MOEDA_KEY = "tabela_precificacao_moeda"
+
+
+def _moeda_tabela():
+    moeda = models.get_setting(_TABELA_MOEDA_KEY) or "USD"
+    return moeda if moeda in models.MOEDAS else "USD"
 FAIXAS_PRECO = [100, 250, 500, 1000, 2000, 3000, 5000, 10000, None]  # None = acima de 10.000 ha
 
 
@@ -8905,11 +8914,15 @@ def preco_pela_area(area_ha, cot=None):
     ate = _faixa_da_area(area)
     usd_ha = _usd_ha_por_faixa().get(ate)
     total = area * usd_ha if usd_ha is not None else None
-    if cot is None:
-        cot = cotacao.dolar()
+    moeda = _moeda_tabela()
+    if moeda == "BRL":
+        total_brl = total
+    else:
+        if cot is None:
+            cot = cotacao.dolar()
+        total_brl = total * cot["valor"] if total is not None and cot else None
     return {"area_ha": area, "faixa": _rotulo_faixa(ate), "usd_ha": usd_ha, "total_usd": total,
-            "total_brl": total * cot["valor"] if total is not None and cot else None,
-            "raio_km": _raio_km(area)}
+            "total_brl": total_brl, "raio_km": _raio_km(area), "moeda": moeda, "simbolo": models.MOEDAS[moeda]}
 
 
 @app.route("/admin/planos/tabela", methods=["POST"])
@@ -8931,6 +8944,8 @@ def admin_planos_tabela():
         flash("Tabela de apoio: o valor por hectare precisa ser um número (sem negativos).", "error")
         return redirect(url_for("admin_planos") + "#tabela-precificacao")
     models.set_setting(_TABELA_PRECO_KEY, json.dumps(faixas))
+    if request.form.get("moeda") in models.MOEDAS:
+        models.set_setting(_TABELA_MOEDA_KEY, request.form["moeda"])
     flash("Tabela de apoio salva.", "success")
     return redirect(url_for("admin_planos") + "#tabela-precificacao")
 
