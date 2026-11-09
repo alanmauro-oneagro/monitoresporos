@@ -400,6 +400,31 @@ class PlanoDaFazendaTest(unittest.TestCase):
         self.assertIn('data-plano="Inteligência"', graficos)
 
 
+class GrupoEconomicoEstudoTest(unittest.TestCase):
+    """Fazendas do Mapas de Estudo com o mesmo grupo economico ficam juntas
+    em Recomendacoes (pedido do Alan, 09/11/2026)."""
+
+    def test_grupo_do_mapas_de_estudo_agrupa(self):
+        webapp.app.config["TESTING"] = True
+        models.init_db()
+        if not models.get_user_by_username("Zzz Master GrupoEst"):
+            models.create_user("Zzz Master GrupoEst", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master GrupoEst")["id"])
+            s["_fresh"] = True
+        sites = [models.create_virtual_farm(n, -12.4 - i / 100, -55.7, 30) for i, n in enumerate(("Zzz Est G1", "Zzz Est G2"))]
+        for site in sites:
+            c.post("/mapa-interpolado/plano", data={"site_name": site, "plano_id": "", "grupo_economico": "Grupo Zzz Estudo"})
+        self.assertIn("👥 Grupo Zzz Estudo", c.get("/mapa-interpolado").get_data(as_text=True))
+        with mock.patch.object(webapp, "_texto_relatorio", side_effect=lambda site, *a, **k: f"texto de {site}"), \
+                mock.patch.object(webapp, "_cards_by_site_all", return_value={s: [] for s in sites}), \
+                mock.patch.object(webapp, "_format_whatsapp_message", side_effect=lambda site, *a, **k: f"texto de {site}"):
+            html = c.get("/recommendations/safra1").get_data(as_text=True)
+        self.assertIn('data-grupo="Grupo Zzz Estudo"', html)
+        self.assertIn("2 fazendas", html)
+
+
 class ExcelClientesPlanosTest(unittest.TestCase):
     """Abas "Clientes" e "Planos" no Excel de Exportar (pedido do Alan, 01/11/2026)."""
 
