@@ -8653,7 +8653,8 @@ def admin_solicitacoes():
                          if a.get("site_name") and a["site_name"] not in ocultas]
         p["faltando"] = _faltando_no_cadastro(p)
     for fz in sem_cadastro:
-        fz["faltando"] = ["cadastro (cliente)"] + _faltando_na_fazenda(fz)
+        # So' o que falta de dado; a falta de cliente ja' e' o selo "Fazenda sem cadastro" (09/11/2026).
+        fz["faltando"] = _faltando_na_fazenda(fz)
     _preencher_estacoes(sem_cadastro + [fz for p in pessoas for fz in p["fazendas"]])
     # Exibir por produtor ou por grupo economico (pedido do Alan, 09/11/2026), lembrado na sessao.
     if request.args.get("exibir") in ("produtor", "grupo"):
