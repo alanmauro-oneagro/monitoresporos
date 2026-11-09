@@ -440,7 +440,15 @@ cliente em Gerenciar Clientes mostra "Preco pela area" (U$, ≈ R$, faixa,
 U$/ha, raio da area). Setting `tabela_precificacao` = lista
 {ate_ha (null = acima), usd_ha}; o formato antigo (10 areas livres)
 aproveita so' as areas iguais a uma faixa. Rota `admin_planos_tabela`.
-So' apoio: nao muda plano nem cobranca. **Pino verde-claro**
+So' apoio: nao muda plano nem cobranca. **Moeda da tabela** (pedido do Alan,
+09/11/2026): seletor "Moeda da tabela" Dolar (U$) / Real (R$) na propria
+tabela (setting `tabela_precificacao_moeda`, `app._moeda_tabela`; os campos
+seguem `usd_ha`/`total_usd` por compatibilidade, mas o valor esta' na moeda
+escolhida). Em R$: sem conversao (some a coluna "≈ Total R$"),
+`preco_pela_area` devolve `moeda`/`simbolo` e `total_brl` = total, o plano com
+preco pela area (`_plano_para_area`) e a fazenda adicional
+(`_cobrar_fazenda_adicional`, `adicional_moeda`) saem em R$, o cadastro
+(`MOEDA_TABELA` no JS) e Gerenciar Clientes mostram R$. **Pino verde-claro**
 (`PIN_COR_PLANO` `#b2f2bb`, pedido do Alan, 07/11/2026): fazenda criada
 pelo plano (lavoura de cliente, `models.sites_de_clientes()` =
 `cliente_pontos.site_name`) no Mapa e no Mapas de Estudo (`de_plano` no

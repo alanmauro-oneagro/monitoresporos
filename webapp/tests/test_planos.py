@@ -616,7 +616,7 @@ class TabelaPrecificacaoTest(unittest.TestCase):
     def test_faixas_fixas_e_salvar(self):
         master = self._logado("Zzz Teste Master Tabela")
         html = master.get("/admin/planos").get_data(as_text=True)
-        self.assertIn("Tabela de apoio: preço em U$ pela área monitorada", html)
+        self.assertIn("Tabela de apoio: preço em <span class=\"moeda-simbolo\">U$</span> pela área monitorada", html)
         self.assertEqual(html.count(" data-campo=\"usd_ha\" value="), 9)  # 9 faixas fixas
         for rotulo in ("até 100 ha", "até 250 ha", "até 1.000 ha", "até 10.000 ha", "acima de 10.000 ha"):
             self.assertIn(f">{rotulo}<", html)
@@ -649,6 +649,26 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         self.assertEqual((p["faixa"], p["usd_ha"], p["total_usd"]), ("até 2.000 ha", None, None))
         self.assertEqual(webapp.preco_pela_area(25000)["total_usd"], 2500)
         self.assertEqual(webapp.preco_pela_area(25000)["faixa"], "acima de 10.000 ha")
+
+    def test_tabela_em_reais(self):
+        """Moeda da tabela de apoio U$ ou R$ (pedido do Alan, 09/11/2026): em R$
+        o valor por ha ja' e' em reais, sem conversao; plano pela area sai em R$."""
+        master = self._logado("Zzz Teste Master Tabela")
+        dados = {f"usd_ha_{i}": "" for i in range(9)}
+        dados.update({"usd_ha_2": "10", "moeda": "BRL"})
+        try:
+            master.post("/admin/planos/tabela", data=dados)
+            p = webapp.preco_pela_area(300)
+            self.assertEqual((p["moeda"], p["simbolo"], p["total_usd"], p["total_brl"]), ("BRL", "R$", 3000, 3000))
+            html = master.get("/admin/planos").get_data(as_text=True)
+            self.assertIn('<option value="BRL" selected', html)
+            self.assertIn("R$ 5.000,00", html)  # 500 ha x R$ 10
+            plano = {"preco_por_area": 1, "parcelas": 12, "nome": "Zzz", "moeda": "USD", "simbolo": "U$"}
+            pa = webapp._plano_para_area(plano, 300)
+            self.assertEqual((pa["moeda"], pa["simbolo"], pa["valor"], pa["valor_parcela"]), ("BRL", "R$", 3000, 250))
+        finally:
+            models.set_setting("tabela_precificacao_moeda", "USD")
+        self.assertEqual(webapp.preco_pela_area(300)["moeda"], "USD")
         self.assertIsNone(webapp.preco_pela_area(None))
         self.assertIsNone(webapp.preco_pela_area(0))
 
