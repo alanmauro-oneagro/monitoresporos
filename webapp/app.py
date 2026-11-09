@@ -1358,19 +1358,6 @@ def _riscos_climaticos_sem_alerta(cards, weather, diseases, site=None, safra=Non
     return [d for d in _riscos_climaticos_relevantes(cards, weather, site, safra) if d["doenca_en"] not in em_alerta]
 
 
-_STATUS_LABELS = {"Perigo": "Alta concentração de esporos", "Atencao": "Moderada concentração de esporos"}
-# Mesma cor da bolinha do PDF (Perigo #ff6b6b -> vermelho, Atencao
-# #e6ac00 -> laranja/amarelo), so' que em emoji pro WhatsApp (texto puro
-# nao tem cor de verdade).
-_STATUS_EMOJI = {"Perigo": "🔴", "Atencao": "🟠"}
-
-
-def _status_label(status):
-    """'Perigo'/'Atencao' -> 'Alta/Moderada concentração de esporos'
-    (Manejo, WhatsApp e PDF usam o mesmo rotulo)."""
-    return _STATUS_LABELS.get(status, status)
-
-
 def _fmt_ingrediente(item, classe_label):
     if item.get("classe"):
         return f"{item['ingrediente']} ({classe_label.get(item['classe'], item['classe'])})"
@@ -1443,6 +1430,16 @@ def _whatsapp_titulo(site):
 # Rodape do relatorio (texto e PDF; pedido do Alan, 08/11/2026).
 AVISO_AGRONOMO = export_pdf.AVISO_AGRONOMO
 CONTATO_RELATORIO = export_pdf.CONTATO_RELATORIO
+
+
+_QUANTIDADE_ESPOROS = {"Perigo": "🔴 Alta", "Atencao": "🟡 Média", "Normal": "🟢 Baixa"}
+
+
+def _linhas_previsao_chuva(previsao):
+    """Previsao de chuva 2 dias por linha: "09/11: 12.2 mm // 10/11: 3.7 mm"
+    (pedido do Alan, 09/11/2026)."""
+    dias = [f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" for d in previsao]
+    return [" // ".join(dias[i:i + 2]) for i in range(0, len(dias), 2)]
 
 
 def _format_whatsapp_message(
@@ -1518,10 +1515,8 @@ def _format_whatsapp_message(
         # disponiveis na fazenda" -- fica a previsao de chuva e as doencas.
         if weather and simples:
             if weather.get("previsao_5_dias"):
-                linhas.append("🌧️ *Previsão de chuva*")
-                linhas.extend(
-                    f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" for d in weather["previsao_5_dias"]
-                )
+                linhas.append("🌧️ *Previsão de chuvas:*")
+                linhas.extend(_linhas_previsao_chuva(weather["previsao_5_dias"]))
         elif weather:
             partes = []
             if weather.get("temperatura_atual") is not None:
@@ -1539,10 +1534,8 @@ def _format_whatsapp_message(
                 linhas.append(f"🧭 Vento predominante (hoje): de {vento_dia['nome']}")
             if weather.get("previsao_5_dias"):
                 linhas.append("")
-                linhas.append("🌧️ *Previsão de chuva*")
-                linhas.extend(
-                    f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" for d in weather["previsao_5_dias"]
-                )
+                linhas.append("🌧️ *Previsão de chuvas:*")
+                linhas.extend(_linhas_previsao_chuva(weather["previsao_5_dias"]))
         if leitura_bioscout and not simples:
             linhas.append("")
             linhas.append(f"_Última leitura BioScout: {leitura_bioscout}_")
@@ -1568,22 +1561,21 @@ def _format_whatsapp_message(
     lines += ["", _WHATSAPP_SEPARADOR, "⚠️ *DOENÇAS EM ATENÇÃO / PERIGO*", "_Recomendações das instituições de pesquisa_"]
 
     for d in diseases:
-        lines.append("")
-        emoji_status = _STATUS_EMOJI.get(d["status"], "")
-        titulo = f"{emoji_status} *{d['rotulo']}* — {_status_label(d['status']).lower()}"
+        # Formato do Alan (09/11/2026): "- *Doenca:*" / "Quantidade de esporos:
+        # 🔴 Alta" / "Risco de infecção:" + "09/11 🟢 · 10/11 🟡 ..." numa linha.
+        lines += ["", f"- *{d['rotulo']}:*",
+                  f"Quantidade de esporos: {_QUANTIDADE_ESPOROS.get(d['status'], d['status'])}"]
         previsao_risco = d.get("previsao_risco")
-        if not previsao_risco:
+        if previsao_risco:
+            lines += ["Risco de infecção:", " · ".join(
+                f"{p['data_fmt']} {_RISCO_EMOJI.get(p['risco'], '⚪')}" for p in previsao_risco)]
+        else:
             # Sem previsao (falha da Open-Meteo, ou doenca sem limite
             # cadastrado) -- cai pro Risco de Infeccao "de agora", baseado
             # no horario ja observado (`_calc_risco_germinacao`).
             risco_label = _risco_label(d.get("risco"))
             if risco_label:
-                titulo += f"\nRisco de infecção: {risco_label}"
-        lines.append(titulo)
-        if previsao_risco:
-            lines.append("Risco de infecção: " + " · ".join(
-                f"{_RISCO_EMOJI.get(p['risco'], '')} {p['data_fmt']} {_risco_label(p['risco'])}" for p in previsao_risco
-            ))
+                lines.append(f"Risco de infecção: {_RISCO_EMOJI.get(d.get('risco'), '')} {risco_label}")
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
         quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None
         if biologicos_itens:
