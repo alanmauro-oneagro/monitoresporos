@@ -6,7 +6,15 @@
 .cad-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 0.75rem; margin: 0; font-size: 0.85rem; }
 .cad-card dt { color: #6c757d; font-weight: 400; }
 .cad-card dd { margin: 0; overflow-wrap: anywhere; }
-.cad-toggle { font-size: 1rem; }
+/* Tamanhos padrao dos cartoes (pedido do Alan, 09/11/2026): nome 0.95rem, selos 0.7rem. */
+.cad-toggle { font-size: 0.95rem; font-weight: 600 !important; }
+.cad-card .badge, .grupo-box .badge { font-size: 0.7rem; font-weight: 600; padding: 0.3em 0.55em; }
+.cad-card .text-muted.small, .cad-card .small.text-muted { font-size: 0.75rem; }
+.fazenda-linha { font-size: 0.8rem; }
+.fazenda-linha .fw-semibold { font-size: 0.85rem; }
+.fazenda-linha .btn-sm { font-size: 0.75rem; }
+#filtro-pessoas .btn, .exibir-por .btn { font-size: 0.78rem; }
+details.card > summary { font-size: 0.9rem; }
 .cad-card { margin-bottom: 0.5rem !important; }
 .cad-card > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
 /* Sinal de celular: mesma linha discreta de Manejos (ver _sinal_celular.linha). */
@@ -30,6 +38,13 @@
         {% if not fz.ativo %}<span class="badge bg-secondary">Oculta</span>{% endif %}
         <div class="ms-auto d-flex gap-1">
             <button type="button" class="btn btn-sm btn-outline-primary py-0 dados-toggle" data-site="{{ fz.site }}" data-idx="{{ fz.idx }}">✏️ Dados da fazenda</button>
+            {# Ocultar daqui: some do site e desta tela, vai pra Gerenciar Fazendas Ocultas (09/11/2026). #}
+            <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0"
+                  data-msg="Ocultar {{ fz.nome_exibicao }}? Some do site e desta tela (nada é apagado) -- reativar em Configurações > Gerenciar Fazendas Ocultas."
+                  onsubmit="return confirm(this.dataset.msg);">
+                <input type="hidden" name="site_name" value="{{ fz.site }}"><input type="hidden" name="ativo" value="0">
+                <button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="Ocultar fazenda">🙈 Ocultar</button>
+            </form>
             {% if cliente_id and fz.ponto and fz.ponto.vinculada %}
             <form method="post" action="{{ url_for('admin_cliente_desvincular', user_id=cliente_id, ponto_id=fz.ponto.id) }}" class="mb-0"
                   onsubmit="return confirm('Tirar {{ fz.nome_exibicao }} deste cadastro? A fazenda continua no site.');">
@@ -233,7 +248,7 @@
     <button type="button" class="btn btn-outline-secondary" data-filtro="incompleto">Cadastro incompleto ({{ n_incompletos }})</button>
     <button type="button" class="btn btn-outline-secondary" data-filtro="fazenda">Fazendas sem cadastro ({{ sem_cadastro | length }})</button>
 </div>
-<div class="d-flex align-items-center gap-2 mb-3 small">
+<div class="d-flex align-items-center gap-2 mb-3 small exibir-por">
     <span class="text-muted">Exibir por:</span>
     <div class="btn-group btn-group-sm" role="group">
         <a class="btn btn-outline-success{{ ' active' if exibir == 'produtor' }}" href="{{ url_for('admin_solicitacoes', exibir='produtor') }}">Nome do produtor</a>

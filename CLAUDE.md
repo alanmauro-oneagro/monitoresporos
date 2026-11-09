@@ -250,7 +250,11 @@ cadastro sempre incompleta, `_faltando_na_fazenda`) e filtros "Cadastro
 incompleto" e "Fazendas sem cadastro". Ponto "so' clima" NAO entra em
 Gerenciar Clientes (nem nas sem cadastro, nem no "+ Novo cliente"/Ligar --
 `_fazendas_sem_cadastro`; pedido do Alan, 09/11/2026): fica so' no Mapas de
-Estudo. Mapas de Estudo ficou so' com criar/editar ponto
+Estudo. Cada linha de fazenda tem "🙈 Ocultar" (`save_site_ativo`); fazenda
+OCULTA some de Gerenciar Clientes (sem cadastro e dentro dos cadastros) e
+fica so' em Gerenciar Fazendas Ocultas. Tamanhos dos cartoes: nome 0.95rem,
+selos 0.7rem, linha da fazenda 0.8rem, filtros 0.78rem (CSS no topo do
+admin_solicitacoes.html). Mapas de Estudo ficou so' com criar/editar ponto
 (coordenada, raio, tipo) e remover.
 **Plano de cada fazenda** (`app._plano_da_fazenda`, selo `selo_plano(site)` --
 template global): fazenda REAL (BioScout) = Inteligência (`models.PLANO_FAZENDA_REAL`),
