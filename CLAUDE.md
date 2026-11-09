@@ -254,7 +254,12 @@ avaliação de um agrônomo responsável." + "Quer ter essa ferramenta para sua
 lavoura, entre em contato com a OneAgro. (43)99114-7595"
 (`export_pdf.AVISO_AGRONOMO`/`CONTATO_RELATORIO`; o PDF nao tem mais "Fonte do
 clima" nem "Powered by BioScout", 09/11/2026; ponto so' clima continua
-sem rodape no texto); cartao
+sem rodape no texto). **Corpo do texto** (pedido do Alan, 09/11/2026):
+"🌧️ *Previsão de chuvas:*" com 2 dias por linha ("09/11: 12.2 mm // 10/11:
+3.7 mm", `_linhas_previsao_chuva`) e cada doenca como "- *Moniliophthora:*" /
+"Quantidade de esporos: 🔴 Alta" (Perigo; Atencao = 🟡 Média,
+`_QUANTIDADE_ESPOROS`) / "Risco de infecção:" / "09/11 🟢 · 10/11 🟡 ..."
+(so' a cor por dia); cartao
 "Todas as fazendas (uma mensagem só)" no topo quando ha' mais de uma
 (`/app/relatorios/todos.txt`: 1 cabecalho + o bloco de cada fazenda) e os botoes "Enviar pelo WhatsApp" (wa.me/?text=),
 "Copiar texto" e "Baixar .txt" (`/app/relatorios/<id>.txt`). Na lista "Fazendas monitoradas" o "✏️ Editar" fica
