@@ -245,18 +245,36 @@ document.addEventListener('click', function (e) {
     fetch('{{ url_for("admin_fazenda_dados") }}?site=' + encodeURIComponent(btn.dataset.site) + '&idx=' + encodeURIComponent(btn.dataset.idx),
           { credentials: 'same-origin' })
         .then(function (r) { if (!r.ok) { throw new Error(); } return r.text(); })
-        .then(function (html) { corpo.innerHTML = html; corpo.dataset.carregado = '1'; })
+        .then(function (html) {
+            corpo.innerHTML = html; corpo.dataset.carregado = '1';
+            corpo.querySelectorAll('.form-culturas').forEach(atualizarCulturas);
+        })
         .catch(function () { corpo.textContent = 'Não foi possível abrir os dados agora.'; });
 });
-// Area total soma as culturas ao digitar ("Soja (1.200 ha), Milho (800 ha)").
-document.addEventListener('input', function (e) {
-    if (e.target.name !== 'culturas' || !e.target.closest('.dados-fazenda')) { return; }
+// Culturas no padrao do app dentro de "Dados da fazenda": o tipo mostra as
+// culturas dele, marcar abre a area e a Area total soma (pedido do Alan, 09/11/2026).
+function atualizarCulturas(form) {
+    var tipos = Array.prototype.map.call(form.querySelectorAll('input[name=grupo_cultura]:checked'), function (g) { return g.value; });
+    form.querySelector('.bloco-culturas').classList.toggle('d-none', !tipos.length);
     var total = 0;
-    (e.target.value.match(/\(([\d.,]+)\s*ha\)/g) || []).forEach(function (m) {
-        var v = parseFloat(m.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.'));
-        if (!isNaN(v)) { total += v; }
+    form.querySelectorAll('.cultura-linha').forEach(function (linha) {
+        var visivel = tipos.indexOf(linha.dataset.grupo) >= 0;
+        linha.classList.toggle('d-none', !visivel);
+        var caixa = linha.querySelector('input[type=checkbox]');
+        var marcada = visivel && (caixa ? caixa.checked : linha.querySelector('.cultura-outra').value.trim() !== '');
+        linha.querySelector('.cultura-area').classList.toggle('d-none', !marcada);
+        if (marcada) {
+            var v = parseFloat((linha.querySelector('.area').value || '').replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(v)) { total += v; }
+        }
     });
-    e.target.closest('form').querySelector('.area-total').textContent = total ? total.toLocaleString('pt-BR') + ' ha' : '-';
+    form.querySelector('.area-total').textContent = total ? total.toLocaleString('pt-BR') + ' ha' : '-';
+}
+['change', 'input'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+        var form = e.target.closest('.form-culturas');
+        if (form) { atualizarCulturas(form); }
+    });
 });
 document.querySelectorAll('.ligar-a-cliente').forEach(function (f) {
     f.addEventListener('submit', function () { f.action = f.querySelector('select').value; });

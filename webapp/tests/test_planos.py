@@ -345,9 +345,17 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         self.assertEqual(self._selo(e1), "Sem plano")
         self.assertEqual(self._selo(self.real), "Inteligência")
         # dados completados antes de ter cadastro (fazendas_dados) vao junto ao ligar
-        r = master.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"},
-                        data={"site_name": e1, "cidade": "Sorriso", "uf": "MT", "culturas": "Soja (100 ha), Milho (50 ha)"})
+        # culturas no mesmo formato do app: tipo + caixa por cultura com a area (09/11/2026)
+        r = master.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"}, data={
+            "site_name": e1, "cidade": "Sorriso", "uf": "MT", "grupo_cultura": "cereais", "culturas": ["Soja", "Milho"],
+            "area_cultura__Soja": "100", "area_cultura__Milho": "50"})
         self.assertTrue(r.get_json()["ok"])
+        self.assertEqual(models.get_fazendas_dados()[e1]["culturas"], "Soja (100 ha), Milho (50 ha)")
+        # grupo numa fazenda ainda sem cadastro (agrupa em Recomendacoes)
+        master.post("/admin/fazendas/grupo/salvar", headers={"X-Autosave": "1"},
+                    data={"site_name": e2, "grupo_economico": "Grupo Zzz Solto"})
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._grupo_economico_da_fazenda(e2), "Grupo Zzz Solto")
         tela = master.get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("Fazendas sem cadastro", tela)
         self.assertIn("+ Novo cliente", tela)
@@ -371,12 +379,18 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         master.post(f"/admin/clientes/{uid}/grupo", headers={"X-Autosave": "1"}, data={"grupo_economico": "Grupo Zzz Novo"})
         with webapp.app.test_request_context():
             self.assertEqual(webapp._grupo_economico_da_fazenda(e2), "Grupo Zzz Novo")
+        master.post("/admin/fazendas/grupo/salvar", headers={"X-Autosave": "1"},
+                    data={"site_name": e1, "grupo_economico": "Grupo Zzz Novo"})
+        self.assertEqual(models.get_cadastro_do_usuario(uid)["grupo_economico"], "Grupo Zzz Novo")
         # editor de dados da fazenda
         editor = master.get("/admin/fazendas/dados", query_string={"site": e2}).get_data(as_text=True)
-        for campo in ('name="cidade"', 'name="culturas"', 'name="nome_exibicao"', 'name="country_code"', 'name="estacao_codigo"'):
+        for campo in ('name="cidade"', 'name="culturas"', 'name="grupo_cultura"', 'name="area_cultura__Soja"',
+                      'name="cultura_outra"', 'name="grupo_economico"', 'name="nome_exibicao"', 'name="country_code"',
+                      'name="estacao_codigo"'):
             self.assertIn(campo, editor)
-        master.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"},
-                    data={"site_name": e2, "cidade": "Sinop", "uf": "MT", "culturas": "Soja (40 ha)"})
+        master.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"}, data={
+            "site_name": e2, "cidade": "Sinop", "uf": "MT", "grupo_cultura": "cereais", "culturas": "Soja",
+            "area_cultura__Soja": "40"})
         self.assertEqual(models.get_ponto_por_id(pontos[e2]["id"])["area_ha"], 40)
         self.assertIn("Soja (140 ha)", models.get_cadastro_do_usuario(uid)["culturas"])
         # Administrador nao mexe nos dados (so' Master)

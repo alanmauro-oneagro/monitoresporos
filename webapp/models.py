@@ -820,6 +820,11 @@ def init_db():
     conn.execute("CREATE TABLE IF NOT EXISTS fazendas_dados (site_name TEXT PRIMARY KEY, cidade TEXT, uf TEXT,"
                  " culturas TEXT, area_ha REAL, atualizado_em TEXT)")
     try:
+        # Grupo de fazenda ainda sem cadastro (agrupa em Recomendacoes; pedido do Alan, 09/11/2026).
+        conn.execute("ALTER TABLE fazendas_dados ADD COLUMN grupo_economico TEXT")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
+    try:
         # Grupo economico da fazenda do Mapas de Estudo (agrupa em Recomendacoes; pedido do Alan, 09/11/2026).
         conn.execute("ALTER TABLE planos_fazenda ADD COLUMN grupo_economico TEXT")
     except sqlite3.OperationalError:
@@ -4371,7 +4376,7 @@ def grupos_economicos():
     """Nomes de grupo economico em uso (fazendas e cadastros), sem repetir."""
     conn = get_db()
     nomes = [r[0] for r in conn.execute(
-        "SELECT grupo_economico FROM planos_fazenda WHERE COALESCE(grupo_economico, '') != ''"
+        "SELECT grupo_economico FROM fazendas_dados WHERE COALESCE(grupo_economico, '') != ''"
         " UNION SELECT grupo_economico FROM solicitacoes_acesso WHERE COALESCE(grupo_economico, '') != ''").fetchall()]
     conn.close()
     vistos, saida = set(), []
@@ -4401,10 +4406,20 @@ def salvar_fazenda_dados(site_name, cidade, uf, culturas, area_ha):
     conn.close()
 
 
-def atualizar_dados_ponto(ponto_id, cidade, uf, culturas, area_ha):
+def salvar_grupo_fazenda_dados(site_name, grupo):
     conn = get_db()
-    conn.execute("UPDATE cliente_pontos SET cidade = ?, uf = ?, culturas = ?, area_ha = ? WHERE id = ?",
-                 (cidade, uf, culturas, area_ha, ponto_id))
+    conn.execute("INSERT INTO fazendas_dados (site_name, grupo_economico, atualizado_em) VALUES (?, ?, ?)"
+                 " ON CONFLICT(site_name) DO UPDATE SET grupo_economico = excluded.grupo_economico,"
+                 " atualizado_em = excluded.atualizado_em", (site_name, grupo, _agora_cuiaba()))
+    conn.commit()
+    conn.close()
+
+
+def atualizar_dados_ponto(ponto_id, cidade, uf, culturas, area_ha, area_preco_ha=None):
+    conn = get_db()
+    conn.execute("UPDATE cliente_pontos SET cidade = ?, uf = ?, culturas = ?, area_ha = ?,"
+                 " area_preco_ha = COALESCE(?, area_preco_ha) WHERE id = ?",
+                 (cidade, uf, culturas, area_ha, area_preco_ha, ponto_id))
     conn.commit()
     conn.close()
 

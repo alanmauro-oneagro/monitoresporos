@@ -4122,7 +4122,10 @@ def _grupo_economico_da_fazenda(site):
     Clientes; pedido do Alan, 09/11/2026), ou ""."""
     dono = models.donos_das_fazendas_clientes().get(site)
     if not dono:
-        return ""
+        # Fazenda sem cadastro: o grupo digitado em "Dados da fazenda" (09/11/2026).
+        if getattr(g, "_fazendas_dados", None) is None:
+            g._fazendas_dados = models.get_fazendas_dados()
+        return ((g._fazendas_dados.get(site) or {}).get("grupo_economico") or "").strip()
     cadastros = g.setdefault("_grupo_por_dono", {})
     if dono not in cadastros:
         cadastros[dono] = ((models.get_cadastro_do_usuario(dono) or {}).get("grupo_economico") or "").strip()
@@ -8969,7 +8972,23 @@ def _dados_da_fazenda(site, idx="0", completo=False):
         "area_ha": area, "area_txt": f"{_fmt_ha(area)} ha" if area else "-",
         "lat": lat, "lon": lon, "country_code": pais,
         "ativo": site not in models.get_deactivated_site_names(), "plano": _plano_da_fazenda(site),
+        "grupo": _grupo_economico_da_fazenda(site),
     }
+    # Culturas no mesmo formato do app (tipo + caixa por cultura com a area + "Outra cultura").
+    lista = _culturas_cliente()
+    marcadas, areas, outra, area_outra, tipos = [], {}, "", "", set()
+    for c, a in _culturas_com_area(culturas):
+        valor = _fmt_ha(_area_de_texto(a)) if a and _area_de_texto(a) else ""
+        if c in lista:
+            marcadas.append(c)
+            areas[c] = valor
+            tipos.add(_grupo_da_cultura(c))
+        else:
+            outra, area_outra = c, valor
+            tipos.add("hf")
+    fz.update(lista_culturas=lista, marcadas=marcadas, areas=areas, outra=outra, area_outra=area_outra,
+              tipos=[t for t in GRUPOS_CULTURA if t in tipos], grupos_cultura=GRUPOS_CULTURA,
+              grupo_de={c: _grupo_da_cultura(c) for c in lista})
     if completo:
         escolha = models.get_all_weather_station_overrides().get(site)
         fz["estacoes_proximas"] = countries.estacoes_mais_proximas_global(lat, lon, pais, n=2) if lat is not None else []
@@ -8997,11 +9016,15 @@ def admin_fazenda_dados_salvar():
         abort(404)
     cidade = (request.form.get("cidade") or "").strip()[:80]
     uf = request.form.get("uf") if request.form.get("uf") in UFS_BR else ""
-    culturas = (request.form.get("culturas") or "").strip()[:300]
-    area = _soma_areas(culturas) or None
+    # Mesmo formulario de culturas do app (tipo, culturas e area de cada uma).
+    grupos = [gr for gr in GRUPOS_CULTURA if gr in request.form.getlist("grupo_cultura")]
+    areas_grupo = _locais_do_form(request.form, _culturas_cliente(), grupos)[0]["areas_grupo"]
+    culturas = ", ".join(f"{c} ({_fmt_ha(a)} ha)" for c, a, _g in areas_grupo if a > 0)
+    area = sum(a for _c, a, _g in areas_grupo) or None
     ponto = _ponto_da_fazenda(site)
     if ponto:
-        models.atualizar_dados_ponto(ponto["id"], cidade, uf, culturas, area)
+        models.atualizar_dados_ponto(ponto["id"], cidade, uf, culturas, area,
+                                     _area_preco_grupos(grupos, areas_grupo) if areas_grupo else None)
         _recalcular_cadastro(ponto["user_id"])
     else:
         models.salvar_fazenda_dados(site, cidade, uf, culturas, area)
@@ -9014,6 +9037,24 @@ def _fazendas_sem_cadastro():
     donos = models.donos_das_fazendas_clientes()
     todas = set(read_sites()) | models.virtual_farm_site_names()
     return sorted((s for s in todas if s not in donos), key=_ordem_fazenda)
+
+
+@app.route("/admin/fazendas/grupo/salvar", methods=["POST"])
+@master_required
+def admin_fazenda_grupo_salvar():
+    """Grupo economico no editor da fazenda: na fazenda com cadastro muda o
+    grupo do cadastro (vale pra todas as fazendas dele); sem cadastro, fica
+    na propria fazenda (pedido do Alan, 09/11/2026)."""
+    site = request.form.get("site_name", "")
+    if site not in (set(read_sites()) | models.virtual_farm_site_names()):
+        abort(404)
+    grupo = (request.form.get("grupo_economico") or "").strip()[:40] or None
+    ponto = _ponto_da_fazenda(site)
+    if ponto:
+        models.atualizar_dados_cadastro(ponto["user_id"], grupo_economico=grupo)
+    else:
+        models.salvar_grupo_fazenda_dados(site, grupo)
+    return _save_response("Grupo salvo.", "admin_solicitacoes")
 
 
 @app.route("/admin/clientes/novo", methods=["POST"])
