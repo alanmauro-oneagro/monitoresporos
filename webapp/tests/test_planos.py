@@ -42,27 +42,27 @@ class PlanosTest(unittest.TestCase):
         return models.criar_cliente(nome, "segredo1", "", "5565999990000", "", None)
 
     def test_planos_padrao(self):
-        for nome in ("Free", "Básico", "Premium", "Premium + Estação"):
+        for nome in ("Essencial", "Básico", "Avançado", "Inteligência"):
             self.assertIn(nome, self.planos)
-        free = self.planos["Free"]
+        free = self.planos["Essencial"]
         self.assertEqual((free["valor"], free["ativo"], free["recursos"]), (0, 1, ["clima", "whatsapp_texto"]))
         # PDF por WhatsApp so' nos Premium (pedido do Alan, 08/11/2026)
-        self.assertIn("whatsapp_pdf", self.planos["Premium"]["recursos"])
-        self.assertIn("whatsapp_pdf", self.planos["Premium + Estação"]["recursos"])
+        self.assertIn("whatsapp_pdf", self.planos["Avançado"]["recursos"])
+        self.assertIn("whatsapp_pdf", self.planos["Inteligência"]["recursos"])
         self.assertNotIn("whatsapp_pdf", self.planos["Básico"]["recursos"])
-        self.assertEqual(self.planos["Premium"]["ativo"], 0)  # pago nasce fora de venda ate' ter preco
+        self.assertEqual(self.planos["Avançado"]["ativo"], 0)  # pago nasce fora de venda ate' ter preco
         models.init_db()  # rodar de novo nao duplica
-        self.assertEqual(sum(1 for p in models.get_planos() if p["nome"] == "Free"), 1)
+        self.assertEqual(sum(1 for p in models.get_planos() if p["nome"] == "Essencial"), 1)
 
     def test_master_define_preco_e_abas(self):
         master = self._logado(models.get_user_by_username("Zzz Teste Master Planos")["id"])
-        premium = self.planos["Premium"]
+        premium = self.planos["Avançado"]
         basico = self.planos["Básico"]
         k, b = premium["id"], basico["id"]
         # um envio so' grava todos os planos da tela
         master.post("/admin/planos/salvar", data={
             "plano_ids": [str(k), str(b)],
-            f"nome__{k}": "Premium", f"valor__{k}": "149,90", f"ciclo__{k}": "MONTHLY", f"max_pontos__{k}": "10",
+            f"nome__{k}": "Avançado", f"valor__{k}": "149,90", f"ciclo__{k}": "MONTHLY", f"max_pontos__{k}": "10",
             f"raio_km__{k}": "50", f"ordem__{k}": "3", f"recursos__{k}": ["clima", "esporos", "risco"], f"ativo__{k}": "on",
             f"nome__{b}": "Básico", f"valor__{b}": "59,90", f"ciclo__{b}": "MONTHLY", f"max_pontos__{b}": "3",
             f"raio_km__{b}": "50", f"ordem__{b}": "2", f"recursos__{b}": ["clima", "site_mapa"],
@@ -78,7 +78,7 @@ class PlanosTest(unittest.TestCase):
         # com um plano errado, nenhum e' gravado
         negativo = master.post("/admin/planos/salvar", data={
             "plano_ids": [str(k), str(b)],
-            f"nome__{k}": "Premium", f"valor__{k}": "-1", f"ciclo__{k}": "MONTHLY", f"max_pontos__{k}": "10", f"raio_km__{k}": "50",
+            f"nome__{k}": "Avançado", f"valor__{k}": "-1", f"ciclo__{k}": "MONTHLY", f"max_pontos__{k}": "10", f"raio_km__{k}": "50",
             f"nome__{b}": "Básico", f"valor__{b}": "1,00", f"ciclo__{b}": "MONTHLY", f"max_pontos__{b}": "3", f"raio_km__{b}": "50",
         }, follow_redirects=True)
         self.assertIn("0 = plano grátis", negativo.get_data(as_text=True))
@@ -91,20 +91,20 @@ class PlanosTest(unittest.TestCase):
         self.assertIn("Escolha o seu plano", html)
         self.assertIn("Grátis", html)
         # todos os planos aparecem; os fora de venda como "Em breve", sem escolha
-        self.assertIn("Premium + Estação", html)
+        self.assertIn("Inteligência", html)
         self.assertIn("Em breve", html)
-        self.assertIn(f'id="plano_{self.planos["Premium + Estação"]["id"]}"', html)
+        self.assertIn(f'id="plano_{self.planos["Inteligência"]["id"]}"', html)
         self.assertNotIn("Aguardando pagamento", html)  # situacao so' depois de escolher
-        forcado = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Premium + Estação"]["id"])},
+        forcado = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Inteligência"]["id"])},
                          follow_redirects=True)
         self.assertIn("Escolha um plano", forcado.get_data(as_text=True))
         self.assertIsNone(models.get_assinatura(uid)["plano_id"])
         self.assertIn("/app/assinatura", c.get("/app/regiao").headers["Location"])  # sem plano: bloqueado
-        resp = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Free"]["id"])})
+        resp = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Essencial"]["id"])})
         self.assertTrue(resp.headers["Location"].endswith("/app"))
         assinatura = models.get_assinatura(uid)
         self.assertEqual((assinatura["plano_id"], assinatura["status"], assinatura["cpf_cnpj"]),
-                         (self.planos["Free"]["id"], "ativa", ""))
+                         (self.planos["Essencial"]["id"], "ativa", ""))
         self.assertTrue(models.assinatura_liberada(assinatura))
         self.assertEqual(c.get("/app").status_code, 200)
         # Free vale 7 dias a partir do cadastro (pedido do Alan, 08/11/2026)
@@ -116,14 +116,14 @@ class PlanosTest(unittest.TestCase):
         conn.execute("UPDATE assinaturas SET criado_em = '2026-01-01 08:00:00', plano_id = NULL, cortesia_ate = NULL WHERE user_id = ?", (uid,))
         conn.commit()
         conn.close()
-        velho = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Free"]["id"])}, follow_redirects=True)
+        velho = c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Essencial"]["id"])}, follow_redirects=True)
         self.assertIn("vale 7 dias", velho.get_data(as_text=True))
         self.assertFalse(models.assinatura_liberada(models.get_assinatura(uid)))
 
     def test_free_antigo_sem_prazo_vira_7_dias(self):
         """Free "sem prazo" de antes da regra passa a 7 dias do cadastro no init_db (pedido do Alan, 08/11/2026)."""
         uid = self._cliente("Zzz Cliente Free Antigo")
-        models.atualizar_assinatura(uid, plano_id=self.planos["Free"]["id"], status="ativa", cortesia_ate=models.SEM_PRAZO)
+        models.atualizar_assinatura(uid, plano_id=self.planos["Essencial"]["id"], status="ativa", cortesia_ate=models.SEM_PRAZO)
         conn = models.get_db()
         conn.execute("UPDATE assinaturas SET criado_em = '2026-10-20 09:00:00' WHERE user_id = ?", (uid,))
         conn.commit()
@@ -141,7 +141,7 @@ class PlanosTest(unittest.TestCase):
         models.salvar_plano(basico["id"], "Básico", "", 49.9, "MONTHLY", 3, 50, ["clima", "esporos"], True, 2)
         uid = self._cliente("Zzz Cliente Troca")
         c = self._logado(uid)
-        c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Free"]["id"])})
+        c.post("/app/assinatura/assinar", data={"plano_id": str(self.planos["Essencial"]["id"])})
         # sem CPF: recusa e continua no gratis
         html = c.post("/app/assinatura/assinar", data={"plano_id": str(basico["id"])}, follow_redirects=True).get_data(as_text=True)
         self.assertIn("CPF ou CNPJ válido", html)
@@ -158,7 +158,7 @@ class PlanosTest(unittest.TestCase):
             from flask_login import login_user
             login_user(webapp.User(models.get_user_by_id(uid)))
             plano, liberada, free_ate = webapp._acesso_cliente()
-            self.assertEqual((plano["nome"], liberada, free_ate), ("Free", True, models.fim_free(assinatura)))
+            self.assertEqual((plano["nome"], liberada, free_ate), ("Essencial", True, models.fim_free(assinatura)))
 
 
     def test_upgrade_so_planos_acima(self):
@@ -177,7 +177,7 @@ class PlanosTest(unittest.TestCase):
         up = c.get("/app/assinatura?upgrade=1").get_data(as_text=True)
         self.assertIn(f'id="plano_{alto}"', up)
         self.assertNotIn(f'id="plano_{baixo}"', up)
-        self.assertNotIn(f'id="plano_{self.planos["Free"]["id"]}"', up)
+        self.assertNotIn(f'id="plano_{self.planos["Essencial"]["id"]}"', up)
         self.assertIn('name="upgrade" value="1"', up)
         with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
                 mock.patch.object(webapp.asaas, "cancelar_assinatura") as cancelar, \
@@ -297,6 +297,107 @@ class PlanosTest(unittest.TestCase):
         self.assertIsNotNone(models.get_virtual_farm(site_name))
         models.delete_user(uid)
         self.assertIsNone(models.get_virtual_farm(site_name))
+
+
+class PlanoDaFazendaTest(unittest.TestCase):
+    """Nomes novos dos planos e plano de cada fazenda (pedido do Alan, 09/11/2026):
+    real = Inteligência, Mapas de Estudo = plano escolhido com ou sem cobranca."""
+
+    @classmethod
+    def setUpClass(cls):
+        webapp.app.config["TESTING"] = True
+        models.init_db()
+        if not models.get_user_by_username("Zzz Master PlanoFaz"):
+            models.create_user("Zzz Master PlanoFaz", "x", is_master=True)
+        if not models.get_user_by_username("Zzz Admin PlanoFaz"):
+            models.create_user("Zzz Admin PlanoFaz", "x", is_admin=True)
+
+    def _logado(self, nome):
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username(nome)["id"])
+            s["_fresh"] = True
+        return c
+
+    def _plano(self, nome):
+        return next(p for p in models.get_planos() if p["nome"] == nome)
+
+    def _selo(self, site):
+        with webapp.app.test_request_context():
+            return webapp._plano_da_fazenda(site)["texto"]
+
+    def test_nomes_antigos_viram_novos_no_init_db(self):
+        essencial = self._plano("Essencial")
+        conn = models.get_db()
+        conn.execute("UPDATE planos SET nome = 'Free' WHERE id = ?", (essencial["id"],))
+        conn.commit()
+        conn.close()
+        models.init_db()
+        nomes = [p["nome"] for p in models.get_planos()]
+        self.assertNotIn("Free", nomes)
+        self.assertEqual(self._plano("Essencial")["id"], essencial["id"])
+        self.assertEqual(models.plano_free()["id"], essencial["id"])
+
+    def test_fazenda_real_e_inteligencia_e_estudo_sem_plano(self):
+        self.assertEqual(self._selo("Zzz Fazenda Real BioScout"), "Inteligência")
+        site = models.create_virtual_farm("Zzz Estudo Sem Plano", -12.5, -55.7, 30)
+        self.assertEqual(self._selo(site), "Sem plano")
+
+    def test_plano_sem_cobranca_com_validade(self):
+        site = models.create_virtual_farm("Zzz Estudo Cortesia", -12.6, -55.7, 30)
+        avancado = self._plano("Avançado")
+        r = self._logado("Zzz Master PlanoFaz").post("/mapa-interpolado/plano", data={
+            "site_name": site, "plano_id": str(avancado["id"]), "validade": "2099-12-31"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self._selo(site), "Avançado · até 31/12/2099")
+        # Administrador nao define plano nem cobranca (so' Master)
+        r = self._logado("Zzz Admin PlanoFaz").post("/mapa-interpolado/plano", data={"site_name": site, "plano_id": ""})
+        self.assertEqual(r.status_code, 403)
+
+    def test_plano_com_cobranca_no_asaas_e_pagamento(self):
+        site = models.create_virtual_farm("Zzz Estudo Cobranca", -12.65, -55.7, 30)
+        basico = self._plano("Básico")
+        models.salvar_plano(basico["id"], basico["nome"], "", 1200, "MONTHLY", 3, 50, basico["recursos"], True, basico["ordem"])
+        master = self._logado("Zzz Master PlanoFaz")
+        dados = {"site_name": site, "plano_id": str(basico["id"]), "cobrar": "1", "pagador_nome": "Zzz Pagador",
+                 "cpf_cnpj": "529.982.247-25", "celular": "(65) 99999-0000", "email": ""}
+        with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
+                mock.patch.object(webapp.asaas, "criar_cliente", return_value="cus_1") as cli, \
+                mock.patch.object(webapp.asaas, "criar_assinatura", return_value="sub_estudo_1") as sub, \
+                mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[{"invoiceUrl": "https://fatura/1"}]):
+            sem_cpf = master.post("/mapa-interpolado/plano", data={**dados, "cpf_cnpj": "123"})
+            self.assertFalse(sub.called)
+            master.post("/mapa-interpolado/plano", data=dados)
+        self.assertIn("CPF/CNPJ", master.get(sem_cpf.location).get_data(as_text=True) if sem_cpf.location else "CPF/CNPJ")
+        self.assertEqual(cli.call_args[0][1], CPF_VALIDO)
+        self.assertEqual(sub.call_args[0][1], 100.0)  # 1.200 / 12 parcelas
+        self.assertTrue(sub.call_args[0][5].startswith("estudo:"))
+        pf = models.get_plano_fazenda(site)
+        self.assertEqual((pf["asaas_subscription_id"], pf["status"], pf["link_fatura"]), ("sub_estudo_1", "pendente", "https://fatura/1"))
+        self.assertEqual(self._selo(site), "Básico · aguardando pagamento")
+        tela = master.get("/mapa-interpolado").get_data(as_text=True)
+        self.assertIn("https://fatura/1", tela)
+        # Pagamento confirmado pelo webhook: vale 1 ano do vencimento
+        with mock.patch.object(webapp.asaas, "token_webhook", return_value="tok"):
+            r = webapp.app.test_client().post("/webhooks/asaas", headers={"asaas-access-token": "tok"}, json={
+                "event": "PAYMENT_CONFIRMED", "payment": {"id": "pay_estudo_1", "subscription": "sub_estudo_1",
+                                                         "status": "CONFIRMED", "dueDate": "2026-11-09", "value": 100}})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._selo(site), "Básico · até 09/11/2027")
+        # Desmarcar a cobranca cancela a assinatura no Asaas
+        with mock.patch.object(webapp.asaas, "cancelar_assinatura") as cancelar:
+            master.post("/mapa-interpolado/plano", data={"site_name": site, "plano_id": str(basico["id"]), "validade": ""})
+        cancelar.assert_called_once_with("sub_estudo_1")
+        self.assertIsNone(models.get_plano_fazenda(site)["asaas_subscription_id"])
+
+    def test_selo_nas_abas_e_filtro_de_plano(self):
+        site = models.create_virtual_farm("Zzz Estudo Selo", -12.7, -55.7, 30)
+        models.salvar_plano_fazenda(site, plano_id=self._plano("Inteligência")["id"], validade="2099-01-01")
+        master = self._logado("Zzz Master PlanoFaz")
+        self.assertIn("Inteligência · até 01/01/2099", master.get("/fazendas").get_data(as_text=True))
+        graficos = master.get("/graficos").get_data(as_text=True)
+        self.assertIn('id="filtroPlano"', graficos)
+        self.assertIn('data-plano="Inteligência"', graficos)
 
 
 class ExcelClientesPlanosTest(unittest.TestCase):

@@ -106,6 +106,7 @@ html { font-size: 14px; }
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}" data-site="{{ site_group.site }}">
                 <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
             </button>
+            {{ selo_plano(site_group.site) }}
             <a href="{{ url_for('fazendas') }}" class="badge rounded-pill text-decoration-none {{ 'bg-success-subtle text-success-emphasis' if site_group.cultura else 'bg-secondary-subtle text-secondary-emphasis' }} fw-normal"
                title="Cultura da safra -- muda na aba Manejos">{{ site_group.cultura or 'sem cultura' }}</a>
             {% if site_group.dias_desde_atualizacao is not none and site_group.dias_desde_atualizacao > 120 %}

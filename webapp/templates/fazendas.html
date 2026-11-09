@@ -58,6 +58,7 @@
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="farm-body-{{ farm_idx }}">
             <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
         </button>
+        {{ selo_plano(site_group.site) }}
         {% if site_group.sinal_celular %}{{ sinal_cel.linha(site_group.sinal_celular) }}{% endif %}
         <div class="d-none mt-3" id="farm-body-{{ farm_idx }}">
             <div class="d-flex gap-2 mb-3">

@@ -196,6 +196,33 @@ cadastrado... entre com a sua conta" e nada e' criado
 (`delete_user` apaga o registro; `_apagar_cadastros_sem_conta` limpa os
 que sobraram ao abrir a tela/contar).
 
+**Nomes dos planos (pedido do Alan, 09/11/2026)**: Free = **Essencial**,
+Premium = **Avançado**, Premium + Estação = **Inteligência** (Básico igual).
+`models.PLANOS_RENOMEADOS` troca no `init_db` (so' se o nome novo nao
+existir; o id fica o mesmo); `plano_free()` acha "Essencial" (ou "Free").
+Onde este arquivo diz Free/Premium/Premium + Estacao, sao esses planos.
+**Plano de cada fazenda** (mesmo pedido; `app._plano_da_fazenda`, selo
+`selo_plano(site)` -- template global): fazenda REAL (estacao BioScout, nao
+virtual) = Inteligência sem validade (`models.PLANO_FAZENDA_REAL`); fazenda de
+cliente = o plano que vale hoje pra ele + validade (`_acesso_do_cliente`,
+`models.donos_das_fazendas_clientes`); fazenda criada no **Mapas de Estudo** =
+o plano que o Master escolhe no botao "💳 Plano" de Pontos Criados (rota
+`salvar_plano_fazenda_estudo`, `@master_required`; tabela `planos_fazenda`,
+entra na cascata de rename e no `delete_virtual_farm`): sem cobranca =
+validade digitada (vazia = sem validade); "Gerar cobrança (Asaas)" = nome +
+CPF/CNPJ (+ celular, e-mail, area pros planos com preco pela area) do
+pagador, assinatura PROPRIA no Asaas (`_cobrar_plano_fazenda`, ref
+`estudo:<id>`, valor/parcelas do plano, U$ pela cotacao), link da fatura no
+cartao; pagamento confirmado no webhook = vale 1 ano do vencimento
+(`models.registrar_pagamento_plano_fazenda`); trocar plano/area/CPF ou
+desmarcar a cobranca cancela a assinatura antiga. Sem plano = selo "Sem plano".
+O selo ("Avançado · até 31/03/2027", verde; amarelo aguardando pagamento;
+vermelho vencido; cinza sem plano) aparece na frente do nome em Alertas
+(dashboard.html), Manejos (fazendas.html), Recomendações e Pontos Criados. A
+aba **Gráficos do site** tem o filtro "Plano" (`planos_disponiveis`,
+`data-plano` em cada estacao; sem estacao marcada, manda todas as do plano;
+guardado nos filtros da conta).
+
 **Cliente do app (pedido do Alan, 25/10/2026)**: 4o tipo de conta,
 `users.is_cliente=1` (nunca admin), criado pelo cadastro direto (acima,
 opcao "Assinar plano") e pago no Asaas (`webapp/asaas.py`, env `ASAAS_API_KEY`/`ASAAS_AMBIENTE`/

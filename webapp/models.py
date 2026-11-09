@@ -650,6 +650,22 @@ def init_db():
             cultura TEXT NOT NULL DEFAULT '',
             criado_em TEXT NOT NULL
         );
+
+        -- Plano das fazendas criadas no Mapas de Estudo (pedido do Alan,
+        -- 09/11/2026): sem cobranca = validade digitada; com cobranca =
+        -- assinatura propria no Asaas e validade = 1 ano do pagamento.
+        CREATE TABLE IF NOT EXISTS planos_fazenda (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_name TEXT NOT NULL UNIQUE,
+            plano_id INTEGER,
+            validade TEXT,
+            cobrar INTEGER NOT NULL DEFAULT 0,
+            pagador_nome TEXT, cpf_cnpj TEXT, email TEXT, celular TEXT,
+            area_ha REAL,
+            asaas_customer_id TEXT, asaas_subscription_id TEXT,
+            status TEXT, pago_ate TEXT, link_fatura TEXT,
+            atualizado_em TEXT
+        );
         """
     )
     try:
@@ -793,6 +809,11 @@ def init_db():
         conn.execute("UPDATE planos SET preco_por_area = 1 WHERE lower(nome) = 'premium'")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
+    # Nomes novos dos planos (pedido do Alan, 09/11/2026): Free = Essencial,
+    # Premium = Avancado, Premium + Estacao = Inteligencia.
+    for antigo, novo in PLANOS_RENOMEADOS:
+        if not conn.execute("SELECT 1 FROM planos WHERE lower(nome) = lower(?)", (novo,)).fetchone():
+            conn.execute("UPDATE planos SET nome = ? WHERE lower(nome) = lower(?)", (novo, antigo))
     # Planos padrao (pedido do Alan, 31/10/2026) -- so' cria o que ainda nao
     # existe pelo nome; os pagos nascem fora de venda ate' o Master por o
     # preco em Configuracoes > Planos e clientes.
@@ -801,7 +822,7 @@ def init_db():
             conn.execute(
                 "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, preco_por_area)"
                 " VALUES (?, '', 0, 'MONTHLY', ?, 50, ?, ?, ?, ?)",
-                (nome, max_pontos, json.dumps(recursos), 1 if ativo else 0, ordem, 1 if nome == "Premium" else 0),
+                (nome, max_pontos, json.dumps(recursos), 1 if ativo else 0, ordem, 1 if nome == "Avançado" else 0),
             )
     # Cadastro direto (pedido do Alan, 31/10/2026): cada linha e' o registro
     # de uma conta criada em /solicitar-acesso (status 'cadastrado'), pra
@@ -826,7 +847,7 @@ def init_db():
                 recursos = json.loads(row["recursos"] or "[]")
             except ValueError:
                 recursos = []
-            novos = ["whatsapp_texto"] + (["whatsapp_pdf"] if row["nome"].strip().lower().startswith("premium") else [])
+            novos = ["whatsapp_texto"] + (["whatsapp_pdf"] if row["nome"].strip().lower().startswith(("premium", "avançado", "inteligência")) else [])
             recursos += [r for r in novos if r not in recursos]
             conn.execute("UPDATE planos SET recursos = ? WHERE id = ?", (json.dumps(recursos), row["id"]))
         conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('recursos_whatsapp_migrados', '1')")
@@ -837,7 +858,7 @@ def init_db():
                 recursos = json.loads(row["recursos"] or "[]")
             except ValueError:
                 recursos = []
-            if row["nome"].strip().lower().startswith("premium") and "graficos_app" not in recursos:
+            if row["nome"].strip().lower().startswith(("premium", "avançado", "inteligência")) and "graficos_app" not in recursos:
                 conn.execute("UPDATE planos SET recursos = ? WHERE id = ?", (json.dumps(recursos + ["graficos_app"]), row["id"]))
         conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('recursos_graficos_migrados', '1')")
     if not conn.execute("SELECT 1 FROM app_settings WHERE key = 'recursos_esporos_numero_migrados'").fetchone():
@@ -847,7 +868,7 @@ def init_db():
             except ValueError:
                 recursos = []
             nome = row["nome"].strip().lower()
-            if nome.startswith("premium") and "esta" in nome and "esporos_numero" not in recursos:
+            if ((nome.startswith("premium") and "esta" in nome) or nome == "inteligência") and "esporos_numero" not in recursos:
                 conn.execute("UPDATE planos SET recursos = ? WHERE id = ?", (json.dumps(recursos + ["esporos_numero"]), row["id"]))
         conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('recursos_esporos_numero_migrados', '1')")
     # Free "sem prazo" de antes da regra dos 7 dias passa a valer 7 dias do
@@ -3011,7 +3032,7 @@ _VIRTUAL_FARM_RENAME_TABLES = (
     "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
     "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_car", "farm_ndvi_historico",
     "site_country_overrides", "site_climate_notes", "ndvi_agendamento", "ndvi_whatsapp_ativos",
-    "whatsapp_schedule_horarios", "site_solo_cache", "cliente_pontos",
+    "whatsapp_schedule_horarios", "site_solo_cache", "cliente_pontos", "planos_fazenda",
 )
 
 
@@ -3104,6 +3125,7 @@ def delete_virtual_farm(site_name):
     resíduo depois de excluida)."""
     conn = get_db()
     conn.execute("DELETE FROM virtual_farms WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM planos_fazenda WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM sites WHERE site_name = ?", (site_name,))  # cascade cuida das permissoes
     conn.execute("DELETE FROM recommendation_notes WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM whatsapp_schedule WHERE site_name = ?", (site_name,))
@@ -3325,6 +3347,15 @@ def clientes_por_site():
         " WHERE p.site_name IS NOT NULL").fetchall()
     conn.close()
     return {r["site_name"]: r["username"] for r in rows}
+
+
+@_cache_requisicao
+def donos_das_fazendas_clientes():
+    """{site_name da fazenda estimada: user_id do cliente dono}."""
+    conn = get_db()
+    rows = conn.execute("SELECT site_name, user_id FROM cliente_pontos WHERE site_name IS NOT NULL").fetchall()
+    conn.close()
+    return {r["site_name"]: r["user_id"] for r in rows}
 
 
 def dono_da_fazenda_cliente(site_name):
@@ -3640,14 +3671,18 @@ RECURSOS_PLANO = [
 ]
 _ABAS_SITE = ["site_mapa", "site_alertas", "site_graficos", "site_manejos", "site_recomendacoes"]
 PLANOS_PADRAO = [  # (nome, recursos, lavouras, a venda ja' de inicio)
-    ("Free", ["clima", "whatsapp_texto"], 1, True),
+    ("Essencial", ["clima", "whatsapp_texto"], 1, True),
     ("Básico", ["clima", "site_mapa", "site_alertas", "fazenda_estimada", "esporos", "whatsapp_texto"], 3, False),
-    ("Premium", ["clima"] + _ABAS_SITE + ["fazenda_estimada", "esporos", "risco", "fungicidas", "regiao",
+    ("Avançado", ["clima"] + _ABAS_SITE + ["fazenda_estimada", "esporos", "risco", "fungicidas", "regiao",
                                           "whatsapp_texto", "whatsapp_pdf", "graficos_app"], 10, False),
     # Fazenda real (estacao BioScout do cliente), liberada pelo Master -- sem fazenda estimada.
-    ("Premium + Estação", ["clima"] + _ABAS_SITE + ["esporos", "risco", "fungicidas", "regiao",
+    ("Inteligência", ["clima"] + _ABAS_SITE + ["esporos", "risco", "fungicidas", "regiao",
                                                     "whatsapp_texto", "whatsapp_pdf", "graficos_app", "esporos_numero"], 10, False),
 ]
+# Nomes antigos -> novos (pedido do Alan, 09/11/2026).
+PLANOS_RENOMEADOS = [("Free", "Essencial"), ("Premium", "Avançado"), ("Premium + Estação", "Inteligência")]
+# Plano das fazendas REAIS (estacao BioScout) -- pedido do Alan, 09/11/2026.
+PLANO_FAZENDA_REAL = "Inteligência"
 # Plano de valor zero (Free) nao tem cobranca: a assinatura fica liberada
 # "sem prazo" (cortesia_ate nessa data) ate' o cliente trocar de plano.
 SEM_PRAZO = "2999-12-31"
@@ -3935,9 +3970,9 @@ def fim_free(assinatura):
 
 
 def plano_free():
-    """O plano gratis (pelo nome "Free"; senao o 1o de valor 0 sem preco pela area)."""
+    """O plano gratis (pelo nome "Essencial", ex-"Free"; senao o 1o de valor 0 sem preco pela area)."""
     planos = get_planos()
-    return (next((p for p in planos if p["nome"].strip().lower() == "free"), None)
+    return (next((p for p in planos if p["nome"].strip().lower() in ("essencial", "free")), None)
             or next((p for p in planos if p["valor"] <= 0 and not p.get("preco_por_area")), None))
 
 
@@ -4252,3 +4287,64 @@ def excluir_cliente_ponto(user_id, ponto_id):
     conn.commit()
     conn.close()
     return site_name
+
+
+# --- Plano de cada fazenda (pedido do Alan, 09/11/2026) ---------------------
+
+_CAMPOS_PLANO_FAZENDA = ("plano_id", "validade", "cobrar", "pagador_nome", "cpf_cnpj", "email", "celular", "area_ha",
+                         "asaas_customer_id", "asaas_subscription_id", "status", "pago_ate", "link_fatura")
+
+
+@_cache_requisicao
+def get_planos_fazendas():
+    """{site_name: linha de planos_fazenda} (fazendas do Mapas de Estudo)."""
+    conn = get_db()
+    linhas = {r["site_name"]: dict(r) for r in conn.execute("SELECT * FROM planos_fazenda").fetchall()}
+    conn.close()
+    return linhas
+
+
+def get_plano_fazenda(site_name):
+    return get_planos_fazendas().get(site_name)
+
+
+def salvar_plano_fazenda(site_name, **campos):
+    campos = {k: v for k, v in campos.items() if k in _CAMPOS_PLANO_FAZENDA}
+    conn = get_db()
+    conn.execute("INSERT OR IGNORE INTO planos_fazenda (site_name) VALUES (?)", (site_name,))
+    if campos:
+        sets = ", ".join(f"{k} = ?" for k in campos)
+        conn.execute(f"UPDATE planos_fazenda SET {sets}, atualizado_em = ? WHERE site_name = ?",
+                     (*campos.values(), _agora_cuiaba(), site_name))
+    conn.commit()
+    conn.close()
+
+
+def plano_fazenda_por_subscription(subscription_id):
+    if not subscription_id:
+        return None
+    conn = get_db()
+    row = conn.execute("SELECT * FROM planos_fazenda WHERE asaas_subscription_id = ?", (subscription_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def plano_fazenda_por_id(pf_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM planos_fazenda WHERE id = ?", (pf_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def registrar_pagamento_plano_fazenda(pf_id, status, vencimento_iso, link=None):
+    """Pagamento confirmado = plano da fazenda vale 1 ano do vencimento
+    (mesma regra do plano do cliente, MESES_VALIDADE_PAGO)."""
+    pf = plano_fazenda_por_id(pf_id)
+    if not pf:
+        return
+    campos = {"link_fatura": link or pf.get("link_fatura")}
+    if status in PAGAMENTO_CONFIRMADO and vencimento_iso:
+        fim = _somar_meses(vencimento_iso[:10], MESES_VALIDADE_PAGO).isoformat()
+        if fim > (pf.get("pago_ate") or ""):
+            campos.update(pago_ate=fim, status="ativa")
+    salvar_plano_fazenda(pf["site_name"], **campos)

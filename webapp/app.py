@@ -3118,16 +3118,21 @@ def graficos():
         v["cultura"] for (site, _), v in models.get_all_farm_culturas().items()
         if v["cultura"] and v["cultura"] != CULTURA_TODOS and site in uf_por_site
     }, key=str.lower)
+    estacoes_info = [
+        {
+            "nome": s, "nome_exibicao": _nome_exibicao(s), "uf": uf_por_site.get(s),
+            "pais": site_countries.get(s, countries.DEFAULT_COUNTRY),
+            "plano": _plano_da_fazenda(s)["nome"] or "Sem plano",
+        }
+        for s in estacoes_disponiveis
+    ]
     return render_template(
         "graficos.html", inicio=inicio.isoformat(), fim=fim.isoformat(),
         culturas_disponiveis=culturas_em_uso,
-        estacoes_disponiveis=[
-            {
-                "nome": s, "nome_exibicao": _nome_exibicao(s), "uf": uf_por_site.get(s),
-                "pais": site_countries.get(s, countries.DEFAULT_COUNTRY),
-            }
-            for s in estacoes_disponiveis
-        ],
+        estacoes_disponiveis=estacoes_info,
+        # Filtro de planos (pedido do Alan, 09/11/2026), na ordem de Planos e Valores.
+        planos_disponiveis=[n for n in [p["nome"] for p in models.get_planos()] + ["Sem plano"]
+                            if any(e["plano"] == n for e in estacoes_info)],
         paises_disponiveis=[{"code": c, "nome": countries.get_country(c)["nome"]} for c in paises_presentes],
     )
 
@@ -3630,6 +3635,7 @@ def mapa_interpolado():
             "pais_nome": countries.get_country(_pais_code_vf)["nome"],
             "ativo": vf["site_name"] not in desativadas,
             "cliente": clientes_site.get(vf["site_name"]),
+            "plano_fazenda": models.get_plano_fazenda(vf["site_name"]) or {},
         })
         # Fazenda do cliente (plano) aparece sempre, com o pino verde-claro, mesmo
         # sem fazenda real no raio ainda (pedido do Alan, 08/11/2026).
@@ -3665,7 +3671,7 @@ def mapa_interpolado():
     info_cobertura = sinal_celular.info()
 
     return render_template(
-        "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
+        "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, planos=models.get_planos(),
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
         # Sinal de celular (ex-aba Sinal telefonia): camada por operadora
         info_cobertura=info_cobertura,
@@ -8266,6 +8272,167 @@ def _resumo_ponto_cliente(ponto, plano):
     }
 
 
+# --- Plano de cada fazenda (pedido do Alan, 09/11/2026) ----------------------
+# Fazenda REAL (estacao BioScout) = Inteligencia; fazenda de cliente = o plano
+# que vale hoje pra ele; fazenda do Mapas de Estudo = o plano que o Master
+# escolheu (com ou sem cobranca no Asaas); senao "Sem plano".
+
+def _data_br4(iso):
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}" if iso and len(iso) >= 10 else (iso or "")
+
+
+def _plano_da_fazenda(site):
+    """{"nome", "validade" (ISO ou None), "texto", "chave": ok|aguardando|vencido|sem_plano}."""
+    cache = g.setdefault("_planos_fazendas", {}) if has_app_context() else {}
+    if site in cache:
+        return cache[site]
+    hoje = _hoje_cuiaba().isoformat()
+    info = {"nome": None, "validade": None, "texto": "Sem plano", "chave": "sem_plano"}
+    dono = models.donos_das_fazendas_clientes().get(site)
+    if dono:
+        acessos = g.setdefault("_acesso_donos", {})
+        if dono not in acessos:
+            acessos[dono] = (_acesso_do_cliente(dono), models.get_assinatura(dono))
+        (plano, liberada, free_ate), assinatura = acessos[dono]
+        if plano:
+            fim = free_ate if free_ate else models.acesso_ate(assinatura)
+            info = {"nome": plano["nome"], "validade": fim}
+            info["chave"] = "ok" if liberada or free_ate else "vencido"
+    elif site not in models.virtual_farm_site_names():
+        info = {"nome": models.PLANO_FAZENDA_REAL, "validade": None, "chave": "ok"}
+    else:
+        pf = models.get_plano_fazenda(site)
+        plano = models.get_plano(pf["plano_id"]) if pf and pf.get("plano_id") else None
+        if plano:
+            if pf.get("cobrar"):
+                fim = pf.get("pago_ate")
+                chave = "aguardando" if not fim else ("ok" if fim >= hoje else "vencido")
+            else:
+                fim = pf.get("validade")
+                chave = "ok" if not fim or fim >= hoje else "vencido"
+            info = {"nome": plano["nome"], "validade": fim, "chave": chave}
+    if info["nome"]:
+        if info["chave"] == "aguardando":
+            info["texto"] = f"{info['nome']} · aguardando pagamento"
+        elif info["validade"] and info["chave"] == "vencido":
+            info["texto"] = f"{info['nome']} · venceu em {_data_br4(info['validade'])}"
+        elif info["validade"]:
+            info["texto"] = f"{info['nome']} · até {_data_br4(info['validade'])}"
+        else:
+            info["texto"] = info["nome"]
+    cache[site] = info
+    return info
+
+
+_COR_SELO_PLANO = {"ok": "bg-success-subtle text-success-emphasis border border-success-subtle",
+                   "aguardando": "bg-warning-subtle text-warning-emphasis border border-warning-subtle",
+                   "vencido": "bg-danger-subtle text-danger-emphasis border border-danger-subtle",
+                   "sem_plano": "bg-light text-secondary border"}
+
+
+@app.template_global()
+def selo_plano(site):
+    """Selo "Plano · validade" na frente do nome da fazenda (Alertas, Manejos,
+    Recomendacoes -- pedido do Alan, 09/11/2026)."""
+    info = _plano_da_fazenda(site)
+    return Markup('<span class="badge rounded-pill fw-normal selo-plano {}" title="Plano da fazenda">{}</span>').format(
+        _COR_SELO_PLANO[info["chave"]], info["texto"])
+
+
+def _cobrar_plano_fazenda(site):
+    """Assinatura no Asaas do plano da fazenda do Mapas de Estudo (valor do
+    plano -- pela area, se o plano for "preco pela area" --, parcelas do
+    ciclo, U$ pela cotacao do dia). Devolve None ou o motivo da falha."""
+    pf = models.get_plano_fazenda(site)
+    plano = models.get_plano(pf["plano_id"]) if pf and pf.get("plano_id") else None
+    if not plano or not _plano_pago(plano):
+        return "o plano escolhido é gratuito"
+    plano = _plano_para_area(plano, pf.get("area_ha"))
+    if plano.get("sob_consulta"):
+        return "plano pela área sem valor na tabela de apoio para essa área (informe a área)"
+    if not asaas.configurado():
+        return "pagamento online ainda não disponível"
+    valor = plano["valor_parcela"]
+    descricao = f"OneAgro Monitor - plano {plano['nome']} - fazenda {_nome_exibicao(site)}"
+    if plano["parcelas"] > 1:
+        descricao += f" - {plano['parcelas']}x de {_dinheiro(valor, plano['simbolo'])}"
+    if plano["moeda"] == "USD":
+        cot = cotacao.dolar()
+        if not cot:
+            return "cotação do dólar indisponível no momento"
+        valor = round(valor * cot["valor"], 2)
+    referencia = f"estudo:{pf['id']}"
+    try:
+        customer_id = pf.get("asaas_customer_id") or asaas.criar_cliente(
+            pf["pagador_nome"], pf["cpf_cnpj"], pf.get("email"), pf.get("celular"), referencia)
+        sub_id = asaas.criar_assinatura(customer_id, valor, plano["ciclo"], descricao,
+                                        _hoje_cuiaba().isoformat(), referencia)
+        link = next((pg.get("invoiceUrl") for pg in asaas.pagamentos_da_assinatura(sub_id) if pg.get("invoiceUrl")), None)
+    except asaas.AsaasErro as e:
+        models.salvar_plano_fazenda(site, status="erro")
+        return str(e)
+    models.salvar_plano_fazenda(site, asaas_customer_id=customer_id, asaas_subscription_id=sub_id,
+                                status="pendente", link_fatura=link)
+    return None
+
+
+def _cancelar_cobranca_plano_fazenda(site):
+    pf = models.get_plano_fazenda(site)
+    if pf and pf.get("asaas_subscription_id"):
+        try:
+            asaas.cancelar_assinatura(pf["asaas_subscription_id"])
+        except asaas.AsaasErro:
+            app.logger.exception("Falha ao cancelar a cobranca do plano da fazenda %s", site)
+        models.salvar_plano_fazenda(site, asaas_subscription_id=None, status="cancelada", link_fatura=None)
+
+
+@app.route("/mapa-interpolado/plano", methods=["POST"])
+@master_required
+def salvar_plano_fazenda_estudo():
+    """Plano da fazenda criada no Mapas de Estudo (pedido do Alan, 09/11/2026):
+    sem cobranca = validade digitada (cortesia); com cobranca = assinatura no
+    Asaas em nome do pagador, validade = 1 ano a partir do pagamento."""
+    site = request.form.get("site_name", "")
+    if site not in models.virtual_farm_site_names() or site in models.donos_das_fazendas_clientes():
+        abort(404)
+    voltar = redirect(url_for("mapa_interpolado") + "#pontos-criados")
+    plano_id = request.form.get("plano_id", type=int)
+    plano = models.get_plano(plano_id) if plano_id else None
+    cobrar = bool(request.form.get("cobrar")) and bool(plano)
+    validade = (request.form.get("validade") or "").strip() or None
+    area = _area_txt(request.form.get("area_ha")) or None
+    pagador = {k: (request.form.get(k) or "").strip() for k in ("pagador_nome", "cpf_cnpj", "email", "celular")}
+    pagador["cpf_cnpj"] = re.sub(r"\D", "", pagador["cpf_cnpj"])
+    pagador["celular"] = re.sub(r"\D", "", pagador["celular"])
+    if cobrar:
+        if not _plano_pago(plano):
+            flash("Esse plano é gratuito -- não há o que cobrar. Desmarque \"Gerar cobrança\".", "error")
+            return voltar
+        if not pagador["pagador_nome"] or not _cpf_cnpj_valido(pagador["cpf_cnpj"]):
+            flash("Para gerar a cobrança, informe o nome e um CPF/CNPJ válido do pagador.", "error")
+            return voltar
+    antes = models.get_plano_fazenda(site) or {}
+    mudou = (antes.get("plano_id") != (plano["id"] if plano else None) or (antes.get("area_ha") or None) != (area or None)
+             or antes.get("cpf_cnpj") != pagador["cpf_cnpj"])
+    if antes.get("asaas_subscription_id") and (not cobrar or mudou):
+        _cancelar_cobranca_plano_fazenda(site)
+    novo_cliente = antes.get("cpf_cnpj") != pagador["cpf_cnpj"]
+    models.salvar_plano_fazenda(
+        site, plano_id=plano["id"] if plano else None, validade=None if cobrar else validade, cobrar=1 if cobrar else 0,
+        area_ha=area, **pagador, **({"asaas_customer_id": None} if novo_cliente else {}),
+        **({} if cobrar else {"status": None, "link_fatura": None}),
+    )
+    if cobrar and not (models.get_plano_fazenda(site) or {}).get("asaas_subscription_id"):
+        erro = _cobrar_plano_fazenda(site)
+        if erro:
+            flash(f"Plano salvo, mas a cobrança não foi gerada: {erro}. Salve de novo para tentar.", "error")
+            return voltar
+        flash("Plano salvo e cobrança gerada no Asaas -- o link da fatura está no cartão da fazenda.", "success")
+        return voltar
+    flash("Plano da fazenda salvo.", "success")
+    return voltar
+
+
 @app.route("/webhooks/asaas", methods=["POST"])
 def asaas_webhook():
     """Eventos do Asaas (pagamento criado/confirmado/vencido/estornado,
@@ -8284,12 +8451,22 @@ def asaas_webhook():
         ref = pagamento.get("externalReference") or ""
         if not ponto and ref.startswith("fazenda:") and ref[8:].isdigit():
             ponto = models.get_ponto_por_id(int(ref[8:]))
+    plano_fazenda = None
+    if pagamento and not ponto:
+        # Plano de fazenda do Mapas de Estudo (pedido do Alan, 09/11/2026).
+        plano_fazenda = models.plano_fazenda_por_subscription(pagamento.get("subscription") or "")
+        ref = pagamento.get("externalReference") or ""
+        if not plano_fazenda and ref.startswith("estudo:") and ref[7:].isdigit():
+            plano_fazenda = models.plano_fazenda_por_id(int(ref[7:]))
     if ponto:
         status = "DELETED" if tipo == "PAYMENT_DELETED" else pagamento.get("status")
         models.registrar_pagamento(
             ponto["user_id"], pagamento["id"], pagamento.get("value"), status,
             pagamento.get("dueDate"), pagamento.get("invoiceUrl"), pagamento.get("subscription"), ponto["id"],
         )
+    elif plano_fazenda:
+        models.registrar_pagamento_plano_fazenda(
+            plano_fazenda["id"], pagamento.get("status"), pagamento.get("dueDate"), pagamento.get("invoiceUrl"))
     elif pagamento:
         assinatura = models.get_assinatura_por_subscription(pagamento.get("subscription") or "")
         if not assinatura:
@@ -8306,7 +8483,10 @@ def asaas_webhook():
         sub_id = (evento.get("subscription") or {}).get("id") or ""
         assinatura = models.get_assinatura_por_subscription(sub_id)
         ponto = models.get_ponto_por_subscription(sub_id)
-        if ponto:
+        plano_fazenda = models.plano_fazenda_por_subscription(sub_id)
+        if plano_fazenda:
+            models.salvar_plano_fazenda(plano_fazenda["site_name"], status="cancelada")
+        elif ponto:
             models.set_adicional_ponto(ponto["id"], adicional_status="cancelada")
         elif assinatura:
             models.atualizar_assinatura(assinatura["user_id"], status="cancelada")
@@ -8334,7 +8514,7 @@ def _situacao_cliente(cl):
     if not cl.get("plano_id"):
         chave, texto = "sem_plano", "Ainda não escolheu o plano"
     elif free_ate:
-        chave, texto = "free", f"Usando o Free até {models.fmt_data_br(free_ate)} (aguardando pagamento)"
+        chave, texto = "free", f"Usando o Essencial até {models.fmt_data_br(free_ate)} (aguardando pagamento)"
     elif liberada and (cl.get("pago_ate") or "") >= hoje:
         chave, texto = "ativo", f"Pago até {models.fmt_data_br(cl['pago_ate'])}"
     elif liberada:
@@ -8342,7 +8522,7 @@ def _situacao_cliente(cl):
         gratis = plano and plano["valor"] <= 0 and not plano.get("preco_por_area")
         chave = "free" if gratis else "ativo"
         texto = "Sem prazo" if fim == models.SEM_PRAZO else (
-            f"{'Free' if gratis else 'Cortesia'} até {models.fmt_data_br(fim)}")
+            f"{'Essencial' if gratis else 'Cortesia'} até {models.fmt_data_br(fim)}")
     else:
         fim = models.acesso_ate(cl)
         chave, texto = "bloqueado", f"Bloqueado{' desde ' + models.fmt_data_br(fim) if fim else ''} -- sem pagamento"
