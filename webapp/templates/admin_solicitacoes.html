@@ -42,6 +42,7 @@
     {% if fz.cidade %}{% set _ = partes.append(fz.cidade ~ ('/' ~ fz.uf if fz.uf else '')) %}{% endif %}
     {% if fz.culturas %}{% set _ = partes.append(fz.culturas ~ ' · ' ~ fz.area_txt) %}{% endif %}
     <div class="text-muted">{{ partes | join(' · ') if partes else 'Município e culturas ainda não informados' }}</div>
+    {% if fz.estacao_txt %}<div class="text-muted" title="Estação meteorológica de referência (muda em Dados da fazenda)">{{ fz.estacao_txt }}</div>{% endif %}
     <div class="dados-corpo d-none mt-2 pt-2 border-top"></div>
 </div>
 {% endmacro %}
@@ -212,15 +213,6 @@
         </div>
         <div class="d-none mt-3 small" id="cad-body-faz-{{ fz.idx }}">
             {{ linha_fazenda(fz) }}
-            {% if clientes_lista %}
-            <form method="post" class="d-flex flex-wrap gap-1 mb-0 ligar-a-cliente" data-site="{{ fz.site }}">
-                <input type="hidden" name="site_name" value="{{ fz.site }}">
-                <select class="form-select form-select-sm" style="max-width: 280px;" aria-label="Cliente">
-                    {% for cli in clientes_lista %}<option value="{{ url_for('admin_cliente_vincular', user_id=cli.id) }}">{{ cli.nome }}</option>{% endfor %}
-                </select>
-                <button class="btn btn-sm btn-outline-success" type="submit">Ligar a este cliente</button>
-            </form>
-            {% endif %}
         </div>
     </div>
 </div>
@@ -319,8 +311,10 @@ function atualizarCulturas(form) {
         if (form) { atualizarCulturas(form); }
     });
 });
-document.querySelectorAll('.ligar-a-cliente').forEach(function (f) {
-    f.addEventListener('submit', function () { f.action = f.querySelector('select').value; });
+// "Ligar a este cliente" fica dentro do "Dados da fazenda" (carregado depois).
+document.addEventListener('submit', function (e) {
+    var f = e.target.closest('.ligar-a-cliente');
+    if (f) { f.action = f.querySelector('select').value; }
 });
 document.querySelectorAll('.cad-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {

@@ -363,6 +363,9 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         self.assertIn('data-tipo="fazenda"', tela)
         self.assertIn("⚠ Cadastro incompleto", tela)
         self.assertIn('data-filtro="incompleto"', tela)
+        self.assertIn("Estação meteorológica de referência (muda em Dados da fazenda)", tela)  # estacao no cartao (09/11/2026)
+        editor_livre = master.get("/admin/fazendas/dados", query_string={"site": e2}).get_data(as_text=True)
+        self.assertIn("ligar-a-cliente", editor_livre) if models.get_all_clientes() else None
         # exibir por grupo: a fazenda solta com grupo entra na caixa do grupo
         master.post("/admin/fazendas/grupo/salvar", headers={"X-Autosave": "1"},
                     data={"site_name": e1, "grupo_economico": "Grupo Zzz Exibir"})

@@ -8651,6 +8651,7 @@ def admin_solicitacoes():
         p["faltando"] = _faltando_no_cadastro(p)
     for fz in sem_cadastro:
         fz["faltando"] = ["cadastro (cliente)"] + _faltando_na_fazenda(fz)
+    _preencher_estacoes(sem_cadastro + [fz for p in pessoas for fz in p["fazendas"]])
     # Exibir por produtor ou por grupo economico (pedido do Alan, 09/11/2026), lembrado na sessao.
     if request.args.get("exibir") in ("produtor", "grupo"):
         session["gerenciar_clientes_exibir"] = request.args["exibir"]
@@ -8670,6 +8671,31 @@ def admin_solicitacoes():
                            grupos=sorted(grupos.values(), key=lambda gr: _chave_alfabetica(gr["nome"])), sem_grupo=sem_grupo,
                            clientes_lista=[{"id": pe["user_id"], "nome": pe.get("nome_completo") or pe["username"]}
                                            for pe in pessoas if pe.get("cliente")])
+
+
+def _preencher_estacoes(fazendas):
+    """Estacao do clima escolhida de cada fazenda, pra mostrar no cartao
+    (pedido do Alan, 09/11/2026): `fz["estacao_txt"]`. Busca as estacoes
+    proximas de todas de uma vez (`estacoes_mais_proximas_global_lote`)."""
+    overrides = models.get_all_weather_station_overrides()
+    com_coord = [fz for fz in fazendas if fz.get("lat") is not None]
+    try:
+        lote = countries.estacoes_mais_proximas_global_lote(
+            [(fz["lat"], fz["lon"], fz["country_code"]) for fz in com_coord], n=3) if com_coord else []
+    except Exception:
+        lote = [[] for _ in com_coord]
+    proximas = {fz["site"]: est for fz, est in zip(com_coord, lote)}
+    for fz in fazendas:
+        escolha = overrides.get(fz["site"])
+        codigo = escolha["codigo"] if escolha else ""
+        if not codigo:
+            fz["estacao_txt"] = "📍 Clima na coordenada da própria fazenda"
+        elif codigo == "__interp3__":
+            fz["estacao_txt"] = "🔀 Média das 3 estações mais próximas"
+        else:
+            est = next((e for e in proximas.get(fz["site"], []) if e["codigo"] == codigo), None)
+            fz["estacao_txt"] = (f"📡 {est['cidade']}/{est['uf']} ({codigo}) · {str(est['distancia_km']).replace('.', ',')} km"
+                                 if est else f"📡 Estação {codigo}")
 
 
 def _faltando_na_fazenda(fz):
@@ -9047,8 +9073,10 @@ def admin_fazenda_dados():
     site = request.args.get("site", "")
     if site not in (set(read_sites()) | models.virtual_farm_site_names()):
         abort(404)
+    clientes = [{"id": c["id"], "nome": (models.get_cadastro_do_usuario(c["id"]) or {}).get("nome_completo") or c["username"]}
+                for c in models.get_all_clientes()]
     return render_template("_dados_fazenda.html", fz=_dados_da_fazenda(site, request.args.get("idx", "0"), completo=True),
-                           countries=countries.COUNTRIES, ufs=UFS_BR)
+                           countries=countries.COUNTRIES, ufs=UFS_BR, clientes_lista=clientes)
 
 
 @app.route("/admin/fazendas/dados/salvar", methods=["POST"])
