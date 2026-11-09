@@ -28,7 +28,7 @@
     <button type="button" class="btn btn-outline-secondary" data-filtro="usuario">Acesso à fazenda ({{ pessoas | length - n_clientes }})</button>
     {% set n_free = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'equalto', 'free') | list | length %}
     {% set n_bloq = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'in', ['bloqueado', 'sem_plano']) | list | length %}
-    <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Free ({{ n_free }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Essencial ({{ n_free }})</button>
     <button type="button" class="btn btn-outline-secondary" data-filtro="bloqueado">Bloqueados / sem plano ({{ n_bloq }})</button>
 </div>
 
@@ -52,7 +52,7 @@
             {% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
             {% if sit %}{# situacao visivel com o cartao fechado #}
             {% set cor = {'ativo': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueado': 'bg-secondary', 'sem_plano': 'bg-light text-dark border'}[sit.chave] %}
-            <span class="badge {{ cor }}" title="{{ sit.texto }}">{{ cl.plano_nome or 'Sem plano' }} · {{ {'ativo': 'ativo', 'free': 'Free', 'bloqueado': 'bloqueado', 'sem_plano': 'escolher plano'}[sit.chave] }}</span>
+            <span class="badge {{ cor }}" title="{{ sit.texto }}">{{ cl.plano_nome or 'Sem plano' }} · {{ {'ativo': 'ativo', 'free': 'Essencial', 'bloqueado': 'bloqueado', 'sem_plano': 'escolher plano'}[sit.chave] }}</span>
             {% endif %}
             {% if c.data %}<span class="text-muted small ms-auto">{{ c.data | data_br }}</span>{% endif %}
         </div>

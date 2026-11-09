@@ -141,7 +141,7 @@
     {% endif %}
 </div></div>
 
-<h6 class="fw-bold mt-4 mb-2">Pontos Criados</h6>
+<h6 class="fw-bold mt-4 mb-2" id="pontos-criados">Pontos Criados</h6>
 {% if not pontos_virtuais %}
 <div class="alert alert-info small">Nenhum ponto estimado ainda -- use o formulario acima.</div>
 {% endif %}
@@ -149,6 +149,7 @@
 <div class="ponto-virtual-card">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
         <strong>{{ ponto.nome }}</strong>
+        {{ selo_plano(ponto.site_name) }}
         <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
         {% if ponto.tipo == 'clima' %}
         <span class="badge bg-info text-dark">☁️ So clima</span>
@@ -161,6 +162,9 @@
         {% endif %}
         <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
         <div class="ms-auto d-flex gap-2">
+            {% if current_user.is_master and not ponto.cliente %}
+            <button type="button" class="btn btn-sm btn-outline-success plano-ponto-toggle" data-target="plano-ponto-{{ loop.index0 }}">💳 Plano</button>
+            {% endif %}
             <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}" data-site="{{ ponto.site_name }}">✏️ Editar</button>
             {% if ponto.ativo %}
             <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0">
@@ -176,6 +180,55 @@
             </form>
         </div>
     </div>
+
+    {% if current_user.is_master and not ponto.cliente %}
+    {# Plano da fazenda (pedido do Alan, 09/11/2026): com ou sem cobranca no Asaas. #}
+    {% set pf = ponto.plano_fazenda %}
+    <div class="d-none border rounded p-2 mb-2 plano-ponto" id="plano-ponto-{{ loop.index0 }}" style="background:#fff;">
+        <form method="post" action="{{ url_for('salvar_plano_fazenda_estudo') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Plano</label>
+                <select name="plano_id" class="form-select form-select-sm">
+                    <option value="">Sem plano</option>
+                    {% for pl in planos %}<option value="{{ pl.id }}" {% if pf.plano_id == pl.id %}selected{% endif %}>{{ pl.nome }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-3 campo-validade">
+                <label class="form-label small text-muted mb-1">Validade (sem cobrança)</label>
+                <input type="date" name="validade" class="form-control form-control-sm" value="{{ pf.validade or '' }}">
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="form-check mb-1">
+                    <input class="form-check-input cobrar-plano" type="checkbox" name="cobrar" value="1" id="cobrar-{{ loop.index0 }}" {% if pf.cobrar %}checked{% endif %}>
+                    <label class="form-check-label small" for="cobrar-{{ loop.index0 }}">Gerar cobrança (Asaas)</label>
+                </div>
+            </div>
+            <div class="col-12 dados-cobranca{{ '' if pf.cobrar else ' d-none' }}">
+                <div class="row g-2">
+                    <div class="col-12 col-md-4"><label class="form-label small text-muted mb-1">Nome do pagador</label>
+                        <input type="text" name="pagador_nome" class="form-control form-control-sm" value="{{ pf.pagador_nome or '' }}" maxlength="80"></div>
+                    <div class="col-6 col-md-2"><label class="form-label small text-muted mb-1">CPF/CNPJ</label>
+                        <input type="text" name="cpf_cnpj" class="form-control form-control-sm" value="{{ pf.cpf_cnpj or '' }}" inputmode="numeric"></div>
+                    <div class="col-6 col-md-2"><label class="form-label small text-muted mb-1">Celular</label>
+                        <input type="text" name="celular" class="form-control form-control-sm" value="{{ pf.celular or '' }}" inputmode="tel"></div>
+                    <div class="col-6 col-md-2"><label class="form-label small text-muted mb-1">E-mail</label>
+                        <input type="email" name="email" class="form-control form-control-sm" value="{{ pf.email or '' }}"></div>
+                    <div class="col-6 col-md-2"><label class="form-label small text-muted mb-1">Área (ha)</label>
+                        <input type="text" name="area_ha" class="form-control form-control-sm" value="{{ (pf.area_ha | round(1) | string).replace('.0', '').replace('.', ',') if pf.area_ha else '' }}" inputmode="decimal" title="Usada nos planos com preço pela área"></div>
+                </div>
+                {% if pf.cobrar %}
+                <div class="small mt-2">
+                    Cobrança: <strong>{{ {'pendente': 'aguardando pagamento', 'ativa': 'paga', 'cancelada': 'cancelada', 'erro': 'não gerada'}.get(pf.status, pf.status or 'não gerada') }}</strong>
+                    {% if pf.pago_ate %} · válida até {{ pf.pago_ate | data_br }}{% endif %}
+                    {% if pf.link_fatura %} · <a href="{{ pf.link_fatura }}" target="_blank" rel="noopener">Ver fatura</a>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="col-12"><button type="submit" class="btn btn-sm btn-success">Salvar plano</button></div>
+        </form>
+    </div>
+    {% endif %}
 
     <div class="d-none border rounded p-2 mb-2" id="editar-ponto-{{ loop.index0 }}" style="background:#fff;">
         <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end"
@@ -836,6 +889,20 @@
         estado.marcador.bindPopup(caixa, { closeButton: false, autoClose: false, closeOnClick: false }).openPopup();
         estado.marcador.on('dragend', function () { estado.marcador.openPopup(); });
     }
+
+    // Plano da fazenda: abre o quadro; "Gerar cobrança" mostra os dados do pagador (09/11/2026).
+    document.querySelectorAll('.plano-ponto-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () { document.getElementById(btn.dataset.target).classList.toggle('d-none'); });
+    });
+    document.querySelectorAll('.plano-ponto').forEach(function (quadro) {
+        var caixa = quadro.querySelector('.cobrar-plano');
+        function atualizar() {
+            quadro.querySelector('.dados-cobranca').classList.toggle('d-none', !caixa.checked);
+            quadro.querySelector('.campo-validade').classList.toggle('d-none', caixa.checked);
+        }
+        caixa.addEventListener('change', atualizar);
+        atualizar();
+    });
 
     document.querySelectorAll('.editar-ponto-toggle').forEach(function (btn) {
         btn.addEventListener('click', function () {

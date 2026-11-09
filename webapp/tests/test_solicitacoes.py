@@ -290,7 +290,7 @@ class CadastroTest(unittest.TestCase):
         conn.commit()
         conn.close()
         html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
-        self.assertIn("Usando o Free até", html)            # pago aguardando pagamento
+        self.assertIn("Usando o Essencial até", html)            # pago aguardando pagamento
         self.assertIn("Bloqueado", html)                    # passou dos 7 dias
         self.assertIn('data-situacao="free"', html)
         self.assertIn('data-situacao="bloqueado"', html)
@@ -434,7 +434,7 @@ class CadastroTest(unittest.TestCase):
         """Premium: total = area x U$/ha da faixa; parcelas pelo ciclo; sem valor na faixa = sob consulta."""
         import json
         import cotacao
-        premium = next(p for p in models.get_planos() if p["nome"] == "Premium")
+        premium = next(p for p in models.get_planos() if p["nome"] == "Avançado")
         self.assertTrue(premium["preco_por_area"])  # ja' nasce ligado no Premium
         models.set_setting("tabela_precificacao", json.dumps([{"ate_ha": 1000, "usd_ha": 1.2}]))
         try:
@@ -445,7 +445,7 @@ class CadastroTest(unittest.TestCase):
                 self.assertTrue(webapp._plano_para_area(premium, 5000)["sob_consulta"])  # faixa ate' 5.000 sem U$/ha
                 self.assertTrue(webapp._plano_para_area(premium, None)["sob_consulta"])
                 # cliente cereais com 800 ha de soja ve o Premium com o preco dele em Minha assinatura
-                models.salvar_plano(premium["id"], "Premium", "", 0, "MONTHLY", 1, 50, premium["recursos"], True, 3,
+                models.salvar_plano(premium["id"], "Avançado", "", 0, "MONTHLY", 1, 50, premium["recursos"], True, 3,
                                     preco_por_area=True)
                 c = webapp.app.test_client()
                 dados = _form(username="Zzz Cad Premium", numero_telefone="65999990034", grupo_cultura="cereais",

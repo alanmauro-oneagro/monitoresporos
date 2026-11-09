@@ -65,12 +65,19 @@
                     <div id="boxEstacao" class="filtro-box-menu d-none bg-white shadow rounded p-2">
                         {% for e in estacoes_disponiveis %}
                         <div class="form-check">
-                            <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" data-pais="{{ e.pais or '' }}" id="est_{{ loop.index }}">
+                            <input class="form-check-input filtro-estacao" type="checkbox" value="{{ e.nome }}" data-pais="{{ e.pais or '' }}" data-plano="{{ e.plano }}" id="est_{{ loop.index }}">
                             <label class="form-check-label small" for="est_{{ loop.index }}">{{ e.nome_exibicao }}{% if e.uf %} ({{ e.uf }}){% endif %}</label>
                         </div>
                         {% endfor %}
                     </div>
                 </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small text-muted mb-1" for="filtroPlano">Plano</label>
+                <select id="filtroPlano" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for pl in planos_disponiveis %}<option value="{{ pl }}">{{ pl }}</option>{% endfor %}
+                </select>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1" for="filtroCultura">Cultura</label>
@@ -326,9 +333,10 @@
     // Sem nenhum Pais marcado, mostra todas.
     function filtrarEstacoesPorPais() {
         var codigos = Array.from(document.querySelectorAll('.filtro-pais:checked')).map(function (el) { return el.value; });
+        var plano = document.getElementById('filtroPlano').value;
         document.querySelectorAll('.filtro-estacao').forEach(function (chk) {
             var linha = chk.closest('.form-check');
-            var mostra = !codigos.length || codigos.indexOf(chk.dataset.pais) !== -1;
+            var mostra = (!codigos.length || codigos.indexOf(chk.dataset.pais) !== -1) && (!plano || chk.dataset.plano === plano);
             linha.classList.toggle('d-none', !mostra);
             if (!mostra && chk.checked) chk.checked = false;
         });
@@ -352,6 +360,7 @@
             pais: Array.from(document.querySelectorAll('.filtro-pais:checked')).map(function (el) { return el.value; }),
             estacao: Array.from(document.querySelectorAll('.filtro-estacao:checked')).map(function (el) { return el.value; }),
             cultura: document.getElementById('filtroCultura').value,
+            plano: document.getElementById('filtroPlano').value,
             ocultarRisco: document.getElementById('filtroOcultarRisco').checked,
         });
     }
@@ -380,6 +389,10 @@
             if (Array.from(selCultura.options).some(function (o) { return o.value === f.cultura; })) selCultura.value = f.cultura;
         }
         if (typeof f.ocultarRisco === 'boolean') document.getElementById('filtroOcultarRisco').checked = f.ocultarRisco;
+        if (typeof f.plano === 'string') {
+            var selPlano = document.getElementById('filtroPlano');
+            if (Array.from(selPlano.options).some(function (o) { return o.value === f.plano; })) selPlano.value = f.plano;
+        }
     }
     restaurarFiltros();
     filtrarEstacoesPorPais();
@@ -401,6 +414,7 @@
         el.addEventListener('change', agendarRecarga);
     });
     document.getElementById('filtroCultura').addEventListener('change', agendarRecarga);
+    document.getElementById('filtroPlano').addEventListener('change', function () { filtrarEstacoesPorPais(); agendarRecarga(); salvarFiltros(); });
     document.getElementById('filtroCultura').addEventListener('change', salvarFiltros);
     document.getElementById('filtroInicio').addEventListener('change', salvarFiltros);
     document.getElementById('filtroFim').addEventListener('change', salvarFiltros);
@@ -436,7 +450,15 @@
         var params = new URLSearchParams();
         params.set('inicio', document.getElementById('filtroInicio').value);
         params.set('fim', document.getElementById('filtroFim').value);
-        document.querySelectorAll('.filtro-estacao:checked').forEach(function (el) { params.append('estacao', el.value); });
+        var marcadas = document.querySelectorAll('.filtro-estacao:checked');
+        if (!marcadas.length && document.getElementById('filtroPlano').value) {
+            // Plano escolhido sem estacao marcada: todas as fazendas daquele plano (as visiveis no box).
+            marcadas = Array.from(document.querySelectorAll('.filtro-estacao')).filter(function (el) {
+                return !el.closest('.form-check').classList.contains('d-none');
+            });
+            if (!marcadas.length) params.append('estacao', '__nenhuma__');
+        }
+        marcadas.forEach(function (el) { params.append('estacao', el.value); });
         document.querySelectorAll('.filtro-pais:checked').forEach(function (el) { params.append('pais', el.value); });
         if (document.getElementById('filtroCultura').value) params.set('cultura', document.getElementById('filtroCultura').value);
         return params.toString();

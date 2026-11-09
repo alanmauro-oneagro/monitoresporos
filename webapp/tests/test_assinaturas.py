@@ -135,7 +135,7 @@ class AssinaturasTest(unittest.TestCase):
         # sem pagamento: usa o Free nos 7 dias do cadastro (pedido do Alan, 08/11/2026) --
         # /app abre, as abas do site (que o Free nao tem) nao
         self.assertEqual(self.client.get("/app").status_code, 200)
-        self.assertIn("você usa o plano <strong>Free</strong>", self.client.get("/app/assinatura").get_data(as_text=True))
+        self.assertIn("você usa o plano <strong>Essencial</strong>", self.client.get("/app/assinatura").get_data(as_text=True))
         self.assertIn("/app", self.client.get("/mapa").headers["Location"])
         self.assertIn("/app", self.client.get("/recommendations").headers["Location"])
         self.assertEqual(self.client.get("/admin/planos").status_code, 302)
@@ -281,11 +281,11 @@ class AssinaturasTest(unittest.TestCase):
         self.assertNotIn("Mofo Zzz <span", todas)
         self.assertIn("(-) Sem medição", todas)
         # Basico: sem graficos 7 + 5 dias, e o JSON do site fica fechado
-        self.assertIn("fazem parte dos planos Premium", todas)
+        self.assertIn("fazem parte dos planos Avançado e Inteligência", todas)
         self.assertEqual(self.client.get("/graficos/dados").status_code, 302)
 
     def test_graficos_premium_7_dias_e_previsao(self):
-        premium = next(p for p in models.get_planos() if p["nome"] == "Premium")
+        premium = next(p for p in models.get_planos() if p["nome"] == "Avançado")
         self.assertIn("graficos_app", premium["recursos"])
         models.salvar_plano(None, "Zzz Graficos", "", 199.9, "MONTHLY", 2, 300, ["clima", "graficos_app"], True, 9)
         plano = next(p for p in models.get_planos() if p["nome"] == "Zzz Graficos")
@@ -302,9 +302,9 @@ class AssinaturasTest(unittest.TestCase):
     def test_caixas_alto_medio_baixo_sem_esporos_numero(self):
         """So' o Premium + Estacao (recurso "esporos_numero") ve o numero de
         esporos; os outros planos veem Alto/Medio/Baixo (pedido do Alan, 08/11/2026)."""
-        estacao = next(p for p in models.get_planos() if p["nome"] == "Premium + Estação")
+        estacao = next(p for p in models.get_planos() if p["nome"] == "Inteligência")
         self.assertIn("esporos_numero", estacao["recursos"])
-        self.assertNotIn("esporos_numero", next(p for p in models.get_planos() if p["nome"] == "Premium")["recursos"])
+        self.assertNotIn("esporos_numero", next(p for p in models.get_planos() if p["nome"] == "Avançado")["recursos"])
         cards = [{"doenca": "Ferrugem Zzz", "doenca_en": "Rust Zzz", "concentracao": 123.4, "status": "Perigo",
                   "data": webapp._hoje_cuiaba().isoformat()},
                  {"doenca": "Mancha Zzz", "doenca_en": "Spot Zzz", "concentracao": 7.5, "status": "Normal",
