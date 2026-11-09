@@ -201,22 +201,39 @@ Premium = **Avançado**, Premium + Estação = **Inteligência** (Básico igual)
 `models.PLANOS_RENOMEADOS` troca no `init_db` (so' se o nome novo nao
 existir; o id fica o mesmo); `plano_free()` acha "Essencial" (ou "Free").
 Onde este arquivo diz Free/Premium/Premium + Estacao, sao esses planos.
-**Plano de cada fazenda** (mesmo pedido; `app._plano_da_fazenda`, selo
-`selo_plano(site)` -- template global): fazenda REAL (estacao BioScout, nao
-virtual) = Inteligência sem validade (`models.PLANO_FAZENDA_REAL`); fazenda de
-cliente = o plano que vale hoje pra ele + validade (`_acesso_do_cliente`,
-`models.donos_das_fazendas_clientes`); fazenda criada no **Mapas de Estudo** =
-o plano que o Master escolhe no botao "💳 Plano" de Pontos Criados (rota
-`salvar_plano_fazenda_estudo`, `@master_required`; tabela `planos_fazenda`,
-entra na cascata de rename e no `delete_virtual_farm`): sem cobranca =
-validade digitada (vazia = sem validade); "Gerar cobrança (Asaas)" = nome +
-CPF/CNPJ (+ celular, e-mail, area pros planos com preco pela area) do
-pagador, assinatura PROPRIA no Asaas (`_cobrar_plano_fazenda`, ref
-`estudo:<id>`, valor/parcelas do plano, U$ pela cotacao), link da fatura no
-cartao; pagamento confirmado no webhook = vale 1 ano do vencimento
-(`models.registrar_pagamento_plano_fazenda`); trocar plano/area/CPF ou
-desmarcar a cobranca cancela a assinatura antiga. Sem plano = selo "Sem plano".
-O selo ("Avançado · até 31/03/2027", verde; amarelo aguardando pagamento;
+**Modelo unico de fazenda em Gerenciar Clientes** (pedido do Alan,
+09/11/2026 -- substitui o "💳 Plano e grupo" do Mapas de Estudo e as
+configuracoes da fazenda que ficavam em Manejos, que SAIRAM sem atalho): toda
+fazenda pertence a um cadastro (conta de cliente, com login) que da' plano,
+validade e grupo economico. As do app ja' nascem assim (`cliente_pontos`); as
+da BioScout e do Mapas de Estudo o Master liga a um cadastro -- "+ Novo
+cliente" (nome, usuario, senha, celular, e-mail, grupo, plano -- padrao
+Inteligência --, cortesia e as fazendas; rota `admin_cliente_novo`) ou "+ Ligar
+fazenda a este cadastro" / "Ligar a este cliente" em "Fazendas sem cadastro"
+(`admin_cliente_vincular`; "Desligar" = `admin_cliente_desvincular`). Fazenda
+ligada = linha em `cliente_pontos` com `vinculada`=1 e `adicional_status`
+'incluida' (`models.vincular_fazenda`, ja' libera e marca o cliente pra
+receber o relatorio): nunca e' apagada junto com o cadastro/ponto
+(`delete_user`, `excluir_cliente_ponto`), nao e' renomeada/movida pelo app
+(`_renomear_fazenda_cliente`), o cliente nao exclui pelo app e nao tem pino
+verde-claro (`sites_de_clientes`). Fazenda ainda sem cadastro guarda os dados em
+`fazendas_dados` (municipio, UF, culturas, area; vao pro ponto ao ligar e
+voltam ao desligar). Cada fazenda (cliente, ligada ou sem cadastro) tem a MESMA
+linha (`linha_fazenda` em admin_solicitacoes.html: nome, selo do plano, origem
+📡 BioScout/🗺️ Mapas de Estudo/📱 App, municipio, culturas, area) e o MESMO editor
+"✏️ Dados da fazenda" (`_dados_fazenda.html`, carregado por fetch em
+`admin_fazenda_dados`; tudo salva sozinho: municipio/UF/culturas
+`admin_fazenda_dados_salvar` com area somada das culturas, nome de exibicao,
+ocultar, pais e estacao do clima -- as mesmas rotas que Manejos usava). Grupo
+economico editavel no cartao do cadastro (`admin_cliente_grupo`). Tudo
+`@master_required`. Mapas de Estudo ficou so' com criar/editar ponto
+(coordenada, raio, tipo) e remover.
+**Plano de cada fazenda** (`app._plano_da_fazenda`, selo `selo_plano(site)` --
+template global): fazenda REAL (BioScout) = Inteligência (`models.PLANO_FAZENDA_REAL`),
+com a validade do cadastro se estiver ligada; as outras = o plano que vale hoje
+pro cadastro (`_acesso_do_cliente`, `models.donos_das_fazendas_clientes`); sem
+cadastro = "Sem plano". A tabela `planos_fazenda` (e a cobranca `estudo:<id>` no
+webhook) ficou do 1o desenho, sem tela. O selo ("Avançado · até 31/03/2027", verde; amarelo aguardando pagamento;
 vermelho vencido; cinza sem plano) aparece na frente do nome em Alertas
 (dashboard.html), Manejos (fazendas.html), Recomendações e Pontos Criados. A
 aba **Gráficos do site** tem o filtro "Plano" (`planos_disponiveis`,
@@ -225,14 +242,10 @@ guardado nos filtros da conta). **Fazendas sempre por plano** (pedido do
 Alan, 09/11/2026): `_ordem_fazenda` comeca por `_ordem_do_plano` --
 Inteligência, Avançado, Básico (ou outro plano), Essencial, sem plano --
 depois pais e nome; vale em toda tela que usa essa ordem. **Grupo economico em
-Recomendações** (mesmo pedido): 2+ fazendas de cliente com o mesmo grupo
-(`_grupo_economico_da_fazenda`: cadastro do dono; nas do Mapas de Estudo, o
-campo "Grupo econômico" do botao "💳 Plano e grupo" -- `planos_fazenda.grupo_economico`,
-selo "👥 <grupo>" em Pontos Criados; e o campo "Grupo:" em Manejos, antes
-do Nome de exibicao, pra QUALQUER fazenda -- real, estimada ou de cliente
-(Master, salva sozinho, rota `save_site_grupo`, sugestoes dos grupos ja'
-usados `models.grupos_economicos`); o grupo digitado vale antes do cadastro
-do cliente, vazio volta ao do cadastro; mesmo nome = mesma caixa) ficam numa caixa "<grupo>"
+Recomendações** (mesmo pedido): 2+ fazendas com o mesmo grupo
+(`_grupo_economico_da_fazenda` = grupo do cadastro a que a fazenda pertence;
+sugestoes dos grupos ja' usados `models.grupos_economicos`; mesmo nome = mesma
+caixa) ficam numa caixa "<grupo>"
 (selo do plano + "N fazendas"; abre e mostra os cartoes das fazendas;
 `_agrupar_por_grupo_economico` marca `grupo`/`grupo_inicio`/`grupo_fim` e o
 template abre/fecha a caixa) com "Texto agrupado" (todas numa mensagem so':

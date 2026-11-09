@@ -3635,7 +3635,6 @@ def mapa_interpolado():
             "pais_nome": countries.get_country(_pais_code_vf)["nome"],
             "ativo": vf["site_name"] not in desativadas,
             "cliente": clientes_site.get(vf["site_name"]),
-            "plano_fazenda": models.get_plano_fazenda(vf["site_name"]) or {},
         })
         # Fazenda do cliente (plano) aparece sempre, com o pino verde-claro, mesmo
         # sem fazenda real no raio ainda (pedido do Alan, 08/11/2026).
@@ -3671,7 +3670,7 @@ def mapa_interpolado():
     info_cobertura = sinal_celular.info()
 
     return render_template(
-        "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais, planos=models.get_planos(),
+        "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
         # Sinal de celular (ex-aba Sinal telefonia): camada por operadora
         info_cobertura=info_cobertura,
@@ -4119,13 +4118,11 @@ def recommendations(safra):
 
 
 def _grupo_economico_da_fazenda(site):
-    """Grupo economico da fazenda: do cadastro do cliente dono ou, nas do
-    Mapas de Estudo, o digitado no quadro do plano (ou "")."""
-    proprio = ((models.get_plano_fazenda(site) or {}).get("grupo_economico") or "").strip()
+    """Grupo economico da fazenda = o do cadastro que ela pertence (Gerenciar
+    Clientes; pedido do Alan, 09/11/2026), ou ""."""
     dono = models.donos_das_fazendas_clientes().get(site)
-    if proprio or not dono:
-        # Grupo digitado em Manejos ou no "💳 Plano e grupo" do Mapas de Estudo (09/11/2026).
-        return proprio
+    if not dono:
+        return ""
     cadastros = g.setdefault("_grupo_por_dono", {})
     if dono not in cadastros:
         cadastros[dono] = ((models.get_cadastro_do_usuario(dono) or {}).get("grupo_economico") or "").strip()
@@ -5212,20 +5209,6 @@ def save_site_ativo():
     else:
         msg = f"'{_nome_exibicao(site_name)}' oculta -- deixa de aparecer no site (Mapa, Gráficos, Recomendações, Mapas de NDVI, Programação de Envios). Pra reativar: Configurações > Gerenciar Fazendas Ocultas."
     return _save_response(msg)
-
-
-@app.route("/fazendas/grupo/save", methods=["POST"])
-@master_required
-def save_site_grupo():
-    """Grupo economico de qualquer fazenda (aba Manejos, pedido do Alan,
-    09/11/2026): agrupa em Recomendacoes. Vazio = volta ao do cadastro do
-    cliente dono (se houver)."""
-    site_name = request.form.get("site_name", "")
-    if not site_name:
-        abort(400)
-    grupo = (request.form.get("grupo_economico") or "").strip()[:40]
-    models.salvar_plano_fazenda(site_name, grupo_economico=grupo or None)
-    return _save_response("Grupo salvo.", "fazendas")
 
 
 @app.template_global()
@@ -8044,7 +8027,7 @@ def _renomear_fazenda_cliente(user_id, ponto, username, lat=None, lon=None):
     """Acerta nome (e local) da fazenda estimada depois que o cliente edita
     a fazenda ou o grupo economico. Devolve o site_name final."""
     site = ponto.get("site_name")
-    vf = models.get_virtual_farm(site) if site else None
+    vf = models.get_virtual_farm(site) if site and not ponto.get("vinculada") else None
     if not vf:
         return site
     lat = vf["lat"] if lat is None else lat
@@ -8209,6 +8192,8 @@ def cliente_ponto_editar(ponto_id):
         loc = _locais_do_form(form, culturas, grupos)[0]
         nome = (form.get("nome") or "").strip()[:60]
         lat, lon = _coordenada(form.get("lat")), _coordenada(form.get("lon"))
+        if ponto.get("vinculada"):  # fazenda da BioScout/Mapas de Estudo: o local nao muda pelo app
+            lat, lon = ponto["lat"], ponto["lon"]
         areas = [(c, a) for c, a, _g in loc["areas_grupo"]]
         erro = None
         if not nome:
@@ -8259,6 +8244,9 @@ def cliente_ponto_editar(ponto_id):
 @cliente_required
 def cliente_ponto_excluir(ponto_id):
     ponto = models.get_cliente_ponto(int(current_user.id), ponto_id)
+    if ponto and ponto.get("vinculada"):
+        flash(f"Essa fazenda foi ligada pela OneAgro -- para tirar, fale com {CONTATO_COMERCIAL['celular']}.", "error")
+        return redirect(url_for("cliente_ponto", ponto_id=ponto_id))
     if ponto and ponto.get("adicional_subscription_id") and ponto.get("adicional_status") != "cancelada":
         try:
             asaas.cancelar_assinatura(ponto["adicional_subscription_id"])
@@ -8446,35 +8434,27 @@ def _data_br4(iso):
 
 
 def _plano_da_fazenda(site):
-    """{"nome", "validade" (ISO ou None), "texto", "chave": ok|aguardando|vencido|sem_plano}."""
+    """{"nome", "validade" (ISO ou None), "texto", "chave": ok|aguardando|vencido|sem_plano}.
+    Fazenda REAL = Inteligencia; o plano e a validade vem do cadastro (cliente)
+    que ela pertence (Gerenciar Clientes); fazenda sem cadastro = sem plano
+    (a real fica Inteligencia, sem validade)."""
     cache = g.setdefault("_planos_fazendas", {}) if has_app_context() else {}
     if site in cache:
         return cache[site]
-    hoje = _hoje_cuiaba().isoformat()
     info = {"nome": None, "validade": None, "texto": "Sem plano", "chave": "sem_plano"}
+    real = site not in models.virtual_farm_site_names()
     dono = models.donos_das_fazendas_clientes().get(site)
     if dono:
         acessos = g.setdefault("_acesso_donos", {})
         if dono not in acessos:
             acessos[dono] = (_acesso_do_cliente(dono), models.get_assinatura(dono))
         (plano, liberada, free_ate), assinatura = acessos[dono]
-        if plano:
+        if plano or real:
             fim = free_ate if free_ate else models.acesso_ate(assinatura)
-            info = {"nome": plano["nome"], "validade": fim}
-            info["chave"] = "ok" if liberada or free_ate else "vencido"
-    elif site not in models.virtual_farm_site_names():
+            info = {"nome": models.PLANO_FAZENDA_REAL if real else plano["nome"], "validade": fim,
+                    "chave": "ok" if liberada or free_ate else "vencido"}
+    elif real:
         info = {"nome": models.PLANO_FAZENDA_REAL, "validade": None, "chave": "ok"}
-    else:
-        pf = models.get_plano_fazenda(site)
-        plano = models.get_plano(pf["plano_id"]) if pf and pf.get("plano_id") else None
-        if plano:
-            if pf.get("cobrar"):
-                fim = pf.get("pago_ate")
-                chave = "aguardando" if not fim else ("ok" if fim >= hoje else "vencido")
-            else:
-                fim = pf.get("validade")
-                chave = "ok" if not fim or fim >= hoje else "vencido"
-            info = {"nome": plano["nome"], "validade": fim, "chave": chave}
     if info["nome"]:
         if info["chave"] == "aguardando":
             info["texto"] = f"{info['nome']} · aguardando pagamento"
@@ -8501,101 +8481,6 @@ def selo_plano(site):
     info = _plano_da_fazenda(site)
     return Markup('<span class="badge rounded-pill fw-normal selo-plano {}" title="Plano da fazenda">{}</span>').format(
         _COR_SELO_PLANO[info["chave"]], info["texto"])
-
-
-def _cobrar_plano_fazenda(site):
-    """Assinatura no Asaas do plano da fazenda do Mapas de Estudo (valor do
-    plano -- pela area, se o plano for "preco pela area" --, parcelas do
-    ciclo, U$ pela cotacao do dia). Devolve None ou o motivo da falha."""
-    pf = models.get_plano_fazenda(site)
-    plano = models.get_plano(pf["plano_id"]) if pf and pf.get("plano_id") else None
-    if not plano or not _plano_pago(plano):
-        return "o plano escolhido é gratuito"
-    plano = _plano_para_area(plano, pf.get("area_ha"))
-    if plano.get("sob_consulta"):
-        return "plano pela área sem valor na tabela de apoio para essa área (informe a área)"
-    if not asaas.configurado():
-        return "pagamento online ainda não disponível"
-    valor = plano["valor_parcela"]
-    descricao = f"OneAgro Monitor - plano {plano['nome']} - fazenda {_nome_exibicao(site)}"
-    if plano["parcelas"] > 1:
-        descricao += f" - {plano['parcelas']}x de {_dinheiro(valor, plano['simbolo'])}"
-    if plano["moeda"] == "USD":
-        cot = cotacao.dolar()
-        if not cot:
-            return "cotação do dólar indisponível no momento"
-        valor = round(valor * cot["valor"], 2)
-    referencia = f"estudo:{pf['id']}"
-    try:
-        customer_id = pf.get("asaas_customer_id") or asaas.criar_cliente(
-            pf["pagador_nome"], pf["cpf_cnpj"], pf.get("email"), pf.get("celular"), referencia)
-        sub_id = asaas.criar_assinatura(customer_id, valor, plano["ciclo"], descricao,
-                                        _hoje_cuiaba().isoformat(), referencia)
-        link = next((pg.get("invoiceUrl") for pg in asaas.pagamentos_da_assinatura(sub_id) if pg.get("invoiceUrl")), None)
-    except asaas.AsaasErro as e:
-        models.salvar_plano_fazenda(site, status="erro")
-        return str(e)
-    models.salvar_plano_fazenda(site, asaas_customer_id=customer_id, asaas_subscription_id=sub_id,
-                                status="pendente", link_fatura=link)
-    return None
-
-
-def _cancelar_cobranca_plano_fazenda(site):
-    pf = models.get_plano_fazenda(site)
-    if pf and pf.get("asaas_subscription_id"):
-        try:
-            asaas.cancelar_assinatura(pf["asaas_subscription_id"])
-        except asaas.AsaasErro:
-            app.logger.exception("Falha ao cancelar a cobranca do plano da fazenda %s", site)
-        models.salvar_plano_fazenda(site, asaas_subscription_id=None, status="cancelada", link_fatura=None)
-
-
-@app.route("/mapa-interpolado/plano", methods=["POST"])
-@master_required
-def salvar_plano_fazenda_estudo():
-    """Plano da fazenda criada no Mapas de Estudo (pedido do Alan, 09/11/2026):
-    sem cobranca = validade digitada (cortesia); com cobranca = assinatura no
-    Asaas em nome do pagador, validade = 1 ano a partir do pagamento."""
-    site = request.form.get("site_name", "")
-    if site not in models.virtual_farm_site_names() or site in models.donos_das_fazendas_clientes():
-        abort(404)
-    voltar = redirect(url_for("mapa_interpolado") + "#pontos-criados")
-    plano_id = request.form.get("plano_id", type=int)
-    plano = models.get_plano(plano_id) if plano_id else None
-    cobrar = bool(request.form.get("cobrar")) and bool(plano)
-    validade = (request.form.get("validade") or "").strip() or None
-    area = _area_txt(request.form.get("area_ha")) or None
-    pagador = {k: (request.form.get(k) or "").strip() for k in ("pagador_nome", "cpf_cnpj", "email", "celular")}
-    pagador["cpf_cnpj"] = re.sub(r"\D", "", pagador["cpf_cnpj"])
-    pagador["celular"] = re.sub(r"\D", "", pagador["celular"])
-    if cobrar:
-        if not _plano_pago(plano):
-            flash("Esse plano é gratuito -- não há o que cobrar. Desmarque \"Gerar cobrança\".", "error")
-            return voltar
-        if not pagador["pagador_nome"] or not _cpf_cnpj_valido(pagador["cpf_cnpj"]):
-            flash("Para gerar a cobrança, informe o nome e um CPF/CNPJ válido do pagador.", "error")
-            return voltar
-    antes = models.get_plano_fazenda(site) or {}
-    mudou = (antes.get("plano_id") != (plano["id"] if plano else None) or (antes.get("area_ha") or None) != (area or None)
-             or antes.get("cpf_cnpj") != pagador["cpf_cnpj"])
-    if antes.get("asaas_subscription_id") and (not cobrar or mudou):
-        _cancelar_cobranca_plano_fazenda(site)
-    novo_cliente = antes.get("cpf_cnpj") != pagador["cpf_cnpj"]
-    models.salvar_plano_fazenda(
-        site, grupo_economico=(request.form.get("grupo_economico") or "").strip()[:40] or None,
-        plano_id=plano["id"] if plano else None, validade=None if cobrar else validade, cobrar=1 if cobrar else 0,
-        area_ha=area, **pagador, **({"asaas_customer_id": None} if novo_cliente else {}),
-        **({} if cobrar else {"status": None, "link_fatura": None}),
-    )
-    if cobrar and not (models.get_plano_fazenda(site) or {}).get("asaas_subscription_id"):
-        erro = _cobrar_plano_fazenda(site)
-        if erro:
-            flash(f"Plano salvo, mas a cobrança não foi gerada: {erro}. Salve de novo para tentar.", "error")
-            return voltar
-        flash("Plano salvo e cobrança gerada no Asaas -- o link da fatura está no cartão da fazenda.", "success")
-        return voltar
-    flash("Plano e grupo da fazenda salvos.", "success")
-    return voltar
 
 
 @app.route("/webhooks/asaas", methods=["POST"])
@@ -8757,8 +8642,14 @@ def admin_solicitacoes():
         p["sinal_locais"] = [(nome, sinal_celular.estimar(lat, lon, buscar_frequencias=False)) for nome, lat, lon in outras]
         sinal_celular.buscar_frequencias_em_segundo_plano(
             [(lat, lon) for lat, lon in locais if sinal_celular.frequencias_salvas(lat, lon) is None])
+    sem_cadastro = _fazendas_sem_cadastro()
+    for p in pessoas:
+        p["fazendas"] = [_dados_da_fazenda(a["site_name"], f"{p['user_id']}_{a['id']}") for a in p["areas"] if a.get("site_name")]
     return render_template("admin_solicitacoes.html", pessoas=pessoas, perfis=PERFIS_CADASTRO,
-                           planos=models.get_planos(), hoje=_hoje_cuiaba().isoformat())
+                           planos=models.get_planos(), hoje=_hoje_cuiaba().isoformat(),
+                           sem_cadastro=[_dados_da_fazenda(s, f"livre_{i}") for i, s in enumerate(sem_cadastro)],
+                           clientes_lista=[{"id": pe["user_id"], "nome": pe.get("nome_completo") or pe["username"]}
+                                           for pe in pessoas if pe.get("cliente")])
 
 
 # Itens do menu Configuracoes (botao ⋮): (chave, rotulo, endpoint, quem ve
@@ -9034,6 +8925,184 @@ def admin_cliente_cortesia(user_id):
     models.atualizar_assinatura(user_id, **campos)
     flash(f"Acesso de {row['username']} atualizado.", "success")
     return redirect(url_for("admin_solicitacoes"))
+
+
+# --- Fazendas no modelo unico (Gerenciar Clientes, pedido do Alan, 09/11/2026) ---
+# Toda fazenda tem os mesmos dados: nome de exibicao, cadastro (cliente) e
+# grupo dele, plano/validade do cadastro, municipio/estado, culturas e areas,
+# coordenada, pais, estacao do clima e ativa/oculta. As do app ja' vem com
+# isso; as da BioScout (e do Mapas de Estudo) o Master liga a um cadastro e
+# completa aqui.
+
+def _soma_areas(culturas_txt):
+    return sum(_area_de_texto(a) for _c, a in _culturas_com_area(culturas_txt)) if culturas_txt else 0
+
+
+def _origem_da_fazenda(site, ponto=None):
+    if site not in models.virtual_farm_site_names():
+        return "bioscout"
+    return "estudo" if (not ponto or ponto.get("vinculada")) else "app"
+
+
+def _ponto_da_fazenda(site):
+    conn = models.get_db()
+    row = conn.execute("SELECT * FROM cliente_pontos WHERE site_name = ? LIMIT 1", (site,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def _dados_da_fazenda(site, idx="0", completo=False):
+    """Dados de uma fazenda no modelo unico. `completo` = tambem as estacoes
+    de clima proximas (so' no editor, carregado por fetch)."""
+    ponto = _ponto_da_fazenda(site)
+    livres = models.get_fazendas_dados().get(site) or {}
+    fonte = ponto or livres
+    coords = _coords_all().get(site)
+    lat, lon = (ponto["lat"], ponto["lon"]) if ponto else (coords if coords else (None, None))
+    pais = models.get_all_site_countries().get(site, countries.DEFAULT_COUNTRY)
+    culturas = fonte.get("culturas") or ""
+    area = fonte.get("area_ha") or _soma_areas(culturas)
+    fz = {
+        "site": site, "idx": idx, "nome_exibicao": _nome_exibicao(site), "ponto": ponto,
+        "origem": _origem_da_fazenda(site, ponto), "dono": ponto["user_id"] if ponto else None,
+        "cidade": fonte.get("cidade") or "", "uf": fonte.get("uf") or "", "culturas": culturas,
+        "area_ha": area, "area_txt": f"{_fmt_ha(area)} ha" if area else "-",
+        "lat": lat, "lon": lon, "country_code": pais,
+        "ativo": site not in models.get_deactivated_site_names(), "plano": _plano_da_fazenda(site),
+    }
+    if completo:
+        escolha = models.get_all_weather_station_overrides().get(site)
+        fz["estacoes_proximas"] = countries.estacoes_mais_proximas_global(lat, lon, pais, n=2) if lat is not None else []
+        fz["estacao_selecionada"] = escolha["codigo"] if escolha else ""
+        fz["estacao_pais"] = escolha["country_code"] if escolha else ""
+    return fz
+
+
+@app.route("/admin/fazendas/dados")
+@master_required
+def admin_fazenda_dados():
+    site = request.args.get("site", "")
+    if site not in (set(read_sites()) | models.virtual_farm_site_names()):
+        abort(404)
+    return render_template("_dados_fazenda.html", fz=_dados_da_fazenda(site, request.args.get("idx", "0"), completo=True),
+                           countries=countries.COUNTRIES, ufs=UFS_BR)
+
+
+@app.route("/admin/fazendas/dados/salvar", methods=["POST"])
+@master_required
+def admin_fazenda_dados_salvar():
+    """Municipio, estado e culturas/areas de qualquer fazenda (salva sozinho)."""
+    site = request.form.get("site_name", "")
+    if site not in (set(read_sites()) | models.virtual_farm_site_names()):
+        abort(404)
+    cidade = (request.form.get("cidade") or "").strip()[:80]
+    uf = request.form.get("uf") if request.form.get("uf") in UFS_BR else ""
+    culturas = (request.form.get("culturas") or "").strip()[:300]
+    area = _soma_areas(culturas) or None
+    ponto = _ponto_da_fazenda(site)
+    if ponto:
+        models.atualizar_dados_ponto(ponto["id"], cidade, uf, culturas, area)
+        _recalcular_cadastro(ponto["user_id"])
+    else:
+        models.salvar_fazenda_dados(site, cidade, uf, culturas, area)
+    return _save_response("Dados da fazenda salvos.", "admin_solicitacoes")
+
+
+def _fazendas_sem_cadastro():
+    """Fazendas da BioScout e do Mapas de Estudo que ainda nao pertencem a
+    nenhum cadastro (inclusive as ocultas), na ordem do site."""
+    donos = models.donos_das_fazendas_clientes()
+    todas = set(read_sites()) | models.virtual_farm_site_names()
+    return sorted((s for s in todas if s not in donos), key=_ordem_fazenda)
+
+
+@app.route("/admin/clientes/novo", methods=["POST"])
+@master_required
+def admin_cliente_novo():
+    """Cadastro feito pelo Master (ex.: fazendas da BioScout, que nao tem
+    grupo): cria a conta de cliente (com login), o registro do cadastro, o
+    plano/cortesia e liga as fazendas escolhidas."""
+    f = request.form
+    voltar = redirect(url_for("admin_solicitacoes"))
+    nome = (f.get("nome_completo") or "").strip()[:80]
+    usuario = (f.get("username") or "").strip()[:60]
+    senha = f.get("password") or ""
+    telefone = _telefone_from_form(f) if (f.get("numero_telefone") or "").strip() else ""
+    email = (f.get("email") or "").strip()[:120]
+    grupo = (f.get("grupo_economico") or "").strip()[:40]
+    erro = None
+    if not nome or not usuario:
+        erro = "Informe o nome e o usuário."
+    elif models.username_em_uso(usuario):
+        erro = f"O usuário '{usuario}' já existe."
+    elif len(senha) < 6:
+        erro = "A senha precisa ter pelo menos 6 caracteres."
+    elif telefone and not _is_valid_phone(telefone):
+        erro = "Celular inválido -- DDD + número."
+    elif models.conta_com_contato(telefone, email):
+        erro = "Esse celular ou e-mail já é de outra conta."
+    if erro:
+        flash(erro, "error")
+        return voltar
+    plano_id = f.get("plano_id", type=int)
+    plano = models.get_plano(plano_id) if plano_id else None
+    uid = models.criar_cliente(usuario, senha, email, telefone, "", plano["id"] if plano else None)
+    models.registrar_cadastro({"username": usuario, "nome_completo": nome, "email": email, "telefone": telefone,
+                               "tipo": "cliente", "user_id": uid, "grupo_economico": grupo or None})
+    cortesia = _parse_iso_date(f.get("cortesia_ate", ""))
+    if cortesia:
+        models.atualizar_assinatura(uid, cortesia_ate=cortesia.isoformat(), status="ativa")
+    livres = set(_fazendas_sem_cadastro())
+    ligadas = [s for s in f.getlist("site") if s in livres]
+    for s in ligadas:
+        _vincular(uid, s)
+    _recalcular_cadastro(uid)
+    flash(f"Cliente '{nome}' criado com {len(ligadas)} fazenda(s).", "success")
+    return voltar
+
+
+def _vincular(user_id, site):
+    lat, lon = _coords_all().get(site) or (0.0, 0.0)
+    return models.vincular_fazenda(user_id, site, _nome_exibicao(site), lat, lon)
+
+
+@app.route("/admin/clientes/<int:user_id>/vincular", methods=["POST"])
+@master_required
+def admin_cliente_vincular(user_id):
+    row = models.get_user_by_id(user_id)
+    site = request.form.get("site_name", "")
+    if not row or not row["is_cliente"] or site not in set(_fazendas_sem_cadastro()):
+        abort(404)
+    _vincular(user_id, site)
+    _recalcular_cadastro(user_id)
+    flash(f"'{_nome_exibicao(site)}' ligada ao cadastro de {row['username']}.", "success")
+    return redirect(url_for("admin_solicitacoes"))
+
+
+@app.route("/admin/clientes/<int:user_id>/desvincular/<int:ponto_id>", methods=["POST"])
+@master_required
+def admin_cliente_desvincular(user_id, ponto_id):
+    site = models.desvincular_fazenda(user_id, ponto_id)
+    if not site:
+        abort(404)
+    _recalcular_cadastro(user_id)
+    flash(f"'{_nome_exibicao(site)}' saiu do cadastro (a fazenda continua no site).", "success")
+    return redirect(url_for("admin_solicitacoes"))
+
+
+@app.route("/admin/clientes/<int:user_id>/grupo", methods=["POST"])
+@master_required
+def admin_cliente_grupo(user_id):
+    """Grupo economico do cadastro (agrupa as fazendas dele em Recomendacoes)."""
+    row = models.get_user_by_id(user_id)
+    if not row:
+        abort(404)
+    grupo = (request.form.get("grupo_economico") or "").strip()[:40]
+    if not models.get_cadastro_do_usuario(user_id):
+        models.registrar_cadastro({"username": row["username"], "tipo": "cliente" if row["is_cliente"] else "fazenda",
+                                   "user_id": user_id, "email": row["email"], "telefone": row["telefone"]})
+    models.atualizar_dados_cadastro(user_id, grupo_economico=grupo or None)
+    return _save_response("Grupo salvo.", "admin_solicitacoes")
 
 
 @app.route("/admin/clientes/<int:user_id>/excluir", methods=["POST"])

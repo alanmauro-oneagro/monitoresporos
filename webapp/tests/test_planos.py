@@ -299,18 +299,19 @@ class PlanosTest(unittest.TestCase):
         self.assertIsNone(models.get_virtual_farm(site_name))
 
 
-class PlanoDaFazendaTest(unittest.TestCase):
-    """Nomes novos dos planos e plano de cada fazenda (pedido do Alan, 09/11/2026):
-    real = Inteligência, Mapas de Estudo = plano escolhido com ou sem cobranca."""
+class ModeloUnicoFazendasTest(unittest.TestCase):
+    """Nomes novos dos planos e o modelo unico de fazenda em Gerenciar Clientes
+    (pedidos do Alan, 09/11/2026): toda fazenda pertence a um cadastro, que da'
+    plano, validade e grupo; BioScout = Inteligência."""
 
     @classmethod
     def setUpClass(cls):
         webapp.app.config["TESTING"] = True
         models.init_db()
-        if not models.get_user_by_username("Zzz Master PlanoFaz"):
-            models.create_user("Zzz Master PlanoFaz", "x", is_master=True)
-        if not models.get_user_by_username("Zzz Admin PlanoFaz"):
-            models.create_user("Zzz Admin PlanoFaz", "x", is_admin=True)
+        for nome, kw in (("Zzz Master Modelo", {"is_master": True}), ("Zzz Admin Modelo", {"is_admin": True})):
+            if not models.get_user_by_username(nome):
+                models.create_user(nome, "x", **kw)
+        cls.real = webapp.read_sites()[0]
 
     def _logado(self, nome):
         c = webapp.app.test_client()
@@ -333,106 +334,75 @@ class PlanoDaFazendaTest(unittest.TestCase):
         conn.commit()
         conn.close()
         models.init_db()
-        nomes = [p["nome"] for p in models.get_planos()]
-        self.assertNotIn("Free", nomes)
+        self.assertNotIn("Free", [p["nome"] for p in models.get_planos()])
         self.assertEqual(self._plano("Essencial")["id"], essencial["id"])
         self.assertEqual(models.plano_free()["id"], essencial["id"])
 
-    def test_fazenda_real_e_inteligencia_e_estudo_sem_plano(self):
-        self.assertEqual(self._selo("Zzz Fazenda Real BioScout"), "Inteligência")
-        site = models.create_virtual_farm("Zzz Estudo Sem Plano", -12.5, -55.7, 30)
-        self.assertEqual(self._selo(site), "Sem plano")
-
-    def test_plano_sem_cobranca_com_validade(self):
-        site = models.create_virtual_farm("Zzz Estudo Cortesia", -12.6, -55.7, 30)
+    def test_cadastro_manual_com_fazendas_da_bioscout_e_do_estudo(self):
+        master = self._logado("Zzz Master Modelo")
+        e1 = models.create_virtual_farm("Zzz Modelo Est 1", -12.41, -55.7, 30)
+        e2 = models.create_virtual_farm("Zzz Modelo Est 2", -12.42, -55.7, 30)
+        self.assertEqual(self._selo(e1), "Sem plano")
+        self.assertEqual(self._selo(self.real), "Inteligência")
+        # dados completados antes de ter cadastro (fazendas_dados) vao junto ao ligar
+        r = master.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"},
+                        data={"site_name": e1, "cidade": "Sorriso", "uf": "MT", "culturas": "Soja (100 ha), Milho (50 ha)"})
+        self.assertTrue(r.get_json()["ok"])
+        tela = master.get("/admin/solicitacoes").get_data(as_text=True)
+        self.assertIn("Fazendas sem cadastro", tela)
+        self.assertIn("+ Novo cliente", tela)
         avancado = self._plano("Avançado")
-        r = self._logado("Zzz Master PlanoFaz").post("/mapa-interpolado/plano", data={
-            "site_name": site, "plano_id": str(avancado["id"]), "validade": "2099-12-31"})
+        r = master.post("/admin/clientes/novo", data={
+            "nome_completo": "Zzz Grupo Modelo Dono", "username": "Zzz Modelo Login", "password": "segredo1",
+            "codigo_pais": "55", "numero_telefone": "65999997101", "email": "", "grupo_economico": "Grupo Zzz Modelo",
+            "plano_id": str(avancado["id"]), "cortesia_ate": "2099-01-31", "site": [e1, e2, self.real]})
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(self._selo(site), "Avançado · até 31/12/2099")
-        # Administrador nao define plano nem cobranca (so' Master)
-        r = self._logado("Zzz Admin PlanoFaz").post("/mapa-interpolado/plano", data={"site_name": site, "plano_id": ""})
-        self.assertEqual(r.status_code, 403)
+        uid = models.get_user_by_username("Zzz Modelo Login")["id"]
+        pontos = {p["site_name"]: p for p in models.get_cliente_pontos(uid)}
+        self.assertEqual(set(pontos), {e1, e2, self.real})
+        self.assertTrue(all(p["vinculada"] for p in pontos.values()))
+        self.assertEqual((pontos[e1]["cidade"], pontos[e1]["area_ha"]), ("Sorriso", 150))
+        self.assertIn(e1, models.get_user_permitted_site_names(uid))
+        self.assertEqual(self._selo(e1), "Avançado · até 31/01/2099")
+        self.assertEqual(self._selo(self.real), "Inteligência · até 31/01/2099")  # BioScout = Inteligência
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._grupo_economico_da_fazenda(e2), "Grupo Zzz Modelo")
+        # grupo do cadastro editavel (salva sozinho)
+        master.post(f"/admin/clientes/{uid}/grupo", headers={"X-Autosave": "1"}, data={"grupo_economico": "Grupo Zzz Novo"})
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._grupo_economico_da_fazenda(e2), "Grupo Zzz Novo")
+        # editor de dados da fazenda
+        editor = master.get("/admin/fazendas/dados", query_string={"site": e2}).get_data(as_text=True)
+        for campo in ('name="cidade"', 'name="culturas"', 'name="nome_exibicao"', 'name="country_code"', 'name="estacao_codigo"'):
+            self.assertIn(campo, editor)
+        master.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"},
+                    data={"site_name": e2, "cidade": "Sinop", "uf": "MT", "culturas": "Soja (40 ha)"})
+        self.assertEqual(models.get_ponto_por_id(pontos[e2]["id"])["area_ha"], 40)
+        self.assertIn("Soja (140 ha)", models.get_cadastro_do_usuario(uid)["culturas"])
+        # Administrador nao mexe nos dados (so' Master)
+        admin = self._logado("Zzz Admin Modelo")
+        self.assertEqual(admin.get("/admin/fazendas/dados", query_string={"site": e2}).status_code, 403)
+        self.assertEqual(admin.post("/admin/clientes/novo", data={}).status_code, 403)
+        # desligar: a fazenda continua no site, sem a permissao do cliente
+        master.post(f"/admin/clientes/{uid}/desvincular/{pontos[e2]['id']}")
+        self.assertTrue(models.get_virtual_farm(e2))
+        self.assertNotIn(e2, models.get_user_permitted_site_names(uid))
+        self.assertEqual(models.get_fazendas_dados()[e2]["cidade"], "Sinop")
+        # excluir o cliente nao apaga as fazendas ligadas
+        models.delete_user(uid)
+        self.assertTrue(models.get_virtual_farm(e1))
 
-    def test_plano_com_cobranca_no_asaas_e_pagamento(self):
-        site = models.create_virtual_farm("Zzz Estudo Cobranca", -12.65, -55.7, 30)
-        basico = self._plano("Básico")
-        models.salvar_plano(basico["id"], basico["nome"], "", 1200, "MONTHLY", 3, 50, basico["recursos"], True, basico["ordem"])
-        master = self._logado("Zzz Master PlanoFaz")
-        dados = {"site_name": site, "plano_id": str(basico["id"]), "cobrar": "1", "pagador_nome": "Zzz Pagador",
-                 "cpf_cnpj": "529.982.247-25", "celular": "(65) 99999-0000", "email": ""}
-        with mock.patch.object(webapp.asaas, "configurado", return_value=True), \
-                mock.patch.object(webapp.asaas, "criar_cliente", return_value="cus_1") as cli, \
-                mock.patch.object(webapp.asaas, "criar_assinatura", return_value="sub_estudo_1") as sub, \
-                mock.patch.object(webapp.asaas, "pagamentos_da_assinatura", return_value=[{"invoiceUrl": "https://fatura/1"}]):
-            sem_cpf = master.post("/mapa-interpolado/plano", data={**dados, "cpf_cnpj": "123"})
-            self.assertFalse(sub.called)
-            master.post("/mapa-interpolado/plano", data=dados)
-        self.assertIn("CPF/CNPJ", master.get(sem_cpf.location).get_data(as_text=True) if sem_cpf.location else "CPF/CNPJ")
-        self.assertEqual(cli.call_args[0][1], CPF_VALIDO)
-        self.assertEqual(sub.call_args[0][1], 100.0)  # 1.200 / 12 parcelas
-        self.assertTrue(sub.call_args[0][5].startswith("estudo:"))
-        pf = models.get_plano_fazenda(site)
-        self.assertEqual((pf["asaas_subscription_id"], pf["status"], pf["link_fatura"]), ("sub_estudo_1", "pendente", "https://fatura/1"))
-        self.assertEqual(self._selo(site), "Básico · aguardando pagamento")
-        tela = master.get("/mapa-interpolado").get_data(as_text=True)
-        self.assertIn("https://fatura/1", tela)
-        # Pagamento confirmado pelo webhook: vale 1 ano do vencimento
-        with mock.patch.object(webapp.asaas, "token_webhook", return_value="tok"):
-            r = webapp.app.test_client().post("/webhooks/asaas", headers={"asaas-access-token": "tok"}, json={
-                "event": "PAYMENT_CONFIRMED", "payment": {"id": "pay_estudo_1", "subscription": "sub_estudo_1",
-                                                         "status": "CONFIRMED", "dueDate": "2026-11-09", "value": 100}})
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(self._selo(site), "Básico · até 09/11/2027")
-        # Desmarcar a cobranca cancela a assinatura no Asaas
-        with mock.patch.object(webapp.asaas, "cancelar_assinatura") as cancelar:
-            master.post("/mapa-interpolado/plano", data={"site_name": site, "plano_id": str(basico["id"]), "validade": ""})
-        cancelar.assert_called_once_with("sub_estudo_1")
-        self.assertIsNone(models.get_plano_fazenda(site)["asaas_subscription_id"])
-
-    def test_selo_nas_abas_e_filtro_de_plano(self):
-        site = models.create_virtual_farm("Zzz Estudo Selo", -12.7, -55.7, 30)
-        models.salvar_plano_fazenda(site, plano_id=self._plano("Inteligência")["id"], validade="2099-01-01")
-        master = self._logado("Zzz Master PlanoFaz")
-        self.assertIn("Inteligência · até 01/01/2099", master.get("/fazendas").get_data(as_text=True))
+    def test_campos_duplicados_sairam_de_manejos_e_mapas_de_estudo(self):
+        master = self._logado("Zzz Master Modelo")
+        models.create_virtual_farm("Zzz Modelo Dup", -12.43, -55.7, 30)
+        manejos = master.get("/fazendas").get_data(as_text=True)
+        for campo in ('name="grupo_economico"', 'name="nome_exibicao"', 'name="estacao_codigo"', "Ocultar fazenda"):
+            self.assertNotIn(campo, manejos)
+        estudo = master.get("/mapa-interpolado").get_data(as_text=True)
+        self.assertNotIn("Plano e grupo", estudo)
+        self.assertNotIn("🙈 Ocultar", estudo)
         graficos = master.get("/graficos").get_data(as_text=True)
         self.assertIn('id="filtroPlano"', graficos)
-        self.assertIn('data-plano="Inteligência"', graficos)
-
-
-class GrupoEconomicoEstudoTest(unittest.TestCase):
-    """Fazendas do Mapas de Estudo com o mesmo grupo economico ficam juntas
-    em Recomendacoes (pedido do Alan, 09/11/2026)."""
-
-    def test_grupo_do_mapas_de_estudo_agrupa(self):
-        webapp.app.config["TESTING"] = True
-        models.init_db()
-        if not models.get_user_by_username("Zzz Master GrupoEst"):
-            models.create_user("Zzz Master GrupoEst", "x", is_master=True)
-        c = webapp.app.test_client()
-        with c.session_transaction() as s:
-            s["_user_id"] = str(models.get_user_by_username("Zzz Master GrupoEst")["id"])
-            s["_fresh"] = True
-        sites = [models.create_virtual_farm(n, -12.4 - i / 100, -55.7, 30) for i, n in enumerate(("Zzz Est G1", "Zzz Est G2"))]
-        for site in sites:
-            c.post("/mapa-interpolado/plano", data={"site_name": site, "plano_id": "", "grupo_economico": "Grupo Zzz Estudo"})
-        self.assertIn("👥 Grupo Zzz Estudo", c.get("/mapa-interpolado").get_data(as_text=True))
-        with mock.patch.object(webapp, "_texto_relatorio", side_effect=lambda site, *a, **k: f"texto de {site}"), \
-                mock.patch.object(webapp, "_cards_by_site_all", return_value={s: [] for s in sites}), \
-                mock.patch.object(webapp, "_format_whatsapp_message", side_effect=lambda site, *a, **k: f"texto de {site}"):
-            html = c.get("/recommendations/safra1").get_data(as_text=True)
-        self.assertIn('data-grupo="Grupo Zzz Estudo"', html)
-        self.assertIn("2 fazendas", html)
-        # Campo "Grupo" em Manejos, antes do nome de exibicao, salva sozinho (09/11/2026)
-        manejos = c.get("/fazendas").get_data(as_text=True)
-        self.assertIn('name="grupo_economico"', manejos)
-        self.assertLess(manejos.index('name="grupo_economico"'), manejos.index('name="nome_exibicao"'))
-        self.assertIn('<option value="Grupo Zzz Estudo">', manejos)
-        r = c.post("/fazendas/grupo/save", headers={"X-Autosave": "1"},
-                   data={"site_name": "Zzz Fazenda Real Grupo", "grupo_economico": "Grupo Zzz Estudo"})
-        self.assertTrue(r.get_json()["ok"])
-        with webapp.app.test_request_context():
-            self.assertEqual(webapp._grupo_economico_da_fazenda("Zzz Fazenda Real Grupo"), "Grupo Zzz Estudo")
 
 
 class ExcelClientesPlanosTest(unittest.TestCase):

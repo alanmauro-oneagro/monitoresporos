@@ -810,6 +810,16 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe
     try:
+        # Fazenda que ja' existia (BioScout ou Mapas de Estudo) ligada a um cadastro
+        # pelo Master em Gerenciar Clientes (pedido do Alan, 09/11/2026): nunca e'
+        # apagada junto com o cadastro, so' desligada.
+        conn.execute("ALTER TABLE cliente_pontos ADD COLUMN vinculada INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
+    # Dados das fazendas ainda sem cadastro (mesmos campos de cliente_pontos).
+    conn.execute("CREATE TABLE IF NOT EXISTS fazendas_dados (site_name TEXT PRIMARY KEY, cidade TEXT, uf TEXT,"
+                 " culturas TEXT, area_ha REAL, atualizado_em TEXT)")
+    try:
         # Grupo economico da fazenda do Mapas de Estudo (agrupa em Recomendacoes; pedido do Alan, 09/11/2026).
         conn.execute("ALTER TABLE planos_fazenda ADD COLUMN grupo_economico TEXT")
     except sqlite3.OperationalError:
@@ -3037,7 +3047,7 @@ _VIRTUAL_FARM_RENAME_TABLES = (
     "farm_produtos", "farm_plantio", "farm_aplicacoes", "farm_espacamento_plantio",
     "farm_culturas", "weather_station_overrides", "farm_ndvi_area", "farm_ndvi_car", "farm_ndvi_historico",
     "site_country_overrides", "site_climate_notes", "ndvi_agendamento", "ndvi_whatsapp_ativos",
-    "whatsapp_schedule_horarios", "site_solo_cache", "cliente_pontos", "planos_fazenda",
+    "whatsapp_schedule_horarios", "site_solo_cache", "cliente_pontos", "planos_fazenda", "fazendas_dados",
 )
 
 
@@ -3131,6 +3141,7 @@ def delete_virtual_farm(site_name):
     conn = get_db()
     conn.execute("DELETE FROM virtual_farms WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM planos_fazenda WHERE site_name = ?", (site_name,))
+    conn.execute("DELETE FROM fazendas_dados WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM sites WHERE site_name = ?", (site_name,))  # cascade cuida das permissoes
     conn.execute("DELETE FROM recommendation_notes WHERE site_name = ?", (site_name,))
     conn.execute("DELETE FROM whatsapp_schedule WHERE site_name = ?", (site_name,))
@@ -3377,7 +3388,7 @@ def sites_de_clientes():
     """Fazendas estimadas criadas pelas lavouras dos clientes do app (plano)."""
     conn = get_db()
     nomes = {r["site_name"] for r in conn.execute(
-        "SELECT site_name FROM cliente_pontos WHERE site_name IS NOT NULL").fetchall()}
+        "SELECT site_name FROM cliente_pontos WHERE site_name IS NOT NULL AND COALESCE(vinculada, 0) = 0").fetchall()}
     conn.close()
     return nomes
 
@@ -3386,8 +3397,8 @@ def delete_user(user_id):
     conn = get_db()
     # Fazendas estimadas criadas pras lavouras do cliente saem junto com ele.
     sites = [r["site_name"] for r in conn.execute(
-        "SELECT site_name FROM cliente_pontos WHERE user_id = ? AND site_name IS NOT NULL", (user_id,)
-    ).fetchall()]
+        "SELECT site_name FROM cliente_pontos WHERE user_id = ? AND site_name IS NOT NULL AND COALESCE(vinculada, 0) = 0",
+        (user_id,)).fetchall()]
     conn.close()
     for site_name in sites:
         if get_virtual_farm(site_name):
@@ -4285,7 +4296,7 @@ def excluir_cliente_ponto(user_id, ponto_id):
     fazenda estimada junto. Devolve o site_name apagado (ou None)."""
     ponto = get_cliente_ponto(user_id, ponto_id)
     site_name = (ponto or {}).get("site_name")
-    if site_name and get_virtual_farm(site_name):
+    if site_name and get_virtual_farm(site_name) and not (ponto or {}).get("vinculada"):
         delete_virtual_farm(site_name)
     conn = get_db()
     conn.execute("DELETE FROM cliente_pontos WHERE id = ? AND user_id = ?", (ponto_id, user_id))
@@ -4369,3 +4380,68 @@ def grupos_economicos():
             vistos.add(n.strip().lower())
             saida.append(n.strip())
     return saida
+
+
+# --- Fazendas no modelo unico (Gerenciar Clientes, pedido do Alan, 09/11/2026) ---
+
+def get_fazendas_dados():
+    conn = get_db()
+    linhas = {r["site_name"]: dict(r) for r in conn.execute("SELECT * FROM fazendas_dados").fetchall()}
+    conn.close()
+    return linhas
+
+
+def salvar_fazenda_dados(site_name, cidade, uf, culturas, area_ha):
+    conn = get_db()
+    conn.execute("INSERT INTO fazendas_dados (site_name, cidade, uf, culturas, area_ha, atualizado_em) VALUES (?, ?, ?, ?, ?, ?)"
+                 " ON CONFLICT(site_name) DO UPDATE SET cidade = excluded.cidade, uf = excluded.uf,"
+                 " culturas = excluded.culturas, area_ha = excluded.area_ha, atualizado_em = excluded.atualizado_em",
+                 (site_name, cidade, uf, culturas, area_ha, _agora_cuiaba()))
+    conn.commit()
+    conn.close()
+
+
+def atualizar_dados_ponto(ponto_id, cidade, uf, culturas, area_ha):
+    conn = get_db()
+    conn.execute("UPDATE cliente_pontos SET cidade = ?, uf = ?, culturas = ?, area_ha = ? WHERE id = ?",
+                 (cidade, uf, culturas, area_ha, ponto_id))
+    conn.commit()
+    conn.close()
+
+
+def vincular_fazenda(user_id, site_name, nome, lat, lon):
+    """Liga uma fazenda que ja' existe (BioScout ou Mapas de Estudo) ao cadastro:
+    vira uma fazenda do cliente (cliente_pontos, `vinculada`=1), com os dados
+    que ela ja' tinha em fazendas_dados, liberada e recebendo o relatorio."""
+    dados = get_fazendas_dados().get(site_name) or {}
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO cliente_pontos (user_id, nome, lat, lon, cultura, criado_em, site_name, vinculada, adicional_status,"
+        " cidade, uf, culturas, area_ha) VALUES (?, ?, ?, ?, '', ?, ?, 1, 'incluida', ?, ?, ?, ?)",
+        (user_id, nome, lat, lon, _agora_cuiaba(), site_name, dados.get("cidade"), dados.get("uf"),
+         dados.get("culturas"), dados.get("area_ha")))
+    conn.execute("DELETE FROM fazendas_dados WHERE site_name = ?", (site_name,))
+    conn.commit()
+    conn.close()
+    liberar_fazenda_para_usuario(user_id, site_name)
+    receber_relatorio_da_fazenda(user_id, site_name)
+    return cur.lastrowid
+
+
+def desvincular_fazenda(user_id, ponto_id):
+    """Tira a fazenda vinculada do cadastro (a fazenda continua no site, com
+    os dados dela de volta em fazendas_dados) e da' a permissao/relatorio."""
+    ponto = get_cliente_ponto(user_id, ponto_id)
+    if not ponto or not ponto.get("vinculada"):
+        return None
+    site = ponto["site_name"]
+    salvar_fazenda_dados(site, ponto.get("cidade"), ponto.get("uf"), ponto.get("culturas"), ponto.get("area_ha"))
+    conn = get_db()
+    conn.execute("DELETE FROM cliente_pontos WHERE id = ?", (ponto_id,))
+    row = conn.execute("SELECT id FROM sites WHERE site_name = ?", (site,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM user_site_permissions WHERE user_id = ? AND site_id = ?", (user_id, row["id"]))
+        conn.execute("DELETE FROM user_report_permissions WHERE user_id = ? AND site_id = ?", (user_id, row["id"]))
+    conn.commit()
+    conn.close()
+    return site
