@@ -215,7 +215,7 @@ details.card > summary { font-size: 0.9rem; }
 
 {# Fazenda sem cadastro: cartao igual ao dos produtores (pedido do Alan, 09/11/2026). #}
 {% macro cartao_fazenda(fz) %}
-<div class="card shadow-sm mb-3 cad-card" data-tipo="fazenda" data-novo="0" data-incompleto="1" data-situacao="">
+<div class="card shadow-sm mb-3 cad-card" data-tipo="fazenda" data-novo="0" data-incompleto="{{ 1 if fz.faltando else 0 }}" data-situacao="">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-center gap-2">
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-faz-{{ fz.idx }}">
@@ -223,7 +223,7 @@ details.card > summary { font-size: 0.9rem; }
             </button>
             <span class="badge bg-secondary">Fazenda sem cadastro</span>
             <span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
-            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ fz.faltando | join('; ') }}">⚠ Cadastro incompleto</span>
+            {% if fz.faltando %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ fz.faltando | join('; ') }}">⚠ Cadastro incompleto</span>{% endif %}
             {{ selo_plano(fz.site) }}
         </div>
         <div class="d-none mt-3 small" id="cad-body-faz-{{ fz.idx }}">
@@ -244,7 +244,7 @@ details.card > summary { font-size: 0.9rem; }
     {% set n_bloq = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'in', ['bloqueado', 'sem_plano']) | list | length %}
     <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Essencial ({{ n_free }})</button>
     <button type="button" class="btn btn-outline-secondary" data-filtro="bloqueado">Bloqueados / sem plano ({{ n_bloq }})</button>
-    {% set n_incompletos = (pessoas | selectattr('faltando') | list | length) + (sem_cadastro | length) %}
+    {% set n_incompletos = (pessoas | selectattr('faltando') | list | length) + (sem_cadastro | selectattr('faltando') | list | length) %}
     <button type="button" class="btn btn-outline-secondary" data-filtro="incompleto">Cadastro incompleto ({{ n_incompletos }})</button>
     <button type="button" class="btn btn-outline-secondary" data-filtro="fazenda">Fazendas sem cadastro ({{ sem_cadastro | length }})</button>
 </div>

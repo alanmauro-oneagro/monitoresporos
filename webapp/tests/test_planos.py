@@ -373,6 +373,10 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         self.assertNotIn(oculta, webapp_sem_cadastro())  # oculta vai pra Gerenciar Fazendas Ocultas
         self.assertIn("🙈 Ocultar", tela)
         self.assertIn("⚠ Cadastro incompleto", tela)
+        # fazenda sem cadastro com municipio e culturas: sem o selo de incompleto (09/11/2026)
+        with webapp.app.test_request_context():
+            fz = webapp._dados_da_fazenda(e1)
+        self.assertEqual(webapp._faltando_na_fazenda(fz), [])
         self.assertIn('data-filtro="incompleto"', tela)
         self.assertIn("Estação meteorológica de referência (muda em Dados da fazenda)", tela)  # estacao no cartao (09/11/2026)
         editor_livre = master.get("/admin/fazendas/dados", query_string={"site": e2}).get_data(as_text=True)

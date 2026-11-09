@@ -246,7 +246,7 @@ caixa "👥 <grupo>" com os cadastros e as fazendas soltas daquele grupo, o
 resto depois); selo "⚠ Cadastro incompleto" ao lado do perfil (Produtor) com
 o que falta no `title` (`_faltando_no_cadastro`: nome completo, celular,
 plano, fazenda, municipio/estado e culturas de cada fazenda; fazenda sem
-cadastro sempre incompleta, `_faltando_na_fazenda`) e filtros "Cadastro
+cadastro so' fica incompleta se faltar municipio/estado ou culturas, `_faltando_na_fazenda` -- a falta de cliente ja' e' o selo "Fazenda sem cadastro", pedido do Alan, 09/11/2026) e filtros "Cadastro
 incompleto" e "Fazendas sem cadastro". Ponto "so' clima" NAO entra em
 Gerenciar Clientes (nem nas sem cadastro, nem no "+ Novo cliente"/Ligar --
 `_fazendas_sem_cadastro`; pedido do Alan, 09/11/2026): fica so' no Mapas de
