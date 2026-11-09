@@ -4121,10 +4121,11 @@ def recommendations(safra):
 def _grupo_economico_da_fazenda(site):
     """Grupo economico da fazenda: do cadastro do cliente dono ou, nas do
     Mapas de Estudo, o digitado no quadro do plano (ou "")."""
+    proprio = ((models.get_plano_fazenda(site) or {}).get("grupo_economico") or "").strip()
     dono = models.donos_das_fazendas_clientes().get(site)
-    if not dono:
-        # Fazenda do Mapas de Estudo: o grupo digitado no "💳 Plano" (09/11/2026).
-        return ((models.get_plano_fazenda(site) or {}).get("grupo_economico") or "").strip()
+    if proprio or not dono:
+        # Grupo digitado em Manejos ou no "💳 Plano e grupo" do Mapas de Estudo (09/11/2026).
+        return proprio
     cadastros = g.setdefault("_grupo_por_dono", {})
     if dono not in cadastros:
         cadastros[dono] = ((models.get_cadastro_do_usuario(dono) or {}).get("grupo_economico") or "").strip()
@@ -5211,6 +5212,33 @@ def save_site_ativo():
     else:
         msg = f"'{_nome_exibicao(site_name)}' oculta -- deixa de aparecer no site (Mapa, Gráficos, Recomendações, Mapas de NDVI, Programação de Envios). Pra reativar: Configurações > Gerenciar Fazendas Ocultas."
     return _save_response(msg)
+
+
+@app.route("/fazendas/grupo/save", methods=["POST"])
+@master_required
+def save_site_grupo():
+    """Grupo economico de qualquer fazenda (aba Manejos, pedido do Alan,
+    09/11/2026): agrupa em Recomendacoes. Vazio = volta ao do cadastro do
+    cliente dono (se houver)."""
+    site_name = request.form.get("site_name", "")
+    if not site_name:
+        abort(400)
+    grupo = (request.form.get("grupo_economico") or "").strip()[:40]
+    models.salvar_plano_fazenda(site_name, grupo_economico=grupo or None)
+    return _save_response("Grupo salvo.", "fazendas")
+
+
+@app.template_global()
+def grupo_da_fazenda(site):
+    return _grupo_economico_da_fazenda(site)
+
+
+@app.template_global()
+def grupos_economicos():
+    """Nomes de grupo ja' usados (sugestao do campo Grupo em Manejos)."""
+    if getattr(g, "_grupos_economicos", None) is None:
+        g._grupos_economicos = models.grupos_economicos()
+    return g._grupos_economicos
 
 
 @app.route("/fazendas/nome/save", methods=["POST"])

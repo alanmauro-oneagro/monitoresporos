@@ -423,6 +423,16 @@ class GrupoEconomicoEstudoTest(unittest.TestCase):
             html = c.get("/recommendations/safra1").get_data(as_text=True)
         self.assertIn('data-grupo="Grupo Zzz Estudo"', html)
         self.assertIn("2 fazendas", html)
+        # Campo "Grupo" em Manejos, antes do nome de exibicao, salva sozinho (09/11/2026)
+        manejos = c.get("/fazendas").get_data(as_text=True)
+        self.assertIn('name="grupo_economico"', manejos)
+        self.assertLess(manejos.index('name="grupo_economico"'), manejos.index('name="nome_exibicao"'))
+        self.assertIn('<option value="Grupo Zzz Estudo">', manejos)
+        r = c.post("/fazendas/grupo/save", headers={"X-Autosave": "1"},
+                   data={"site_name": "Zzz Fazenda Real Grupo", "grupo_economico": "Grupo Zzz Estudo"})
+        self.assertTrue(r.get_json()["ok"])
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._grupo_economico_da_fazenda("Zzz Fazenda Real Grupo"), "Grupo Zzz Estudo")
 
 
 class ExcelClientesPlanosTest(unittest.TestCase):

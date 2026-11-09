@@ -4354,3 +4354,18 @@ def registrar_pagamento_plano_fazenda(pf_id, status, vencimento_iso, link=None):
         if fim > (pf.get("pago_ate") or ""):
             campos.update(pago_ate=fim, status="ativa")
     salvar_plano_fazenda(pf["site_name"], **campos)
+
+
+def grupos_economicos():
+    """Nomes de grupo economico em uso (fazendas e cadastros), sem repetir."""
+    conn = get_db()
+    nomes = [r[0] for r in conn.execute(
+        "SELECT grupo_economico FROM planos_fazenda WHERE COALESCE(grupo_economico, '') != ''"
+        " UNION SELECT grupo_economico FROM solicitacoes_acesso WHERE COALESCE(grupo_economico, '') != ''").fetchall()]
+    conn.close()
+    vistos, saida = set(), []
+    for n in sorted(nomes, key=str.lower):
+        if n.strip().lower() not in vistos:
+            vistos.add(n.strip().lower())
+            saida.append(n.strip())
+    return saida

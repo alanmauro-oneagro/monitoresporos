@@ -51,6 +51,7 @@
 <datalist id="catalogo-nomes-biologico">{% for nome in catalogo_produtos.biologico | map(attribute='nome') | unique %}<option value="{{ nome }}">{% endfor %}</datalist>
 <datalist id="catalogo-ia-biologico">{% for p in catalogo_produtos.biologico if p.ingrediente_ativo %}<option value="{{ p.ingrediente_ativo }}">{% endfor %}</datalist>
 <datalist id="catalogo-variedades">{% for v in catalogo_variedades %}<option value="{{ v }}">{% endfor %}</datalist>
+{% if current_user.is_master %}<datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>{% endif %}
 {% for site_group in sites_data %}
 {% set farm_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
@@ -205,6 +206,17 @@
 
             {# Configuracoes da fazenda -- so' Master (pedido do Alan). #}
             {% if current_user.is_master %}
+            {# Grupo economico (pedido do Alan, 09/11/2026): agrupa em Recomendacoes. #}
+            <div class="mt-3 pt-3 border-top">
+                <form method="post" action="{{ url_for('save_site_grupo') }}" class="d-flex align-items-center gap-2" data-autosave>
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="form-label small text-muted mb-0" for="grupo_{{ farm_idx }}">Grupo:</label>
+                    <input type="text" name="grupo_economico" id="grupo_{{ farm_idx }}" class="form-control form-control-sm" list="lista-grupos"
+                           style="max-width: 260px;" value="{{ grupo_da_fazenda(site_group.site) }}" maxlength="40" placeholder="ex.: Grupo Mauro">
+                    <span class="autosave-status small"></span>
+                </form>
+            </div>
+
             <div class="mt-3 pt-3 border-top">
                 <form method="post" action="{{ url_for('save_site_display_name') }}" class="d-flex align-items-center gap-2" data-autosave data-autosave-reload>
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
