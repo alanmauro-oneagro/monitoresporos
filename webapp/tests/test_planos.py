@@ -359,6 +359,17 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         tela = master.get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("Fazendas sem cadastro", tela)
         self.assertIn("+ Novo cliente", tela)
+        # fazenda sem cadastro = cartao igual ao dos produtores, com o selo e o filtro de incompleto (09/11/2026)
+        self.assertIn('data-tipo="fazenda"', tela)
+        self.assertIn("⚠ Cadastro incompleto", tela)
+        self.assertIn('data-filtro="incompleto"', tela)
+        # exibir por grupo: a fazenda solta com grupo entra na caixa do grupo
+        master.post("/admin/fazendas/grupo/salvar", headers={"X-Autosave": "1"},
+                    data={"site_name": e1, "grupo_economico": "Grupo Zzz Exibir"})
+        por_grupo = master.get("/admin/solicitacoes?exibir=grupo").get_data(as_text=True)
+        self.assertIn("👥 Grupo Zzz Exibir", por_grupo)
+        self.assertIn("grupo-box", master.get("/admin/solicitacoes").get_data(as_text=True))  # lembrado na sessao
+        master.get("/admin/solicitacoes?exibir=produtor")
         avancado = self._plano("Avançado")
         r = master.post("/admin/clientes/novo", data={
             "nome_completo": "Zzz Grupo Modelo Dono", "username": "Zzz Modelo Login", "password": "segredo1",
