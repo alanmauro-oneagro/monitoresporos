@@ -100,6 +100,61 @@ html { font-size: 14px; }
 {% else %}
 {% for site_group in sites_data %}
 {% set outer_loop = loop %}
+{% if site_group.grupo_inicio %}
+{# Grupo economico (pedido do Alan, 09/11/2026): uma caixa com as fazendas do
+   grupo; texto do grupo numa mensagem so' e/ou os PDFs juntos. #}
+{% set gr = site_group.grupo %}
+{% set gform = "whatsapp_grupo_" ~ safra ~ "_" ~ gr.id %}
+<div class="card shadow-sm mb-3 border-success grupo-card" data-grupo="{{ gr.nome }}">
+    <div class="card-body">
+        <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 grupo-toggle" data-target="grupo-corpo-{{ safra }}-{{ gr.id }}">
+                <span class="toggle-icon">▶</span> {{ gr.nome }}
+            </button>
+            {{ selo_plano(gr.sites[0]) }}
+            <span class="badge rounded-pill bg-light text-secondary border fw-normal">{{ gr.sites | length }} fazendas</span>
+            <div class="ms-auto d-flex flex-wrap align-items-center gap-2 rec-acoes">
+                <div class="form-check mb-0 acao-chk-pdf" title="Enviar o PDF de cada fazenda do grupo, um atrás do outro">
+                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ gform }}" id="g_pdf_{{ safra }}_{{ gr.id }}"{% if not wa_ok %} disabled{% endif %}>
+                    <label class="form-check-label small" for="g_pdf_{{ safra }}_{{ gr.id }}">PDFs juntos</label>
+                </div>
+                <div class="form-check mb-0 acao-chk-texto" title="Texto de todas as fazendas do grupo numa mensagem só">
+                    <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ gform }}" id="g_txt_{{ safra }}_{{ gr.id }}"{% if not wa_ok %} disabled{% endif %}>
+                    <label class="form-check-label small" for="g_txt_{{ safra }}_{{ gr.id }}">Texto agrupado</label>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn acao-copiar" data-text="{{ gr.texto }}"
+                        title="Copiar o texto de todas as fazendas do grupo numa mensagem só">📋 Copiar texto do grupo</button>
+                {% if not wa_ok %}
+                <button type="button" class="btn btn-sm btn-outline-success acao-whats" disabled title="WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp">📲 Enviar grupo por WhatsApp</button>
+                {% else %}
+                <details class="whatsapp-destinos acao-whats">
+                    <summary class="btn btn-sm btn-outline-success">📲 Enviar grupo por WhatsApp{% if gr.whatsapp_lista %} ({{ gr.whatsapp_lista | length }}){% endif %} ▾</summary>
+                    <form method="post" action="{{ url_for('send_grupo_whatsapp') }}" id="{{ gform }}" class="whatsapp-destinos-painel card card-body shadow-sm p-2 mt-1 mb-0">
+                        <input type="hidden" name="safra" value="{{ safra }}">
+                        <input type="hidden" name="grupo" value="{{ gr.nome }}">
+                        {% for s in gr.sites %}<input type="hidden" name="site" value="{{ s }}">{% endfor %}
+                        <div class="small fw-bold mb-1">Enviar para:</div>
+                        {% for d in gr.whatsapp_lista %}
+                        <div class="form-check small">
+                            <input class="form-check-input" type="checkbox" name="destino" value="{{ d.telefone }}" checked id="gdest_{{ safra }}_{{ gr.id }}_{{ loop.index0 }}">
+                            <label class="form-check-label" for="gdest_{{ safra }}_{{ gr.id }}_{{ loop.index0 }}">{{ d.nome }} <span class="text-muted">(…{{ d.telefone[-4:] }})</span></label>
+                        </div>
+                        {% else %}
+                        <div class="small text-muted mb-1">Nenhum número cadastrado nas fazendas do grupo.</div>
+                        {% endfor %}
+                        <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + numero, sem espacos -- nao fica salvo)</label>
+                        <div class="d-flex gap-2">
+                            <input type="text" name="codigo_pais" value="55" inputmode="numeric" class="form-control form-control-sm" style="max-width: 5.5rem;" aria-label="Codigo do pais">
+                            <input type="tel" name="numero_telefone" inputmode="tel" placeholder="11999999999" class="form-control form-control-sm">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-success mt-2">📲 Enviar</button>
+                    </form>
+                </details>
+                {% endif %}
+            </div>
+        </div>
+        <div class="d-none mt-3" id="grupo-corpo-{{ safra }}-{{ gr.id }}">
+{% endif %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
@@ -372,10 +427,25 @@ html { font-size: 14px; }
         </div>
     </div>
 </div>
+{% if site_group.grupo_fim %}
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endfor %}
 {% if pontos_clima %}{% include "_pontos_clima.html" %}{% endif %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
 <script src="{{ url_for('static', filename='rosa_ventos.js', v=versao_estaticos) }}"></script>
+<script>
+document.querySelectorAll('.grupo-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var corpo = document.getElementById(btn.dataset.target);
+        var abrir = corpo.classList.contains('d-none');
+        corpo.classList.toggle('d-none');
+        btn.querySelector('.toggle-icon').textContent = abrir ? '▼' : '▶';
+    });
+});
+</script>
 <script>
 // Grafico "Esporos por M3" da fazenda -- mesmos parametros do grafico da
 // aba Graficos (faixas verde/amarela/vermelha de atencao/perigo, valor

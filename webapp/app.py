@@ -4108,6 +4108,7 @@ def recommendations(safra):
             "vento_dia": _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]),
         })
     sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
+    sites_data = _agrupar_por_grupo_economico(sites_data)
     any_whatsapp_configured = any(s["whatsapp_destinos"] > 0 for s in sites_data)
     return render_template(
         "recommendations.html", sites_data=sites_data, no_access=False,
@@ -4115,6 +4116,139 @@ def recommendations(safra):
         pontos_clima=_pontos_clima() if current_user.is_master else [],
         safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS,
     )
+
+
+def _grupo_economico_da_fazenda(site):
+    """Grupo economico do cliente dono da fazenda (ou "")."""
+    dono = models.donos_das_fazendas_clientes().get(site)
+    if not dono:
+        return ""
+    cadastros = g.setdefault("_grupo_por_dono", {})
+    if dono not in cadastros:
+        cadastros[dono] = ((models.get_cadastro_do_usuario(dono) or {}).get("grupo_economico") or "").strip()
+    return cadastros[dono]
+
+
+def _agrupar_por_grupo_economico(sites_data):
+    """Recomendacoes (pedido do Alan, 09/11/2026): fazendas do mesmo grupo
+    economico (2 ou mais) ficam juntas, numa caixa "Grupo X" no lugar da 1a
+    delas (a lista ja' vem por plano). Cada fazenda do grupo ganha `grupo`
+    e a 1a/ultima `grupo_inicio`/`grupo_fim` (o template abre/fecha a caixa)."""
+    por_grupo = {}
+    for sg in sites_data:
+        nome = _grupo_economico_da_fazenda(sg["site"])
+        if nome:
+            por_grupo.setdefault(nome.lower(), []).append(sg)
+    grupos = {k: v for k, v in por_grupo.items() if len(v) > 1}
+    saida, vistos = [], set()
+    for i, sg in enumerate(sites_data):
+        chave = _grupo_economico_da_fazenda(sg["site"]).lower()
+        if chave not in grupos:
+            saida.append(sg)
+            continue
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        membros = grupos[chave]
+        destinos = {}
+        for m in membros:
+            for d in m["whatsapp_lista"]:
+                destinos.setdefault(d["telefone"], d)
+        info = {"id": f"g{i}", "nome": _grupo_economico_da_fazenda(membros[0]["site"]),
+                "sites": [m["site"] for m in membros], "whatsapp_lista": list(destinos.values()),
+                "texto": _juntar_relatorios([m["whatsapp_text"] for m in membros])}
+        for j, m in enumerate(membros):
+            m["grupo"] = info
+            m["grupo_inicio"] = j == 0
+            m["grupo_fim"] = j == len(membros) - 1
+        saida.extend(membros)
+    return saida
+
+
+def _juntar_relatorios(textos):
+    """Varios relatorios numa mensagem so': o topo (RELATÓRIO DE
+    MONITORAMENTO / data) e o rodape uma vez; no meio, o bloco de cada
+    fazenda separado por ━━ (grupo economico em Recomendacoes e "Todas as
+    fazendas" do app -- pedidos do Alan, 08 e 09/11/2026)."""
+    topo = _cabecalho_relatorio_cliente()
+    rodape = ["", f"_{AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
+    linhas, com_rodape = list(topo), False
+    for i, texto in enumerate(textos):
+        partes = texto.split("\n")
+        if partes[:len(topo)] == topo:
+            partes = partes[len(topo):]
+        if partes[-len(rodape):] == rodape:
+            partes, com_rodape = partes[:-len(rodape)], True
+        if i:
+            linhas += ["", _SEP_RELATORIO]
+        linhas += partes
+    return "\n".join(linhas + (rodape if com_rodape else []))
+
+
+@app.route("/recommendations/grupo/whatsapp", methods=["POST"])
+@login_required
+def send_grupo_whatsapp():
+    """Envio do grupo economico (pedido do Alan, 09/11/2026): o texto de
+    todas as fazendas numa mensagem so' e/ou os PDFs de cada uma, um atras
+    do outro, pros destinatarios escolhidos (cadastrados em alguma fazenda
+    do grupo ou um numero digitado)."""
+    safra = _safra_or_default(request.form)
+    voltar = redirect(url_for("recommendations", safra=safra))
+    sites = [s for s in request.form.getlist("site") if s]
+    if not current_user.is_admin:
+        permitidas = set(models.get_user_permitted_site_names(int(current_user.id)))
+        if any(s not in permitidas for s in sites):
+            abort(403)
+    if not sites:
+        return voltar
+    if (volta := _whatsapp_desconectado(url_for("recommendations_default"))):
+        return volta
+    enviar_texto, enviar_pdf = bool(request.form.get("enviar_texto")), bool(request.form.get("enviar_pdf"))
+    if not enviar_texto and not enviar_pdf:
+        flash("Marque Texto e/ou PDF para enviar.", "error")
+        return voltar
+    cadastrados = {}
+    for s in sites:
+        for tel, rotulo in _site_whatsapp_destinations(s):
+            cadastrados.setdefault(tel, rotulo)
+    destinos = [(tel, cadastrados[tel]) for tel in request.form.getlist("destino") if tel in cadastrados]
+    if request.form.get("numero_telefone", "").strip():
+        telefone = _telefone_from_form(request.form)
+        if not _is_valid_phone(telefone):
+            flash("Número digitado inválido -- use DDD + número, com o código do país ao lado.", "error")
+            return voltar
+        if telefone not in dict(destinos):
+            destinos.append((telefone, f"numero digitado ({telefone})"))
+    if not destinos:
+        flash("Escolha pelo menos um destinatário ou digite um número.", "error")
+        return voltar
+    texto = _juntar_relatorios([_texto_relatorio(s, safra) for s in sites]) if enviar_texto else None
+    nome_grupo = request.form.get("grupo") or "grupo"
+
+    def enviar_todos():
+        with app.app_context():
+            formatos = _formatos_whatsapp_clientes()
+            for telefone, rotulo in destinos:
+                pode_texto, _ = formatos.get(telefone, (True, True))
+                if texto and pode_texto:
+                    try:
+                        ok, msg = whatsapp.send_whatsapp(telefone, texto)
+                    except Exception as exc:
+                        ok, msg = False, f"erro inesperado: {exc}"
+                    models.log_whatsapp_envio(sites[0], rotulo, telefone, ok, f"Texto do grupo {nome_grupo}: {msg}")
+                if enviar_pdf:
+                    for s in sites:
+                        try:
+                            _send_site_whatsapp(s, safra=safra, enviar_texto=False, enviar_pdf=True,
+                                                destinos_override=[(telefone, rotulo)])
+                        except Exception as exc:
+                            models.log_whatsapp_envio(s, rotulo, telefone, False, f"erro inesperado: {exc}")
+
+    threading.Thread(target=enviar_todos, daemon=True).start()
+    formatos = " + ".join(f for f, sim in (("texto do grupo", enviar_texto), (f"{len(sites)} PDF(s)", enviar_pdf)) if sim)
+    flash(f"Enviando {formatos} de '{nome_grupo}' para {len(destinos)} destinatário(s) -- sai um de cada vez, "
+          f"{whatsapp.INTERVALO_ENTRE_ENVIOS_S}s entre mensagens.", "success")
+    return voltar
 
 
 def _safra_or_default(form):
@@ -5242,9 +5376,20 @@ def save_recommendations():
     return _save_response("Anotacoes salvas.", "recommendations", safra=_safra_or_default(request.form))
 
 
+# Fazendas sempre listadas por plano (pedido do Alan, 09/11/2026):
+# Inteligencia, Avancado, (Basico), Essencial e, por ultimo, sem plano.
+_ORDEM_PLANOS = {"inteligência": 0, "avançado": 1, "básico": 2, "essencial": 3}
+
+
+def _ordem_do_plano(site):
+    nome = _plano_da_fazenda(site)["nome"]
+    return _ORDEM_PLANOS.get(nome.strip().lower(), 2) if nome else 4
+
+
 def _ordem_fazenda(site):
     """Chave de ordenacao de fazenda/estacao em toda tela (pedido do Alan,
-    18/10/2026): 1) pais -- Brasil sempre primeiro, depois os outros em
+    18/10/2026; o plano veio na frente em 09/11/2026): 0) plano
+    (`_ordem_do_plano`); 1) pais -- Brasil sempre primeiro, depois os outros em
     ordem alfabetica; 2) nome exibido em ordem alfabetica, sem diferenca de
     acento. (3, tempo sem sinal, entra so' onde ha' esse dado -- ver
     `dashboard`/`fazendas_ocultas`.)"""
@@ -5253,6 +5398,7 @@ def _ordem_fazenda(site):
         paises = g._ordem_paises = models.get_all_site_countries()
     codigo = paises.get(site, countries.DEFAULT_COUNTRY)
     return (
+        _ordem_do_plano(site),
         codigo != countries.DEFAULT_COUNTRY,
         _chave_alfabetica(countries.get_country(codigo)["nome"]),
         _chave_alfabetica(_nome_exibicao(site)),
@@ -8119,14 +8265,6 @@ def cliente_relatorio_txt(ponto_id):
     return Response(_texto_relatorio_cliente(ponto), mimetype="text/plain; charset=utf-8", headers=cabecalhos)
 
 
-def _bloco_relatorio_fazenda(ponto):
-    """Relatorio de uma fazenda sem o topo (RELATÓRIO DE MONITORAMENTO/data),
-    pra juntar varias fazendas debaixo de um topo so'."""
-    linhas = _texto_relatorio(ponto["site_name"]).split("\n")
-    topo = _cabecalho_relatorio_cliente()
-    return linhas[len(topo):] if linhas[:len(topo)] == topo else linhas
-
-
 def _texto_relatorio_cliente(ponto):
     return _texto_relatorio(ponto["site_name"])
 
@@ -8138,14 +8276,10 @@ def cliente_relatorios_todos_txt():
     seguida (pedido do Alan, 08/11/2026)."""
     user_id = int(current_user.id)
     pontos = [p for p in models.get_cliente_pontos(user_id) if models.ponto_liberado(p) and p.get("site_name")]
-    linhas = _cabecalho_relatorio_cliente()
-    for i, p in enumerate(pontos):
-        if i:
-            linhas += ["", _SEP_RELATORIO]
-        linhas += _bloco_relatorio_fazenda(p)
+    texto = _juntar_relatorios([_texto_relatorio(p["site_name"]) for p in pontos])
     cabecalhos = {} if request.args.get("ver") else {
         "Content-Disposition": f'attachment; filename="relatorios-{_hoje_cuiaba().isoformat()}.txt"'}
-    return Response("\n".join(linhas), mimetype="text/plain; charset=utf-8", headers=cabecalhos)
+    return Response(texto, mimetype="text/plain; charset=utf-8", headers=cabecalhos)
 
 
 @app.route("/app/regiao")
