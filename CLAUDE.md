@@ -236,7 +236,8 @@ economico editavel no cartao do cadastro (`admin_cliente_grupo`). Tudo
 `@master_required`. **Lista de Gerenciar Clientes** (pedido do Alan, 09/11/2026):
 as fazendas sem cadastro sao CARTOES iguais aos dos produtores (macros
 `cartao_pessoa`/`cartao_fazenda`, `data-tipo="fazenda"`, selo "Fazenda sem
-cadastro", origem e plano; abrir mostra a linha + "Dados da fazenda"; o
+cadastro", origem e plano; abrir mostra a linha SEM repetir nome/plano/origem -- `linha_fazenda(..., sem_titulo=True)`,
+pedido do Alan, 10/11/2026 -- + "Dados da fazenda"; o
 "Ligar ao cliente" fica DENTRO do "Dados da fazenda", no topo, so' pra fazenda
 sem cadastro); a linha de cada fazenda mostra tambem a estacao do clima
 escolhida ("📡 SINOP/MT (A917) · 17,7 km", coordenada propria ou media das 3

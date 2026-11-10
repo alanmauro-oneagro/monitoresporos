@@ -35,12 +35,16 @@ details.card > summary { font-size: 0.9rem; }
 
 {# Fazenda no modelo unico (pedido do Alan, 09/11/2026): mesma linha e mesmo
    editor pra fazenda da BioScout, do Mapas de Estudo ou do app. #}
-{% macro linha_fazenda(fz, cliente_id=None) %}
+{# `sem_titulo`: no cartao da fazenda sem cadastro o nome e os selos ja' estao no
+   proprio cartao -- nao repetir (pedido do Alan, 10/11/2026). #}
+{% macro linha_fazenda(fz, cliente_id=None, sem_titulo=False) %}
 <div class="border rounded px-2 py-1 mb-1 bg-white fazenda-linha" data-site="{{ fz.site }}">
     <div class="d-flex flex-wrap align-items-center gap-2">
+        {% if not sem_titulo %}
         <span class="fw-semibold">{{ fz.nome_exibicao }}</span>
         {{ selo_plano(fz.site) }}
         <span class="badge bg-light text-dark border fw-normal">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
+        {% endif %}
         {% if not fz.ativo %}<span class="badge bg-secondary">Oculta</span>{% endif %}
         <div class="ms-auto d-flex gap-1">
             <button type="button" class="btn btn-sm btn-outline-primary py-0 dados-toggle" data-site="{{ fz.site }}" data-idx="{{ fz.idx }}">✏️ Dados da fazenda</button>
@@ -239,7 +243,7 @@ details.card > summary { font-size: 0.9rem; }
             <span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
         </div>
         <div class="d-none mt-3 small" id="cad-body-faz-{{ fz.idx }}">
-            {{ linha_fazenda(fz) }}
+            {{ linha_fazenda(fz, sem_titulo=True) }}
         </div>
     </div>
 </div>
