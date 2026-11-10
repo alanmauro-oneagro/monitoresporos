@@ -860,6 +860,19 @@ site tem que entrar la'.
   topo, culturas menores e "Area total · <nome do dono da conta>"
   (`nome_completo`, senao o usuario) -- o total e' de todas as fazendas,
   nao da 1a (antes mostrava "<fazenda> · <cidade>"; pedidos do Alan, 08/11/2026).
+- **Revisao geral de padrao** (pedido do Alan, 10/11/2026): titulo de toda tela (h4/h1.titulo,
+  20 px) e o `<title>` = nome da aba no menu ("Usuários", "Gráficos", "Manejos", "Mapa",
+  "Alertas", "Fungicidas", "Recomendações"...); textos visiveis com acento. Nenhuma tela
+  muda o tamanho base da pagina (a Recomendações tinha `html { font-size: 14px }`, saiu).
+  `_tipografia.html` tambem fixa a fonte (system-ui), cabecalho de tabela 0.85rem semi-negrito,
+  rotulo de campo 500, selo 600 e texto `.small.text-muted`/`.form-text` 0.8rem. Conferido
+  em todas as telas a 430 px e 1280 px: nenhuma passa da largura. **Nomes dos arquivos
+  baixados** (`app._nome_arquivo`): `OneAgro_<Tipo>[_<Nome>]_<AAAA-MM-DD>[_<HHhMM>].<ext>` --
+  PDF `OneAgro_Relatorio_<fazenda>_...pdf`, Excel `OneAgro_Exportacao_..._HHhMM.xlsx`,
+  backup `OneAgro_Backup_...db.gz`, texto do app `OneAgro_Relatorio_<fazenda>_...txt` /
+  `OneAgro_Relatorios_...txt` (hora de Cuiaba). **Gerenciar Exportações** em 3 cartoes:
+  Planilha Excel (lista as abas), Backup do banco e Historico de envios por WhatsApp (filtros
+  dentro do cartao).
 - **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
   "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
   (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no

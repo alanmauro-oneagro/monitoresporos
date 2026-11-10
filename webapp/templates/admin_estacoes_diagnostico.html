@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Diagnostico de estacoes{% endblock %}
+{% block title %}Diagnóstico das estações - OneAgro App{% endblock %}
 {% block content %}
-<h2 class="mb-3">Diagnostico das APIs de estacoes</h2>
+<h4 class="mb-3">Diagnóstico das estações</h4>
 <p class="text-muted small">Amostras reais das respostas do INMET, DMC (Chile) e SMN (Argentina), so' leitura. Tokens e usuarios aparecem ocultos.</p>
 <div class="card mb-3">
     <div class="card-body">
-        <h6 class="mb-2">Verificacao por fazenda (dados ja lidos pelo site)</h6>
+        <h6 class="mb-2">Verificação por fazenda (dados já lidos pelo site)</h6>
         {% if erro_clima.erro %}<div class="alert alert-warning small py-1">Ultimo erro ({{ erro_clima.quando }}): <code>{{ erro_clima.erro }}</code></div>{% endif %}
         <div class="table-responsive">
         <table class="table table-sm small mb-0">

@@ -3,20 +3,36 @@
 {% block content %}
 <h4 class="mb-2">Gerenciar Exportações</h4>
 
-<div class="card shadow-sm mb-4">
-    <div class="card-body d-flex flex-wrap align-items-center gap-3">
-        <a href="{{ url_for('admin_exportar_download') }}" class="btn btn-success">📊 Baixar Excel</a>
-        <a href="{{ url_for('admin_exportar_backup') }}" class="btn btn-outline-secondary" title="Cópia do banco inteiro (.db.gz) para guardar fora do servidor">💾 Baixar backup do banco</a>
-        {% if ambiente_qap %}
-        <a href="{{ url_for('admin_restaurar_backup') }}" class="btn btn-outline-danger">♻️ Restaurar backup (só QAP)</a>
-        {% endif %}
+{# Organizada por tipo de arquivo (pedido do Alan, 10/11/2026). #}
+<div class="row g-3 mb-3">
+    <div class="col-12 col-lg-6">
+        <div class="card shadow-sm h-100"><div class="card-body">
+            <h6 class="mb-1">📊 Planilha Excel</h6>
+            <p class="text-muted small mb-2">Uma aba por assunto: Fazendas, Clima e Esporos, Manejo, Doenças, Fungicidas,
+                WhatsApp (últimos 90 dias), Usuários, Clientes e Planos.</p>
+            <a href="{{ url_for('admin_exportar_download') }}" class="btn btn-success btn-sm">Baixar Excel</a>
+        </div></div>
+    </div>
+    <div class="col-12 col-lg-6">
+        <div class="card shadow-sm h-100"><div class="card-body">
+            <h6 class="mb-1">💾 Backup do banco</h6>
+            <p class="text-muted small mb-2">Cópia do banco inteiro (.db.gz) para guardar fora do servidor. O servidor também
+                guarda sozinho um backup por dia (últimos 7).</p>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{{ url_for('admin_exportar_backup') }}" class="btn btn-outline-secondary btn-sm">Baixar backup</a>
+                {% if ambiente_qap %}
+                <a href="{{ url_for('admin_restaurar_backup') }}" class="btn btn-outline-danger btn-sm">♻️ Restaurar backup (só QAP)</a>
+                {% endif %}
+            </div>
+        </div></div>
     </div>
 </div>
 
-<h5 class="mb-2">Relatorio de Envios por WhatsApp</h5>
-<p class="text-muted small mb-2">Últimos 7 dias -- o Excel acima traz os últimos 90 dias.</p>
-
-<form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h6 class="mb-1">📨 Histórico de envios por WhatsApp</h6>
+        <p class="text-muted small mb-2">Últimos 7 dias -- o Excel traz os últimos 90 dias.</p>
+        <form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
     <div>
         <label class="form-label small mb-1">Fazenda</label>
         <select name="site" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -29,13 +45,9 @@
     <div class="form-check mb-1">
         <input class="form-check-input" type="checkbox" name="falhas" value="1" id="apenas-falhas"
                {% if apenas_falhas %}checked{% endif %} onchange="this.form.submit()">
-        <label class="form-check-label small" for="apenas-falhas">Mostrar so falhas</label>
+        <label class="form-check-label small" for="apenas-falhas">Mostrar só falhas</label>
     </div>
 </form>
-
-<div class="card shadow-sm mb-4">
-    <div class="card-body">
-        <h6 class="mb-2">Historico de envios</h6>
         {% if not logs %}
         <p class="text-muted small mb-0">Nenhum envio registrado ainda{% if apenas_falhas %} (com falha){% endif %}{% if site_selecionado %} pra essa fazenda{% endif %}.</p>
         {% else %}
@@ -46,8 +58,8 @@
                         <th>Data</th>
                         <th>Hora</th>
                         <th>Fazenda</th>
-                        <th>Destinatario</th>
-                        <th>Telefone</th>
+                        <th>Destinatário</th>
+                        <th>Celular</th>
                         <th>Status</th>
                         <th>Detalhe</th>
                     </tr>

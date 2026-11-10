@@ -19,7 +19,7 @@
     .fungicida-mover-btn { padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
 }
 </style>
-<h4 class="mb-2">Biblioteca de fungicidas</h4>
+<h4 class="mb-2">Fungicidas</h4>
 <p class="small text-muted mb-3">
     Base Agrofit/MAPA (<a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit" target="_blank" rel="noopener">dados abertos</a>):
     {% if agrofit.baixando %}<span id="agrofitProgresso">baixando agora...</span>{% elif agrofit.baixado_em and agrofit.enviado %}arquivo enviado em {{ agrofit.baixado_em }} -- envie de novo uma vez por mes.{% elif agrofit.baixado_em %}atualizada em {{ agrofit.baixado_em }}, renova sozinha uma vez por mes.{% else %}ainda nao baixada -- baixa sozinha em instantes.{% endif %}

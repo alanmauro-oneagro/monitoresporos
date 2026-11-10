@@ -157,7 +157,7 @@
             {% else %}
             <a class="nav-link text-white{% if request.endpoint == 'mapa' %} tab-ativa{% endif %}" href="{{ url_for('mapa') }}">Mapa</a>
             <a class="nav-link text-white{% if request.endpoint == 'dashboard' %} tab-ativa{% endif %}" href="{{ url_for('dashboard') }}">Alertas</a>
-            <a class="nav-link text-white{% if request.endpoint == 'graficos' %} tab-ativa{% endif %}" href="{{ url_for('graficos') }}">Graficos</a>
+            <a class="nav-link text-white{% if request.endpoint == 'graficos' %} tab-ativa{% endif %}" href="{{ url_for('graficos') }}">Gráficos</a>
             <a class="nav-link text-white{% if request.endpoint == 'fazendas' %} tab-ativa{% endif %}" href="{{ url_for('fazendas') }}">Manejos</a>
             <a class="nav-link text-white{% if request.endpoint == 'recommendations' %} tab-ativa{% endif %}" href="{{ url_for('recommendations_default') }}">Recomendações</a>
             {% endif %}
@@ -165,7 +165,7 @@
             <a class="nav-link text-white" href="{{ url_for('logout') }}">Sair</a>
             {% if current_user.is_master or abas_config_permitidas %}
             <div class="position-relative">
-                <button type="button" class="btn btn-link nav-link text-white px-3 py-2{% if request.endpoint in _admin_dropdown_endpoints %} tab-ativa{% endif %}" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configuracoes">⋮{% if solicitacoes_pendentes %}<span class="badge bg-danger align-top" style="font-size: 0.6rem;" title="Novos cadastros">{{ solicitacoes_pendentes }}</span>{% endif %}<span class="d-lg-none fs-6 fw-bold ms-2 config-rotulo">Configurações</span></button>
+                <button type="button" class="btn btn-link nav-link text-white px-3 py-2{% if request.endpoint in _admin_dropdown_endpoints %} tab-ativa{% endif %}" style="font-size: 1.4rem; line-height: 1;" data-dropdown-toggle="settingsMenu" title="Configurações">⋮{% if solicitacoes_pendentes %}<span class="badge bg-danger align-top" style="font-size: 0.6rem;" title="Novos cadastros">{{ solicitacoes_pendentes }}</span>{% endif %}<span class="d-lg-none fs-6 fw-bold ms-2 config-rotulo">Configurações</span></button>
                 <div id="settingsMenu" class="d-none position-absolute end-0 bg-white shadow rounded mt-2 py-1" style="min-width: 220px; z-index: 1050;">
                     {% for item in menu_config %}
                     <div class="d-flex align-items-center menu-config-item" data-chave="{{ item.chave }}">

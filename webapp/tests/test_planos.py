@@ -259,7 +259,7 @@ class PlanosTest(unittest.TestCase):
         self.assertIn('id="menuCliente"', menu)
         self.assertIn("📄 Relatórios", menu)
         self.assertIn('id="menuCliente"', c.get("/app").get_data(as_text=True))
-        self.assertNotIn(">Graficos<", menu)
+        self.assertNotIn('href="/graficos"', menu)
         self.assertIn("🔔", c.get("/app").get_data(as_text=True))
 
         # lavoura nova vira fazenda estimada liberada so' pra ele
