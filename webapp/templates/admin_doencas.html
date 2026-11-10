@@ -23,7 +23,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
         <div class="d-flex flex-wrap gap-2">
             <input type="text" name="nome_pt" class="form-control form-control-sm" style="max-width: 320px;" placeholder="Nome. Ex.: Mancha-alvo" required>
             <input type="text" name="nome_cientifico" class="form-control form-control-sm fst-italic" style="max-width: 320px;" placeholder="Nome cientifico. Ex.: Corynespora cassiicola">
-            <button type="submit" class="btn btn-sm btn-success">+ Adicionar doenca</button>
+            <button type="submit" class="btn btn-sm btn-success">+ Adicionar doença</button>
         </div>
     </div>
 </form>
@@ -58,7 +58,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
                 <input type="text" name="nome_pt" class="form-control form-control-sm" value="{{ d.pt }}" required>
             </div>
             <div class="col-md-5">
-                <label class="form-label small text-muted mb-1">Nome cientifico do fungo</label>
+                <label class="form-label small text-muted mb-1">Nome científico do fungo</label>
                 <input type="text" name="nome_cientifico" class="form-control form-control-sm fst-italic" value="{{ d.cientifico }}" placeholder="Ex.: Phakopsora pachyrhizi">
             </div>
         </div>
@@ -111,7 +111,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 </form>
 
 
-<h4 class="mb-2 mt-4">Culturas</h4>
+<h6 class="mb-2 mt-4">Culturas</h6>
 <form method="post" data-autosave data-autosave-reload class="card shadow-sm mb-2">
     <input type="hidden" name="form_id" value="matriz_culturas">
     <div class="card-body">
@@ -137,7 +137,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 </form>
 
 
-<h4 class="mb-2 mt-4">Doencas x Pais</h4>
+<h6 class="mb-2 mt-4">Doenças x País</h6>
 
 <form method="post" data-autosave>
     <input type="hidden" name="form_id" value="matriz_paises">
@@ -146,7 +146,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
             <thead>
                 <tr>
                     <th>Doenca</th>
-                    <th>Nome cientifico</th>
+                    <th>Nome científico</th>
                     {% for slot in range(12) %}
                     <th class="text-center">
                         <input type="text" name="pais_nome__{{ slot }}" class="form-control form-control-sm text-center cultura-nome-input"

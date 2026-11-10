@@ -1787,6 +1787,20 @@ def _historico_doenca(site, doenca_en, dias=30):
     ]
 
 
+def _nome_arquivo(tipo, ext, nome=None, com_hora=False):
+    """Nome padrao dos arquivos baixados (pedido do Alan, 10/11/2026):
+    OneAgro_<Tipo>[_<Nome>]_<AAAA-MM-DD>[_<HHhMM>].<ext>, sem acento nem espaco."""
+    agora = weather_forecast._agora_cuiaba()
+    partes = ["OneAgro", tipo]
+    if nome:
+        limpo = unicodedata.normalize("NFKD", nome)
+        limpo = re.sub(r"[^A-Za-z0-9]+", "_", "".join(c for c in limpo if not unicodedata.combining(c))).strip("_")
+        if limpo:
+            partes.append(limpo[:60])
+    partes.append(agora.strftime("%Y-%m-%d_%Hh%M") if com_hora else agora.strftime("%Y-%m-%d"))
+    return "_".join(partes) + "." + ext
+
+
 def _build_site_pdf(
     site, diseases, weather, produtos, cultura, safra, leitura_bioscout=None,
     mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
@@ -1826,7 +1840,7 @@ def _build_site_pdf(
         riscos_climaticos=riscos_climaticos, titulo_fazenda=_whatsapp_titulo(site),
         data_relatorio=weather_forecast._agora_cuiaba().strftime("%d/%m/%Y"),
     )
-    filename = f"Recomendacao_{nome_fazenda}_{datetime.now().strftime('%Y%m%d')}.pdf".replace(" ", "_")
+    filename = _nome_arquivo("Relatorio", "pdf", nome_fazenda)
     return nome_fazenda, filename, buffer.getvalue()
 
 
@@ -6614,7 +6628,7 @@ def admin_exportar_download():
     relatorio diario de clima (ver `export_excel.build_workbook`) --
     botao "Baixar Excel completo" na pagina `admin_exportar`."""
     buffer = export_excel.build_workbook(completar_clima=_completar_clima_horario)
-    filename = f"OneAgro_Export_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    filename = _nome_arquivo("Exportacao", "xlsx", com_hora=True)
     conteudo = buffer.getvalue()
     destino = _save_export_copy_local(conteudo, filename)
     if destino:
@@ -6709,7 +6723,7 @@ def admin_exportar_backup():
         copia = Path(pasta) / "banco.db"
         models.copiar_banco(copia)
         conteudo = gzip.compress(copia.read_bytes())
-    filename = f"backup_oneagro_{datetime.now().strftime('%Y%m%d_%H%M')}.db.gz"
+    filename = _nome_arquivo("Backup", "db.gz", com_hora=True)
     return send_file(io.BytesIO(conteudo), as_attachment=True, download_name=filename, mimetype="application/gzip")
 
 
@@ -8317,9 +8331,8 @@ def cliente_relatorio_txt(ponto_id):
     ponto = models.get_cliente_ponto(int(current_user.id), ponto_id)
     if not ponto or not ponto.get("site_name") or not models.ponto_liberado(ponto):
         abort(404)
-    nome = re.sub(r"[^A-Za-z0-9]+", "-", _sem_acento_min(_nome_exibicao(ponto["site_name"]))).strip("-") or "fazenda"
     cabecalhos = {} if request.args.get("ver") else {
-        "Content-Disposition": f'attachment; filename="relatorio-{nome}-{_hoje_cuiaba().isoformat()}.txt"'}
+        "Content-Disposition": f'attachment; filename="{_nome_arquivo("Relatorio", "txt", _nome_exibicao(ponto["site_name"]))}"'}
     return Response(_texto_relatorio_cliente(ponto), mimetype="text/plain; charset=utf-8", headers=cabecalhos)
 
 
@@ -8336,7 +8349,7 @@ def cliente_relatorios_todos_txt():
     pontos = [p for p in models.get_cliente_pontos(user_id) if models.ponto_liberado(p) and p.get("site_name")]
     texto = _juntar_relatorios([_texto_relatorio(p["site_name"]) for p in pontos])
     cabecalhos = {} if request.args.get("ver") else {
-        "Content-Disposition": f'attachment; filename="relatorios-{_hoje_cuiaba().isoformat()}.txt"'}
+        "Content-Disposition": f'attachment; filename="{_nome_arquivo("Relatorios", "txt")}"'}
     return Response(texto, mimetype="text/plain; charset=utf-8", headers=cabecalhos)
 
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Recomendações {{ safra_label }} - OneAgro App{% endblock %}
+{% block title %}Recomendações - OneAgro App{% endblock %}
 {% block extra_head %}
 <style>
 .rec-topo { display: flex; align-items: center; gap: 1.5rem; }
@@ -31,7 +31,6 @@
 /* Pagina com muita tabela/formulario -- reduz a base (rem) pra tudo
    ficar mais compacto numa visualizacao a 100%, sem precisar dar zoom
    out no navegador. */
-html { font-size: 14px; }
 /* Escolha de destinatarios do WhatsApp (painel que abre no botao). */
 .whatsapp-destinos > summary { list-style: none; }
 .whatsapp-destinos > summary::-webkit-details-marker { display: none; }
@@ -87,9 +86,9 @@ html { font-size: 14px; }
 {% include "_aviso_whatsapp.html" %}
 {% if not no_access and not any_whatsapp_configured %}
 <div class="alert alert-warning small">
-    Nenhum numero de WhatsApp cadastrado ainda -- um admin precisa marcar, na
+    Nenhum número de WhatsApp cadastrado ainda -- um admin precisa marcar, na
     aba Programação de Envios, quem recebe cada fazenda, e cadastrar o telefone da pessoa na
-    aba Usuarios.
+    aba Usuários.
 </div>
 {% endif %}
 
@@ -142,7 +141,7 @@ html { font-size: 14px; }
                         {% else %}
                         <div class="small text-muted mb-1">Nenhum número cadastrado nas fazendas do grupo.</div>
                         {% endfor %}
-                        <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + numero, sem espacos -- nao fica salvo)</label>
+                        <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + número, sem espaços -- não fica salvo)</label>
                         <div class="d-flex gap-2">
                             <input type="text" name="codigo_pais" value="55" inputmode="numeric" class="form-control form-control-sm" style="max-width: 5.5rem;" aria-label="Codigo do pais">
                             <input type="tel" name="numero_telefone" inputmode="tel" placeholder="11999999999" class="form-control form-control-sm">
@@ -212,7 +211,7 @@ html { font-size: 14px; }
                         {% else %}
                         <div class="small text-muted mb-1">Nenhum numero cadastrado pra essa fazenda.</div>
                         {% endfor %}
-                        <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + numero, sem espacos -- nao fica salvo)</label>
+                        <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + número, sem espaços -- não fica salvo)</label>
                         <div class="d-flex gap-2">
                             <input type="text" name="codigo_pais" value="55" inputmode="numeric" class="form-control form-control-sm" style="max-width: 5.5rem;" aria-label="Codigo do pais">
                             <input type="tel" name="numero_telefone" inputmode="tel" placeholder="11999999999" class="form-control form-control-sm">

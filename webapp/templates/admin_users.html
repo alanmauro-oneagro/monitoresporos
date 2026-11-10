@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Usuarios - OneAgro App{% endblock %}
+{% block title %}Usuários - OneAgro App{% endblock %}
 {% block content %}
-<h4 class="mb-3">Usuarios</h4>
+<h4 class="mb-3">Usuários</h4>
 
 <div class="table-responsive">
-<table class="table table-sm bg-white shadow-sm" style="font-size: 0.85rem;">
+<table class="table table-sm bg-white shadow-sm">
     <thead>
-        <tr><th>Usuario</th><th>Grupo</th><th>Email</th><th>Telefone</th><th>Acesso</th><th>Permissoes</th><th>Receber relatorios</th><th>WhatsApp</th><th>Subordinados</th><th></th></tr>
+        <tr><th>Usuário</th><th>Grupo</th><th>Email</th><th>Celular</th><th>Acesso</th><th>Permissões</th><th>Receber relatórios</th><th>WhatsApp</th><th>Subordinados</th><th></th></tr>
     </thead>
     <tbody>
     {% for u in users %}
@@ -109,11 +109,11 @@
 
 <div class="card shadow-sm mt-4">
     <div class="card-body p-4 form-compact">
-        <h5 class="mb-3">Novo usuario</h5>
+        <h5 class="mb-3">Novo usuário</h5>
         <form method="post" action="{{ url_for('admin_create_user') }}">
             <div class="mb-3 row g-2">
                 <div class="col-md-4">
-                    <label class="form-label">Usuario</label>
+                    <label class="form-label">Usuário</label>
                     <input type="text" name="username" class="form-control" required>
                 </div>
                 <div class="col-md-4">
@@ -140,7 +140,7 @@
                     {% endif %}
                 </select>
             </div>
-            <button type="submit" class="btn btn-success">Criar usuario</button>
+            <button type="submit" class="btn btn-success">Criar usuário</button>
         </form>
     </div>
 </div>
