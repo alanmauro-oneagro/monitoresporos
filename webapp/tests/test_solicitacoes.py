@@ -413,6 +413,9 @@ class CadastroTest(unittest.TestCase):
         usuarios = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
         self.assertIn("Zzz Cad Locais", usuarios)  # cliente do app aparece na aba Usuarios
         self.assertIn("Cliente do app", usuarios)
+        self.assertIn("<th>Grupo</th>", usuarios)  # coluna Grupo entre Usuario e Email (10/11/2026)
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._nome_sem_grupo("x"), "x")
         r = self._logado("Zzz Teste Master Cad").post(f"/admin/users/{uid}/subordinados", data={
             "form_id": "add", "nome": "Zzz Pela Equipe", "codigo_pais": "55", "numero_telefone": "65999990260"})
         self.assertEqual(r.status_code, 302)

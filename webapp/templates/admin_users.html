@@ -6,12 +6,13 @@
 <div class="table-responsive">
 <table class="table table-sm bg-white shadow-sm" style="font-size: 0.85rem;">
     <thead>
-        <tr><th>Usuario</th><th>Email</th><th>Telefone</th><th>Acesso</th><th>Permissoes</th><th>Receber relatorios</th><th>WhatsApp</th><th>Subordinados</th><th></th></tr>
+        <tr><th>Usuario</th><th>Grupo</th><th>Email</th><th>Telefone</th><th>Acesso</th><th>Permissoes</th><th>Receber relatorios</th><th>WhatsApp</th><th>Subordinados</th><th></th></tr>
     </thead>
     <tbody>
     {% for u in users %}
         <tr>
             <td>{{ u.username }}</td>
+            <td>{{ grupos.get(u.id) or '-' }}</td>
             <td>{{ u.email or '-' }}</td>
             <td>{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
             <td>{% if u.is_cliente %}<span class="badge bg-success">Cliente do app</span>{% else %}{{ niveis[nivel_acesso(u)] }}{% endif %}</td>
@@ -80,6 +81,7 @@
         {% for sub in subordinados_by_owner.get(u.id, []) %}
         <tr class="table-light sub-row d-none" data-owner-rows="{{ u.id }}">
             <td class="text-muted small ps-4">↳ {{ sub.nome }}{% if u.is_cliente %} <span class="badge bg-light text-secondary border fw-normal" title="{{ 'Indicado pelo cliente no cadastro/app (até 2)' if sub.pelo_cliente else 'Incluído pela equipe OneAgro' }}">{{ 'pelo cliente' if sub.pelo_cliente else 'pela equipe' }}</span>{% endif %}</td>
+            <td class="text-muted small">-</td>
             <td class="text-muted small">-</td>
             <td class="text-muted small">{{ sub.telefone | telefone_br }}</td>
             <td class="text-muted small">-</td>

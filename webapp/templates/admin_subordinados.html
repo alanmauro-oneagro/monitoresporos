@@ -57,7 +57,7 @@
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" name="site_ids__{{ sub.id }}" value="{{ site.id }}"
                     id="sub{{ sub.id }}_site{{ site.id }}" {% if site.id in sub.site_ids %}checked{% endif %}>
-                <label class="form-check-label small" for="sub{{ sub.id }}_site{{ site.id }}">{{ site.site_name }}</label>
+                <label class="form-check-label small" for="sub{{ sub.id }}_site{{ site.id }}">{{ nome_sem_grupo(site.site_name) }}</label>
             </div>
             {% endfor %}
         </div>
