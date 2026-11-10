@@ -239,7 +239,12 @@ as fazendas sem cadastro sao CARTOES iguais aos dos produtores (macros
 cadastro", origem e plano; abrir mostra a linha SEM repetir nome/plano/origem -- `linha_fazenda(..., sem_titulo=True)`,
 pedido do Alan, 10/11/2026 -- + "Dados da fazenda"; o
 "Ligar ao cliente" fica DENTRO do "Dados da fazenda", no topo, so' pra fazenda
-sem cadastro); a linha de cada fazenda mostra tambem a estacao do clima
+sem cadastro; select comeca em "-" (botao "Ligar" so' libera ao escolher) com
+"Clientes do app" (entra no cadastro, `admin_cliente_vincular`) e "Usuários" da aba
+Usuarios (pedido do Alan, 10/11/2026: ligar = libera a fazenda + recebe o relatorio,
+sem cadastro de cliente -- `admin_usuario_ligar_fazenda`; linha "Ligada a:" com os
+usuarios ligados, `models.usuarios_ligados_a_fazenda`, ✕ desliga =
+`admin_usuario_desligar_fazenda`; sem ninguem = "-")); a linha de cada fazenda mostra tambem a estacao do clima
 escolhida ("📡 SINOP/MT (A917) · 17,7 km", coordenada propria ou media das 3
 -- `_preencher_estacoes`, em lote); "Exibir por: Nome do produtor | Grupo"
 (`?exibir=`, lembrado em `session["gerenciar_clientes_exibir"]`; por grupo =

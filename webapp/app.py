@@ -9217,8 +9217,38 @@ def admin_fazenda_dados():
         abort(404)
     clientes = [{"id": c["id"], "nome": (models.get_cadastro_do_usuario(c["id"]) or {}).get("nome_completo") or c["username"]}
                 for c in models.get_all_clientes()]
+    # Usuarios da aba Usuarios tambem (pedido do Alan, 10/11/2026): ligar = liberar + receber o relatorio.
+    usuarios = [{"id": u["id"], "nome": u["username"]} for u in models.get_all_users()]
     return render_template("_dados_fazenda.html", fz=_dados_da_fazenda(site, request.args.get("idx", "0"), completo=True),
-                           countries=countries.COUNTRIES, ufs=UFS_BR, clientes_lista=clientes)
+                           countries=countries.COUNTRIES, ufs=UFS_BR, clientes_lista=clientes, usuarios_lista=usuarios,
+                           usuarios_ligados=models.usuarios_ligados_a_fazenda(site))
+
+
+@app.route("/admin/usuarios/<int:user_id>/ligar-fazenda", methods=["POST"])
+@master_required
+def admin_usuario_ligar_fazenda(user_id):
+    """Ligar uma fazenda sem cadastro a um usuario da aba Usuarios: libera a
+    fazenda e marca pra receber o relatorio (sem cadastro de cliente)."""
+    row = models.get_user_by_id(user_id)
+    site = request.form.get("site_name", "")
+    if not row or row["is_cliente"] or site not in (set(read_sites()) | models.virtual_farm_site_names()):
+        abort(404)
+    models.liberar_fazenda_para_usuario(user_id, site)
+    models.receber_relatorio_da_fazenda(user_id, site)
+    flash(f"'{_nome_exibicao(site)}' liberada para {row['username']}, que passa a receber o relatório.", "success")
+    return redirect(url_for("admin_solicitacoes"))
+
+
+@app.route("/admin/usuarios/<int:user_id>/desligar-fazenda", methods=["POST"])
+@master_required
+def admin_usuario_desligar_fazenda(user_id):
+    row = models.get_user_by_id(user_id)
+    site = request.form.get("site_name", "")
+    if not row or row["is_cliente"]:
+        abort(404)
+    models.desligar_fazenda_do_usuario(user_id, site)
+    flash(f"'{_nome_exibicao(site)}' desligada de {row['username']}.", "success")
+    return redirect(url_for("admin_solicitacoes"))
 
 
 @app.route("/admin/fazendas/dados/salvar", methods=["POST"])

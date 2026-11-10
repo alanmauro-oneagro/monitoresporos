@@ -406,6 +406,18 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         self.assertIn('data-filtro="incompleto"', tela)
         self.assertIn("Estação meteorológica de referência (muda em Dados da fazenda)", tela)  # estacao no cartao (09/11/2026)
         editor_livre = master.get("/admin/fazendas/dados", query_string={"site": e2}).get_data(as_text=True)
+        # ligar a um usuario da aba Usuarios = liberar + receber; sem ligacao mostra "-" (10/11/2026)
+        self.assertIn('<option value="" selected>-</option>', editor_livre)
+        self.assertIn("<strong>-</strong>", editor_livre)
+        if not models.get_user_by_username("Zzz Usuario Ligar"):
+            models.create_user("Zzz Usuario Ligar", "x")
+        equipe = models.get_user_by_username("Zzz Usuario Ligar")
+        r = master.post(f"/admin/usuarios/{equipe['id']}/ligar-fazenda", data={"site_name": e2})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual([u["username"] for u in models.usuarios_ligados_a_fazenda(e2)], ["Zzz Usuario Ligar"])
+        self.assertIn(e2, webapp_sem_cadastro())  # continua sem cadastro de cliente
+        master.post(f"/admin/usuarios/{equipe['id']}/desligar-fazenda", data={"site_name": e2})
+        self.assertEqual(models.usuarios_ligados_a_fazenda(e2), [])
         self.assertIn("ligar-a-cliente", editor_livre) if models.get_all_clientes() else None
         # exibir por grupo: a fazenda solta com grupo entra na caixa do grupo
         master.post("/admin/fazendas/grupo/salvar", headers={"X-Autosave": "1"},
