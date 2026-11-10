@@ -359,7 +359,8 @@ avaliação de um agrônomo responsável." + "Quer ter essa ferramenta para sua
 lavoura, entre em contato com a OneAgro. (43)99114-7595"
 (`export_pdf.AVISO_AGRONOMO`/`CONTATO_RELATORIO`; o PDF nao tem mais "Fonte do
 clima" nem "Powered by BioScout", 09/11/2026; ponto so' clima continua
-sem rodape no texto). **Corpo do texto** (pedido do Alan, 09/11/2026):
+sem rodape no texto). **Sem "Última leitura BioScout"** no texto (WhatsApp/app) nem no PDF de
+nenhuma fazenda (pedido do Alan, 10/11/2026). **Corpo do texto** (pedido do Alan, 09/11/2026):
 "🌧️ *Previsão de chuvas:*" com 2 dias por linha ("09/11: 12.2 mm // 10/11:
 3.7 mm", `_linhas_previsao_chuva`) e cada doenca como "- *Moniliophthora:*" /
 "Quantidade de esporos: 🔴 Alta" (Perigo; Atencao = 🟡 Média,

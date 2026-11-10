@@ -1536,9 +1536,7 @@ def _format_whatsapp_message(
                 linhas.append("")
                 linhas.append("🌧️ *Previsão de chuvas:*")
                 linhas.extend(_linhas_previsao_chuva(weather["previsao_5_dias"]))
-        if leitura_bioscout and not simples:
-            linhas.append("")
-            linhas.append(f"_Última leitura BioScout: {leitura_bioscout}_")
+        # "Última leitura BioScout" saiu do texto (pedido do Alan, 10/11/2026).
         if anotacao:
             linhas.append("")
             linhas.append(f"📝 *Anotação:* {anotacao}")

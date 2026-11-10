@@ -214,9 +214,7 @@ def _cabecalho_clima(weather, leitura_bioscout):
         ]))
         esquerda.append(tabela)
 
-    if leitura_bioscout:
-        esquerda.append(Spacer(1, 5))
-        esquerda.append(Paragraph(f"Última leitura BioScout: {leitura_bioscout}", _ESTILO_ROTULO_CLIMA))
+    # "Última leitura BioScout" saiu do PDF (pedido do Alan, 10/11/2026).
 
     if not rosa:
         tabela = Table([[esquerda]], colWidths=[largura_esq], hAlign="LEFT")

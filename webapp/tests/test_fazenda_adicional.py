@@ -284,6 +284,7 @@ class FazendaAdicionalTest(unittest.TestCase):
         self.assertIn("Clima agora", cheio)
         self.assertNotIn("Clima agora", enxuto)
         self.assertNotIn("Última leitura BioScout", enxuto)
+        self.assertNotIn("Última leitura BioScout", cheio)  # saiu de todo texto (10/11/2026)
         self.assertIn("Previsão de chuva", enxuto)
         with webapp.app.test_request_context():
             self.assertFalse(webapp._relatorio_simples(pontos[0]["site_name"]))  # Basico
