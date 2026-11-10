@@ -6187,7 +6187,7 @@ def mover_fungicida_item():
 @app.route("/admin/users")
 @aba_required("usuarios")
 def admin_users():
-    users = models.get_all_users()
+    users = models.get_all_users(com_clientes=True)
     report_counts = {u["id"]: len(models.get_user_report_site_ids(u["id"])) for u in users}
     permission_counts = {u["id"]: len(models.get_user_permitted_site_ids(u["id"])) for u in users}
     site_name_by_id = {s["id"]: s["site_name"] for s in models.get_all_sites()}
@@ -7302,7 +7302,7 @@ def _criar_locais_e_extras(user_id, username, locais, extras, plano):
         sites.append(site)
     ids = models.site_ids_por_nome(sites)
     for ex in extras:
-        sub_id = models.create_subordinado(user_id, ex["nome"], ex["telefone"])
+        sub_id = models.create_subordinado(user_id, ex["nome"], ex["telefone"], pelo_cliente=True)
         models.set_subordinado_report_sites(sub_id, [ids[sites[i]] for i in ex["locais"] if sites[i] in ids])
 
 
@@ -7824,7 +7824,7 @@ def cliente_home():
         # Culturas do cadastro (pedido do Alan, 08/11/2026: "Lavouras" virou "Culturas").
         cadastro=cad, culturas_lista=_culturas_com_area(cad.get("culturas")),
         user=models.get_user_by_id(int(current_user.id)),
-        extras=_extras_do_cliente(int(current_user.id), pontos), max_extras=MAX_EXTRAS_RELATORIO,
+        extras=_extras_do_cliente(int(current_user.id), pontos, so_do_cliente=True), max_extras=MAX_EXTRAS_RELATORIO,
         voltar=_caminho_interno(request.referrer) or "",
         resumos={p["id"]: _resumo_ponto_cliente(p, plano) for p in pontos if p["liberado"]},
         urls_offline=[url_for("cliente_ponto", ponto_id=p["id"]) for p in pontos] + [url_for("cliente_regiao")],
@@ -7873,10 +7873,13 @@ def cliente_destinatarios():
             return redirect(url_for("cliente_home"))
         sites = [por_id[i]["site_name"] for i in form.getlist(f"extra_pontos__{k}") if i in por_id and por_id[i].get("site_name")]
         novos.append((nome, telefone, sites))
+    # So' os indicados pelo proprio cliente; os incluidos pela equipe na aba
+    # Usuarios ficam (pedido do Alan, 10/11/2026).
     for sub in models.get_owner_subordinados(user_id):
-        models.delete_subordinado(sub["id"])
+        if sub["pelo_cliente"]:
+            models.delete_subordinado(sub["id"])
     for nome, telefone, sites in novos:
-        sub_id = models.create_subordinado(user_id, nome, telefone)
+        sub_id = models.create_subordinado(user_id, nome, telefone, pelo_cliente=True)
         models.set_subordinado_report_sites(sub_id, list(models.site_ids_por_nome(sites).values()))
     if autosave:
         return jsonify(ok=True)
@@ -8547,13 +8550,16 @@ def asaas_webhook():
     return jsonify({"ok": True})
 
 
-def _extras_do_cliente(user_id, pontos):
-    """Pessoas que o cliente indicou pra receber o relatorio, com o nome das
-    areas de cada uma: [{"id", "nome", "telefone", "areas": [nome], "ponto_ids"}]."""
+def _extras_do_cliente(user_id, pontos, so_do_cliente=False):
+    """Pessoas que recebem o relatorio do cliente, com o nome das areas de
+    cada uma: [{"id", "nome", "telefone", "areas": [nome], "ponto_ids"}].
+    `so_do_cliente`: so' as que ele indicou (os 2 contatos do app)."""
     ids = models.site_ids_por_nome([pt.get("site_name") for pt in pontos])
     por_site_id = {ids[pt["site_name"]]: pt for pt in pontos if pt.get("site_name") in ids}
     extras = []
     for sub in models.get_owner_subordinados(user_id):
+        if so_do_cliente and not sub["pelo_cliente"]:
+            continue
         dele = [por_site_id[i] for i in sub["site_ids"] if i in por_site_id]
         extras.append({"id": sub["id"], "nome": sub["nome"], "telefone": sub["telefone"],
                        "areas": [pt["nome"] for pt in dele], "ponto_ids": [pt["id"] for pt in dele]})

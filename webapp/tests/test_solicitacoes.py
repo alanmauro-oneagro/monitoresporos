@@ -409,6 +409,17 @@ class CadastroTest(unittest.TestCase):
         r = c.post("/app/destinatarios", headers={"X-Autosave": "1"}, data={"extra_nome__1": "Zzz Pela Metade"})
         self.assertFalse(r.get_json()["ok"])
         self.assertEqual([s["nome"] for s in models.get_owner_subordinados(uid)], ["Zzz Auto"])  # nao apaga
+        # equipe inclui mais subordinados na aba Usuarios (sem limite); o app nao apaga (10/11/2026)
+        usuarios = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
+        self.assertIn("Zzz Cad Locais", usuarios)  # cliente do app aparece na aba Usuarios
+        self.assertIn("Cliente do app", usuarios)
+        r = self._logado("Zzz Teste Master Cad").post(f"/admin/users/{uid}/subordinados", data={
+            "form_id": "add", "nome": "Zzz Pela Equipe", "codigo_pais": "55", "numero_telefone": "65999990260"})
+        self.assertEqual(r.status_code, 302)
+        c.post("/app/destinatarios", headers={"X-Autosave": "1"},
+               data={"extra_nome__1": "Zzz Auto 2", "codigo_pais__extra1": "55", "numero_telefone__extra1": "65999990251"})
+        self.assertEqual(sorted(s["nome"] for s in models.get_owner_subordinados(uid)), ["Zzz Auto 2", "Zzz Pela Equipe"])
+        self.assertNotIn("Zzz Pela Equipe", c.get("/app").get_data(as_text=True))  # app mostra so' os 2 dele
         # senha: conferida enquanto digita, botao mostrar senha
         self.assertIn('class="btn btn-outline-secondary mostrar-senha"', home)
         self.assertTrue(c.post("/app/conta/conferir-senha", data={"senha": dados["senha"]}).get_json()["ok"])
