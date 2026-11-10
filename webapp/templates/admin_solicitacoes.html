@@ -7,7 +7,7 @@
 .cad-card dt { color: #6c757d; font-weight: 400; }
 .cad-card dd { margin: 0; overflow-wrap: anywhere; }
 /* Tamanhos padrao dos cartoes (pedido do Alan, 09/11/2026): nome 0.95rem, selos 0.7rem. */
-.cad-toggle { font-size: 0.95rem; font-weight: 600 !important; }
+.cad-toggle { font-size: 0.95rem; font-weight: 600 !important; text-align: left; }
 .cad-card .badge, .grupo-box .badge { font-size: 0.7rem; font-weight: 600; padding: 0.3em 0.55em; }
 .cad-card .text-muted.small, .cad-card .small.text-muted { font-size: 0.75rem; }
 .fazenda-linha { font-size: 0.8rem; }
@@ -16,6 +16,9 @@
 #filtro-pessoas .btn, .exibir-por .btn { font-size: 0.78rem; }
 details.card > summary { font-size: 0.9rem; }
 .cad-card { margin-bottom: 0.5rem !important; }
+/* Cartoes iguais (pedido do Alan, 10/11/2026): nome sozinho na 1a linha, selos sempre na 2a. */
+.cad-selos { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.3rem; }
+.cad-selos:empty { display: none; }
 .cad-card > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
 /* Sinal de celular: mesma linha discreta de Manejos (ver _sinal_celular.linha). */
 .sinal-linha { display: flex; flex-wrap: wrap; gap: 0.15rem 0.9rem; margin-top: 0.1rem; font-size: 0.78rem; line-height: 1.35; }
@@ -55,7 +58,7 @@ details.card > summary { font-size: 0.9rem; }
     </div>
     {% set partes = [] %}
     {% if fz.cidade %}{% set _ = partes.append(fz.cidade ~ ('/' ~ fz.uf if fz.uf else '')) %}{% endif %}
-    {% if fz.culturas %}{% set _ = partes.append(fz.culturas ~ ' · ' ~ fz.area_txt) %}{% endif %}
+    {% if fz.culturas %}{% set _ = partes.append(fz.culturas ~ (' · ' ~ fz.area_txt if fz.area_txt != '-' else '')) %}{% endif %}
     <div class="text-muted">{{ partes | join(' · ') if partes else 'Município e culturas ainda não informados' }}</div>
     {% if fz.estacao_txt %}<div class="text-muted" title="Estação meteorológica de referência (muda em Dados da fazenda)">{{ fz.estacao_txt }}</div>{% endif %}
     <div class="dados-corpo d-none mt-2 pt-2 border-top"></div>
@@ -97,10 +100,13 @@ details.card > summary { font-size: 0.9rem; }
      data-incompleto="{{ 1 if c.faltando else 0 }}"
      data-situacao="{{ ('bloqueado' if sit.chave in ('bloqueado', 'sem_plano') else sit.chave) if sit else '' }}">
     <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2">
             <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-{{ idx }}">
                 <span class="toggle-icon">▶</span> {{ c.nome_completo or c.username }}
             </button>
+            {% if c.data %}<span class="text-muted small ms-auto text-nowrap">{{ c.data | data_br }}</span>{% endif %}
+        </div>
+        <div class="cad-selos">
             {% if not c.visto %}<span class="badge bg-danger">Novo</span>{% endif %}
             <span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Cliente do app' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
             {% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
@@ -109,7 +115,6 @@ details.card > summary { font-size: 0.9rem; }
             {% set cor = {'ativo': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueado': 'bg-secondary', 'sem_plano': 'bg-light text-dark border'}[sit.chave] %}
             <span class="badge {{ cor }}" title="{{ sit.texto }}">{{ cl.plano_nome or 'Sem plano' }} · {{ {'ativo': 'ativo', 'free': 'Essencial', 'bloqueado': 'bloqueado', 'sem_plano': 'escolher plano'}[sit.chave] }}</span>
             {% endif %}
-            {% if c.data %}<span class="text-muted small ms-auto">{{ c.data | data_br }}</span>{% endif %}
         </div>
         <div class="d-none mt-3" id="cad-body-{{ idx }}">
         <dl class="mb-3">
@@ -215,16 +220,16 @@ details.card > summary { font-size: 0.9rem; }
 
 {# Fazenda sem cadastro: cartao igual ao dos produtores (pedido do Alan, 09/11/2026). #}
 {% macro cartao_fazenda(fz) %}
-<div class="card shadow-sm mb-3 cad-card" data-tipo="fazenda" data-novo="0" data-incompleto="{{ 1 if fz.faltando else 0 }}" data-situacao="">
+{# Sem o selo "Cadastro incompleto": a fazenda sem cadastro ja' tem o proprio selo (pedido do Alan, 10/11/2026). #}
+<div class="card shadow-sm mb-3 cad-card" data-tipo="fazenda" data-novo="0" data-incompleto="0" data-situacao="">
     <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-faz-{{ fz.idx }}">
-                <span class="toggle-icon">▶</span> {{ fz.nome_exibicao }}
-            </button>
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-faz-{{ fz.idx }}">
+            <span class="toggle-icon">▶</span> {{ fz.nome_exibicao }}
+        </button>
+        <div class="cad-selos">
             <span class="badge bg-secondary">Fazenda sem cadastro</span>
-            <span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
-            {% if fz.faltando %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ fz.faltando | join('; ') }}">⚠ Cadastro incompleto</span>{% endif %}
             {{ selo_plano(fz.site) }}
+            <span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
         </div>
         <div class="d-none mt-3 small" id="cad-body-faz-{{ fz.idx }}">
             {{ linha_fazenda(fz) }}
@@ -244,7 +249,7 @@ details.card > summary { font-size: 0.9rem; }
     {% set n_bloq = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'in', ['bloqueado', 'sem_plano']) | list | length %}
     <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Essencial ({{ n_free }})</button>
     <button type="button" class="btn btn-outline-secondary" data-filtro="bloqueado">Bloqueados / sem plano ({{ n_bloq }})</button>
-    {% set n_incompletos = (pessoas | selectattr('faltando') | list | length) + (sem_cadastro | selectattr('faltando') | list | length) %}
+    {% set n_incompletos = pessoas | selectattr('faltando') | list | length %}
     <button type="button" class="btn btn-outline-secondary" data-filtro="incompleto">Cadastro incompleto ({{ n_incompletos }})</button>
     <button type="button" class="btn btn-outline-secondary" data-filtro="fazenda">Fazendas sem cadastro ({{ sem_cadastro | length }})</button>
 </div>

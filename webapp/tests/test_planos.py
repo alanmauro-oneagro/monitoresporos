@@ -332,6 +332,28 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         with webapp.app.test_request_context():
             return webapp._plano_da_fazenda(site)["texto"]
 
+    def test_dados_da_fazenda_preenchidos_sozinhos(self):
+        """Estado pelo nome, culturas pelas safras de Manejos e municipio pela
+        coordenada; nunca troca o que ja' foi digitado (pedido do Alan, 10/11/2026)."""
+        site = models.create_virtual_farm("Zzz Auto Dados - MT", -11.86, -55.5, 30)
+        models.set_farm_cultura(site, "safra1", "Soja")
+        models.set_farm_cultura(site, "safra2", "Milho")
+        with webapp.app.test_request_context():
+            fz = webapp._dados_da_fazenda(site)
+            self.assertIn("município/estado de", " ".join(webapp._faltando_na_fazenda(fz)))
+            webapp._completar_dados_fazendas([fz])
+        dados = models.get_fazendas_dados()[site]
+        self.assertEqual((dados["uf"], dados["culturas"]), ("MT", "Soja, Milho"))
+        with webapp.app.test_request_context():
+            webapp._gravar_dados_vazios(site, "Sinop", "PR", "Trigo")
+        dados = models.get_fazendas_dados()[site]
+        self.assertEqual((dados["cidade"], dados["uf"], dados["culturas"]), ("Sinop", "MT", "Soja, Milho"))
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._faltando_na_fazenda(webapp._dados_da_fazenda(site)), [])
+        # fora do Brasil basta o municipio
+        self.assertEqual(webapp._faltando_na_fazenda({"cidade": "Pencahue", "uf": "", "culturas": "Uva",
+                                                      "country_code": "CL", "nome_exibicao": "x"}), [])
+
     def test_nomes_antigos_viram_novos_no_init_db(self):
         essencial = self._plano("Essencial")
         conn = models.get_db()
@@ -372,7 +394,7 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         models.set_site_ativo(oculta, False)
         self.assertNotIn(oculta, webapp_sem_cadastro())  # oculta vai pra Gerenciar Fazendas Ocultas
         self.assertIn("🙈 Ocultar", tela)
-        self.assertIn("⚠ Cadastro incompleto", tela)
+        self.assertNotIn('data-tipo="fazenda" data-novo="0" data-incompleto="1"', tela)  # sem o selo (10/11/2026)
         # fazenda sem cadastro com municipio e culturas: sem o selo de incompleto (09/11/2026)
         with webapp.app.test_request_context():
             fz = webapp._dados_da_fazenda(e1)
