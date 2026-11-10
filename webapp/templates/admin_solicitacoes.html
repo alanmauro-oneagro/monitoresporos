@@ -19,6 +19,9 @@ details.card > summary { font-size: 0.9rem; }
 /* Cartoes iguais (pedido do Alan, 10/11/2026): nome sozinho na 1a linha, selos sempre na 2a. */
 .cad-selos { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.3rem; }
 .cad-selos:empty { display: none; }
+.grupo-resumo { margin-top: 0.4rem; }
+.grupo-item { border-top: 1px solid #e9ecef; padding: 0.35rem 0; font-size: 0.85rem; }
+.grupo-item .cad-selos { margin-top: 0.2rem; }
 .cad-card > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
 /* Sinal de celular: mesma linha discreta de Manejos (ver _sinal_celular.linha). */
 .sinal-linha { display: flex; flex-wrap: wrap; gap: 0.15rem 0.9rem; margin-top: 0.1rem; font-size: 0.78rem; line-height: 1.35; }
@@ -92,6 +95,19 @@ details.card > summary { font-size: 0.9rem; }
 </details>
 <datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>
 
+{# Selos do cadastro (cartao fechado e resumo da caixa do grupo -- pedido do Alan, 10/11/2026). #}
+{% macro selos_pessoa(c) %}
+{% set sit = c.situacao %}
+{% if not c.visto %}<span class="badge bg-danger">Novo</span>{% endif %}
+<span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Cliente do app' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
+{% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
+{% if c.faltando %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ c.faltando | join('; ') }}">⚠ Cadastro incompleto</span>{% endif %}
+{% if sit %}
+{% set cor = {'ativo': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueado': 'bg-secondary', 'sem_plano': 'bg-light text-dark border'}[sit.chave] %}
+<span class="badge {{ cor }}" title="{{ sit.texto }}">{{ c.cliente.plano_nome or 'Sem plano' }} · {{ {'ativo': 'ativo', 'free': 'Essencial', 'bloqueado': 'bloqueado', 'sem_plano': 'escolher plano'}[sit.chave] }}</span>
+{% endif %}
+{% endmacro %}
+
 {% macro cartao_pessoa(c, idx) %}
 {% set telefone_digitos = (c.telefone or '') | replace('+', '') %}
 {% set cl = c.cliente %}
@@ -106,16 +122,7 @@ details.card > summary { font-size: 0.9rem; }
             </button>
             {% if c.data %}<span class="text-muted small ms-auto text-nowrap">{{ c.data | data_br }}</span>{% endif %}
         </div>
-        <div class="cad-selos">
-            {% if not c.visto %}<span class="badge bg-danger">Novo</span>{% endif %}
-            <span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Cliente do app' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
-            {% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
-            {% if c.faltando %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ c.faltando | join('; ') }}">⚠ Cadastro incompleto</span>{% endif %}
-            {% if sit %}{# situacao visivel com o cartao fechado #}
-            {% set cor = {'ativo': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueado': 'bg-secondary', 'sem_plano': 'bg-light text-dark border'}[sit.chave] %}
-            <span class="badge {{ cor }}" title="{{ sit.texto }}">{{ cl.plano_nome or 'Sem plano' }} · {{ {'ativo': 'ativo', 'free': 'Essencial', 'bloqueado': 'bloqueado', 'sem_plano': 'escolher plano'}[sit.chave] }}</span>
-            {% endif %}
-        </div>
+        <div class="cad-selos">{{ selos_pessoa(c) }}</div>
         <div class="d-none mt-3" id="cad-body-{{ idx }}">
         <dl class="mb-3">
             <dt>Usuário</dt><dd>{{ c.username }}</dd>
@@ -272,7 +279,21 @@ details.card > summary { font-size: 0.9rem; }
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="grupo-body-{{ loop.index0 }}">
             <span class="toggle-icon">▶</span> 👥 {{ gr.nome }}
         </button>
-        <span class="badge bg-light text-secondary border fw-normal">{{ gr.pessoas | length }} cadastro(s) · {{ gr.fazendas | length }} fazenda(s) sem cadastro</span>
+        {% set n_faz = (gr.pessoas | map(attribute='fazendas') | map('length') | sum) + (gr.fazendas | length) %}
+        <span class="badge bg-light text-secondary border fw-normal">{{ gr.pessoas | length }} cadastro(s) · {{ n_faz }} fazenda(s)</span>
+        {# Situacao de cada cadastro/fazenda sem precisar abrir a caixa (pedido do Alan, 10/11/2026). #}
+        <div class="grupo-resumo">
+            {% for c in gr.pessoas %}
+            <div class="grupo-item"><span class="fw-semibold">{{ c.nome_completo or c.username }}</span>
+                <span class="text-muted">· {{ c.fazendas | length }} fazenda(s)</span>
+                <div class="cad-selos mt-0">{{ selos_pessoa(c) }}</div></div>
+            {% endfor %}
+            {% for fz in gr.fazendas %}
+            <div class="grupo-item"><span class="fw-semibold">{{ fz.nome_exibicao }}</span>
+                <div class="cad-selos mt-0"><span class="badge bg-secondary">Fazenda sem cadastro</span>{{ selo_plano(fz.site) }}
+                <span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span></div></div>
+            {% endfor %}
+        </div>
         <div class="d-none mt-3" id="grupo-body-{{ loop.index0 }}">
             {% for c in gr.pessoas %}{{ cartao_pessoa(c, 'g' ~ c.user_id ~ '_' ~ loop.index0) }}{% endfor %}
             {% for fz in gr.fazendas %}{{ cartao_fazenda(fz) }}{% endfor %}
@@ -342,6 +363,9 @@ document.querySelectorAll('.cad-toggle').forEach(function (btn) {
         var aberto = !corpo.classList.contains('d-none');
         corpo.classList.toggle('d-none');
         btn.querySelector('.toggle-icon').textContent = aberto ? '▶' : '▼';
+        // Caixa do grupo aberta: os cartoes tomam o lugar do resumo.
+        var resumo = btn.closest('.grupo-box') && btn.closest('.card-body').querySelector(':scope > .grupo-resumo');
+        if (resumo && btn.dataset.target.indexOf('grupo-body-') === 0) { resumo.classList.toggle('d-none', !aberto); }
     });
 });
 (function () {

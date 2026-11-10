@@ -408,6 +408,10 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
                     data={"site_name": e1, "grupo_economico": "Grupo Zzz Exibir"})
         por_grupo = master.get("/admin/solicitacoes?exibir=grupo").get_data(as_text=True)
         self.assertIn("👥 Grupo Zzz Exibir", por_grupo)
+        # situacao na caixa fechada, sem abrir (pedido do Alan, 10/11/2026)
+        caixa = por_grupo.split("👥 Grupo Zzz Exibir", 1)[1].split("grupo-body-", 1)[0]
+        self.assertIn("grupo-resumo", caixa)
+        self.assertIn("Fazenda sem cadastro", caixa)
         self.assertIn("grupo-box", master.get("/admin/solicitacoes").get_data(as_text=True))  # lembrado na sessao
         master.get("/admin/solicitacoes?exibir=produtor")
         avancado = self._plano("Avançado")

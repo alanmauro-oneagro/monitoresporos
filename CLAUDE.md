@@ -243,7 +243,10 @@ escolhida ("📡 SINOP/MT (A917) · 17,7 km", coordenada propria ou media das 3
 -- `_preencher_estacoes`, em lote); "Exibir por: Nome do produtor | Grupo"
 (`?exibir=`, lembrado em `session["gerenciar_clientes_exibir"]`; por grupo =
 caixa "👥 <grupo>" com os cadastros e as fazendas soltas daquele grupo, o
-resto depois); selo "⚠ Cadastro incompleto" ao lado do perfil (Produtor) com
+resto depois; a caixa FECHADA ja' mostra "N cadastro(s) · N fazenda(s)" e um
+resumo `.grupo-resumo` com cada cadastro -- nome, "N fazenda(s)" e os mesmos
+selos do cartao, macro `selos_pessoa` -- e cada fazenda solta com seus selos;
+abrir troca o resumo pelos cartoes -- pedido do Alan, 10/11/2026); selo "⚠ Cadastro incompleto" ao lado do perfil (Produtor) com
 o que falta no `title` (`_faltando_no_cadastro`: nome completo, celular,
 plano, fazenda, municipio/estado e culturas de cada fazenda; fazenda sem
 cadastro NUNCA tem o selo "Cadastro incompleto" -- ja' tem o selo "Fazenda sem cadastro" (pedido
