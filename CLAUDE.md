@@ -544,7 +544,10 @@ cliente**: os "Receber relatorio" (ate' 2, cadastro/app) sao subordinados com
 `subordinados.pelo_cliente`=1; Master/Administrador inclui MAIS na aba Usuarios >
 Subordinados (sem limite, `pelo_cliente`=0, selo "pela equipe"). O app mostra e troca
 SO' os dele (`cliente_destinatarios`, `_extras_do_cliente(..., so_do_cliente=True)`);
-os da equipe nunca sao apagados pelo app e recebem no formato do plano do cliente. App Android/iOS em
+os da equipe nunca sao apagados pelo app e recebem no formato do plano do cliente. Coluna **Grupo** entre Usuario e Email
+(pedido do Alan, 10/11/2026): cliente = grupo do cadastro; equipe/usuario = grupos das
+fazendas que recebe. Nos subordinados (linhas da aba Usuarios e tela Subordinados) a fazenda
+aparece SEM o "<grupo> - " da frente (`_nome_sem_grupo`, template global `nome_sem_grupo`). App Android/iOS em
 `mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
 app nao aparece preco nem link de pagamento (regra das lojas).
 **Aba Graficos do app** (`/app/regiao`, endpoint `cliente_regiao`; ex-"Regiao",

@@ -4132,6 +4132,17 @@ def _grupo_economico_da_fazenda(site):
     return cadastros[dono]
 
 
+@app.template_global("nome_sem_grupo")
+def _nome_sem_grupo(site):
+    """Nome de exibicao sem o "<grupo> - " da frente (subordinados na aba
+    Usuarios; pedido do Alan, 10/11/2026)."""
+    nome = _nome_exibicao(site)
+    grupo = _grupo_economico_da_fazenda(site)
+    if grupo and nome.lower().startswith(grupo.lower() + " - "):
+        return nome[len(grupo) + 3:]
+    return nome
+
+
 def _agrupar_por_grupo_economico(sites_data):
     """Recomendacoes (pedido do Alan, 09/11/2026): fazendas do mesmo grupo
     economico (2 ou mais) ficam juntas, numa caixa "Grupo X" no lugar da 1a
@@ -6192,19 +6203,32 @@ def admin_users():
     permission_counts = {u["id"]: len(models.get_user_permitted_site_ids(u["id"])) for u in users}
     site_name_by_id = {s["id"]: s["site_name"] for s in models.get_all_sites()}
     subordinados_by_owner = {}
+    grupos = {}
     for u in users:
         subs = models.get_owner_subordinados(u["id"])
         for sub in subs:
             sub["fazendas"] = "; ".join(sorted(
-                _nome_exibicao(site_name_by_id[sid]) for sid in sub["site_ids"] if sid in site_name_by_id
+                _nome_sem_grupo(site_name_by_id[sid]) for sid in sub["site_ids"] if sid in site_name_by_id
             ))
         subordinados_by_owner[u["id"]] = subs
+        # Coluna Grupo (pedido do Alan, 10/11/2026): cliente = grupo do cadastro;
+        # equipe/usuario = grupos das fazendas que ele recebe.
+        if u["is_cliente"]:
+            nomes = [((models.get_cadastro_do_usuario(u["id"]) or {}).get("grupo_economico") or "").strip()]
+        else:
+            nomes = [_grupo_economico_da_fazenda(site_name_by_id[sid])
+                     for sid in models.get_user_report_site_ids(u["id"]) if sid in site_name_by_id]
+        vistos = {}
+        for n in nomes:
+            if n:
+                vistos.setdefault(n.lower(), n)
+        grupos[u["id"]] = ", ".join(sorted(vistos.values(), key=str.lower))
     subordinado_counts = {uid: len(subs) for uid, subs in subordinados_by_owner.items() if subs}
     return render_template(
         "admin_users.html", users=users, default_password=models.DEFAULT_PASSWORD,
         niveis=NIVEIS_ACESSO, nivel_acesso=_nivel_acesso,
         report_counts=report_counts, permission_counts=permission_counts,
-        subordinado_counts=subordinado_counts, subordinados_by_owner=subordinados_by_owner,
+        subordinado_counts=subordinado_counts, subordinados_by_owner=subordinados_by_owner, grupos=grupos,
     )
 
 
