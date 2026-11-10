@@ -359,7 +359,14 @@ function atualizarCulturas(form) {
 // "Ligar a este cliente" fica dentro do "Dados da fazenda" (carregado depois).
 document.addEventListener('submit', function (e) {
     var f = e.target.closest('.ligar-a-cliente');
-    if (f) { f.action = f.querySelector('select').value; }
+    if (f) {
+        if (!f.querySelector('select').value) { e.preventDefault(); return; }
+        f.action = f.querySelector('select').value;
+    }
+});
+document.addEventListener('change', function (e) {
+    var f = e.target.closest('.ligar-a-cliente');
+    if (f) { f.querySelector('button').disabled = !e.target.value; }
 });
 document.querySelectorAll('.cad-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {

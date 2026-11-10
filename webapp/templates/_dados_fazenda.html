@@ -7,15 +7,33 @@
                 {% if fz.lat is not none %} · {{ ('%.4f' | format(fz.lat)) | replace('.', ',') }}; {{ ('%.4f' | format(fz.lon)) | replace('.', ',') }}{% endif %}
                 {% if fz.origem == 'estudo' %} · coordenada e raio em <a href="{{ url_for('mapa_interpolado') }}#pontos-criados">Mapas de Estudo</a>{% endif %}
             </div>
-            {% if not fz.dono and clientes_lista %}
-            {# Fazenda sem cadastro: ligar a um cliente (pedido do Alan, 09/11/2026). #}
+            {% if not fz.dono %}
+            {# Fazenda sem cadastro: ligar a um cliente do app (entra no cadastro dele) ou a um
+               usuario da aba Usuarios (libera + recebe o relatorio) -- pedidos do Alan, 09 e 10/11/2026. #}
+            <div class="mb-1"><span class="text-muted">Ligada a:</span>
+                {% for u in usuarios_ligados %}
+                <form method="post" action="{{ url_for('admin_usuario_desligar_fazenda', user_id=u.id) }}" class="d-inline-flex align-items-center gap-1 mb-0 me-2"
+                      onsubmit="return confirm('Desligar {{ fz.nome_exibicao }} de {{ u.username }}? Ele deixa de ver e de receber o relatório dela.');">
+                    <input type="hidden" name="site_name" value="{{ fz.site }}">
+                    <span class="badge bg-primary-subtle text-primary-emphasis border">{{ u.username }}</span>
+                    <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" type="submit" title="Desligar">✕</button>
+                </form>
+                {% else %}<strong>-</strong>{% endfor %}
+            </div>
             <form method="post" class="d-flex flex-wrap align-items-center gap-1 mb-3 ligar-a-cliente">
                 <input type="hidden" name="site_name" value="{{ fz.site }}">
                 <span class="text-muted me-1">Ligar ao cliente:</span>
                 <select class="form-select form-select-sm" style="max-width: 280px;" aria-label="Cliente">
+                    <option value="" selected>-</option>
+                    {% if clientes_lista %}<optgroup label="Clientes do app">
                     {% for cli in clientes_lista %}<option value="{{ url_for('admin_cliente_vincular', user_id=cli.id) }}">{{ cli.nome }}</option>{% endfor %}
+                    </optgroup>{% endif %}
+                    {% set ja = usuarios_ligados | map(attribute='id') | list %}
+                    <optgroup label="Usuários">
+                    {% for u in usuarios_lista if u.id not in ja %}<option value="{{ url_for('admin_usuario_ligar_fazenda', user_id=u.id) }}">{{ u.nome }}</option>{% endfor %}
+                    </optgroup>
                 </select>
-                <button class="btn btn-sm btn-outline-success" type="submit">Ligar a este cliente</button>
+                <button class="btn btn-sm btn-outline-success" type="submit" disabled>Ligar</button>
             </form>
             {% endif %}
             {# Grupo: no cadastro (vale pra todas as fazendas dele) ou, sem cadastro, na propria fazenda. #}

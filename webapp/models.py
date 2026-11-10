@@ -4305,6 +4305,30 @@ def liberar_fazenda_para_usuario(user_id, site_name):
     conn.close()
 
 
+def desligar_fazenda_do_usuario(user_id, site_name):
+    """Tira a fazenda das permissoes e do relatorio do usuario."""
+    conn = get_db()
+    row = conn.execute("SELECT id FROM sites WHERE site_name = ?", (site_name,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM user_site_permissions WHERE user_id = ? AND site_id = ?", (user_id, row["id"]))
+        conn.execute("DELETE FROM user_report_permissions WHERE user_id = ? AND site_id = ?", (user_id, row["id"]))
+        conn.commit()
+    conn.close()
+
+
+def usuarios_ligados_a_fazenda(site_name):
+    """Usuarios da equipe (nao clientes) com a fazenda liberada E recebendo o
+    relatorio -- o "Ligar ao cliente" de um usuario (pedido do Alan, 10/11/2026)."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT u.id, u.username FROM users u JOIN sites s ON s.site_name = ?"
+        " JOIN user_site_permissions p ON p.user_id = u.id AND p.site_id = s.id"
+        " JOIN user_report_permissions r ON r.user_id = u.id AND r.site_id = s.id"
+        " WHERE u.is_cliente = 0 ORDER BY u.username COLLATE NOCASE", (site_name,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def excluir_cliente_ponto(user_id, ponto_id):
     """Apaga a lavoura e, se ela tinha virado fazenda estimada no site, a
     fazenda estimada junto. Devolve o site_name apagado (ou None)."""
