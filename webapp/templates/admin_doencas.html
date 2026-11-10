@@ -36,7 +36,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 <div class="card shadow-sm doenca-card" data-doenca="{{ d.en }}">
     <div class="card-body px-2 px-sm-3">
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start doenca-toggle" data-target="doenca-body-{{ loop.index0 }}">
-            <span class="toggle-icon">▶</span> {{ d.pt }}
+            <span class="toggle-icon">▶</span> <span class="doenca-nome">{{ d.pt }}</span>
             {% if d.manual %}<span class="badge bg-info text-dark fw-normal ms-1" title="Cadastrada manualmente -- nao vem do BioScout">Manual</span>{% endif %}
         </button>
         <div class="d-none mt-1 mb-2" id="doenca-body-{{ loop.index0 }}">
@@ -54,7 +54,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
         </div>
         <div class="row gx-2">
             <div class="col-md-5">
-                <label class="form-label small text-muted mb-1">Nome no nosso site</label>
+                <label class="form-label small text-muted mb-1" title="Trocar aqui muda o nome em todo o site: Alertas, Manejos, Recomendações, Gráficos, app, WhatsApp e PDF (as anotações vão junto)">✏️ Nome da doença (vale em todo o site)</label>
                 <input type="text" name="nome_pt" class="form-control form-control-sm" value="{{ d.pt }}" required>
             </div>
             <div class="col-md-5">
@@ -192,6 +192,13 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
         document.getElementById(btn.dataset.target).classList.toggle('d-none', !aberto);
         btn.querySelector('.toggle-icon').textContent = aberto ? '▼' : '▶';
     }
+    // Nome do cartao acompanha o que e' digitado no campo do nome.
+    document.querySelectorAll('.doenca-card input[name="nome_pt"]').forEach(function (inp) {
+        inp.addEventListener('input', function () {
+            var alvo = inp.closest('.doenca-card').querySelector('.doenca-nome');
+            if (alvo && inp.value.trim()) { alvo.textContent = inp.value.trim(); }
+        });
+    });
     document.querySelectorAll('.doenca-toggle').forEach(function (btn) {
         var doenca = btn.closest('.doenca-card').dataset.doenca;
         if (abertas.indexOf(doenca) !== -1) abrir(btn, true);

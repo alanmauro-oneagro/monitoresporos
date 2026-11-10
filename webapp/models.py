@@ -1678,6 +1678,12 @@ def delete_disease_translation(display_name_en):
 
 def save_disease_translation(display_name_en, nome_pt, nome_cientifico=""):
     conn = get_db()
+    # Renomear a doenca (aba Doencas/Culturas) leva junto as anotacoes por
+    # fazenda, que sao guardadas pelo nome em portugues (pedido do Alan, 10/11/2026).
+    antigo = conn.execute("SELECT nome_pt FROM disease_translations WHERE display_name_en = ?", (display_name_en,)).fetchone()
+    if antigo and antigo["nome_pt"] and antigo["nome_pt"] != nome_pt:
+        conn.execute("UPDATE OR IGNORE recommendation_notes SET doenca = ? WHERE doenca = ?", (nome_pt, antigo["nome_pt"]))
+        conn.execute("DELETE FROM recommendation_notes WHERE doenca = ?", (antigo["nome_pt"],))
     conn.execute(
         """
         INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, ?)

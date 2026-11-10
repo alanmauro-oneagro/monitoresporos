@@ -5523,12 +5523,19 @@ def admin_doencas():
         molhamentos = request.form.getlist("germ_molhamento_horas")
         info_atual = models.get_all_disease_info()
         culturas_ativas = set(models.get_culturas_ativas())
+        # Nome repetido de outra doenca nao vale (o nome e' a chave das anotacoes).
+        usados = {(d.get("nome_pt") or "").strip().lower(): en for en, d in info_atual.items()}
+        repetido = None
         for idx, (display_name_en, nome_pt, nome_cientifico) in enumerate(
             zip(display_names, nomes_pt, nomes_cientificos)
         ):
-            nome_pt = nome_pt.strip()
+            nome_pt = " ".join(nome_pt.split())[:80]
             if not nome_pt:
                 continue
+            if usados.get(nome_pt.lower(), display_name_en) != display_name_en:
+                repetido = nome_pt
+                nome_pt = (info_atual.get(display_name_en) or {}).get("nome_pt") or nome_pt
+            usados[nome_pt.lower()] = display_name_en
             models.save_disease_translation(display_name_en, nome_pt, nome_cientifico.strip())
             models.set_doenca_culturas(
                 display_name_en, [c for c in request.form.getlist(f"culturas_card__{idx}") if c in culturas_ativas],
@@ -5546,6 +5553,8 @@ def admin_doencas():
                 _parse_float_or_none(molhamentos[idx]) if idx < len(molhamentos) else None,
                 agua_livre_inibe,
             )
+        if repetido:
+            return _save_response(f"Já existe outra doença chamada '{repetido}' -- escolha outro nome.", "admin_doencas", ok=False)
         return _save_response("Nomes de doencas atualizados.", "admin_doencas")
 
     _load_translations()  # garante linhas novas + nome cientifico pre-preenchido
