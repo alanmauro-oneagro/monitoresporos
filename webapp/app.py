@@ -8651,10 +8651,9 @@ def admin_solicitacoes():
         ocultas = models.get_deactivated_site_names()
         p["fazendas"] = [_dados_da_fazenda(a["site_name"], f"{p['user_id']}_{a['id']}") for a in p["areas"]
                          if a.get("site_name") and a["site_name"] not in ocultas]
+    _completar_dados_fazendas(sem_cadastro + [fz for p in pessoas for fz in p["fazendas"]])
+    for p in pessoas:
         p["faltando"] = _faltando_no_cadastro(p)
-    for fz in sem_cadastro:
-        # So' o que falta de dado; a falta de cliente ja' e' o selo "Fazenda sem cadastro" (09/11/2026).
-        fz["faltando"] = _faltando_na_fazenda(fz)
     _preencher_estacoes(sem_cadastro + [fz for p in pessoas for fz in p["fazendas"]])
     # Exibir por produtor ou por grupo economico (pedido do Alan, 09/11/2026), lembrado na sessao.
     if request.args.get("exibir") in ("produtor", "grupo"):
@@ -8702,9 +8701,104 @@ def _preencher_estacoes(fazendas):
                                  if est else f"📡 Estação {codigo}")
 
 
+# Preenchimento automatico dos dados da fazenda (pedido do Alan, 10/11/2026):
+# so' completa o que esta' VAZIO -- estado pelo fim do nome ("Dallas - MT"),
+# culturas pelas safras de Manejos e municipio/estado pela coordenada
+# (OpenStreetMap, em segundo plano, 1 por segundo). Nunca troca o digitado.
+_UF_NO_NOME = re.compile(r"[-–/(]\s*([A-Za-z]{2})\s*\)?\s*$")
+_GEO_LOCK = threading.Lock()
+_GEO_TENTADOS = {}
+
+
+def _gravar_dados_vazios(site, cidade="", uf="", culturas=""):
+    ponto = _ponto_da_fazenda(site)
+    atual = ponto or models.get_fazendas_dados().get(site) or {}
+    cid0, uf0, cult0 = atual.get("cidade") or "", atual.get("uf") or "", atual.get("culturas") or ""
+    cid1, uf1, cult1 = cid0 or cidade, uf0 or uf, cult0 or culturas
+    if (cid1, uf1, cult1) == (cid0, uf0, cult0):
+        return False
+    area = atual.get("area_ha") or _soma_areas(cult1) or None
+    if ponto:
+        models.atualizar_dados_ponto(ponto["id"], cid1, uf1, cult1, area)
+    else:
+        models.salvar_fazenda_dados(site, cid1, uf1, cult1, area)
+    return True
+
+
+def _municipio_da_coordenada(lat, lon):
+    import urllib.parse
+    import urllib.request
+    params = urllib.parse.urlencode({"format": "jsonv2", "lat": f"{float(lat):.5f}", "lon": f"{float(lon):.5f}",
+                                     "zoom": 10, "accept-language": "pt-BR"})
+    req = urllib.request.Request(f"https://nominatim.openstreetmap.org/reverse?{params}",
+                                 headers={"User-Agent": "OneAgroMonitor/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            end = (json.load(resp) or {}).get("address") or {}
+    except Exception:
+        return "", ""
+    cidade = next((end[k] for k in ("city", "town", "village", "municipality", "county") if end.get(k)), "")
+    iso = end.get("ISO3166-2-lvl4") or ""
+    return cidade[:80], (iso[3:] if iso.startswith("BR-") else "")
+
+
+def _geocodificar_em_segundo_plano(pendentes):
+    if app.config.get("TESTING") or not pendentes:
+        return
+    agora = time.time()
+    pendentes = [p for p in pendentes if agora - _GEO_TENTADOS.get(p[0], 0) > 6 * 3600]
+    if not pendentes or not _GEO_LOCK.acquire(blocking=False):
+        return
+    for p in pendentes:
+        _GEO_TENTADOS[p[0]] = agora
+
+    def rodar():
+        try:
+            with app.app_context():
+                for site, lat, lon, pais in pendentes:
+                    cidade, uf = _municipio_da_coordenada(lat, lon)
+                    if cidade:
+                        _gravar_dados_vazios(site, cidade, uf if pais == "BR" and uf in UFS_BR else "")
+                    time.sleep(1.1)
+        except Exception:
+            app.logger.exception("Falha ao buscar o municipio das fazendas")
+        finally:
+            _GEO_LOCK.release()
+    threading.Thread(target=rodar, daemon=True).start()
+
+
+def _completar_dados_fazendas(fazendas):
+    safras = models.get_all_farm_culturas()
+    pendentes = []
+    for fz in fazendas:
+        culturas = ""
+        if not fz["culturas"]:
+            nomes = []
+            for s, _rot in models.SAFRAS:
+                c = (safras.get((fz["site"], s)) or {}).get("cultura")
+                if c and c not in nomes:
+                    nomes.append(c)
+            culturas = ", ".join(nomes)
+        uf = ""
+        if not fz["uf"] and fz["country_code"] == "BR":
+            for nome in (fz["nome_exibicao"], fz["site"]):
+                m = _UF_NO_NOME.search(nome or "")
+                if m and m.group(1).upper() in UFS_BR:
+                    uf = m.group(1).upper()
+                    break
+        if (culturas or uf) and _gravar_dados_vazios(fz["site"], "", uf, culturas):
+            fz["culturas"] = fz["culturas"] or culturas
+            fz["uf"] = fz["uf"] or uf
+            area = fz["area_ha"] or _soma_areas(fz["culturas"])
+            fz["area_txt"] = f"{_fmt_ha(area)} ha" if area else "-"
+        if not fz["cidade"] and fz["lat"] is not None:
+            pendentes.append((fz["site"], fz["lat"], fz["lon"], fz["country_code"]))
+    _geocodificar_em_segundo_plano(pendentes)
+
+
 def _faltando_na_fazenda(fz):
     falta = []
-    if not fz.get("cidade") or not fz.get("uf"):
+    if not fz.get("cidade") or (not fz.get("uf") and fz.get("country_code", "BR") == "BR"):
         falta.append(f"município/estado de {fz['nome_exibicao']}")
     if not fz.get("culturas"):
         falta.append(f"culturas de {fz['nome_exibicao']}")

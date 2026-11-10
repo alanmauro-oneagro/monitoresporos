@@ -246,8 +246,16 @@ caixa "👥 <grupo>" com os cadastros e as fazendas soltas daquele grupo, o
 resto depois); selo "⚠ Cadastro incompleto" ao lado do perfil (Produtor) com
 o que falta no `title` (`_faltando_no_cadastro`: nome completo, celular,
 plano, fazenda, municipio/estado e culturas de cada fazenda; fazenda sem
-cadastro so' fica incompleta se faltar municipio/estado ou culturas, `_faltando_na_fazenda` -- a falta de cliente ja' e' o selo "Fazenda sem cadastro", pedido do Alan, 09/11/2026) e filtros "Cadastro
-incompleto" e "Fazendas sem cadastro". Ponto "so' clima" NAO entra em
+cadastro NUNCA tem o selo "Cadastro incompleto" -- ja' tem o selo "Fazenda sem cadastro" (pedido
+do Alan, 10/11/2026); `_faltando_na_fazenda` = municipio (estado so' no Brasil) e culturas) e filtros "Cadastro
+incompleto" e "Fazendas sem cadastro". **Dados preenchidos sozinhos** (pedido do Alan, 10/11/2026;
+`_completar_dados_fazendas`, ao abrir Gerenciar Clientes): so' o que esta' VAZIO, nunca troca o digitado
+(`_gravar_dados_vazios`) -- estado pelo fim do nome ("Dallas - MT", so' Brasil), culturas pelas safras de
+Manejos (`farm_culturas`, sem area) e municipio/estado pela coordenada (OpenStreetMap Nominatim reverse,
+`_municipio_da_coordenada`, thread de fundo 1 por segundo, cada fazenda tentada no maximo a cada 6 h; fora com
+TESTING) -- aparece na proxima abertura da tela. **Cartoes iguais** (mesmo pedido): nome sozinho na 1a linha
+(data a' direita) e selos na 2a (`.cad-selos`), fazenda sem cadastro na ordem "Fazenda sem cadastro", plano,
+origem. Ponto "so' clima" NAO entra em
 Gerenciar Clientes (nem nas sem cadastro, nem no "+ Novo cliente"/Ligar --
 `_fazendas_sem_cadastro`; pedido do Alan, 09/11/2026): fica so' no Mapas de
 Estudo. Cada linha de fazenda tem "🙈 Ocultar" (`save_site_ativo`); fazenda
