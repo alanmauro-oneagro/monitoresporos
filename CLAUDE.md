@@ -536,7 +536,15 @@ fazendas adicionais, `asaas.alterar_forma_pagamento`, PUT com
 `updatePendingPayments`); sem escolha = UNDEFINED (escolhe na fatura). Pagamentos antigos ficam
 presos a' assinatura velha (`fechar_pagamentos_sem_assinatura`), o credito
 nao e' reaproveitado. A tela do upgrade mostra "Com o desconto: ..." em
-cada plano. Clientes nao aparecem na aba Usuarios. App Android/iOS em
+cada plano. **Clientes na aba Usuarios** (pedido do Alan, 10/11/2026): aparecem depois
+de todos (`models.get_all_users(com_clientes=True)`, so' em `admin_users`), Acesso
+"Cliente do app", botoes "Gerenciar Clientes" (Master), Redefinir senha e Excluir
+(`admin_cliente_excluir`, cancela o Asaas; sem "Editar cadastro"). **Subordinados do
+cliente**: os "Receber relatorio" (ate' 2, cadastro/app) sao subordinados com
+`subordinados.pelo_cliente`=1; Master/Administrador inclui MAIS na aba Usuarios >
+Subordinados (sem limite, `pelo_cliente`=0, selo "pela equipe"). O app mostra e troca
+SO' os dele (`cliente_destinatarios`, `_extras_do_cliente(..., so_do_cliente=True)`);
+os da equipe nunca sao apagados pelo app e recebem no formato do plano do cliente. App Android/iOS em
 `mobile/` (Capacitor abrindo `/app`, user-agent `OneAgroApp`): dentro do
 app nao aparece preco nem link de pagamento (regra das lojas).
 **Aba Graficos do app** (`/app/regiao`, endpoint `cliente_regiao`; ex-"Regiao",

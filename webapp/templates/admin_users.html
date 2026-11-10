@@ -14,7 +14,7 @@
             <td>{{ u.username }}</td>
             <td>{{ u.email or '-' }}</td>
             <td>{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
-            <td>{{ niveis[nivel_acesso(u)] }}</td>
+            <td>{% if u.is_cliente %}<span class="badge bg-success">Cliente do app</span>{% else %}{{ niveis[nivel_acesso(u)] }}{% endif %}</td>
             <td>
                 {% if u.is_admin %}
                     <span class="text-muted">Todas ({{ niveis[nivel_acesso(u)] }})</span>
@@ -51,6 +51,20 @@
                 </a>
             </td>
             <td class="d-flex gap-2">
+                {% if u.is_cliente %}
+                {# Cliente do app (cadastro pelo site): dados, plano e exclusao ficam em Gerenciar Clientes (10/11/2026). #}
+                {% if current_user.is_master %}
+                <a href="{{ url_for('admin_solicitacoes') }}" class="btn btn-sm btn-outline-primary">Gerenciar Clientes</a>
+                {% endif %}
+                <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" onsubmit="return confirm('Redefinir a senha de {{ u.username }} para a senha padrao?');">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Redefinir senha</button>
+                </form>
+                {% if current_user.is_master %}
+                <form method="post" action="{{ url_for('admin_cliente_excluir', user_id=u.id) }}" onsubmit="return confirm('Excluir o cliente {{ u.username }}? A cobrança no Asaas é cancelada.');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                </form>
+                {% endif %}
+                {% else %}
                 {% if current_user.is_master %}
                 <a href="{{ url_for('admin_edit_user', user_id=u.id) }}" class="btn btn-sm btn-outline-primary">Editar cadastro</a>
                 {% endif %}
@@ -60,11 +74,12 @@
                 <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" onsubmit="return confirm('Excluir usuario {{ u.username }}?');">
                     <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
                 </form>
+                {% endif %}
             </td>
         </tr>
         {% for sub in subordinados_by_owner.get(u.id, []) %}
         <tr class="table-light sub-row d-none" data-owner-rows="{{ u.id }}">
-            <td class="text-muted small ps-4">↳ {{ sub.nome }}</td>
+            <td class="text-muted small ps-4">↳ {{ sub.nome }}{% if u.is_cliente %} <span class="badge bg-light text-secondary border fw-normal" title="{{ 'Indicado pelo cliente no cadastro/app (até 2)' if sub.pelo_cliente else 'Incluído pela equipe OneAgro' }}">{{ 'pelo cliente' if sub.pelo_cliente else 'pela equipe' }}</span>{% endif %}</td>
             <td class="text-muted small">-</td>
             <td class="text-muted small">{{ sub.telefone | telefone_br }}</td>
             <td class="text-muted small">-</td>

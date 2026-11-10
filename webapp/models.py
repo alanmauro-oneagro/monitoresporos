@@ -816,6 +816,13 @@ def init_db():
         conn.execute("ALTER TABLE cliente_pontos ADD COLUMN vinculada INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
+    try:
+        # Subordinado indicado pelo proprio cliente (cadastro/app, ate' 2) x incluido
+        # pela equipe na aba Usuarios (sem limite) -- o app so' troca os dele (10/11/2026).
+        conn.execute("ALTER TABLE subordinados ADD COLUMN pelo_cliente INTEGER NOT NULL DEFAULT 0")
+        conn.execute("UPDATE subordinados SET pelo_cliente = 1 WHERE owner_user_id IN (SELECT id FROM users WHERE is_cliente = 1)")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
     # Dados das fazendas ainda sem cadastro (mesmos campos de cliente_pontos).
     conn.execute("CREATE TABLE IF NOT EXISTS fazendas_dados (site_name TEXT PRIMARY KEY, cidade TEXT, uf TEXT,"
                  " culturas TEXT, area_ha REAL, atualizado_em TEXT)")
@@ -3184,15 +3191,17 @@ def get_user_by_id(user_id):
     return row
 
 
-def get_all_users():
+def get_all_users(com_clientes=False):
     """Master primeiro, depois Administrador, depois Usuario (cada grupo em
     ordem alfabetica) -- pedido explicito do usuario, pra quem administra
     o site aparecer sempre no topo da aba Usuarios. Clientes do app
-    (`is_cliente`) ficam de fora -- eles aparecem so' na aba Planos."""
+    (`is_cliente`) so' com `com_clientes` (aba Usuarios, pedido do Alan,
+    10/11/2026), depois de todos."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, username, is_admin, is_master, email, telefone, whatsapp_pausado FROM users"
-        " WHERE is_cliente = 0 ORDER BY is_master DESC, is_admin DESC, username COLLATE NOCASE"
+        "SELECT id, username, is_admin, is_master, is_cliente, email, telefone, whatsapp_pausado FROM users"
+        + ("" if com_clientes else " WHERE is_cliente = 0")
+        + " ORDER BY is_cliente, is_master DESC, is_admin DESC, username COLLATE NOCASE"
     ).fetchall()
     conn.close()
     return rows
@@ -3590,7 +3599,7 @@ def get_owner_subordinados(owner_user_id):
     dict tem {id, nome, telefone, site_ids, whatsapp_pausado}."""
     conn = get_db()
     subs = conn.execute(
-        "SELECT id, nome, telefone, whatsapp_pausado FROM subordinados WHERE owner_user_id = ? ORDER BY nome", (owner_user_id,)
+        "SELECT id, nome, telefone, whatsapp_pausado, pelo_cliente FROM subordinados WHERE owner_user_id = ? ORDER BY nome", (owner_user_id,)
     ).fetchall()
     resultado = []
     for s in subs:
@@ -3601,17 +3610,17 @@ def get_owner_subordinados(owner_user_id):
         }
         resultado.append({
             "id": s["id"], "nome": s["nome"], "telefone": s["telefone"], "site_ids": site_ids,
-            "whatsapp_pausado": bool(s["whatsapp_pausado"]),
+            "whatsapp_pausado": bool(s["whatsapp_pausado"]), "pelo_cliente": bool(s["pelo_cliente"]),
         })
     conn.close()
     return resultado
 
 
-def create_subordinado(owner_user_id, nome, telefone):
+def create_subordinado(owner_user_id, nome, telefone, pelo_cliente=False):
     conn = get_db()
     cur = conn.execute(
-        "INSERT INTO subordinados (owner_user_id, nome, telefone) VALUES (?, ?, ?)",
-        (owner_user_id, nome, telefone),
+        "INSERT INTO subordinados (owner_user_id, nome, telefone, pelo_cliente) VALUES (?, ?, ?, ?)",
+        (owner_user_id, nome, telefone, 1 if pelo_cliente else 0),
     )
     conn.commit()
     novo_id = cur.lastrowid
