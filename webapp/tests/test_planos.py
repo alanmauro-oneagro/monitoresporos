@@ -388,6 +388,10 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         self.assertIn("+ Novo cliente", tela)
         # fazenda sem cadastro = cartao igual ao dos produtores, com o selo e o filtro de incompleto (09/11/2026)
         self.assertIn('data-tipo="fazenda"', tela)
+        # cartao da fazenda sem cadastro aberto nao repete nome/plano/origem (10/11/2026)
+        cartao = tela.split('data-tipo="fazenda"', 1)[1].split('data-tipo=', 1)[0]
+        self.assertEqual(cartao.count("Fazenda sem cadastro"), 1)
+        self.assertEqual(cartao.count("selo-plano"), 1)
         clima = models.create_virtual_farm("Zzz Modelo So Clima", -12.44, -55.7, 30, tipo="clima")
         self.assertNotIn(clima, webapp_sem_cadastro())  # ponto so' clima: so' no Mapas de Estudo (09/11/2026)
         oculta = models.create_virtual_farm("Zzz Modelo Oculta", -12.45, -55.7, 30)
