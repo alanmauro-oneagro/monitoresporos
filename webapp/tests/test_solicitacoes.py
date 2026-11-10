@@ -210,6 +210,33 @@ class CadastroTest(unittest.TestCase):
         finally:
             models.set_grupos_culturas(antes)
 
+    def test_renomear_doenca_leva_as_anotacoes(self):
+        """Nome da doenca editado em Doencas/Culturas vale no site todo, com as
+        anotacoes por fazenda (pedido do Alan, 10/11/2026); nome repetido nao vale."""
+        master = self._logado("Zzz Teste Master Cad")
+        en = models.add_manual_disease("Zzz Doenca Antiga")
+        outra = models.add_manual_disease("Zzz Doenca Outra")
+        models.save_recommendation_note("Zzz Fazenda Nota", "Zzz Doenca Antiga", "aplicar cedo")
+        try:
+            def postar(nome):
+                info = models.get_all_disease_info()
+                ens = list(info)
+                dados = {"display_name_en": ens, "nome_cientifico": [info[e]["nome_cientifico"] or "" for e in ens],
+                         "nome_pt": [nome if e == en else info[e]["nome_pt"] for e in ens]}
+                return master.post("/admin/doencas", headers={"X-Autosave": "1"}, data=dados).get_json()
+            self.assertTrue(postar("Zzz Doenca Nova")["ok"])
+            self.assertEqual(models.get_all_disease_translations()[en]["nome_pt"], "Zzz Doenca Nova")
+            notas = models.get_all_recommendation_notes()
+            self.assertEqual(notas.get(("Zzz Fazenda Nota", "Zzz Doenca Nova")), "aplicar cedo")
+            self.assertNotIn(("Zzz Fazenda Nota", "Zzz Doenca Antiga"), notas)
+            r = postar("Zzz Doenca Outra")
+            self.assertFalse(r["ok"])
+            self.assertEqual(models.get_all_disease_translations()[en]["nome_pt"], "Zzz Doenca Nova")
+        finally:
+            models.delete_disease_translation(en)
+            models.delete_disease_translation(outra)
+            models.save_recommendation_note("Zzz Fazenda Nota", "Zzz Doenca Nova", "")
+
     def test_cana_virou_outros_no_banco(self):
         """Cadastro e tipo das culturas gravados como "cana" passam a "outros" no init_db."""
         uid = models.criar_cliente("Zzz Cad Cana Antiga", "segredo1", "", "5565999990081", "", None)

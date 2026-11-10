@@ -723,6 +723,12 @@ site tem que entrar la'.
   doenca ficam no proprio cartao (`culturas_card__<idx>`); a matriz
   Doencas x Culturas foi retirada -- sobrou so' o editor dos 12 nomes
   de cultura (form_id `matriz_culturas`).
+- **Renomear doenca** (pedido do Alan, 10/11/2026): campo "✏️ Nome da doença (vale em
+  todo o site)" no cartao de cada doenca em Doenças/Culturas (`nome_pt`, salva sozinho,
+  o titulo do cartao acompanha). Tudo do site e' guardado pela chave em ingles
+  (`display_name_en`), menos as anotacoes por fazenda (`recommendation_notes.doenca` =
+  nome em portugues): `models.save_disease_translation` leva as anotacoes pro nome novo.
+  Nome igual ao de outra doenca e' recusado (aviso no autosave, fica o nome antigo).
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);
