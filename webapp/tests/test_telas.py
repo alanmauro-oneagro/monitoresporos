@@ -9,6 +9,9 @@ Usa um banco temporario e os CSVs reais de data/; toda chamada de rede
 servico externo fora do ar sem quebrar.
 """
 import os
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -85,6 +88,23 @@ class TelasPorNivelTest(unittest.TestCase):
                 with self.subTest(nivel=nivel, rota=rota):
                     resp = self._cliente(nivel).get(rota, follow_redirects=True)
                     self.assertLess(resp.status_code, 500)
+
+    @unittest.skipUnless(shutil.which("node"), "sem node pra conferir o JavaScript")
+    def test_javascript_das_telas_sem_erro_de_sintaxe(self):
+        """Script com erro de sintaxe derruba a tela inteira (o mapa do Mapas de
+        Estudo sumiu por um "});" sobrando -- 11/11/2026)."""
+        for nivel in ("master", "cliente"):
+            for rota in _rotas_get():
+                resp = self._cliente(nivel).get(rota, follow_redirects=True)
+                if "text/html" not in resp.content_type:
+                    continue
+                for i, js in enumerate(re.findall(r"<script(?![^>]*\b(?:src|type)=)[^>]*>(.*?)</script>", resp.get_data(as_text=True), re.S)):
+                    with self.subTest(nivel=nivel, rota=rota, script=i):
+                        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+                            f.write(js)
+                        r = subprocess.run(["node", "--check", f.name], capture_output=True, text=True)
+                        os.unlink(f.name)
+                        self.assertEqual(r.returncode, 0, r.stderr[:500])
 
     def test_sem_login_vai_pro_login(self):
         c = webapp.app.test_client()
