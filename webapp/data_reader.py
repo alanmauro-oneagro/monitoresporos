@@ -20,7 +20,39 @@ DOENCA_MAP = {
     "Anthracnose": "Antracnose",
     "Dry rot": "Fusarium",
     "Septoria": "Septoriose",
+    # Nomes novos do BioScout (pedido do Alan, 11/11/2026) e outros comuns que
+    # podem aparecer -- doenca nova fora daqui entra em ingles e o Master e'
+    # avisado (Alertas e Doenças/Culturas) pra dar o nome em portugues.
+    "Brown Spot": "Mancha Parda",
+    "Purple Seed Stain": "Mancha Púrpura",
+    "White Mould": "Mofo Branco",
+    "White Mold": "Mofo Branco",
+    "Grey Mould": "Mofo Cinzento",
+    "Gray Mold": "Mofo Cinzento",
+    "Frogeye Leaf Spot": "Mancha Olho-de-rã",
+    "Grey Leaf Spot": "Cercosporiose",
+    "Gray Leaf Spot": "Cercosporiose",
+    "Northern Corn Leaf Blight": "Helmintosporiose",
+    "Southern Rust": "Ferrugem Polissora",
+    "Common Rust": "Ferrugem Comum",
+    "Downy Mildew": "Míldio",
+    "Fusarium Head Blight": "Giberela",
+    "Leaf Rust": "Ferrugem da Folha",
+    "Stripe Rust": "Ferrugem Amarela",
+    "Charcoal Rot": "Podridão de Carvão",
+    "Ramularia": "Ramulária",
 }
+
+# Sufixo do tipo de esporo que o BioScout passou a mandar no nome cientifico
+# ("Corynespora spp. - Conidiospore") -- mostrado em portugues.
+TIPOS_ESPORO = {"Conidiospore": "conidiósporo", "Ascospore": "ascósporo", "Urediniospore": "urediniósporo",
+                "Basidiospore": "basidiósporo", "Sporangium": "esporângio", "Chlamydospore": "clamidósporo"}
+
+
+def cientifico_em_portugues(nome):
+    for en, pt in TIPOS_ESPORO.items():
+        nome = (nome or "").replace(f" - {en}", f" - {pt}")
+    return nome
 
 # Valores iniciais (semente) das 10 caixas de "Nome Culturas" (menu Opcoes)
 # -- so usado na primeira vez que o banco e' criado; depois disso e'
@@ -94,7 +126,7 @@ def read_scientific_names():
             display_name = row.get("displayName")
             scientific = row.get("scientificName")
             if display_name and scientific and display_name not in names:
-                names[display_name] = scientific
+                names[display_name] = cientifico_em_portugues(scientific)
         return names
     return dict(_derivado_das_leituras("cientificos", calcular))
 

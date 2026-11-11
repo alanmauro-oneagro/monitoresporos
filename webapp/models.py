@@ -1542,6 +1542,21 @@ def ensure_disease_translations(display_names, default_map, scientific_map=None)
                 "UPDATE disease_translations SET nome_cientifico = ? WHERE display_name_en = ?",
                 (scientific_map[name], name),
             )
+    # Doenca que entrou com o nome em ingles e depois ganhou traducao no
+    # DOENCA_MAP passa pro nome em portugues (nunca troca nome editado nem
+    # repete o nome de outra doenca) -- pedido do Alan, 11/11/2026.
+    linhas = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico FROM disease_translations").fetchall()
+    usados = {(r["nome_pt"] or "").lower() for r in linhas}
+    for r in linhas:
+        novo = default_map.get(r["display_name_en"])
+        if novo and r["nome_pt"] == r["display_name_en"] and novo.lower() not in usados:
+            conn.execute("UPDATE disease_translations SET nome_pt = ? WHERE display_name_en = ?", (novo, r["display_name_en"]))
+            usados.add(novo.lower())
+        cient = r["nome_cientifico"] or ""
+        if " - " in cient and scientific_map.get(r["display_name_en"]) and scientific_map[r["display_name_en"]] != cient \
+                and cient.split(" - ")[0] == scientific_map[r["display_name_en"]].split(" - ")[0]:
+            conn.execute("UPDATE disease_translations SET nome_cientifico = ? WHERE display_name_en = ?",
+                         (scientific_map[r["display_name_en"]], r["display_name_en"]))
     conn.commit()
     conn.close()
 

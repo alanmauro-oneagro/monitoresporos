@@ -237,6 +237,33 @@ class CadastroTest(unittest.TestCase):
             models.delete_disease_translation(outra)
             models.save_recommendation_note("Zzz Fazenda Nota", "Zzz Doenca Nova", "")
 
+    def test_doencas_novas_do_bioscout_em_portugues(self):
+        """Brown Spot/Purple Seed Stain/White Mould ganham nome em portugues (inclusive
+        quem ja estava no banco em ingles); doenca desconhecida avisa o Master (11/11/2026)."""
+        import data_reader
+        for en in ("White Mould", "Zzz Unknown Blight"):
+            models.delete_disease_translation(en)
+        conn = models.get_db()
+        conn.execute("INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, ?)",
+                     ("White Mould", "White Mould", "Sclerotinia spp. - Ascospore"))
+        conn.commit(); conn.close()
+        try:
+            models.ensure_disease_translations(
+                ["White Mould", "Zzz Unknown Blight"], data_reader.DOENCA_MAP,
+                {"White Mould": data_reader.cientifico_em_portugues("Sclerotinia spp. - Ascospore")})
+            info = models.get_all_disease_translations()
+            self.assertEqual(info["White Mould"]["nome_pt"], "Mofo Branco")
+            self.assertEqual(info["White Mould"]["nome_cientifico"], "Sclerotinia spp. - ascósporo")
+            with webapp.app.test_request_context():
+                self.assertIn("Zzz Unknown Blight", webapp.doencas_sem_traducao())
+                self.assertNotIn("White Mould", webapp.doencas_sem_traducao())
+            html = self._logado("Zzz Teste Master Cad").get("/dashboard").get_data(as_text=True)
+            self.assertIn("ainda sem nome em português", html)
+            self.assertIn("Zzz Unknown Blight", html)
+        finally:
+            for en in ("White Mould", "Zzz Unknown Blight"):
+                models.delete_disease_translation(en)
+
     def test_cana_virou_outros_no_banco(self):
         """Cadastro e tipo das culturas gravados como "cana" passam a "outros" no init_db."""
         uid = models.criar_cliente("Zzz Cad Cana Antiga", "segredo1", "", "5565999990081", "", None)
