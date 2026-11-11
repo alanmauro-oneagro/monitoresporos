@@ -824,6 +824,9 @@ def _load_translations():
     return models.get_all_disease_translations()
 
 
+DIAS_DOENCA_NOVA = 3
+
+
 @app.template_global()
 def doencas_sem_traducao():
     """Doencas do BioScout ainda com o nome em ingles (nova, sem traducao no
@@ -5629,6 +5632,18 @@ def admin_doencas():
     _load_translations()  # garante linhas novas + nome cientifico pre-preenchido
     info = models.get_all_disease_info()
     doenca_culturas = models.get_doenca_culturas()
+    # Ordem (pedido do Alan, 11/11/2026): doencas do Brasil (ou sem pais marcado) primeiro,
+    # depois as de outros paises, cada parte em ordem alfabetica do nome; doenca que
+    # entrou ha' menos de DIAS_DOENCA_NOVA dias fica destacada em azul escuro.
+    paises_por_doenca = models.get_doenca_paises()
+    nome_brasil = _chave_alfabetica(countries.get_country("BR")["nome"])
+    criadas = models.doencas_criadas_em()
+    limite_nova = (datetime.strptime(models._agora_cuiaba()[:19], "%Y-%m-%d %H:%M:%S")
+                   - timedelta(days=DIAS_DOENCA_NOVA)).strftime("%Y-%m-%d %H:%M:%S")
+
+    def _fora_do_brasil(en):
+        paises = paises_por_doenca.get(en)
+        return bool(paises) and nome_brasil not in map(_chave_alfabetica, paises)
     doencas = [
         {
             "en": en, "pt": data["nome_pt"], "cientifico": data["nome_cientifico"],
@@ -5639,8 +5654,9 @@ def admin_doencas():
             "agua_livre_inibe": data["germ_agua_livre_inibe"],
             "manual": models.is_manual_disease(en),
             "sem_traducao": not models.is_manual_disease(en) and (data["nome_pt"] or en) == en,
+            "nova": (criadas.get(en) or "") >= limite_nova,
         }
-        for en, data in sorted(info.items(), key=lambda kv: _chave_alfabetica(kv[1]["nome_cientifico"] or ""))
+        for en, data in sorted(info.items(), key=lambda kv: (_fora_do_brasil(kv[0]), _chave_alfabetica(kv[1]["nome_pt"] or kv[0])))
     ]
     culturas_ativas = models.get_culturas_ativas()
     culturas = models.get_culturas()

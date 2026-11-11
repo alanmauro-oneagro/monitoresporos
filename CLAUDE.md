@@ -740,6 +740,11 @@ site tem que entrar la'.
   **Recomendações sem cultura na safra** continua sem mostrar doenca (decisao antiga), mas agora
   avisa "Nenhuma cultura definida para esta safra -- escolha em Manejos" em vez de "Nenhuma doença
   em Atenção ou Perigo" (que parecia "tudo bem").
+- **Ordem em Doenças/Culturas** (pedido do Alan, 11/11/2026): doencas do Brasil (ou sem pais
+  marcado) primeiro, depois as de outros paises, cada parte em ordem alfabetica do nome em
+  portugues. Doenca que entrou ha' menos de `app.DIAS_DOENCA_NOVA` (3) dias (coluna
+  `disease_translations.criado_em`, gravada ao entrar do BioScout ou a mao; as antigas ficam sem
+  data) fica em azul escuro (`.doenca-nova`, faixa e fundo azul + selo "Nova"), depois volta ao normal.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);

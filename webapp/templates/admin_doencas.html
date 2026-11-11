@@ -12,6 +12,9 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 .doenca-toggle { font-size: 1rem; width: 100%; padding: 0.4rem 0 !important; }
 .doenca-card { margin-bottom: 0.5rem; }
 .doenca-card > .card-body { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+/* Doenca nova (entrou ha' menos de 3 dias): azul mais escuro (pedido do Alan, 11/11/2026). */
+.doenca-card.doenca-nova { border-left: 5px solid #0a2a6b; background: #e8eefb; }
+.doenca-card.doenca-nova .doenca-toggle { color: #0a2a6b !important; }
 </style>
 {% endblock %}
 {% block content %}
@@ -33,11 +36,12 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 {% else %}
 <form method="post" data-autosave>
 {% for d in doencas %}
-<div class="card shadow-sm doenca-card" data-doenca="{{ d.en }}">
+<div class="card shadow-sm doenca-card{% if d.nova %} doenca-nova{% endif %}" data-doenca="{{ d.en }}">
     <div class="card-body px-2 px-sm-3">
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start doenca-toggle" data-target="doenca-body-{{ loop.index0 }}">
             <span class="toggle-icon">▶</span> <span class="doenca-nome">{{ d.pt }}</span>
             {% if d.manual %}<span class="badge bg-info text-dark fw-normal ms-1" title="Cadastrada manualmente -- nao vem do BioScout">Manual</span>{% endif %}
+            {% if d.nova %}<span class="badge fw-normal ms-1" style="background:#0a2a6b;" title="Entrou há menos de 3 dias">Nova</span>{% endif %}
             {% if d.sem_traducao %}<span class="badge bg-warning text-dark fw-normal ms-1" title="Doença nova do BioScout -- dê o nome em português">🆕 Sem nome em português</span>{% endif %}
         </button>
         <div class="d-none mt-1 mb-2" id="doenca-body-{{ loop.index0 }}">
