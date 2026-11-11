@@ -940,7 +940,9 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
   - Testes: `python -m unittest tests.test_telas tests.test_assinaturas tests.test_solicitacoes tests.test_planos tests.test_sinal_celular tests.test_fazenda_estimada tests.test_whatsapp_desconectado tests.test_menu_config tests.test_fazenda_adicional`
     (rodar de `webapp/`). `test_telas` abre TODA tela GET sem parametro
     com Master/Administrador/Usuario/Cliente (sem erro 500, rede
-    desligada) e confere as regras de acesso. Rodar antes de cada PR da
+    desligada) e confere as regras de acesso; tambem passa o JavaScript de
+    cada tela (Master e Cliente) no `node --check` -- um "});" sobrando
+    derrubou o mapa do Mapas de Estudo (11/11/2026). Rodar antes de cada PR da
     migracao; tela nova entra sozinha no teste.
   - Teste de carga: `loadtest/locustfile.py` (Locust; NUNCA contra
     producao). Linha de base local (mesma config do Railway, 8 fazendas,
