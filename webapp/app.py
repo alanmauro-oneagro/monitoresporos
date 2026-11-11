@@ -725,7 +725,7 @@ BIOSCOUT_USERNAME = os.environ.get("BIOSCOUT_USERNAME")
 BIOSCOUT_PASSWORD = os.environ.get("BIOSCOUT_PASSWORD")
 
 _fetch_lock = threading.Lock()
-_fetch_state = {"running": False, "last_error": None}
+_fetch_state = {"running": False, "last_error": None, "pct": None}
 
 
 def _fetch_configured():
@@ -740,7 +740,8 @@ def _run_fetch_in_background():
     try:
         if BIOSCOUT_USERNAME and BIOSCOUT_PASSWORD:
             erros = bioscout_fetch.fetch_recent(
-                data_reader.DATA_DIR, BIOSCOUT_USERNAME, BIOSCOUT_PASSWORD, log=lambda msg: None
+                data_reader.DATA_DIR, BIOSCOUT_USERNAME, BIOSCOUT_PASSWORD, log=lambda msg: None,
+                progresso=lambda pct: _fetch_state.update(pct=pct),
             )
             error = "; ".join(erros)[:300] if erros else None
         else:
@@ -770,6 +771,7 @@ def _start_fetch_if_not_running():
             return False
         _fetch_state["running"] = True
         _fetch_state["last_error"] = None
+        _fetch_state["pct"] = 0
     threading.Thread(target=_run_fetch_in_background, daemon=True).start()
     return True
 
@@ -2890,6 +2892,45 @@ def logout():
     return redirect(url_for("login"))
 
 
+def _estado_busca():
+    with _fetch_lock:
+        return {"rodando": _fetch_state["running"], "pct": _fetch_state.get("pct")}
+
+
+@app.template_global()
+def estado_atualizacao(qual):
+    """{"rodando", "pct"} de cada "Atualizar" do site (pedido do Alan, 11/11/2026):
+    busca do BioScout, base do Agrofit e mapas de cobertura da Anatel."""
+    if qual == "bioscout":
+        return _estado_busca()
+    if qual == "agrofit":
+        st = agrofit_dados.status()
+        p = st.get("progresso") or {}
+        pct = None
+        if st["baixando"]:
+            if p.get("etapa") == "baixando" and p.get("total"):
+                pct = 5 + int(75 * p.get("baixados", 0) / p["total"])
+            elif p.get("etapa") == "processando":
+                pct = 85
+            else:
+                pct = 2
+        return {"rodando": st["baixando"], "pct": pct}
+    if qual == "anatel":
+        info = sinal_celular.info()
+        p = info.get("progresso") or {}
+        pct = int(100 * p.get("feitos", 0) / p["total"]) if info["rodando"] and p.get("total") else None
+        return {"rodando": info["rodando"], "pct": pct}
+    return {"rodando": False, "pct": None}
+
+
+@app.route("/atualizacao/<qual>/status")
+@login_required
+def atualizacao_status(qual):
+    if qual not in ("bioscout", "agrofit", "anatel"):
+        abort(404)
+    return jsonify(estado_atualizacao(qual))
+
+
 @app.route("/dashboard/atualizar", methods=["POST"])
 @login_required
 def dashboard_atualizar():
@@ -2899,6 +2940,8 @@ def dashboard_atualizar():
     (BIOSCOUT_USERNAME/BIOSCOUT_PASSWORD, busca em Python -- ver
     `bioscout_fetch.py`); sem nenhum dos dois configurados, avisa em vez
     de fingir que funcionou."""
+    if not _fetch_configured() and request.headers.get("X-Progresso") == "1":
+        return jsonify(ok=False, erro="Nenhuma busca de dados configurada nesse ambiente -- avise um administrador.")
     if not _fetch_configured():
         flash(
             "Nenhuma busca de dados configurada nesse ambiente (nem "
@@ -2906,6 +2949,10 @@ def dashboard_atualizar():
             "um administrador.",
             "error",
         )
+    elif request.headers.get("X-Progresso") == "1":
+        # Botao "Atualizando... XX%" (pedido do Alan, 11/11/2026): sem aviso no topo.
+        _start_fetch_if_not_running()
+        return jsonify(ok=True)
     elif _start_fetch_if_not_running():
         flash(
             "Busca de dados nova comecou em segundo plano. Atualize a pagina "
@@ -2913,7 +2960,7 @@ def dashboard_atualizar():
             "success",
         )
     else:
-        flash("Ja tem uma busca de dados em andamento -- aguarde ela terminar.", "success")
+        flash("Já tem uma busca de dados em andamento -- aguarde ela terminar.", "success")
     return redirect(request.referrer or url_for("dashboard"))
 
 
@@ -3811,6 +3858,8 @@ def atualizar_cobertura_anatel():
     """Baixa de novo os mapas de cobertura da Anatel (o agendador ja' faz
     sozinho uma vez por mes)."""
     sinal_celular.atualizar_em_segundo_plano(forcar=True)
+    if request.headers.get("X-Progresso") == "1":
+        return jsonify(ok=True)
     flash("Baixando os mapas de cobertura da Anatel -- leva alguns minutos. Recarregue a página para acompanhar.", "success")
     return redirect(url_for("mapa_interpolado"))
 
@@ -5785,6 +5834,8 @@ def agrofit_enviar_arquivo():
 @aba_required("fungicidas")
 def agrofit_atualizar_agora():
     agrofit_dados.atualizar_em_segundo_plano(forcar=True)
+    if request.headers.get("X-Progresso") == "1":
+        return jsonify(ok=True)
     return redirect(url_for("admin_fungicidas"))
 
 

@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -105,6 +106,33 @@ class TelasPorNivelTest(unittest.TestCase):
                         r = subprocess.run(["node", "--check", f.name], capture_output=True, text=True)
                         os.unlink(f.name)
                         self.assertEqual(r.returncode, 0, r.stderr[:500])
+
+    def test_atualizar_mostra_progresso(self):
+        """Botao Atualizar: sem aviso no topo, "Atualizando... XX%" pelo status (11/11/2026)."""
+        import threading
+        liberar, chegou = threading.Event(), threading.Event()
+
+        def busca_falsa(*_a, progresso=None, **_k):
+            progresso(50)
+            chegou.set()
+            liberar.wait(5)
+            return []
+        c = self._cliente("master")
+        with mock.patch.object(webapp, "_fetch_configured", return_value=True), \
+                mock.patch.object(webapp, "BIOSCOUT_USERNAME", "u"), mock.patch.object(webapp, "BIOSCOUT_PASSWORD", "p"), \
+                mock.patch.object(webapp.bioscout_fetch, "fetch_recent", side_effect=busca_falsa), \
+                mock.patch.object(webapp, "ULTIMA_BUSCA_MARCA", webapp.Path(tempfile.mkdtemp()) / "marca"):
+            self.assertIn("botao-atualizar", c.get("/dashboard").get_data(as_text=True))
+            self.assertEqual(c.post("/dashboard/atualizar", headers={"X-Progresso": "1"}).get_json(), {"ok": True})
+            self.assertTrue(chegou.wait(5))
+            self.assertEqual(c.get("/atualizacao/bioscout/status").get_json(), {"rodando": True, "pct": 50})
+            self.assertIn("Atualizando... 50%", c.get("/dashboard").get_data(as_text=True))
+            liberar.set()
+            for _ in range(50):
+                if not c.get("/atualizacao/bioscout/status").get_json()["rodando"]:
+                    break
+                time.sleep(0.1)
+            self.assertFalse(c.get("/atualizacao/bioscout/status").get_json()["rodando"])
 
     def test_sem_login_vai_pro_login(self):
         c = webapp.app.test_client()

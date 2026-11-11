@@ -470,5 +470,48 @@ window.OneAgroPrefs = (function () {
 {% endif %}
 {% include "_mascara_telefone.html" %}
 {% include "_abas_cliente.html" %}
+<script>
+// Botao "Atualizar" com progresso (_botao_atualizar.html; pedido do Alan, 11/11/2026).
+(function () {
+    function acompanhar(btn) {
+        btn.disabled = true;
+        var viuRodando = btn.dataset.rodando === '1', esperas = 0;
+        function passo() {
+            fetch(btn.dataset.status, { headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (st) {
+                    if (st.rodando) {
+                        viuRodando = true;
+                        btn.textContent = '🔄 Atualizando...' + (st.pct != null ? ' ' + st.pct + '%' : '');
+                        setTimeout(passo, 1500);
+                    } else if (viuRodando) {
+                        btn.textContent = '🔄 Atualizando... 100%';
+                        location.reload();
+                    } else if (++esperas < 8) {
+                        setTimeout(passo, 800);
+                    } else {
+                        location.reload();  // terminou rapido demais pra ver (ou nem comecou)
+                    }
+                })
+                .catch(function () { setTimeout(passo, 3000); });
+        }
+        passo();
+    }
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.botao-atualizar');
+        if (!btn || btn.disabled) { return; }
+        btn.disabled = true;
+        btn.textContent = '🔄 Atualizando...';
+        fetch(btn.dataset.acao, { method: 'POST', headers: { 'X-Progresso': '1' } })
+            .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
+            .then(function (res) {
+                if (res.ok === false) { alert(res.erro || 'Não foi possível atualizar agora.'); btn.disabled = false; btn.textContent = btn.dataset.rotulo; return; }
+                acompanhar(btn);
+            })
+            .catch(function () { btn.disabled = false; btn.textContent = btn.dataset.rotulo; });
+    });
+    document.querySelectorAll('.botao-atualizar[data-rodando="1"]').forEach(acompanhar);
+})();
+</script>
 </body>
 </html>

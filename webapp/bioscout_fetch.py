@@ -163,7 +163,7 @@ def _earliest_reading_by_site(spore_counts_path):
     return earliest
 
 
-def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=print):
+def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=print, progresso=None):
     """Busca sites + spore_counts + weather. Fazenda com historico
     completo desde `FULL_HISTORY_SINCE` ja salvo so' busca a janela
     recente (`lookback_days`) -- rapido, e o merge por chave preserva
@@ -198,8 +198,11 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
     # nao qualquer diferenca de 1-2 dias.
     backfill_grace = timedelta(days=5)
 
+    avancar = progresso or (lambda pct: None)  # % pro botao "Atualizando..." (11/11/2026)
+    avancar(5)
     log("Autenticando...")
     token = _get_auth_token(username, password)
+    avancar(20)
     headers = {"Authorization": f"Bearer {token}"}
     log("OK.")
 
@@ -229,6 +232,7 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
             f.write(buffer.getvalue())
     site_ids = [str(s.get("siteId")) for s in sites]
     log(f"Sites sincronizados: {len(site_ids)}")
+    avancar(35)
 
     end = datetime.now()
     recent_start = end - timedelta(days=lookback_days)
@@ -247,7 +251,8 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
     janelas = [(recent_start, end, [sid for sid in site_ids if sid not in new_site_ids])]
     if new_site_ids:
         janelas.append((FULL_HISTORY_SINCE, end, new_site_ids))
-    for start, window_end, ids in janelas:
+    for n_janela, (start, window_end, ids) in enumerate(janelas, 1):
+        avancar(35 + int(60 * (n_janela - 1) / len(janelas)))
         if not ids:
             continue
         from_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -266,5 +271,6 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
     # la' e' modelo meteorologico, nao sensor -- o site usa estacao
     # oficial/Open-Meteo. Do BioScout, so' esporos.
 
+    avancar(100)
     log(f"Concluido. Dados em {data_dir}")
     return erros
