@@ -7,6 +7,12 @@
     {{ atualizar.botao_atualizar("bioscout", url_for('dashboard_atualizar')) }}
 </div>
 
+{% if current_user.is_master %}{% set novas = doencas_sem_traducao() %}{% if novas %}
+<div class="alert alert-warning small">
+    🆕 Doença(s) nova(s) do BioScout ainda sem nome em português: <strong>{{ novas | join(', ') }}</strong> --
+    dê o nome em <a href="{{ url_for('admin_doencas') }}">Doenças/Culturas</a> (vale em todo o site, relatórios e PDF).
+</div>
+{% endif %}{% endif %}
 {% if fetch_last_error %}
 <div class="alert alert-warning small">
     ⚠ A ultima busca de dados do BioScout falhou (so' admin ve este aviso): <code>{{ fetch_last_error }}</code>

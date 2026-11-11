@@ -824,6 +824,14 @@ def _load_translations():
     return models.get_all_disease_translations()
 
 
+@app.template_global()
+def doencas_sem_traducao():
+    """Doencas do BioScout ainda com o nome em ingles (nova, sem traducao no
+    DOENCA_MAP): aviso pro Master em Alertas e em Doenças/Culturas (11/11/2026)."""
+    return sorted(en for en, d in models.get_all_disease_translations().items()
+                  if not models.is_manual_disease(en) and (d.get("nome_pt") or en) == en)
+
+
 def _filter_cards_by_cultura(cards_by_site, culturas_by_site, doenca_culturas, safra=None):
     """Se a fazenda tiver uma cultura atual definida numa safra (aba
     Fazendas/Recomendacoes), mostra so os cartoes de doencas marcadas para
@@ -5630,6 +5638,7 @@ def admin_doencas():
             "ur_min": data["germ_ur_min"], "molhamento_horas": data["germ_molhamento_horas"],
             "agua_livre_inibe": data["germ_agua_livre_inibe"],
             "manual": models.is_manual_disease(en),
+            "sem_traducao": not models.is_manual_disease(en) and (data["nome_pt"] or en) == en,
         }
         for en, data in sorted(info.items(), key=lambda kv: _chave_alfabetica(kv[1]["nome_cientifico"] or ""))
     ]

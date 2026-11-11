@@ -38,6 +38,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start doenca-toggle" data-target="doenca-body-{{ loop.index0 }}">
             <span class="toggle-icon">▶</span> <span class="doenca-nome">{{ d.pt }}</span>
             {% if d.manual %}<span class="badge bg-info text-dark fw-normal ms-1" title="Cadastrada manualmente -- nao vem do BioScout">Manual</span>{% endif %}
+            {% if d.sem_traducao %}<span class="badge bg-warning text-dark fw-normal ms-1" title="Doença nova do BioScout -- dê o nome em português">🆕 Sem nome em português</span>{% endif %}
         </button>
         <div class="d-none mt-1 mb-2" id="doenca-body-{{ loop.index0 }}">
         <div class="d-flex justify-content-between align-items-center mb-2">

@@ -730,6 +730,16 @@ site tem que entrar la'.
   (`display_name_en`), menos as anotacoes por fazenda (`recommendation_notes.doenca` =
   nome em portugues): `models.save_disease_translation` leva as anotacoes pro nome novo.
   Nome igual ao de outra doenca e' recusado (aviso no autosave, fica o nome antigo).
+- **Doenca nova do BioScout** (pedido do Alan, 11/11/2026): `data_reader.DOENCA_MAP` traz o nome
+  em portugues (Brown Spot = Mancha Parda, Purple Seed Stain = Mancha Púrpura, White Mould = Mofo
+  Branco e outros nomes comuns); `models.ensure_disease_translations` tambem troca pra portugues a
+  doenca que ja' estava no banco com o nome em ingles (nunca troca nome editado nem repete nome).
+  O sufixo do esporo no nome cientifico vira portugues ("Corynespora spp. - conidiósporo",
+  `data_reader.cientifico_em_portugues`). Doenca sem traducao (`doencas_sem_traducao()`): aviso
+  "🆕 ... sem nome em português" pro Master no topo do Alertas e selo no cartao em Doenças/Culturas.
+  **Recomendações sem cultura na safra** continua sem mostrar doenca (decisao antiga), mas agora
+  avisa "Nenhuma cultura definida para esta safra -- escolha em Manejos" em vez de "Nenhuma doença
+  em Atenção ou Perigo" (que parecia "tudo bem").
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);

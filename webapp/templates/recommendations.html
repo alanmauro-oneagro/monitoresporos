@@ -255,8 +255,12 @@
         {% endif %}
         </div>
 
-        {% if not site_group.diseases %}
-        <div class="alert alert-info small mb-3">Nenhuma doenca em Atencao ou Perigo nessa fazenda no momento.</div>
+        {% if not site_group.diseases and not site_group.cultura %}
+        {# Sem cultura na safra nao mostra doenca (decisao do Alan) -- avisa em vez de parecer "tudo bem" (11/11/2026). #}
+        <div class="alert alert-warning small mb-3">Nenhuma cultura definida para esta safra -- as doenças não aparecem
+            aqui nem no relatório. Escolha a cultura (ou "Todos") em <a href="{{ url_for('fazendas') }}">Manejos</a>.</div>
+        {% elif not site_group.diseases %}
+        <div class="alert alert-info small mb-3">Nenhuma doença em Atenção ou Perigo nessa fazenda no momento.</div>
         {% endif %}
 
         {% if site_group.nivel_dados == 'bloqueado' %}
