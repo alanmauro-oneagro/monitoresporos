@@ -874,6 +874,16 @@ site tem que entrar la'.
   `OneAgro_Relatorios_...txt` (hora de Cuiaba). **Gerenciar Exportações** em 3 cartoes:
   Planilha Excel (lista as abas), Backup do banco e Historico de envios por WhatsApp (filtros
   dentro do cartao).
+- **Botao "Atualizar" com progresso** (pedido do Alan, 11/11/2026): Alertas ("🔄 Atualizar",
+  busca do BioScout), Fungicidas ("Atualizar agora" da base Agrofit) e Mapas de Estudo
+  ("Baixar agora" da Anatel) usam a macro `_botao_atualizar.html` (`botao_atualizar(qual,
+  acao, rotulo, classe)`; JS `.botao-atualizar` no fim do base.html): o clique faz POST com
+  header `X-Progresso: 1` (a rota responde JSON, sem flash -- acabou o "Ja tem uma busca em
+  andamento"), o botao vira "🔄 Atualizando... XX%" consultando `/atualizacao/<qual>/status`
+  (`estado_atualizacao`: bioscout = `_fetch_state["pct"]` vindo do callback `progresso` de
+  `bioscout_fetch.fetch_recent`; agrofit = bytes baixados / processando; anatel = mapas
+  feitos/total) e a pagina recarrega ao terminar. Abrir a tela com a busca ja' rodando (ex.: a
+  auto-atualizacao do Alertas) ja' mostra o progresso.
 - **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
   "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
   (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no

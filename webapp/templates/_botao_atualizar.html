@@ -1,0 +1,11 @@
+{# Botao "Atualizar" com progresso (pedido do Alan, 11/11/2026): ao clicar, vira
+   "🔄 Atualizando... XX%" (sem aviso no topo) e a pagina recarrega sozinha ao terminar.
+   O JS fica em base.html (.botao-atualizar). #}
+{% macro botao_atualizar(qual, acao, rotulo="🔄 Atualizar", classe="btn btn-sm btn-outline-success") %}
+{% set st = estado_atualizacao(qual) %}
+<button type="button" class="{{ classe }} botao-atualizar text-nowrap" data-acao="{{ acao }}"
+        data-status="{{ url_for('atualizacao_status', qual=qual) }}" data-rotulo="{{ rotulo }}"
+        {% if st.rodando %}data-rodando="1" disabled{% endif %}>
+    {%- if st.rodando %}🔄 Atualizando...{% if st.pct is not none %} {{ st.pct }}%{% endif %}{% else %}{{ rotulo }}{% endif -%}
+</button>
+{% endmacro %}
