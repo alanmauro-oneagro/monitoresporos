@@ -264,6 +264,27 @@ class CadastroTest(unittest.TestCase):
             for en in ("White Mould", "Zzz Unknown Blight"):
                 models.delete_disease_translation(en)
 
+    def test_doencas_brasil_primeiro_alfabetica_e_nova_em_destaque(self):
+        """Doenças/Culturas: Brasil primeiro, ordem alfabetica, nova (3 dias) em azul (11/11/2026)."""
+        master = self._logado("Zzz Teste Master Cad")
+        b = models.add_manual_disease("Zzz B Doenca Nova")
+        a = models.add_manual_disease("Zzz A Doenca Velha")
+        c = models.add_manual_disease("Zzz C Doenca Fora")
+        conn = models.get_db()
+        conn.execute("UPDATE disease_translations SET criado_em = '2020-01-01 00:00:00' WHERE display_name_en IN (?, ?)", (a, c))
+        conn.commit(); conn.close()
+        fora = next(p for p in models.get_paises_doenca_slots() if p and p != "Brasil")
+        models.set_doenca_paises(c, [fora])
+        try:
+            html = master.get("/admin/doencas").get_data(as_text=True)
+            self.assertLess(html.index("Zzz A Doenca Velha"), html.index("Zzz B Doenca Nova"))
+            self.assertLess(html.index("Zzz B Doenca Nova"), html.index("Zzz C Doenca Fora"))
+            self.assertIn(f'doenca-card doenca-nova" data-doenca="{b}"', html)
+            self.assertIn(f'doenca-card" data-doenca="{a}"', html)
+        finally:
+            for en in (a, b, c):
+                models.delete_disease_translation(en)
+
     def test_cana_virou_outros_no_banco(self):
         """Cadastro e tipo das culturas gravados como "cana" passam a "outros" no init_db."""
         uid = models.criar_cliente("Zzz Cad Cana Antiga", "segredo1", "", "5565999990081", "", None)

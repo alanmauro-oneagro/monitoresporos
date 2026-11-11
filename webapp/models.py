@@ -695,6 +695,7 @@ def init_db():
     for coluna, tipo in [
         ("germ_temp_min", "REAL"), ("germ_temp_max", "REAL"), ("germ_ur_min", "REAL"),
         ("germ_molhamento_horas", "REAL"), ("germ_agua_livre_inibe", "INTEGER NOT NULL DEFAULT 0"),
+        ("criado_em", "TEXT"),  # quando a doenca entrou (destaque de "nova" por 3 dias, 11/11/2026)
     ]:
         try:
             conn.execute(f"ALTER TABLE disease_translations ADD COLUMN {coluna} {tipo}")
@@ -1507,6 +1508,14 @@ def get_all_disease_translations():
     return {r["display_name_en"]: _disease_info_row_to_dict(r) for r in rows}
 
 
+def doencas_criadas_em():
+    """{display_name_en: criado_em} -- so' as que ja' entraram com a data."""
+    conn = get_db()
+    rows = conn.execute("SELECT display_name_en, criado_em FROM disease_translations WHERE criado_em IS NOT NULL").fetchall()
+    conn.close()
+    return {r["display_name_en"]: r["criado_em"] for r in rows}
+
+
 def get_all_disease_info():
     """Mesmo dado de `get_all_disease_translations` -- usado pela tela de
     admin Doencas (mostra e deixa editar todas as colunas)."""
@@ -1534,8 +1543,8 @@ def ensure_disease_translations(display_names, default_map, scientific_map=None)
     for name in display_names:
         if name not in existing:
             conn.execute(
-                "INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, ?)",
-                (name, default_map.get(name, name), scientific_map.get(name, "")),
+                "INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico, criado_em) VALUES (?, ?, ?, ?)",
+                (name, default_map.get(name, name), scientific_map.get(name, ""), _agora_cuiaba()),
             )
         elif not existing[name] and scientific_map.get(name):
             conn.execute(
@@ -1660,8 +1669,8 @@ def add_manual_disease(nome_pt):
     while chave in existentes:
         chave, n = f"{base}-{n}", n + 1
     conn.execute(
-        "INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, '')",
-        (chave, nome_pt),
+        "INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico, criado_em) VALUES (?, ?, '', ?)",
+        (chave, nome_pt, _agora_cuiaba()),
     )
     conn.commit()
     conn.close()
