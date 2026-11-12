@@ -63,11 +63,6 @@
    plano; o link com ?modalidade=fazenda continua criando acesso a fazenda. #}
 {% set modalidade_sel = 'fazenda' if (form.get('modalidade') or request.args.get('modalidade')) == 'fazenda' else 'plano' %}
 {% set perfis_sel = form.getlist('perfil') if form else [] %}
-{% if modalidade_sel != 'fazenda' %}
-<div class="alert alert-success d-flex align-items-center gap-2 py-2 mb-3 fw-semibold" id="aviso-gratis">
-    <span class="badge bg-success fs-6">🎁 Grátis por 7 dias</span><span class="small">Experimente o OneAgro sem pagar nada.</span>
-</div>
-{% endif %}
 <form method="post" class="card shadow-sm mb-3" id="form-cadastro"><div class="card-body">
 
     <input type="hidden" name="modalidade" value="{{ modalidade_sel }}">
