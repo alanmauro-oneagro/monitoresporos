@@ -778,3 +778,13 @@ class TravaWhatsappQapTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GerminacaoDoencasComunsTest(unittest.TestCase):
+    def test_rhizoctonia_e_outros_fungos_comuns_tem_germinacao(self):
+        import app as app_module
+        for nome in ("Rhizoctonia solani", "Rhizoctonia spp.", "Thanatephorus cucumeris",
+                     "Sclerotium rolfsii", "Fusarium graminearum", "Blumeria graminis"):
+            chave, dados = app_module._pesquisa_germinacao_por_cientifico(nome)
+            self.assertIsNotNone(dados, nome)
+        self.assertEqual(app_module._pesquisa_germinacao_por_cientifico("Rhizoctonia solani")[1]["temp_min"], 25)

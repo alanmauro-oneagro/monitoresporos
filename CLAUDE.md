@@ -753,6 +753,10 @@ site tem que entrar la'.
   `_sincronizar_apelidos`) e a juncao mantem o nome digitado. Cada cartao tem o proprio
   "✓ Salvo" ao lado do nome (`data-autosave-group` + `.autosave-status`); o aviso de salvo de
   todo o site fica 5 s na tela.
+- **Germinacao de fungos comuns** (pedido do Alan, 12/11/2026): `_PESQUISA_GERMINACAO` ganhou
+  Rhizoctonia/Thanatephorus (mela/rizoctoniose), Sclerotium/Athelia rolfsii, Ascochyta, Phoma,
+  Pyrenophora, Blumeria, Fusarium graminearum/Gibberella (giberela, 48 h), Venturia, Monilinia,
+  Mycosphaerella e Pseudocercospora -- antes "Buscar pelo nome cientifico" dizia "Sem dados".
 - **Fundir doencas** (pedido do Alan, 11/11/2026; Master): no cartao de cada doenca em
   Doenças/Culturas, "🔗 Fundir com..." + "Fundir" (rota `fundir_doenca`, confirmacao no navegador)
   junta ESTA doenca na escolhida (`models.fundir_doencas`): fica nome/culturas/fungicidas da
