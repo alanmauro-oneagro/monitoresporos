@@ -707,6 +707,27 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         finally:
             models.set_setting("tabela_precificacao", "[]")
 
+    def test_quantidade_de_faixas_editavel(self):
+        master = self._logado("Zzz Teste Master Tabela")
+        h = {"X-Autosave": "1"}
+        try:
+            r = master.post("/admin/planos/tabela", data={"ate_ha_0": "500", "ate_ha_1": "2000", "usd_ha_0": "3",
+                                                          "usd_ha_1": "2", "usd_ha_2": "1"}, headers=h).get_json()
+            self.assertTrue(r["ok"])
+            self.assertEqual(webapp._faixas_preco(), [500, 2000, None])
+            self.assertEqual(webapp.preco_pela_area(800)["usd_ha"], 2)
+            self.assertEqual((webapp.preco_pela_area(9000)["faixa"], webapp.preco_pela_area(9000)["usd_ha"]), ("acima de 2.000 ha", 1))
+            html = master.get("/admin/planos").get_data(as_text=True)
+            self.assertEqual(html.count('data-campo="usd_ha" value='), 3)
+            self.assertIn('id="adicionar-faixa"', html)
+            dados = {f"ate_ha_{i}": str((i + 1) * 100) for i in range(12)}
+            self.assertTrue(master.post("/admin/planos/tabela", data=dados, headers=h).get_json()["ok"])
+            self.assertEqual(len(webapp._faixas_preco()), 13)
+            muitas = {f"ate_ha_{i}": str((i + 1) * 100) for i in range(webapp.MAX_FAIXAS + 1)}
+            self.assertFalse(master.post("/admin/planos/tabela", data=muitas, headers=h).get_json()["ok"])
+        finally:
+            models.set_setting("tabela_precificacao", "[]")
+
     def test_preco_pela_area_busca_a_faixa_de_cima(self):
         import json
         models.set_setting("tabela_precificacao", json.dumps(
@@ -716,10 +737,11 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         self.assertAlmostEqual(p["raio_km"], webapp._raio_km(300))
         self.assertEqual(webapp.preco_pela_area(100)["faixa"], "até 100 ha")  # limite fica na propria faixa
         self.assertEqual(webapp.preco_pela_area("100.5")["faixa"], "até 250 ha")
-        p = webapp.preco_pela_area(1500)  # faixa ate' 2.000 sem valor
-        self.assertEqual((p["faixa"], p["usd_ha"], p["total_usd"]), ("até 2.000 ha", None, None))
+        # 4 faixas gravadas = 4 faixas (quantidade editavel, 13/11/2026): 1.500 ha cai no "acima de 1.000"
+        p = webapp.preco_pela_area(1500)
+        self.assertEqual((p["faixa"], p["usd_ha"], p["total_usd"]), ("acima de 1.000 ha", 0.1, 150))
         self.assertEqual(webapp.preco_pela_area(25000)["total_usd"], 2500)
-        self.assertEqual(webapp.preco_pela_area(25000)["faixa"], "acima de 10.000 ha")
+        models.set_setting("tabela_precificacao", "[]")
 
     def test_tabela_em_reais(self):
         """Moeda da tabela de apoio U$ ou R$ (pedido do Alan, 09/11/2026): em R$

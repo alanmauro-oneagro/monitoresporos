@@ -9278,7 +9278,7 @@ def admin_planos():
         "admin_planos.html", planos=models.get_planos(), recursos=models.RECURSOS_PLANO,
         recursos_ocultos=RECURSOS_FORA_DA_TELA,
         ciclos=models.CICLOS_PLANO, moedas=models.MOEDAS, cotacao_dolar=cotacao.dolar(),
-        tabela_preco=_tabela_precificacao(), moeda_tabela=_moeda_tabela(),
+        tabela_preco=_tabela_precificacao(), moeda_tabela=_moeda_tabela(), max_faixas=MAX_FAIXAS,
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
         hoje=_hoje_cuiaba().isoformat(),
@@ -9302,6 +9302,7 @@ def _moeda_tabela():
     moeda = models.get_setting(_TABELA_MOEDA_KEY) or "USD"
     return moeda if moeda in models.MOEDAS else "USD"
 FAIXAS_PRECO = [100, 250, 500, 1000, 2000, 3000, 5000, 10000, None]  # padrao; None = acima da ultima
+MAX_FAIXAS = 20  # quantidade de faixas tambem editavel (pedido do Alan, 13/11/2026)
 
 
 def _faixas_preco():
@@ -9314,7 +9315,7 @@ def _faixas_preco():
         salvo = []
     limites = [item.get("ate_ha") for item in salvo if isinstance(item, dict) and "ate_ha" in item] if isinstance(salvo, list) else []
     numeros = [a for a in limites if a is not None]
-    if (len(limites) == len(FAIXAS_PRECO) and limites[-1] is None and len(numeros) == len(FAIXAS_PRECO) - 1
+    if (2 <= len(limites) <= MAX_FAIXAS + 1 and limites[-1] is None and len(numeros) == len(limites) - 1
             and all(isinstance(a, (int, float)) and a > 0 for a in numeros)
             and all(a < b for a, b in zip(numeros, numeros[1:]))):
         return limites
@@ -9404,12 +9405,21 @@ def admin_planos_tabela():
         return int(valor) if valor.is_integer() else valor
     faixas = []
     atuais = _faixas_preco()
+    # Com os campos de area (13/11/2026) a quantidade de faixas vem do formulario:
+    # ate_ha_0..n-1 + a linha "acima" (usd_ha_n). Sem eles, as faixas gravadas.
+    n_area = len([k for k in request.form if re.fullmatch(r"ate_ha_\d+", k)])
     try:
-        for i, ate in enumerate(atuais):
-            if ate is not None and f"ate_ha_{i}" in request.form:  # limite da faixa editavel (13/11/2026)
+        if n_area:
+            if n_area > MAX_FAIXAS:
+                raise ValueError
+            limites_form = []
+            for i in range(n_area):
                 ate = numero(request.form.get(f"ate_ha_{i}"))
                 if not ate:
                     raise ValueError
+                limites_form.append(ate)
+            atuais = limites_form + [None]
+        for i, ate in enumerate(atuais):
             faixas.append({"ate_ha": ate, "usd_ha": numero(request.form.get(f"usd_ha_{i}"))})
     except ValueError:
         return _save_response("Tabela de apoio: área e valor por hectare precisam ser números maiores que zero.", "admin_planos", ok=False)
