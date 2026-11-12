@@ -101,10 +101,6 @@
 <div class="card shadow-sm mb-4" id="tabela-precificacao"><div class="card-body px-2 px-sm-3">
     {% set sm = 'R$' if moeda_tabela == 'BRL' else 'U$' %}
     <h6 class="mb-1">Tabela de apoio: preço em <span class="moeda-simbolo">{{ sm }}</span> pela área monitorada</h6>
-    <p class="small text-muted mb-2">Digite o valor por hectare de cada faixa. A área do cadastro do cliente busca a faixa dela
-        (valor intermediário fica na faixa de cima: 300 ha usa a de "até 500 ha") e o preço aparece em
-        <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>. Em U$, o ≈ R$ sai pelo dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.
-        Não muda nenhum plano nem cobrança.</p>
     <form method="post" action="{{ url_for('admin_planos_tabela') }}" data-autosave>
         {# Moeda da tabela: U$ ou R$ (pedido do Alan, 09/11/2026). #}
         <div class="d-flex align-items-center gap-2 small mb-2">
@@ -113,7 +109,6 @@
                 <option value="USD" {% if moeda_tabela != 'BRL' %}selected{% endif %}>Dólar (U$)</option>
                 <option value="BRL" {% if moeda_tabela == 'BRL' %}selected{% endif %}>Real (R$)</option>
             </select>
-            <span class="text-muted">vale para o preço pela área do plano e para a fazenda adicional</span>
         </div>
         <div class="table-responsive">
         <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem; max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}" data-moeda="{{ moeda_tabela }}">
