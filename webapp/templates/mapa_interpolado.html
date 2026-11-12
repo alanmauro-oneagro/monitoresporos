@@ -25,13 +25,6 @@
     .mapa-tooltip { font-size: 0.8rem; }
     .mapa-tt-title { font-weight: 700; }
     .mapa-tt-data { font-size: 0.7rem; opacity: 0.75; margin-bottom: 0.25rem; }
-    .mapa-tt-row { display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
-    .mapa-tt-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; display: inline-block; flex: none; }
-    .mapa-tt-perigo .mapa-tt-dot { background: #ff6b6b; }
-    .mapa-tt-atencao .mapa-tt-dot { background: #ffd43b; }
-    .mapa-tt-normal .mapa-tt-dot { background: #51cf66; }
-    .mapa-tt-doenca { flex: 1 1 auto; }
-    .mapa-tt-valor { font-weight: 700; margin-left: 0.5rem; }
     .mapa-tt-sinal { border-top: 1px solid rgba(0,0,0,0.12); margin-top: 0.3rem; padding-top: 0.25rem; }
     .sinal-linha { display: flex; flex-wrap: wrap; gap: 0.1rem 0.7rem; font-size: 0.72rem; line-height: 1.35; }
     .sinal-item { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
@@ -152,9 +145,6 @@
         <strong>{{ ponto.nome }}</strong>
         {% if ponto.tipo != 'estudo' %}{{ selo_plano(ponto.site_name) }}{% endif %}
         <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
-        {% if ponto.tipo == 'estudo' and ponto.mais_proxima %}
-        <span class="badge text-dark" style="background:#e5dbff;" title="Fazenda BioScout com leitura mais próxima">📡 {{ ponto.mais_proxima[0] }} · {{ '%.1f'|format(ponto.mais_proxima[1])|replace('.', ',') }} km</span>
-        {% endif %}
         {% if ponto.cliente %}
         <span class="badge text-dark" style="background: #b2f2bb;" title="Criada pelo cliente ao marcar a fazenda no mapa (plano)">🟢 Cliente: {{ ponto.cliente }}</span>
         {% endif %}
@@ -300,41 +290,13 @@
         if (!site.sinal_html) return html;
         return html.slice(0, -'</div>'.length) + '<div class="mapa-tt-sinal">' + site.sinal_html + '</div></div>';
     }
+    // Pino do Mapas de Estudo so' marca o lugar (pedido do Alan, 12/11/2026):
+    // balao com o nome (e o sinal de celular), sem quadro de esporos.
     function buildTooltipBase(site) {
-        if (site.tipo === 'estudo') {
-            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
-                '<div class="mapa-tt-data">📐 Estudo de viabilidade · raio ' + Math.round(site.raio_km) + ' km</div>' +
-                (site.mais_proxima ? '<div class="mapa-tt-data">📡 Mais próxima: ' + escapeHtml(site.mais_proxima) + '</div>' : '') +
-                '</div>';
-        }
-        if (site.tipo === 'clima') {
-            // Ponto so' de clima -- nao monitora doenca nenhuma, entao nao
-            // faz sentido mostrar "Leitura de -" nem uma lista vazia.
-            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
-                '<div class="mapa-tt-data">☁️ Ponto de referencia de clima (sem monitoramento de doenca)</div></div>';
-        }
-        if (site.inativo) {
-            // Sem leitura nova ha mais de 15 dias -- mesmo padrao do Mapa
-            // normal, nao mostra leitura antiga nem concentracao de
-            // doenca, so' o nome do pino.
-            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div></div>';
-        }
-        if (!site.cards.length) {
-            // Fazenda do cliente ainda sem fazenda real com leitura no raio do plano.
-            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
-                '<div class="mapa-tt-data">Sem fazenda real com leitura no raio ainda</div></div>';
-        }
-        var rows = site.cards.map(function (c) {
-            var cls = c.status === 'Perigo' ? 'perigo' : (c.status === 'Atencao' ? 'atencao' : 'normal');
-            var valor = (c.concentracao === null || c.concentracao === undefined) ? '-' : c.concentracao;
-            return '<div class="mapa-tt-row mapa-tt-' + cls + '">' +
-                '<span class="mapa-tt-dot"></span>' +
-                '<span class="mapa-tt-doenca">' + escapeHtml(c.doenca) + '</span>' +
-                '<span class="mapa-tt-valor">' + escapeHtml(valor) + '</span>' +
-                '</div>';
-        }).join('');
+        var tipo = site.tipo === 'estudo' ? '📐 Estudo de viabilidade · raio ' + Math.round(site.raio_km) + ' km'
+            : (site.tipo === 'clima' ? '☁️ Só clima' : '');
         return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
-            '<div class="mapa-tt-data">Leitura de ' + escapeHtml(site.ultima_leitura) + '</div>' + rows + '</div>';
+            (tipo ? '<div class="mapa-tt-data">' + tipo + '</div>' : '') + '</div>';
     }
 
     var map = L.map('farm-map', { zoomSnap: 0.25 });
@@ -446,7 +408,6 @@
     caixasSinal.forEach(function (c) { c.addEventListener('change', atualizarCamadasSinal); });
     atualizarCamadasSinal();
 
-    var FAZENDAS_URL = '{{ url_for("fazendas") }}';
     // No celular nao existe hover -- so' toque. Sem esse controle, o
     // primeiro toque ja navegava direto pra fazenda, sem o usuario ver o
     // tooltip de alertas antes (mesmo padrao do Mapa normal, mapa.html).
@@ -495,15 +456,10 @@
             .bindTooltip(buildTooltipHtml(site), { direction: 'top', sticky: true, opacity: 0.95 })
             .on('click', function () {
                 if (site.virtual) { abrirEdicaoDoPonto(site.site); return; }
-                if (!marcador.isTooltipOpen()) {
-                    if (ultimoTooltipAberto && ultimoTooltipAberto !== marcador) {
-                        ultimoTooltipAberto.closeTooltip();
-                    }
-                    marcador.openTooltip();
-                    ultimoTooltipAberto = marcador;
-                    return;
-                }
-                window.location.href = FAZENDAS_URL + '?site=' + encodeURIComponent(site.site);
+                // Fazenda real: so' mostra o nome, nao leva pra outra aba.
+                if (ultimoTooltipAberto && ultimoTooltipAberto !== marcador) ultimoTooltipAberto.closeTooltip();
+                marcador.openTooltip();
+                ultimoTooltipAberto = marcador;
             });
         if (site.virtual) { layersPorSite[site.site] = { marcador: marcador, circulo: circulo }; }
         // Ponto criado (so clima ou doenca): clique ou botao direito
