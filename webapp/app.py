@@ -6189,6 +6189,23 @@ _PESQUISA_GERMINACAO = {
     "elsinoe": _G(15, 25, 90, 6),                  # verrugose
     "hemileia": _G(15, 28, 95, 6),                 # ferrugem do cafe
     "hemileia vastatrix": _G(15, 28, 95, 6),
+    # Rizoctoniose / mela (feijao), mela da soja, queima-das-bainhas (arroz).
+    "rhizoctonia": _G(25, 32, 90, 12),
+    "rhizoctonia solani": _G(25, 32, 90, 12),
+    "thanatephorus": _G(25, 32, 90, 12),
+    "thanatephorus cucumeris": _G(25, 32, 90, 12),
+    "sclerotium rolfsii": _G(25, 35, 90, 12),     # murcha de esclerocio
+    "athelia rolfsii": _G(25, 35, 90, 12),
+    "ascochyta": _G(15, 25, 90, 12),
+    "phoma": _G(15, 25, 90, 12),
+    "pyrenophora": _G(15, 28, 90, 12),             # mancha amarela / mancha reticular
+    "blumeria": _G(15, 22, 80, None, True),        # oidio dos cereais
+    "fusarium graminearum": _G(20, 30, 90, 48),    # giberela: 48 h de molhamento na floracao
+    "gibberella": _G(20, 30, 90, 48),
+    "venturia": _G(10, 24, 90, 9),                 # sarna (macieira)
+    "monilinia": _G(15, 27, 90, 5),                # podridao parda
+    "mycosphaerella": _G(20, 30, 90, 12),          # sigatoka
+    "pseudocercospora": _G(20, 30, 90, 12),
 }
 _PALAVRAS_IGNORADAS_CIENTIFICO = {"spp", "sp", "and", "e", "var", "f", "complex", "complexo"}
 
