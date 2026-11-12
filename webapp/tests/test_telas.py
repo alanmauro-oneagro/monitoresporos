@@ -219,6 +219,8 @@ class TelasPorNivelTest(unittest.TestCase):
             self.assertIn('value="Zzz Prod (Zzz IA)"', html)
             self.assertIn('type="text" name="cx_data_ts" class="form-control form-control-sm" value="antes do plantio"', html)
             self.assertNotIn("Nome do produto", html)
+            for titulo in ("Dados de Plantio", "Dados de Aplicações", "Anotações por doença"):  # recolhidos (13/11/2026)
+                self.assertIn('<span class="toggle-icon">▶</span> ' + titulo, html)
             c.post("/fazendas/save", data={
                 "site_name": site, "safra": "safra1",
                 "cx_data_ts": ["2026-11-10", ""], "cx_talhao_ts": ["T1", ""],

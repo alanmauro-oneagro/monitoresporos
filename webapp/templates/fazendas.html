@@ -121,8 +121,13 @@
                 </form>
 
                 <div class="mt-3 pt-3 border-top">
+                    {# Plantio, Aplicacoes e Anotacoes tambem recolhidos (pedido do Alan, 13/11/2026). #}
+                    {% set n_plantio = safra_group.plantio | length - 1 %}
+                    <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold secao-toggle" data-target="sec-plantio-{{ farm_idx }}-{{ safra_group.safra }}">
+                        <span class="toggle-icon">▶</span> Dados de Plantio{% if n_plantio %} <span class="badge bg-light text-dark border fw-normal">{{ n_plantio }}</span>{% endif %}
+                    </button>
+                    <div class="d-none mt-2 mb-2" id="sec-plantio-{{ farm_idx }}-{{ safra_group.safra }}">
                     <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-                        <div class="fw-bold">Dados de Plantio</div>
                         <form method="post" action="{{ url_for('save_farm_espacamento') }}" class="d-flex align-items-center gap-1 mb-0" data-autosave>
                             <input type="hidden" name="site_name" value="{{ site_group.site }}">
                             <input type="hidden" name="safra" value="{{ safra_group.safra }}">
@@ -155,7 +160,14 @@
                         </div>
                         <span class="autosave-status small ms-2"></span>
                     </form>
-                    <div class="fw-bold mb-2">Dados de Aplicacoes</div>
+                    </div>
+                    {% set n_aplic = safra_group.aplicacoes | length - 1 %}
+                    <div class="mt-2">
+                    <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold secao-toggle" data-target="sec-aplic-{{ farm_idx }}-{{ safra_group.safra }}">
+                        <span class="toggle-icon">▶</span> Dados de Aplicações{% if n_aplic %} <span class="badge bg-light text-dark border fw-normal">{{ n_aplic }}</span>{% endif %}
+                    </button>
+                    </div>
+                    <div class="d-none mt-2" id="sec-aplic-{{ farm_idx }}-{{ safra_group.safra }}">
                     <form method="post" action="{{ url_for('save_farm_aplicacoes') }}" data-autosave>
                         <input type="hidden" name="site_name" value="{{ site_group.site }}">
                         <input type="hidden" name="safra" value="{{ safra_group.safra }}">
@@ -178,13 +190,18 @@
                         </div>
                         <span class="autosave-status small ms-2"></span>
                     </form>
+                    </div>
                 </div>
 
             </div>
             {% endfor %}
 
             <div class="mt-3 pt-3 border-top">
-                <div class="fw-bold mb-1">Anotações por doença</div>
+                {% set n_notas = site_group.anotacoes | selectattr('nota') | list | length %}
+                <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold secao-toggle" data-target="sec-notas-{{ farm_idx }}">
+                        <span class="toggle-icon">▶</span> Anotações por doença{% if n_notas %} <span class="badge bg-light text-dark border fw-normal">{{ n_notas }}</span>{% endif %}
+                    </button>
+                <div class="d-none mt-2" id="sec-notas-{{ farm_idx }}">
                 {% if site_group.anotacoes %}
                 <form method="post" action="{{ url_for('save_recommendations') }}" data-autosave data-autosave-por-grupo>
                     {% for a in site_group.anotacoes %}
@@ -202,6 +219,7 @@
                 {% else %}
                 <div class="text-muted small">Escolha a cultura de uma safra acima para anotar por doença.</div>
                 {% endif %}
+                </div>
             </div>
 
         </div>
