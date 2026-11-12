@@ -107,6 +107,29 @@ class TelasPorNivelTest(unittest.TestCase):
                         os.unlink(f.name)
                         self.assertEqual(r.returncode, 0, r.stderr[:500])
 
+    def test_estudo_de_viabilidade_so_no_mapas_de_estudo(self):
+        """Estudo de viabilidade fica so' no Mapas de Estudo, agrupado (12/11/2026)."""
+        c = self._cliente("master")
+        c.post("/mapa-interpolado/adicionar", data={
+            "tipo": "estudo", "nome": "Zzz Estudo Viabilidade", "lat": "-12.5", "lon": "-55.7",
+            "raio_km": "30", "country_code": "BR"})
+        pe = next(p for p in models.get_pontos_estudo() if p["nome"] == "Zzz Estudo Viabilidade")
+        self.assertNotIn("Zzz Estudo Viabilidade", {vf["nome"] for vf in models.get_all_virtual_farms()})
+        html = c.get("/mapa-interpolado").get_data(as_text=True)
+        self.assertIn("📐 Estudo de viabilidade</option>", html)
+        self.assertIn('data-grupo="e"', html)
+        self.assertIn("Zzz Estudo Viabilidade", html)
+        self.assertNotIn("(interpola fazendas reais no raio)", html)
+        self.assertLess(html.index('id="cartao-anatel"'), html.index('id="form-novo-ponto"'))
+        for rota in ("/recommendations", "/fazendas", "/dashboard", "/whatsapp"):
+            self.assertNotIn("Zzz Estudo Viabilidade", c.get(rota, follow_redirects=True).get_data(as_text=True))
+        c.post("/mapa-interpolado/editar", data={
+            "site_name": f"estudo:{pe['id']}", "nome": "Zzz Estudo Viabilidade 2", "lat": "-12.6", "lon": "-55.8",
+            "raio_km": "40", "country_code": "BR"})
+        self.assertEqual(models.get_ponto_estudo(pe["id"])["raio_km"], 40)
+        c.post("/mapa-interpolado/remover", data={"site_name": f"estudo:{pe['id']}"})
+        self.assertIsNone(models.get_ponto_estudo(pe["id"]))
+
     def test_atualizar_mostra_progresso(self):
         """Botao Atualizar: sem aviso no topo, "Atualizando... XX%" pelo status (11/11/2026)."""
         import threading

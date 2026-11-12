@@ -273,6 +273,15 @@ fica so' em Gerenciar Fazendas Ocultas. Tamanhos dos cartoes: nome 0.95rem,
 selos 0.7rem, linha da fazenda 0.8rem, filtros 0.78rem (CSS no topo do
 admin_solicitacoes.html). Mapas de Estudo ficou so' com criar/editar ponto
 (coordenada, raio, tipo) e remover.
+**Mapas de Estudo -- estudo de viabilidade, regua e grupos** (pedido do Alan, 12/11/2026): tipos
+sem parenteses ("🦠 Monitorar doenças", "☁️ Somente clima", "📐 Estudo de viabilidade"). Estudo de
+viabilidade = tabela PROPRIA `pontos_estudo` (`models.criar/atualizar/excluir_ponto_estudo`), so'
+nesta tela -- nao vira fazenda, nao liga em nada (projeto de venda de estacao); nas rotas
+adicionar/editar/remover do Mapas de Estudo o `site_name` "estudo:<id>" (`_ponto_estudo_do_form`).
+Pino laranja-claro + circulo tracejado do raio, balao com a fazenda BioScout mais proxima e sinal.
+Cartao da Anatel logo abaixo do mapa (`#cartao-anatel`). Regua no canto do mapa (📏 distancia km,
+⬠ area ha + perimetro; ✕ limpa; medindo, o clique nao marca ponto novo). Pontos Criados em grupos:
+Monitoramento de doenças, Só clima, Estudo de viabilidade (macro `cartao_ponto`).
 **Plano de cada fazenda** (`app._plano_da_fazenda`, selo `selo_plano(site)` --
 template global): fazenda REAL (BioScout) = Inteligência (`models.PLANO_FAZENDA_REAL`),
 com a validade do cadastro se estiver ligada; as outras = o plano que vale hoje
