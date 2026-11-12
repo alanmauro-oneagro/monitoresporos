@@ -55,10 +55,21 @@
 {% set farm_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
+        <div class="d-flex align-items-center flex-wrap gap-2">
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="farm-body-{{ farm_idx }}">
             <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
         </button>
         {{ selo_plano(site_group.site) }}
+        {% if current_user.is_admin %}
+        {# Ocultar tambem daqui (pedido do Alan, 12/11/2026). #}
+        <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0 ms-auto ocultar-manejos"
+              data-msg="Ocultar {{ site_group.nome_exibicao }}? Ela some de todo o site (nada é apagado) -- reativar em Configurações > Gerenciar Fazendas Ocultas."
+              onsubmit="return confirm(this.dataset.msg);">
+            <input type="hidden" name="site_name" value="{{ site_group.site }}"><input type="hidden" name="ativo" value="0">
+            <button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="Ocultar fazenda">🙈 Ocultar</button>
+        </form>
+        {% endif %}
+        </div>
         {% if site_group.sinal_celular %}{{ sinal_cel.linha(site_group.sinal_celular) }}{% endif %}
         <div class="d-none mt-3" id="farm-body-{{ farm_idx }}">
             <div class="d-flex gap-2 mb-3">

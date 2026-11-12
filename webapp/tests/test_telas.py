@@ -146,6 +146,10 @@ class TelasPorNivelTest(unittest.TestCase):
         self.assertEqual(vf2["tipo"], "clima")
         models.delete_virtual_farm(vf2["site_name"])
 
+    def test_ocultar_em_manejos(self):
+        self.assertIn("ocultar-manejos", self._cliente("master").get("/fazendas").get_data(as_text=True))
+        self.assertNotIn("ocultar-manejos", self._cliente("cliente").get("/fazendas", follow_redirects=True).get_data(as_text=True))
+
     def test_atualizar_mostra_progresso(self):
         """Botao Atualizar: sem aviso no topo, "Atualizando... XX%" pelo status (11/11/2026)."""
         import threading
