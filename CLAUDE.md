@@ -521,7 +521,7 @@ Alan, 08/11/2026). Planos padrao
 pedido do Alan, 31/10/2026): **Free** (valor 0, a venda), Basico, Premium e
 Premium + Estacao (nascem fora de venda e com valor 0 ate' o Master por o
 preco). Valor 0 = gratis: em "Minha assinatura" (cartoes com TODOS os
-planos; os fora de venda aparecem como "Em breve", sem escolha; o quadro
+planos; os fora de venda aparecem como "Em breve", sem escolha; o quadro de preco do plano gratis diz "Grátis 7 dias" -- cadastro, Minha assinatura e /planos, pedido do Alan, 13/11/2026; o quadro
 de situacao/"Aguardando pagamento" so' aparece depois de escolher um
 plano) o Free ativa na hora, sem CPF nem Asaas. **Free = 7 dias**
 (pedido do Alan, 08/11/2026): `cortesia_ate = models.fim_free(assinatura)`

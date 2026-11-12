@@ -169,7 +169,7 @@
                 {% if not no_app_loja %}
                 <div class="preco-plano" data-parcelas="{{ p.parcelas }}" data-simbolo="{{ p.simbolo }}" data-moeda="{{ p.moeda }}"
                      {% if p.preco_por_area %}data-por-area="1"{% else %}data-valor="{{ p.valor }}"{% endif %}>
-                    {% if p.preco_por_area %}<div class="preco-box"><div class="preco-sub">Informe a área para calcular</div></div>{% elif p.valor <= 0 %}<div class="preco-box"><div class="preco-parcela">Grátis</div></div>{% else %}{{ p | parcelas_plano }}{% endif %}
+                    {% if p.preco_por_area %}<div class="preco-box"><div class="preco-sub">Informe a área para calcular</div></div>{% elif p.valor <= 0 %}<div class="preco-box"><div class="preco-parcela">Grátis 7 dias</div></div>{% else %}{{ p | parcelas_plano }}{% endif %}
                 </div>
                 {% endif %}
                 {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
