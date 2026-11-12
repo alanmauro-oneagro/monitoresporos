@@ -258,8 +258,7 @@ class CadastroTest(unittest.TestCase):
                 self.assertIn("Zzz Unknown Blight", webapp.doencas_sem_traducao())
                 self.assertNotIn("White Mould", webapp.doencas_sem_traducao())
             html = self._logado("Zzz Teste Master Cad").get("/dashboard").get_data(as_text=True)
-            self.assertIn("ainda sem nome em português", html)
-            self.assertIn("Zzz Unknown Blight", html)
+            self.assertNotIn("ainda sem nome em português", html)  # aviso saiu do Alertas (12/11/2026)
         finally:
             for en in ("White Mould", "Zzz Unknown Blight"):
                 models.delete_disease_translation(en)
