@@ -74,7 +74,8 @@ class PlanosTest(unittest.TestCase):
         html = master.get("/admin/planos").get_data(as_text=True)
         self.assertIn("Abas liberadas no app", html)
         self.assertIn("0 = grátis", html)
-        self.assertEqual(html.count('type="submit">Salvar</button>'), 1)  # um botao Salvar so'
+        self.assertNotIn(">Salvar</button>", html)  # salva sozinho (12/11/2026)
+        self.assertIn('action="/admin/planos/salvar" data-autosave', html)
         # com um plano errado, nenhum e' gravado
         negativo = master.post("/admin/planos/salvar", data={
             "plano_ids": [str(k), str(b)],

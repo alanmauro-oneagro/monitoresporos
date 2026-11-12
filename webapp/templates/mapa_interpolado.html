@@ -126,8 +126,8 @@
                     </div>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-sm btn-success">💾 Salvar Ponto</button>
-                        <button type="button" id="limpar-ponto-btn" class="btn btn-sm btn-secondary" title="Remove o pino e o circulo de previa do mapa e limpa latitude/longitude -- nada e' salvo ate clicar em Salvar Ponto, entao um clique sem querer no mapa pode ser desfeito por aqui">🧹 Limpar ponto</button>
+                        <button type="submit" class="btn btn-sm btn-success">➕ Criar ponto</button>
+                        <button type="button" id="limpar-ponto-btn" class="btn btn-sm btn-secondary" title="Remove o pino e o circulo de previa do mapa e limpa latitude/longitude -- nada e' criado ate clicar em Criar ponto, entao um clique sem querer no mapa pode ser desfeito por aqui">🧹 Limpar ponto</button>
                     </div>
                 </form>
                 <div id="sinal-ponto" class="border rounded p-2 mt-3 small d-none" style="background:#f8f9fa;" aria-live="polite"></div>
@@ -163,8 +163,9 @@
     </div>
 
     <div class="d-none border rounded p-2 mb-2" id="editar-ponto-{{ idx }}" style="background:#fff;">
-        <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end"
-              onsubmit="return confirm(this.tipo.value === 'estudo' &amp;&amp; '{{ ponto.tipo }}' !== 'estudo' ? 'Transformar \'{{ ponto.nome }}\' em estudo de viabilidade? Ele deixa de ser fazenda: sai de todas as telas e apaga permissões, agenda de WhatsApp e anotações ligadas a ele.' : 'Salvar essas alterações no ponto \'{{ ponto.nome }}\'? Os dados atuais (nome, coordenada, raio, tipo) serão substituídos.');">
+        {# Salva sozinho e recarrega (pedido do Alan, 12/11/2026); virar estudo pede confirmacao. #}
+        <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end form-editar-ponto" data-autosave data-autosave-reload
+              data-tipo-original="{{ ponto.tipo }}" data-msg-estudo="Transformar '{{ ponto.nome }}' em estudo de viabilidade? Ele deixa de ser fazenda: sai de todas as telas e apaga permissões, agenda de WhatsApp e anotações ligadas a ele.">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
             <div class="col-12 col-md-3">
                 <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
@@ -198,9 +199,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-12 col-md-1">
-                <button type="submit" class="btn btn-sm btn-outline-primary w-100">Salvar</button>
-            </div>
+            <div class="col-12 small text-muted">Salva sozinho ao sair do campo (ou ao soltar o pino no mapa)<span class="autosave-status small ms-2"></span></div>
         </form>
     </div>
 
@@ -693,7 +692,7 @@
 
     // Um clique sem querer no mapa (rolando/dando zoom, por exemplo) larga
     // um pino de previa e preenche latitude/longitude -- nada e' salvo de
-    // verdade ainda (so acontece ao clicar em "Salvar Ponto", que exige
+    // verdade ainda (so acontece ao clicar em "Criar ponto", que exige
     // Nome preenchido), mas o pino ficava no mapa sem nenhum jeito de
     // tirar de la' a nao ser recarregando a pagina. Esse botao remove o
     // pino/circulo e limpa os campos, deixando o formulario como se
@@ -765,7 +764,7 @@
         if (!buscaResultados.contains(e.target) && e.target !== buscaInput) { limparResultadosBusca(); }
     });
 
-    // O ponto so pode ser criado clicando em "Salvar Ponto" -- aperta
+    // O ponto so pode ser criado clicando em "Criar ponto" -- aperta
     // Enter em qualquer campo do formulario (nome, latitude, longitude,
     // raio) normalmente submeteria a pagina sozinho, criando o ponto
     // sem querer antes da pessoa conferir os dados.
@@ -787,7 +786,7 @@
     // um pino roxo ARRASTAVEL entra no lugar, atualizando lat/lon do
     // proprio formulario de Editar a cada arrasto -- fechar o painel (ou
     // trocar pra outro ponto) devolve o pino original ao mapa sem perder
-    // nada (nada e' salvo ate clicar em "Salvar" desse formulario).
+    // nada (salva sozinho ao soltar o pino ou sair de um campo).
     var editEstadoPorAlvo = {};
 
     function iniciarEdicaoPin(painel) {
@@ -830,7 +829,13 @@
             atualizarCirculoEdicao();
         });
         estado.marcador.on('dragend', function (ev) {
-            detectarPaisPreview(ev.target.getLatLng(), countrySelectEdit);
+            // Soltou o pino: acha o pais do lugar novo e salva sozinho.
+            var ll = ev.target.getLatLng();
+            fetch('{{ url_for("detectar_pais_ponto_virtual") }}?lat=' + ll.lat + '&lon=' + ll.lng)
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) { if (d && d.country_code && countrySelectEdit) countrySelectEdit.value = d.country_code; })
+                .catch(function () {})
+                .then(function () { form.requestSubmit(); });
         });
         estado.raioListener = atualizarCirculoEdicao;
         raioInputEdit.addEventListener('input', estado.raioListener);
@@ -876,17 +881,16 @@
         var estado = editEstadoPorAlvo[painel.id];
         if (!estado) return;
         // A pagina fica no mapa (o formulario fica bem abaixo dele) -- o
-        // proprio pino arrastavel traz Salvar/Cancelar.
+        // proprio pino arrastavel traz o nome e Fechar.
         if (estado.marcador.getPopup()) { estado.marcador.openPopup(); return; }
         var form = painel.querySelector('form');
         var nomeForm = form.querySelector('input[name="nome"]');
         var caixa = document.createElement('div');
         caixa.innerHTML = '<label class="form-label small text-muted mb-1">Nome</label>'
             + '<input type="text" class="form-control form-control-sm mb-2" data-campo="nome">'
-            + '<div class="small mb-2">Arraste o pino para mover.</div>'
+            + '<div class="small mb-2">Arraste o pino para mover -- salva sozinho.</div>'
             + '<div class="d-flex gap-1">'
-            + '<button type="button" class="btn btn-sm btn-primary" data-acao="salvar">Salvar</button>'
-            + '<button type="button" class="btn btn-sm btn-outline-secondary" data-acao="cancelar">Cancelar</button>'
+            + '<button type="button" class="btn btn-sm btn-outline-secondary" data-acao="cancelar">Fechar</button>'
             + '<button type="button" class="btn btn-sm btn-outline-secondary" data-acao="detalhes">Editar dados</button>'
             + '</div>';
         var nomeCaixa = caixa.querySelector('[data-campo="nome"]');
@@ -895,12 +899,11 @@
         nomeCaixa.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') { e.preventDefault(); form.requestSubmit(); }
         });
+        nomeCaixa.addEventListener('change', function () { form.requestSubmit(); });
         L.DomEvent.disableClickPropagation(caixa);
         caixa.addEventListener('click', function (e) {
             var acao = e.target.dataset && e.target.dataset.acao;
-            if (acao === 'salvar') {
-                form.requestSubmit();
-            } else if (acao === 'cancelar') {
+            if (acao === 'cancelar') {
                 btn.click();
             } else if (acao === 'detalhes') {
                 painel.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -909,6 +912,21 @@
         estado.marcador.bindPopup(caixa, { closeButton: false, autoClose: false, closeOnClick: false }).openPopup();
         estado.marcador.on('dragend', function () { estado.marcador.openPopup(); });
     }
+
+    // Tipo de ponto virando estudo apaga a fazenda: pede confirmacao antes
+    // do salvamento automatico.
+    document.querySelectorAll('.form-editar-ponto select[name="tipo"]').forEach(function (sel) {
+        var form = sel.form, anterior = sel.value;
+        sel.addEventListener('input', function (e) { e.stopPropagation(); });
+        sel.addEventListener('change', function (e) {
+            if (sel.value === 'estudo' && form.dataset.tipoOriginal !== 'estudo' && !confirm(form.dataset.msgEstudo)) {
+                sel.value = anterior;
+                e.stopPropagation();
+                return;
+            }
+            anterior = sel.value;
+        });
+    });
 
     document.querySelectorAll('.editar-ponto-toggle').forEach(function (btn) {
         btn.addEventListener('click', function () {

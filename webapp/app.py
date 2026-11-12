@@ -9337,11 +9337,12 @@ def admin_planos_tabela():
         for i, ate in enumerate(FAIXAS_PRECO):
             faixas.append({"ate_ha": ate, "usd_ha": numero(request.form.get(f"usd_ha_{i}"))})
     except ValueError:
-        flash("Tabela de apoio: o valor por hectare precisa ser um número (sem negativos).", "error")
-        return redirect(url_for("admin_planos") + "#tabela-precificacao")
+        return _save_response("Tabela de apoio: o valor por hectare precisa ser um número (sem negativos).", "admin_planos", ok=False)
     models.set_setting(_TABELA_PRECO_KEY, json.dumps(faixas))
     if request.form.get("moeda") in models.MOEDAS:
         models.set_setting(_TABELA_MOEDA_KEY, request.form["moeda"])
+    if request.headers.get("X-Autosave") == "1":
+        return {"ok": True, "message": "Tabela de apoio salva."}
     flash("Tabela de apoio salva.", "success")
     return redirect(url_for("admin_planos") + "#tabela-precificacao")
 
@@ -9354,7 +9355,10 @@ def admin_planos_salvar():
     algum erro, nada e' gravado."""
     form = request.form
     chaves = [k for k in form.getlist("plano_ids") if k.isdigit()]
-    if form.get("nome__novo", "").strip():
+    # Salva sozinho (pedido do Alan, 12/11/2026): o "Novo plano" so' e'
+    # criado quando tem nome E valor; criado, a tela recarrega.
+    novo_incompleto = bool(form.get("nome__novo", "").strip()) and not form.get("valor__novo", "").strip()
+    if form.get("nome__novo", "").strip() and not novo_incompleto:
         chaves.append("novo")
     planos = []
     for k in chaves:
@@ -9365,12 +9369,12 @@ def admin_planos_salvar():
             raio_km = float(form.get(f"raio_km__{k}", "50").replace(",", "."))
             ordem = int(form.get(f"ordem__{k}", "0") or 0)
         except ValueError:
-            flash(f"Plano \"{nome or 'novo'}\": valor, lavouras, raio e ordem precisam ser números.", "error")
-            return redirect(url_for("admin_planos"))
+            return _save_response(f"Plano \"{nome or 'novo'}\": valor, lavouras, raio e ordem precisam ser números.",
+                                  "admin_planos", ok=False)
         ciclo = form.get(f"ciclo__{k}")
         if not nome or valor < 0 or max_pontos < 1 or raio_km <= 0 or ciclo not in models.CICLOS_PLANO:
-            flash(f"Plano \"{nome or 'novo'}\": preencha nome, valor (0 = plano grátis), ciclo, lavouras e raio.", "error")
-            return redirect(url_for("admin_planos"))
+            return _save_response(f"Plano \"{nome or 'novo'}\": preencha nome, valor (0 = plano grátis), ciclo, lavouras e raio.",
+                                  "admin_planos", ok=False)
         moeda = form.get(f"moeda__{k}", "BRL")
         if moeda not in models.MOEDAS:
             moeda = "BRL"
@@ -9379,6 +9383,10 @@ def admin_planos_salvar():
                        bool(form.get(f"preco_area__{k}"))))
     for dados in planos:
         models.salvar_plano(*dados)
+    if request.headers.get("X-Autosave") == "1":
+        if novo_incompleto:
+            return {"ok": True, "message": "Planos salvos.", "aviso": "novo plano: digite o valor para criar"}
+        return {"ok": True, "message": "Planos salvos.", "reload": "novo" in chaves}
     flash("Planos salvos.", "success")
     return redirect(url_for("admin_planos"))
 
@@ -9407,8 +9415,7 @@ def admin_cliente_cortesia(user_id):
     if plano_id.isdigit() and models.get_plano(int(plano_id)):
         campos["plano_id"] = int(plano_id)
     models.atualizar_assinatura(user_id, **campos)
-    flash(f"Acesso de {row['username']} atualizado.", "success")
-    return redirect(url_for("admin_solicitacoes"))
+    return _save_response(f"Acesso de {row['username']} atualizado.", "admin_solicitacoes")
 
 
 # --- Fazendas no modelo unico (Gerenciar Clientes, pedido do Alan, 09/11/2026) ---

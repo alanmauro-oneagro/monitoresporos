@@ -30,7 +30,7 @@
     <span>(PTAX de venda do Banco Central, {{ cotacao_dolar.data | data_br }})</span>{% else %}cotação indisponível no momento{% endif %}
     -- plano em U$ é cobrado em reais por essa cotação na hora da assinatura.</p>
 {% set colunas = planos + [none] %}
-<form method="post" action="{{ url_for('admin_planos_salvar') }}">
+<form method="post" action="{{ url_for('admin_planos_salvar') }}" data-autosave>
     {% for p in planos %}<input type="hidden" name="plano_ids" value="{{ p.id }}">{% endfor %}
     <div class="table-responsive mb-2">
     <table class="table table-sm table-bordered align-middle mb-0 tabela-planos">
@@ -93,8 +93,8 @@
         </tbody>
     </table>
     </div>
-    <div class="position-sticky bottom-0 bg-white border-top py-2 mb-4" style="z-index: 5;">
-        <button class="btn btn-success" type="submit">Salvar</button>
+    <div class="position-sticky bottom-0 bg-white border-top py-2 mb-4 small text-muted" style="z-index: 5;">
+        Tudo salva sozinho<span class="autosave-status small ms-2"></span>
     </div>
 </form>
 
@@ -105,7 +105,7 @@
         (valor intermediário fica na faixa de cima: 300 ha usa a de "até 500 ha") e o preço aparece em
         <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>. Raio = círculo com a área; em U$, o ≈ R$ sai pelo dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.
         Não muda nenhum plano nem cobrança.</p>
-    <form method="post" action="{{ url_for('admin_planos_tabela') }}">
+    <form method="post" action="{{ url_for('admin_planos_tabela') }}" data-autosave>
         {# Moeda da tabela: U$ ou R$ (pedido do Alan, 09/11/2026). #}
         <div class="d-flex align-items-center gap-2 small mb-2">
             <label for="moeda-tabela" class="text-muted">Moeda da tabela</label>
@@ -136,10 +136,10 @@
         </div>
         <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
             <label for="simular-area" class="text-muted">Simular área do cliente (ha)</label>
-            <input type="number" min="0" step="any" id="simular-area" class="form-control form-control-sm" style="max-width: 7rem;">
+            <input type="number" min="0" step="any" id="simular-area" form="simulacao-sem-salvar" class="form-control form-control-sm" style="max-width: 7rem;">
             <span id="simular-resultado" class="fw-semibold"></span>
         </div>
-        <button class="btn btn-outline-success btn-sm" type="submit">Salvar tabela</button>
+        <div class="small text-muted">Salva sozinho<span class="autosave-status small ms-2"></span></div>
     </form>
 </div></div>
 <script>

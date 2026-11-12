@@ -325,6 +325,7 @@
             // embaixo (filtro de doenca por cultura) -- sem recarregar, o
             // "✓ Salvo" aparece mas a lista renderizada continua a mesma
             // de antes do save, dando a impressao de que nao mudou nada.
+            if (data.ok && data.reload) { location.reload(); return; }  // ex.: plano novo criado
             if (data.ok && form.hasAttribute('data-autosave-reload')) {
                 // Reabre na mesma fazenda apos o reload (?site=...), se o
                 // form tiver esse campo -- senao a pagina recarrega
@@ -341,7 +342,7 @@
             }
             if (!status) return;
             clearTimeout(status._clearTimer);
-            status.textContent = data.ok ? '✓ Salvo' : ('⚠ ' + (data.message || 'Erro ao salvar'));
+            status.textContent = data.ok ? ('✓ Salvo' + (data.aviso ? ' · ' + data.aviso : '')) : ('⚠ ' + (data.message || 'Erro ao salvar'));
             status.className = 'autosave-status small ms-2 ' + (data.ok ? 'text-success' : 'text-danger');
             status._clearTimer = setTimeout(function () { status.textContent = ''; }, 5000);
         }).catch(function () {

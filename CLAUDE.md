@@ -662,6 +662,14 @@ site tem que entrar la'.
   foco), nunca so' por debounce — evita salvar/recarregar a pagina no meio da
   digitacao. Campos de escolha (select/checkbox/radio) continuam no debounce
   normal (1200ms).
+- **Sem botao Salvar em todo o site** (pedido do Alan, 12/11/2026; teste
+  `test_salva_sozinho_sem_botao_salvar` abre toda tela e recusa botao "Salvar"): Planos e
+  Valores e Tabela de apoio com `data-autosave` (o "Novo plano" so' e' criado com nome E valor;
+  criado, a rota devolve `reload: true`, que o base.html segue; `aviso` aparece depois do
+  "✓ Salvo"); Editar ponto do Mapas de Estudo com `data-autosave-reload` (soltar o pino acha o
+  pais e salva; virar estudo pede confirmacao antes); Cortesia em Gerenciar Clientes (ex-"OK");
+  Trocar senha / Definir nova senha / senha do app gravam sozinhas ao sair do campo com tudo
+  certo. Botoes de CRIAR/ACAO ficam: "➕ Criar ponto", "➕ Adicionar fazenda", "✅ Pôr na galeria" (NDVI).
 - **Renomear fazenda virtual**: `models.update_virtual_farm(...)` muda o
   `nome`, que muda o proprio `site_name` (cascata em varias tabelas).
   Acessivel tanto por Mapa Interpolado quanto pela aba Manejos (campo "Nome
