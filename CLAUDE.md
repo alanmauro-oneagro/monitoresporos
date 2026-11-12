@@ -490,7 +490,8 @@ So' apoio: nao muda plano nem cobranca. **Area de cada faixa editavel** (pedido 
   `admin_planos_tabela` grava ordenado (o valor/ha acompanha a area); so' area repetida e' recusada.
   **Preco fixo** -- COLUNA da tabela, uma caixa por faixa (`fixo_<i>`; gravado em cada item do setting como
   `fixo`, `app._fixo_por_faixa()`; a caixa unica antiga `tabela_preco_fixo` so' vale de padrao pra faixa gravada
-  sem a marca; pedidos do Alan, 13/11/2026): faixa marcada, o cliente paga a area do LIMITE da faixa (350 ha cai em "ate' 400" = 400 x valor/ha);
+  sem a marca; pedidos do Alan, 13/11/2026; colunas na ordem Area | valor/ha | Total | ≈ Total R$ | Preco fixo | ✕):
+  faixa marcada, o cliente paga a area do LIMITE da faixa (350 ha cai em "ate' 400" = 400 x valor/ha);
   a faixa "acima de" continua pela area. Vale em todo o site: `preco_pela_area` (devolve `preco_fixo`/`area_cobrada`)
   -> plano com preco pela area, cobranca, fazenda adicional, Gerenciar Clientes ("cobrado por N ha"), Minha
   assinatura ("valor da faixa: N ha"), cadastro (`PRECO_FIXO` no JS) e o Simular da tabela. **Quantidade de
