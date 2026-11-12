@@ -488,7 +488,8 @@ So' apoio: nao muda plano nem cobranca. **Area de cada faixa editavel** (pedido 
   vale em toda conta (`_faixa_da_area`, `preco_pela_area`, cadastro); fora de ordem = recusado. **Quantidade de
   faixas editavel** (mesmo dia): "+ Adicionar faixa" (nova = ultima x 2) e "✕" em cada faixa (minimo 1, maximo
   `app.MAX_FAIXAS` = 20); o JS renumera `ate_ha_<i>`/`usd_ha_<i>` (a linha "acima" e' a ultima) e a rota usa
-  quantos `ate_ha_*` vierem. **Moeda da tabela** (pedido do Alan,
+  quantos `ate_ha_*` vierem. A coluna "Raio (km)" SAIU da tabela (pedido do Alan, 13/11/2026); o raio continua so' no
+  texto do "Simular area do cliente" e no cartao do cliente em Gerenciar Clientes. **Moeda da tabela** (pedido do Alan,
 09/11/2026): seletor "Moeda da tabela" Dolar (U$) / Real (R$) na propria
 tabela (setting `tabela_precificacao_moeda`, `app._moeda_tabela`; os campos
 seguem `usd_ha`/`total_usd` por compatibilidade, mas o valor esta' na moeda

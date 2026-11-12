@@ -672,7 +672,7 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         for i, ate in enumerate((100, 250, 500, 1000, 2000, 3000, 5000, 10000)):  # limites editaveis (13/11/2026)
             self.assertIn(f'name="ate_ha_{i}" data-col="{i}" data-campo="ate_ha" value="{ate}"', html)
         self.assertIn(">acima de 10.000 ha<", html)
-        self.assertIn(">0,56<", html)  # raio de 100 ha
+        self.assertNotIn("Raio (km)", html)  # coluna Raio saiu da tabela de apoio (13/11/2026)
         dados = {f"usd_ha_{i}": "" for i in range(9)}
         dados.update({"usd_ha_3": "0.5", "usd_ha_8": "0.2"})
         resp = master.post("/admin/planos/tabela", data=dados)
