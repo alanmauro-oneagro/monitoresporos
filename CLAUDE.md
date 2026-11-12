@@ -675,6 +675,11 @@ site tem que entrar la'.
   pais e salva; virar estudo pede confirmacao antes); Cortesia em Gerenciar Clientes (ex-"OK");
   Trocar senha / Definir nova senha / senha do app gravam sozinhas ao sair do campo com tudo
   certo. Botoes de CRIAR/ACAO ficam: "➕ Criar ponto", "➕ Adicionar fazenda", "✅ Pôr na galeria" (NDVI).
+- **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
+  dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR
+  recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e
+  7 funcoes sem uso do models.py (set_ndvi_oculta, set_whatsapp_send_hour, get_whatsapp_days(_pdf),
+  delete_farm_ndvi_historico_de_site, atualizar_cliente_ponto, get_plano_fazenda).
 - **Renomear fazenda virtual**: `models.update_virtual_farm(...)` muda o
   `nome`, que muda o proprio `site_name` (cascata em varias tabelas).
   Acessivel tanto por Mapa Interpolado quanto pela aba Manejos (campo "Nome
