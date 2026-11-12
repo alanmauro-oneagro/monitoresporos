@@ -7662,8 +7662,8 @@ def _contexto_cadastro(culturas):
         "culturas": culturas, "grupos": GRUPOS_CULTURA,
         "grupo_de": {c: _grupo_da_cultura(c) for c in culturas},
         "planos": models.get_planos(apenas_ativos=True), "recursos": models.RECURSOS_PLANO,
-        "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"]} for f in _tabela_precificacao()],
-        "moeda_tabela": _moeda_tabela(), "preco_fixo": _preco_fixo(),
+        "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"], "fixo": f["fixo"]} for f in _tabela_precificacao()],
+        "moeda_tabela": _moeda_tabela(),
         "cotacao_valor": cot["valor"] if cot else None, "contato_comercial": CONTATO_COMERCIAL, "max_extras": MAX_EXTRAS_RELATORIO,
     }
 
@@ -9280,7 +9280,6 @@ def admin_planos():
         recursos_ocultos=RECURSOS_FORA_DA_TELA,
         ciclos=models.CICLOS_PLANO, moedas=models.MOEDAS, cotacao_dolar=cotacao.dolar(),
         tabela_preco=_tabela_precificacao(), moeda_tabela=_moeda_tabela(), max_faixas=MAX_FAIXAS,
-        preco_fixo=_preco_fixo(),
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
         hoje=_hoje_cuiaba().isoformat(),
@@ -9306,7 +9305,20 @@ _TABELA_FIXO_KEY = "tabela_preco_fixo"
 
 
 def _preco_fixo():
+    """Caixa unica antiga (13/11/2026) -- so' vale de padrao pra faixa gravada sem "fixo"."""
     return models.get_setting(_TABELA_FIXO_KEY) == "1"
+
+
+def _fixo_por_faixa():
+    """{ate_ha: True/False} -- "Preco fixo" por faixa (coluna da tabela, pedido do Alan,
+    13/11/2026). Faixa sem a marca usa a caixa unica antiga; "acima de" nunca e' fixa."""
+    try:
+        salvo = json.loads(models.get_setting(_TABELA_PRECO_KEY) or "[]")
+    except ValueError:
+        salvo = []
+    padrao = _preco_fixo()
+    return {item["ate_ha"]: bool(item.get("fixo", padrao)) for item in salvo if isinstance(item, dict)
+            and item.get("ate_ha") is not None} if isinstance(salvo, list) else {}
 
 
 def _moeda_tabela():
@@ -9364,10 +9376,13 @@ def _usd_ha_por_faixa():
 
 def _tabela_precificacao():
     valores = _usd_ha_por_faixa()
+    fixos = _fixo_por_faixa()
+    padrao_fixo = _preco_fixo()
     faixas = []
     for ate in _faixas_preco():
         usd_ha = valores.get(ate)
         faixas.append({"ate_ha": ate, "rotulo": _rotulo_faixa(ate), "usd_ha": usd_ha,
+                       "fixo": bool(ate) and fixos.get(ate, padrao_fixo),
                        "raio_km": _raio_km(ate) if ate else None,
                        "total_usd": ate * usd_ha if ate and usd_ha is not None else None})
     return faixas
@@ -9391,7 +9406,7 @@ def preco_pela_area(area_ha, cot=None):
         return None
     ate = _faixa_da_area(area)
     usd_ha = _usd_ha_por_faixa().get(ate)
-    fixo = _preco_fixo() and ate is not None
+    fixo = ate is not None and _fixo_por_faixa().get(ate, _preco_fixo())
     area_cobrada = ate if fixo else area
     total = area_cobrada * usd_ha if usd_ha is not None else None
     moeda = _moeda_tabela()
@@ -9433,8 +9448,13 @@ def admin_planos_tabela():
                     raise ValueError
                 limites_form.append(ate)
             atuais = limites_form + [None]
+        fixos_antes = _fixo_por_faixa()
+        por_linha = bool(request.form.get("tem_preco_fixo"))  # coluna "Preco fixo" (13/11/2026)
         for i, ate in enumerate(atuais):
-            faixas.append({"ate_ha": ate, "usd_ha": numero(request.form.get(f"usd_ha_{i}"))})
+            item = {"ate_ha": ate, "usd_ha": numero(request.form.get(f"usd_ha_{i}"))}
+            if ate is not None:
+                item["fixo"] = bool(request.form.get(f"fixo_{i}")) if por_linha else fixos_antes.get(ate, _preco_fixo())
+            faixas.append(item)
     except ValueError:
         return _save_response("Tabela de apoio: área e valor por hectare precisam ser números maiores que zero.", "admin_planos", ok=False)
     # Sempre em ordem de area (pedido do Alan, 13/11/2026): ordena aqui; so' area repetida e' recusada.
@@ -9446,8 +9466,6 @@ def admin_planos_tabela():
     models.set_setting(_TABELA_PRECO_KEY, json.dumps(faixas))
     if request.form.get("moeda") in models.MOEDAS:
         models.set_setting(_TABELA_MOEDA_KEY, request.form["moeda"])
-    if request.form.get("tem_preco_fixo"):
-        models.set_setting(_TABELA_FIXO_KEY, "1" if request.form.get("preco_fixo") else "0")
     if request.headers.get("X-Autosave") == "1":
         return {"ok": True, "message": "Tabela de apoio salva."}
     flash("Tabela de apoio salva.", "success")
