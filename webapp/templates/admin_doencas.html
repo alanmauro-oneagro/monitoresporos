@@ -15,6 +15,16 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 /* Doenca nova (entrou ha' menos de 3 dias): azul mais escuro (pedido do Alan, 11/11/2026). */
 .doenca-card.doenca-nova { border-left: 5px solid #0a2a6b; background: #e8eefb; }
 .doenca-card.doenca-nova .doenca-toggle { color: #0a2a6b !important; }
+/* Cabecalho do cartao mais limpo (pedido do Alan, 13/11/2026): nome a' esquerda,
+   selos pequenos em pilula a' direita; sem traducao = faixa ambar discreta. */
+.doenca-toggle { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.doenca-toggle .doenca-nome { flex: 1 1 auto; min-width: 0; }
+.doenca-toggle .toggle-icon { font-size: 0.8rem; flex: none; }
+.selo-doenca { font-size: 0.68rem; font-weight: 600; border-radius: 999px; padding: 0.15rem 0.55rem; white-space: nowrap; }
+.selo-manual { background: #e7f5ff; color: #1864ab; border: 1px solid #a5d8ff; }
+.selo-nova { background: #0a2a6b; color: #fff; }
+.selo-traducao { background: #fff9db; color: #8a6100; border: 1px solid #ffe066; }
+.doenca-card.sem-traducao { border-left: 4px solid #fcc419; }
 </style>
 {% endblock %}
 {% block content %}
@@ -40,14 +50,14 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 {# Doencas separadas pelo pais onde o BioScout leu (pedido do Alan, 12/11/2026). #}
 <h6 class="mt-3 mb-2 pais-doencas">🌎 {{ d.pais }} <span class="text-muted fw-normal small">({{ doencas | selectattr('pais', 'equalto', d.pais) | list | length }})</span></h6>
 {% endif %}
-<div class="card shadow-sm doenca-card{% if d.nova %} doenca-nova{% endif %}" data-doenca="{{ d.en }}" data-autosave-group>
+<div class="card shadow-sm doenca-card{% if d.nova %} doenca-nova{% endif %}{% if d.sem_traducao %} sem-traducao{% endif %}" data-doenca="{{ d.en }}" data-autosave-group>
     <div class="card-body px-2 px-sm-3">
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start doenca-toggle" data-target="doenca-body-{{ loop.index0 }}">
             <span class="toggle-icon">▶</span> <span class="doenca-nome">{{ d.pt }}</span>
             <span class="autosave-status small ms-2"></span>
-            {% if d.manual %}<span class="badge bg-info text-dark fw-normal ms-1" title="Cadastrada manualmente -- nao vem do BioScout">Manual</span>{% endif %}
-            {% if d.nova %}<span class="badge fw-normal ms-1" style="background:#0a2a6b;" title="Entrou há menos de 3 dias">Nova</span>{% endif %}
-            {% if d.sem_traducao %}<span class="badge bg-warning text-dark fw-normal ms-1" title="Doença nova do BioScout -- dê o nome em português">🆕 Sem nome em português</span>{% endif %}
+            {% if d.manual %}<span class="selo-doenca selo-manual" title="Cadastrada manualmente -- não vem do BioScout">Manual</span>{% endif %}
+            {% if d.nova %}<span class="selo-doenca selo-nova" title="Entrou há menos de 3 dias">Nova</span>{% endif %}
+            {% if d.sem_traducao %}<span class="selo-doenca selo-traducao" title="Doença nova do BioScout -- dê o nome em português abrindo o cartão">Sem tradução</span>{% endif %}
         </button>
         <div class="d-none mt-1 mb-2" id="doenca-body-{{ loop.index0 }}">
         <div class="d-flex justify-content-between align-items-center mb-2">

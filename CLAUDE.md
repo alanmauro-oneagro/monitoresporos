@@ -778,8 +778,9 @@ site tem que entrar la'.
   Branco e outros nomes comuns); `models.ensure_disease_translations` tambem troca pra portugues a
   doenca que ja' estava no banco com o nome em ingles (nunca troca nome editado nem repete nome).
   O sufixo do esporo no nome cientifico vira portugues ("Corynespora spp. - conidiósporo",
-  `data_reader.cientifico_em_portugues`). Doenca sem traducao (`doencas_sem_traducao()`): selo no cartao em
-  Doenças/Culturas (o aviso no topo do Alertas SAIU -- pedido do Alan, 12/11/2026).
+  `data_reader.cientifico_em_portugues`). Doenca sem traducao (`doencas_sem_traducao()`): selo pequeno "Sem tradução" (pilula ambar,
+  `.selo-doenca`; Manual/Nova no mesmo estilo, a' direita do nome) + faixa ambar a' esquerda do cartao
+  em Doenças/Culturas (pedido do Alan, 13/11/2026) (o aviso no topo do Alertas SAIU -- pedido do Alan, 12/11/2026).
   **Recomendações sem cultura na safra** continua sem mostrar doenca (decisao antiga), mas agora
   avisa "Nenhuma cultura definida para esta safra -- escolha em Manejos" em vez de "Nenhuma doença
   em Atenção ou Perigo" (que parecia "tudo bem").
