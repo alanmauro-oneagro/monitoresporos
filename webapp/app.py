@@ -5620,6 +5620,45 @@ def _parse_float_or_none(valor):
         return None
 
 
+def _pais_de_cada_doenca(info, paises_por_doenca):
+    """Pais de origem de cada doenca (pedido do Alan, 12/11/2026): o das fazendas
+    onde o BioScout leu a doenca (pais da fazenda; sem escolha, pela coordenada);
+    sem leitura = paises marcados; sem pais = Brasil. Doenca lida e sem pais
+    marcado ganha os da leitura. Devolve (pais_da_doenca(en), ordem_pais(pais)) --
+    mesma regra em Doenças/Culturas e Fungicidas."""
+    nome_brasil = _chave_alfabetica(countries.get_country("BR")["nome"])
+    pais_por_site = models.get_all_site_countries()
+    coords = _coords_all()
+    nome_pais = {cod: dados["nome"] for cod, dados in countries.COUNTRIES.items()}
+
+    def _pais_do_site(site):
+        if site in pais_por_site:
+            return pais_por_site[site]
+        c = coords.get(site)
+        return (countries.detectar_pais_por_coordenada(*c) if c else None) or countries.DEFAULT_COUNTRY
+
+    paises_lidos = {en: {nome_pais.get(_pais_do_site(site), _pais_do_site(site)) for site in sites}
+                    for en, sites in data_reader.sites_por_doenca().items()}
+    slots_paises = {_chave_alfabetica(p): p for p in models.get_paises_doenca_slots() if p}
+    for en, paises_en in paises_lidos.items():
+        if en in info and not paises_por_doenca.get(en):
+            marcar = [slots_paises[_chave_alfabetica(p)] for p in paises_en if _chave_alfabetica(p) in slots_paises]
+            if marcar:  # so' preenche quem ainda nao tem pais marcado
+                models.set_doenca_paises(en, marcar)
+                paises_por_doenca[en] = set(marcar)
+
+    def _pais_da_doenca(en):
+        paises = paises_lidos.get(en) or paises_por_doenca.get(en) or set()
+        if not paises or any(_chave_alfabetica(p) == nome_brasil for p in paises):  # sem pais = Brasil
+            return countries.get_country("BR")["nome"]
+        return sorted(paises, key=_chave_alfabetica)[0]
+
+    def _ordem_pais(pais):
+        return (0, "") if _chave_alfabetica(pais) == nome_brasil else (1, _chave_alfabetica(pais))
+
+    return _pais_da_doenca, _ordem_pais
+
+
 @app.route("/admin/doencas", methods=["GET", "POST"])
 @aba_required("doencas")
 def admin_doencas():
@@ -5736,36 +5775,7 @@ def admin_doencas():
     limite_nova = (datetime.strptime(models._agora_cuiaba()[:19], "%Y-%m-%d %H:%M:%S")
                    - timedelta(days=DIAS_DOENCA_NOVA)).strftime("%Y-%m-%d %H:%M:%S")
 
-    # Pais de origem (pedido do Alan, 12/11/2026): o das fazendas onde o BioScout leu a
-    # doenca (pais da fazenda; sem escolha, pela coordenada); sem leitura = paises marcados.
-    pais_por_site = models.get_all_site_countries()
-    coords = _coords_all()
-    nome_pais = {cod: info["nome"] for cod, info in countries.COUNTRIES.items()}
-
-    def _pais_do_site(site):
-        if site in pais_por_site:
-            return pais_por_site[site]
-        c = coords.get(site)
-        return (countries.detectar_pais_por_coordenada(*c) if c else None) or countries.DEFAULT_COUNTRY
-
-    paises_lidos = {en: {nome_pais.get(_pais_do_site(site), _pais_do_site(site)) for site in sites}
-                    for en, sites in data_reader.sites_por_doenca().items()}
-    slots_paises = {_chave_alfabetica(p): p for p in models.get_paises_doenca_slots() if p}
-    for en, paises_en in paises_lidos.items():
-        if en in info and not paises_por_doenca.get(en):
-            marcar = [slots_paises[_chave_alfabetica(p)] for p in paises_en if _chave_alfabetica(p) in slots_paises]
-            if marcar:  # so' preenche quem ainda nao tem pais marcado
-                models.set_doenca_paises(en, marcar)
-                paises_por_doenca[en] = set(marcar)
-
-    def _pais_da_doenca(en):
-        paises = paises_lidos.get(en) or paises_por_doenca.get(en) or set()
-        if not paises or any(_chave_alfabetica(p) == nome_brasil for p in paises):  # sem pais = Brasil
-            return countries.get_country("BR")["nome"]
-        return sorted(paises, key=_chave_alfabetica)[0]
-
-    def _ordem_pais(pais):
-        return (0, "") if _chave_alfabetica(pais) == nome_brasil else (1, _chave_alfabetica(pais))
+    _pais_da_doenca, _ordem_pais = _pais_de_cada_doenca(info, paises_por_doenca)
 
     def _fora_do_brasil(en):
         paises = paises_por_doenca.get(en)
@@ -5876,22 +5886,12 @@ def admin_fungicidas():
 
     doencas_data = []
     row_counter = 0
-    # Doenca com registro encontrado (fungicida_data.py ja tem alguma
-    # coisa cadastrada) primeiro, ordem alfabetica dentro de cada grupo;
-    # "sem dados ainda" sempre por ultimo -- pedido explicito do usuario,
-    # pra facilitar achar rapido o que ainda falta pesquisar.
-    # Doencas do Brasil (ou sem pais marcado) sempre antes das de outros
-    # paises; dentro delas, as do BioScout antes das cadastradas a mao.
-    def _fora_do_brasil(doenca_en):
-        paises = doenca_paises.get(doenca_en)
-        return bool(paises) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises)
-
+    # Mesma logica de Doenças/Culturas (pedido do Alan, 12/11/2026): grupos por
+    # pais de origem, Brasil primeiro, ordem alfabetica dentro de cada pais.
+    _pais_da_doenca, _ordem_pais = _pais_de_cada_doenca(translations, doenca_paises)
     doencas_ordenadas = sorted(
         translations.items(),
-        key=lambda kv: (
-            _fora_do_brasil(kv[0]), models.is_manual_disease(kv[0]),
-            not fungicida_data.get_recomendacao(kv[0]), _chave_alfabetica(kv[1]["nome_pt"]),
-        ),
+        key=lambda kv: (_ordem_pais(_pais_da_doenca(kv[0])), _chave_alfabetica(kv[1]["nome_pt"])),
     )
     for doenca_en, info in doencas_ordenadas:
         rotulo = info["nome_pt"]
@@ -5905,6 +5905,7 @@ def admin_fungicidas():
         if not rec:
             doencas_data.append({
                 "doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True, "paises": paises_doenca,
+                "pais": _pais_da_doenca(doenca_en),
                 "bandeiras": bandeiras,
                 "nota": notas.get(doenca_en, ""),
                 "cientifico": info.get("nome_cientifico") or "",
@@ -5946,6 +5947,7 @@ def admin_fungicidas():
             })
         doencas_data.append({
             "doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False, "paises": paises_doenca,
+            "pais": _pais_da_doenca(doenca_en),
             "bandeiras": bandeiras,
             "nota": notas.get(doenca_en, ""),
             "cientifico": info.get("nome_cientifico") or "",

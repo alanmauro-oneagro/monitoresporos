@@ -201,6 +201,10 @@ class TelasPorNivelTest(unittest.TestCase):
         models.salvar_grupo_fazenda_dados(vf["site_name"], None)
         models.delete_virtual_farm(vf["site_name"])
 
+    def test_fungicidas_por_pais_como_doencas(self):
+        html = self._cliente("master").get("/admin/fungicidas").get_data(as_text=True)
+        self.assertIn('class="mt-3 mb-2 pais-doencas">🌎 Brasil', html)
+
     def test_atualizar_mostra_progresso(self):
         """Botao Atualizar: sem aviso no topo, "Atualizando... XX%" pelo status (11/11/2026)."""
         import threading

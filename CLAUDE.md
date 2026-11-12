@@ -850,8 +850,9 @@ site tem que entrar la'.
   mesmo padrao pra doenca do BioScout ou manual (sem nada no
   fungicida_data.py, a lista inteira vem da tabela
   `fungicida_importado_item`, lida por `fungicida_data.get_recomendacao`).
-  Ordem na Biblioteca: BioScout do Brasil (ou sem pais), depois manuais,
-  por ultimo as de outros paises. A
+  Ordem na Biblioteca = MESMA de Doenças/Culturas (pedido do Alan, 12/11/2026): grupos "🌎 <pais>"
+  pelo pais de origem (`app._pais_de_cada_doenca`, usado nas duas telas), Brasil primeiro, ordem
+  alfabetica dentro de cada pais (o antigo BioScout > manuais > sem dados saiu). A
   API AgroAPI da Embrapa foi descartada (nao gerava token). O portal do
   MAPA respondeu 403 ao link pelo NOME do dataset; o link com o id
   (`agrofit_dados._DOWNLOAD_DIRETO`, mesmo usado por
