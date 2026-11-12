@@ -176,6 +176,14 @@ class TelasPorNivelTest(unittest.TestCase):
     def test_grupo_no_editar_ponto(self):
         c = self._cliente("master")
         base = {"lat": "-12.5", "lon": "-55.7", "raio_km": "30", "country_code": "BR"}
+        c.post("/mapa-interpolado/adicionar", data={**base, "tipo": "clima", "nome": "Zzz Grupo Novo", "grupo_economico": "Zzz Grupo N"})
+        vn = next(v for v in models.get_all_virtual_farms() if v["nome"] == "Zzz Grupo Novo")
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._grupo_economico_da_fazenda(vn["site_name"]), "Zzz Grupo N")
+        self.assertIn('name="grupo_economico" class="form-control form-control-sm" maxlength="40" list="grupos-economicos" placeholder="(sem grupo)">',
+                      c.get("/mapa-interpolado").get_data(as_text=True))
+        models.salvar_grupo_fazenda_dados(vn["site_name"], None)
+        models.delete_virtual_farm(vn["site_name"])
         c.post("/mapa-interpolado/adicionar", data={**base, "tipo": "estudo", "nome": "Zzz Grupo Estudo"})
         pe = next(p for p in models.get_pontos_estudo() if p["nome"] == "Zzz Grupo Estudo")
         c.post("/mapa-interpolado/editar", data={**base, "site_name": f"estudo:{pe['id']}", "nome": "Zzz Grupo Estudo",
