@@ -12,18 +12,18 @@
     </div>
     <label class="form-label small mb-1">Nome da fazenda</label>
     <input class="form-control mb-2 local-nome" name="local_nome__{{ i }}" value="{{ form.get('local_nome__' ~ i, '') if form else '' }}" maxlength="60" placeholder="Ex.: Fazenda Santa Rita" aria-label="Nome da fazenda" required>
-    <div class="row g-2 mb-3">
-        <div class="col-8">
-            <label class="form-label small mb-1">Cidade</label>
-            <input class="form-control local-cidade" name="local_cidade__{{ i }}" value="{{ form.get('local_cidade__' ~ i, '') if form else '' }}" list="cidades-{{ i }}" autocomplete="off" aria-label="Cidade" required>
-            <datalist id="cidades-{{ i }}" class="local-cidades"></datalist>
-        </div>
+    {# Estado primeiro; a cidade vem da lista do IBGE daquele estado (pedido do Alan, 13/11/2026). #}
+    <div class="row g-2 mb-3 par-uf-cidade">
         <div class="col-4">
             <label class="form-label small mb-1">Estado</label>
-            <select class="form-select local-uf" name="local_uf__{{ i }}" aria-label="Estado" required>
+            <select class="form-select local-uf" name="local_uf__{{ i }}" aria-label="Estado" data-uf-ibge required>
                 <option value=""></option>
                 {% for uf in ufs %}<option value="{{ uf }}" {% if form and form.get('local_uf__' ~ i) == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}
             </select>
+        </div>
+        <div class="col-8">
+            <label class="form-label small mb-1">Cidade</label>
+            <input class="form-control local-cidade" name="local_cidade__{{ i }}" value="{{ form.get('local_cidade__' ~ i, '') if form else '' }}" autocomplete="off" aria-label="Cidade" placeholder="Escolha o estado primeiro" data-cidade-ibge required>
         </div>
     </div>
     <div class="small fw-semibold mb-1">Culturas e área plantada</div>
@@ -322,7 +322,7 @@
     function iniciarMapa(b) {
         if (!window.L) return;
         var latC = b.querySelector('.local-lat'), lonC = b.querySelector('.local-lon');
-        var cidadeC = b.querySelector('.local-cidade'), ufC = b.querySelector('.local-uf'), lista = b.querySelector('.local-cidades');
+        var ufC = b.querySelector('.local-uf');
         var mapa = L.map(b.querySelector('.local-mapa')).setView([-14.5, -54.5], 4);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri' }).addTo(mapa);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 }).addTo(mapa);
@@ -331,13 +331,11 @@
         });
         var contorno = null;
         function municipio() {
-            var uf = ufC.value, nome = semAcento(cidadeC.value);
+            var uf = ufC.value, nome = semAcento(b.querySelector('.local-cidade').value);
             municipiosDa(uf).then(function (lst) {
                 if (!lst) return;
-                lista.innerHTML = lst.map(function (m) { return '<option value="' + m.nome + '">'; }).join('');
                 var achado = lst.filter(function (m) { return semAcento(m.nome) === nome; })[0];
                 if (!achado) return;
-                cidadeC.value = achado.nome;  // grafia oficial do IBGE
                 ibge(IBGE + '/v3/malhas/municipios/' + achado.id + '?formato=application/vnd.geo+json').then(function (g) {
                     if (!g) return;
                     if (contorno) mapa.removeLayer(contorno);
@@ -346,8 +344,7 @@
                 });
             });
         }
-        ufC.addEventListener('change', municipio);
-        cidadeC.addEventListener('change', municipio);
+        b.addEventListener('change', function (e) { if (e.target.classList.contains('local-cidade')) municipio(); });
         var marcador = null;
         function mostrar(la, lo, centralizar) {
             if (marcador) { marcador.setLatLng([la, lo]); }
@@ -380,6 +377,7 @@
         var tmp = document.createElement('div'); tmp.innerHTML = html.trim();
         var b = tmp.firstElementChild; locaisEl.appendChild(b);
         iniciarMapa(b); atualizar();
+        if (window.cidadesIbge) window.cidadesIbge(b);
         b.querySelector('.local-nome').focus();
     });
     locaisEl.addEventListener('click', function (e) {

@@ -1,0 +1,70 @@
+<script>
+// Estado primeiro, cidade escolhida na lista oficial do IBGE (pedido do Alan, 13/11/2026):
+// sem divergencia de grafia. Em cada par, o select de UF tem `data-uf-ibge` e o campo da
+// cidade `data-cidade-ibge` (input no HTML -- funciona sem JS e pra fazenda fora do Brasil).
+// Com UF escolhida e a lista carregada, o input vira um select com os municipios daquela UF
+// (mesmo name/id/classes); sem UF (ou IBGE fora do ar) volta a ser campo de texto.
+(function () {
+    var cache = {};
+    function lista(uf) {
+        if (!cache[uf]) {
+            cache[uf] = fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/' + uf + '/municipios')
+                .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+                .then(function (l) { if (!l) delete cache[uf]; return l; });
+        }
+        return cache[uf];
+    }
+    function chave(t) { return (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+    function trocar(atual, novo) {
+        ['name', 'id', 'className', 'required'].forEach(function (a) { if (atual[a]) novo[a] = atual[a]; });
+        novo.className = novo.className.replace(/\bform-control\b/, novo.tagName === 'SELECT' ? 'form-select' : 'form-control')
+            .replace(/\bform-select\b/, novo.tagName === 'SELECT' ? 'form-select' : 'form-control');
+        if (novo.tagName === 'SELECT') novo.className = novo.className.replace(/form-control-sm/, 'form-select-sm');
+        else novo.className = novo.className.replace(/form-select-sm/, 'form-control-sm');
+        novo.setAttribute('data-cidade-ibge', '');
+        if (atual.getAttribute('aria-label')) novo.setAttribute('aria-label', atual.getAttribute('aria-label'));
+        atual.replaceWith(novo);
+        return novo;
+    }
+    function campoDaCidade(ufSel) {
+        var par = ufSel.closest('.par-uf-cidade');
+        return par && par.querySelector('[data-cidade-ibge]');
+    }
+    function carregar(ufSel, avisar) {
+        var campo = campoDaCidade(ufSel);
+        if (!campo) return;
+        var uf = ufSel.value, valor = campo.value;
+        if (!uf) {
+            if (campo.tagName === 'SELECT') {
+                var inp = document.createElement('input'); inp.type = 'text'; inp.value = valor; inp.maxLength = 80;
+                trocar(campo, inp);
+            }
+            return;
+        }
+        lista(uf).then(function (l) {
+            if (ufSel.value !== uf) return;  // trocou de estado no meio
+            var atual = campoDaCidade(ufSel);
+            if (!l) return;  // IBGE fora do ar: fica o campo de texto
+            var nomes = l.map(function (m) { return m.nome; }).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+            var achado = nomes.filter(function (n) { return chave(n) === chave(atual.value); })[0] || '';
+            var sel = document.createElement('select'), antigo = atual.value.trim();
+            var limpo = function (t) { return t.replace(/[<>&"]/g, ''); };
+            // Cidade gravada que nao esta na lista: continua escolhida (nunca apaga o que ja existe).
+            var fora = antigo && !achado ? '<option value="' + limpo(antigo) + '" selected>' + limpo(antigo) + ' (fora da lista)</option>' : '';
+            sel.innerHTML = '<option value="">Escolha a cidade</option>' + fora + nomes.map(function (n) {
+                return '<option' + (n === achado ? ' selected' : '') + '>' + limpo(n) + '</option>';
+            }).join('');
+            sel = trocar(atual, sel);
+            if (avisar || (achado && achado !== antigo)) sel.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    }
+    document.addEventListener('change', function (e) {
+        if (e.target.matches && e.target.matches('[data-uf-ibge]')) carregar(e.target, true);
+    });
+    window.cidadesIbge = function (raiz) {
+        (raiz || document).querySelectorAll('[data-uf-ibge]').forEach(function (s) { if (s.value) carregar(s, false); });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { window.cidadesIbge(); });
+    else window.cidadesIbge();
+})();
+</script>
