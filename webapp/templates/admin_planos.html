@@ -110,16 +110,12 @@
                 <option value="BRL" {% if moeda_tabela == 'BRL' %}selected{% endif %}>Real (R$)</option>
             </select>
             <input type="hidden" name="tem_preco_fixo" value="1">
-            <div class="form-check ms-2 mb-0" title="Marcado: o cliente paga a área do limite da faixa (350 ha cai em &quot;até 400 ha&quot; e paga 400 ha)">
-                <input class="form-check-input" type="checkbox" name="preco_fixo" id="preco-fixo" {% if preco_fixo %}checked{% endif %}>
-                <label class="form-check-label" for="preco-fixo">Preço fixo</label>
-            </div>
         </div>
         <div class="table-responsive">
         <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem; max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}" data-moeda="{{ moeda_tabela }}">
             <thead class="table-light"><tr>
                 <th title="Área monitorada">Área</th>
-                <th title="Valor por hectare"><span class="moeda-simbolo">{{ sm }}</span>/ha</th><th title="Valor total no limite da faixa">Total <span class="moeda-simbolo">{{ sm }}</span></th><th class="col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" title="Valor total em reais, pela cotação de hoje">≈ Total R$</th>
+                <th title="Valor por hectare"><span class="moeda-simbolo">{{ sm }}</span>/ha</th><th class="text-center" title="Marcado: quem cai nesta faixa paga a área do limite dela (350 ha em &quot;até 400 ha&quot; paga 400 ha)">Preço fixo</th><th title="Valor total no limite da faixa">Total <span class="moeda-simbolo">{{ sm }}</span></th><th class="col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" title="Valor total em reais, pela cotação de hoje">≈ Total R$</th>
             </tr></thead>
             <tbody>
                 {% for f in tabela_preco %}
@@ -132,6 +128,7 @@
                     <td class="text-nowrap rotulo-acima">{{ f.rotulo }}</td>
                     {% endif %}
                     <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 3.6rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ f.usd_ha if f.usd_ha is not none else '' }}" aria-label="Valor por hectare {{ f.rotulo }}"></td>
+                    <td class="text-center">{% if f.ate_ha %}<input class="form-check-input" type="checkbox" name="fixo_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="fixo" aria-label="Preço fixo {{ f.rotulo }}" {% if f.fixo %}checked{% endif %}>{% else %}<span class="text-muted">-</span>{% endif %}</td>
                     <td class="text-end fw-bold text-nowrap" data-saida="usd" data-col="{{ loop.index0 }}">{{ f.total_usd | dinheiro(sm) if f.total_usd is not none else '-' }}</td>
                     <td class="text-end text-nowrap col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" data-saida="brl" data-col="{{ loop.index0 }}">{{ (f.total_usd * cotacao_dolar.valor) | dinheiro if f.total_usd is not none and cotacao_dolar else '-' }}</td>
                 </tr>
@@ -171,7 +168,8 @@
         var v = usdHa(tr), raio = Math.sqrt(area * 0.01 / Math.PI).toFixed(2).replace('.', ',');
         var faixa = rotulo(tr);
         if (v === null) { saida.textContent = faixa + ' -- sem ' + simbolo() + '/ha na faixa · raio ' + raio + ' km'; return; }
-        var fixo = document.getElementById('preco-fixo').checked && !isNaN(ateDe(tr));
+        var caixaFixo = tr.querySelector('[data-campo="fixo"]');
+        var fixo = caixaFixo && caixaFixo.checked && !isNaN(ateDe(tr));
         var total = (fixo ? ateDe(tr) : area) * v;
         saida.textContent = faixa + ': ' + dinheiro(total, simbolo()) + (!emDolar() || isNaN(cotacao) ? '' : ' (≈ ' + dinheiro(total * cotacao, 'R$') + ')') + ' · raio ' + raio + ' km';
     }
@@ -197,7 +195,7 @@
         simular();
     });
     document.getElementById('simular-area').addEventListener('input', simular);
-    document.getElementById('preco-fixo').addEventListener('change', simular);
+    tabela.addEventListener('change', function (e) { if (e.target.dataset.campo === 'fixo') simular(); });
 
     // Quantidade de faixas editavel (pedido do Alan, 13/11/2026): + Adicionar / ✕ tirar,
     // renumera os campos (ate_ha_i / usd_ha_i; a linha "acima" fica por ultimo) e salva.
@@ -209,6 +207,8 @@
             var a = tr.querySelector('[data-campo="ate_ha"]'), u = tr.querySelector('[data-campo="usd_ha"]');
             if (a) a.name = 'ate_ha_' + i;
             if (u) u.name = 'usd_ha_' + i;
+            var fx = tr.querySelector('[data-campo="fixo"]');
+            if (fx) fx.name = 'fixo_' + i;
         });
         var faixas = linhas.filter(function (tr) { return tr.querySelector('[data-campo="ate_ha"]'); });
         faixas.forEach(function (tr) { tr.querySelector('.remover-faixa').classList.toggle('d-none', faixas.length < 2); });
@@ -246,6 +246,7 @@
         var limite = ateDe(ultima);
         nova.querySelector('[data-campo="ate_ha"]').value = isNaN(limite) ? 100 : limite * 2;
         nova.querySelector('[data-campo="usd_ha"]').value = '';
+        nova.querySelector('[data-campo="fixo"]').checked = false;
         ultima.after(nova);
         renumerar();
         salvar();

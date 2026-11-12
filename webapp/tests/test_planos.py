@@ -712,8 +712,9 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         finally:
             models.set_setting("tabela_precificacao", "[]")
 
-    def test_preco_fixo_cobra_o_limite_da_faixa(self):
-        """Preco fixo (13/11/2026): 350 ha cai em "ate' 400" e paga 400 ha."""
+    def test_preco_fixo_por_faixa(self):
+        """Preco fixo por faixa (coluna, 13/11/2026): 350 ha em "ate' 400" fixa paga 400 ha;
+        faixa sem a marca segue pela area."""
         master = self._logado("Zzz Teste Master Tabela")
         h = {"X-Autosave": "1"}
         dados = {"ate_ha_0": "300", "ate_ha_1": "400", "usd_ha_0": "14", "usd_ha_1": "13", "usd_ha_2": "3",
@@ -722,14 +723,20 @@ class TabelaPrecificacaoTest(unittest.TestCase):
             master.post("/admin/planos/tabela", data=dados, headers=h)
             p = webapp.preco_pela_area(350)
             self.assertEqual((p["total_usd"], p["preco_fixo"]), (350 * 13, False))
-            master.post("/admin/planos/tabela", data={**dados, "preco_fixo": "on"}, headers=h)
+            master.post("/admin/planos/tabela", data={**dados, "fixo_1": "on"}, headers=h)
             p = webapp.preco_pela_area(350)
             self.assertEqual((p["faixa"], p["total_usd"], p["area_cobrada"], p["preco_fixo"]), ("até 400 ha", 400 * 13, 400, True))
+            self.assertEqual(webapp.preco_pela_area(250)["total_usd"], 250 * 14)  # faixa 300 nao fixa
             self.assertEqual(webapp.preco_pela_area(1000)["total_usd"], 3000)  # "acima de": pela area
-            self.assertIn('id="preco-fixo" checked', master.get("/admin/planos").get_data(as_text=True))
+            html = master.get("/admin/planos").get_data(as_text=True)
+            self.assertIn('name="fixo_1" data-col="1" data-campo="fixo" aria-label="Preço fixo até 400 ha" checked', html)
+            self.assertNotIn('name="fixo_2"', html)
             plano = {"preco_por_area": True, "parcelas": 1, "valor": 0}
             self.assertEqual(webapp._plano_para_area(plano, 350)["valor"], 5200)
-            self.assertIn("var PRECO_FIXO = true", webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True))
+            self.assertIn('"fixo": true', webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True))
+            # fora de ordem: a marca acompanha a faixa
+            master.post("/admin/planos/tabela", data={**dados, "ate_ha_0": "400", "ate_ha_1": "300", "fixo_0": "on"}, headers=h)
+            self.assertEqual(webapp._fixo_por_faixa(), {300: False, 400: True})
         finally:
             models.set_setting("tabela_precificacao", "[]")
             models.set_setting("tabela_preco_fixo", "0")
