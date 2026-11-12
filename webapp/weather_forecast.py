@@ -520,18 +520,17 @@ def _resultado_vigente(registro):
     uma janela anterior (falha na atual), o 1o dia dela pode ser ontem."""
     resultado = (registro or {}).get("resultado") or []
     inicio, campo = (registro or {}).get("inicio"), (registro or {}).get("campo_saida")
-    if not resultado or not inicio or not campo:
+    if not resultado or not campo:
         return resultado
-    atraso = (_agora_cuiaba().date() - datetime.fromisoformat(inicio).date()).days
-    if atraso <= 0:
-        return resultado
-    return [{**p, campo: (p.get(campo) or [])[atraso:]} for p in resultado]
+    atraso = max(0, (_agora_cuiaba().date() - datetime.fromisoformat(inicio).date()).days) if inicio else 0
+    return [{**p, campo: (p.get(campo) or [])[atraso:atraso + DIAS_GRADE]} for p in resultado]
 
 
 # Limite da Open-Meteo gratuita: 600 chamadas/minuto, e cada ponto de uma
 # grade em lote conta como uma chamada -- grade maior que isso vai em lotes,
 # esperando a janela de 1 minuto liberar entre um e outro.
 GRADE_LOTE_PONTOS = 500
+DIAS_GRADE = 6  # dias mostrados nas camadas de chuva/nuvens (hoje + 5)
 _GRADE_LIMITE_MINUTO = 550
 _grade_envios = []  # [(timestamp, pontos)] dos ultimos 60s
 _grade_envios_lock = threading.Lock()
@@ -559,7 +558,10 @@ def _buscar_grade_em_lotes(lats, lons, campo_daily):
             "latitude": ",".join(str(v) for v in lote_lats),
             "longitude": ",".join(str(v) for v in lote_lons),
             "daily": campo_daily,
-            "forecast_days": 6,
+            # 1 dia de folga: entre a meia-noite e a leitura das 04:45 (ou se a leitura
+            # falhar) a grade guardada e' de ontem e perde o 1o dia -- com 7, ainda
+            # sobram os 6 dias do mapa (pedido do Alan, 13/11/2026).
+            "forecast_days": DIAS_GRADE + 1,
             "timezone": "auto",
         }
         for tentativa in range(3):
@@ -652,7 +654,7 @@ def _buscar_e_guardar_grade(chave, registro, tipo, lats, lons, campo_daily, camp
         saida.append({
             "lat": r.get("latitude"),
             "lon": r.get("longitude"),
-            campo_saida: daily.get(campo_daily, [])[:6],
+            campo_saida: daily.get(campo_daily, [])[:DIAS_GRADE + 1],
         })
     inicio = ((resultados[0].get("daily") or {}).get("time") or [None])[0] if resultados else None
     corte = (_agora_cuiaba().date() - timedelta(days=3)).isoformat()
