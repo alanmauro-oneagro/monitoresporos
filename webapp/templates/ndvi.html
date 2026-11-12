@@ -48,7 +48,10 @@
                     {% endfor %}
                 </div>
                 {% endif %}
-                <form method="post" action="{{ url_for('save_ndvi_car') }}" enctype="multipart/form-data">
+                {# Formulario recolhido (antes repetia o texto inteiro em toda fazenda -- revisao de redundancias, 12/11/2026). #}
+                <details class="mb-2">
+                <summary class="small fw-semibold">📎 {{ 'Anexar mais um CAR' if site_group.cars else 'Anexar CAR' }}</summary>
+                <form method="post" action="{{ url_for('save_ndvi_car') }}" enctype="multipart/form-data" class="mt-2">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener" class="small d-inline-block mb-2">Buscar contorno da fazenda no SICAR &raquo;</a>
                     <label class="small text-muted mb-1 d-block" for="nome_car_{{ site_idx }}">Nome do CAR (opcional -- ex.: nome do talhao/propriedade)</label>
@@ -59,6 +62,7 @@
                     <textarea class="form-control form-control-sm mb-2" id="kml_texto_{{ site_idx }}" name="kml_texto" rows="4" placeholder="&lt;kml&gt;...&lt;/kml&gt;"></textarea>
                     <button type="submit" class="btn btn-sm btn-success">{{ 'Anexar mais um CAR' if site_group.cars else 'Anexar CAR' }}</button>
                 </form>
+                </details>
             </div>
             <div class="col-12 col-lg-6">
                 {% if site_group.cars %}

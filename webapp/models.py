@@ -1268,12 +1268,6 @@ def get_ndvi_ocultas():
         return set()
 
 
-def set_ndvi_oculta(site_name, oculta):
-    ocultas = get_ndvi_ocultas()
-    (ocultas.add if oculta else ocultas.discard)(site_name)
-    set_setting(_NDVI_OCULTAS_KEY, json.dumps(sorted(ocultas)))
-
-
 def set_setting(key, value):
     conn = get_db()
     conn.execute(
@@ -1303,15 +1297,6 @@ def get_whatsapp_send_hour():
     except (TypeError, ValueError):
         return int(_WHATSAPP_SEND_HOUR_DEFAULT)
     return hora if 0 <= hora <= 23 else int(_WHATSAPP_SEND_HOUR_DEFAULT)
-
-
-def set_whatsapp_send_hour(hora):
-    try:
-        hora_int = int(hora)
-    except (TypeError, ValueError):
-        return
-    if 0 <= hora_int <= 23:
-        set_setting(_WHATSAPP_SEND_HOUR_KEY, str(hora_int))
 
 
 def get_all_whatsapp_schedule_horarios():
@@ -1387,13 +1372,6 @@ def set_whatsapp_schedule_hora(site_name, tipo, hora, minuto=0):
     conn.close()
 
 
-def get_whatsapp_days(site_name):
-    conn = get_db()
-    rows = conn.execute("SELECT weekday FROM whatsapp_schedule WHERE site_name = ?", (site_name,)).fetchall()
-    conn.close()
-    return {r["weekday"] for r in rows}
-
-
 def get_all_whatsapp_days():
     conn = get_db()
     rows = conn.execute("SELECT site_name, weekday FROM whatsapp_schedule").fetchall()
@@ -1415,13 +1393,6 @@ def set_whatsapp_days(site_name, weekdays):
         )
     conn.commit()
     conn.close()
-
-
-def get_whatsapp_days_pdf(site_name):
-    conn = get_db()
-    rows = conn.execute("SELECT weekday FROM whatsapp_schedule_pdf WHERE site_name = ?", (site_name,)).fetchall()
-    conn.close()
-    return {r["weekday"] for r in rows}
 
 
 def get_all_whatsapp_days_pdf():
@@ -2681,13 +2652,6 @@ def delete_farm_ndvi_historico_item(historico_id, site_name):
     mesmo motivo de `get_farm_ndvi_historico_imagem`)."""
     conn = get_db()
     conn.execute("DELETE FROM farm_ndvi_historico WHERE id = ? AND site_name = ?", (historico_id, site_name))
-    conn.commit()
-    conn.close()
-
-
-def delete_farm_ndvi_historico_de_site(site_name):
-    conn = get_db()
-    conn.execute("DELETE FROM farm_ndvi_historico WHERE site_name = ?", (site_name,))
     conn.commit()
     conn.close()
 
@@ -4479,16 +4443,6 @@ def site_ids_por_nome(site_names):
     return {r["site_name"]: r["id"] for r in rows}
 
 
-def atualizar_cliente_ponto(user_id, ponto_id, nome, cultura):
-    conn = get_db()
-    conn.execute(
-        "UPDATE cliente_pontos SET nome = ?, cultura = ? WHERE id = ? AND user_id = ?",
-        (nome, cultura, ponto_id, user_id),
-    )
-    conn.commit()
-    conn.close()
-
-
 def ligar_ponto_a_fazenda(ponto_id, site_name):
     conn = get_db()
     conn.execute("UPDATE cliente_pontos SET site_name = ? WHERE id = ?", (site_name, ponto_id))
@@ -4571,10 +4525,6 @@ def get_planos_fazendas():
     linhas = {r["site_name"]: dict(r) for r in conn.execute("SELECT * FROM planos_fazenda").fetchall()}
     conn.close()
     return linhas
-
-
-def get_plano_fazenda(site_name):
-    return get_planos_fazendas().get(site_name)
 
 
 def salvar_plano_fazenda(site_name, **campos):
