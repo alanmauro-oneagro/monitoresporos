@@ -103,7 +103,7 @@
     <h6 class="mb-1">Tabela de apoio: preço em <span class="moeda-simbolo">{{ sm }}</span> pela área monitorada</h6>
     <p class="small text-muted mb-2">Digite o valor por hectare de cada faixa. A área do cadastro do cliente busca a faixa dela
         (valor intermediário fica na faixa de cima: 300 ha usa a de "até 500 ha") e o preço aparece em
-        <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>. Raio = círculo com a área; em U$, o ≈ R$ sai pelo dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.
+        <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>. Em U$, o ≈ R$ sai pelo dólar de hoje{% if cotacao_dolar %} (R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}){% endif %}.
         Não muda nenhum plano nem cobrança.</p>
     <form method="post" action="{{ url_for('admin_planos_tabela') }}" data-autosave>
         {# Moeda da tabela: U$ ou R$ (pedido do Alan, 09/11/2026). #}
@@ -118,7 +118,7 @@
         <div class="table-responsive">
         <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem; max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}" data-moeda="{{ moeda_tabela }}">
             <thead class="table-light"><tr>
-                <th title="Área monitorada">Área</th><th title="Raio monitorado no limite da faixa">Raio (km)</th>
+                <th title="Área monitorada">Área</th>
                 <th title="Valor por hectare"><span class="moeda-simbolo">{{ sm }}</span>/ha</th><th title="Valor total no limite da faixa">Total <span class="moeda-simbolo">{{ sm }}</span></th><th class="col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" title="Valor total em reais, pela cotação de hoje">≈ Total R$</th>
             </tr></thead>
             <tbody>
@@ -131,7 +131,6 @@
                     {% else %}
                     <td class="text-nowrap rotulo-acima">{{ f.rotulo }}</td>
                     {% endif %}
-                    <td class="text-end text-muted" data-saida="raio" data-col="{{ loop.index0 }}">{{ ('%.2f' | format(f.raio_km)) | replace('.', ',') if f.raio_km else '-' }}</td>
                     <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 3.6rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ f.usd_ha if f.usd_ha is not none else '' }}" aria-label="Valor por hectare {{ f.rotulo }}"></td>
                     <td class="text-end fw-bold text-nowrap" data-saida="usd" data-col="{{ loop.index0 }}">{{ f.total_usd | dinheiro(sm) if f.total_usd is not none else '-' }}</td>
                     <td class="text-end text-nowrap col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" data-saida="brl" data-col="{{ loop.index0 }}">{{ (f.total_usd * cotacao_dolar.valor) | dinheiro if f.total_usd is not none and cotacao_dolar else '-' }}</td>
@@ -177,8 +176,6 @@
     }
     function recalcular(col) {
         var tr = linhas[col], ate = ateDe(tr), v = usdHa(tr);
-        var raio = tabela.querySelector('[data-col="' + col + '"][data-saida="raio"]');
-        if (raio) raio.textContent = !isNaN(ate) && ate > 0 ? Math.sqrt(ate * 0.01 / Math.PI).toFixed(2).replace('.', ',') : '-';
         var acima = tabela.querySelector('.rotulo-acima'), penultima = linhas[linhas.length - 2];
         if (acima && penultima && !isNaN(ateDe(penultima))) acima.textContent = 'acima de ' + ateDe(penultima).toLocaleString('pt-BR') + ' ha';
         var total = !isNaN(ate) && v !== null ? ate * v : null;
