@@ -740,6 +740,20 @@ site tem que entrar la'.
   **Recomendações sem cultura na safra** continua sem mostrar doenca (decisao antiga), mas agora
   avisa "Nenhuma cultura definida para esta safra -- escolha em Manejos" em vez de "Nenhuma doença
   em Atenção ou Perigo" (que parecia "tudo bem").
+- **Fundir doencas** (pedido do Alan, 11/11/2026; Master): no cartao de cada doenca em
+  Doenças/Culturas, "🔗 Fundir com..." + "Fundir" (rota `fundir_doenca`, confirmacao no navegador)
+  junta ESTA doenca na escolhida (`models.fundir_doencas`): fica nome/culturas/fungicidas da
+  escolhida, o que estiver vazio nela vem da outra (nome cientifico, germinacao), culturas e
+  paises somam, tabelas de fungicida por linha (a da escolhida ganha), anotacoes por fazenda vao
+  pra' que ficou (as duas, uma embaixo da outra). As LEITURAS do BioScout da que saiu (passadas e
+  futuras) contam na que ficou: tabela `doenca_fusoes` (origem_en -> destino_en) ->
+  `models.apelidos_de_doencas` -> `data_reader.definir_apelidos` (reescreve `displayName` ao ler
+  o spore_counts.csv; relido a cada 30 s por `_apelidos_em_dia` e na subida); mesmo dia e fazenda
+  = vale a MAIOR contagem (`data_reader._mesma_leitura_maior`, so' quando uma das leituras veio de
+  apelido). Doenca manual nao pode ficar no lugar de uma do BioScout (aviso: junte a manual na do
+  BioScout). Secao "🔗 Fusões feitas" com "Desfazer" (`desfazer_fusao_doenca` /
+  `models.desfazer_fusao`: volta nome, nome cientifico, germinacao, culturas e paises; anotacoes
+  e fungicidas que foram pra' outra ficam la').
 - **Ordem em Doenças/Culturas** (pedido do Alan, 11/11/2026): doencas do Brasil (ou sem pais
   marcado) primeiro, depois as de outros paises, cada parte em ordem alfabetica do nome em
   portugues. Doenca que entrou ha' menos de `app.DIAS_DOENCA_NOVA` (3) dias (coluna

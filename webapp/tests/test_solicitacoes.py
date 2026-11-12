@@ -285,6 +285,57 @@ class CadastroTest(unittest.TestCase):
             for en in (a, b, c):
                 models.delete_disease_translation(en)
 
+    def test_fundir_doencas(self):
+        """Botao "🔗 Fundir com..." em Doenças/Culturas (pedido do Alan, 11/11/2026)."""
+        import data_reader
+        master = self._logado("Zzz Teste Master Cad")
+        fica = models.add_manual_disease("Zzz Fusao Fica")
+        sai = models.add_manual_disease("Zzz Fusao Sai")
+        models.save_disease_translation(sai, "Zzz Fusao Sai", "Fungus zzz")
+        models.set_doenca_culturas(sai, ["Soja"])
+        models.save_recommendation_note("Zzz Faz Fusao", "Zzz Fusao Sai", "nota da que sai")
+        models.save_recommendation_note("Zzz Faz Fusao", "Zzz Fusao Fica", "nota da que fica")
+        try:
+            html = master.get("/admin/doencas").get_data(as_text=True)
+            self.assertIn("🔗 Fundir com...", html)
+            r = master.post("/admin/doencas/fundir", data={"origem": sai, "destino": fica})
+            self.assertEqual(r.status_code, 302)
+            info = models.get_all_disease_info()
+            self.assertNotIn(sai, info)
+            self.assertEqual(info[fica]["nome_cientifico"], "Fungus zzz")  # vazio na que fica = vem da outra
+            self.assertIn("Soja", models.get_doenca_culturas().get(fica, set()))
+            notas = models.get_all_recommendation_notes()
+            self.assertEqual(notas[("Zzz Faz Fusao", "Zzz Fusao Fica")], "nota da que fica\nnota da que sai")
+            self.assertEqual(models.apelidos_de_doencas()[sai], fica)
+            self.assertIn("Fusões feitas", master.get("/admin/doencas").get_data(as_text=True))
+            # desfazer: volta separada
+            master.post("/admin/doencas/desfazer-fusao", data={"origem": sai})
+            self.assertEqual(models.get_all_disease_info()[sai]["nome_pt"], "Zzz Fusao Sai")
+            self.assertNotIn(sai, models.apelidos_de_doencas())
+        finally:
+            for en in (fica, sai):
+                models.delete_disease_translation(en)
+            models.save_recommendation_note("Zzz Faz Fusao", "Zzz Fusao Fica", "")
+
+    def test_leituras_da_doenca_fundida_contam_na_que_ficou(self):
+        import data_reader
+        try:
+            antes = data_reader.get_dashboard_data()
+            sites = [s for s, cards in antes.items()
+                     if {c["doenca_en"] for c in cards} >= {"Septoria", "Target Spot"}]
+            if not sites:
+                self.skipTest("sem fazenda com as duas doencas nos dados")
+            site = sites[0]
+            data_reader.definir_apelidos({"Septoria": "Target Spot"})
+            depois = data_reader.get_dashboard_data()
+            nomes = [c["doenca_en"] for c in depois[site]]
+            self.assertNotIn("Septoria", nomes)
+            self.assertEqual(nomes.count("Target Spot"), 1)
+            self.assertNotIn("Septoria", data_reader.read_unique_display_names())
+        finally:
+            data_reader.definir_apelidos({})
+        self.assertIn("Septoria", data_reader.read_unique_display_names())
+
     def test_cana_virou_outros_no_banco(self):
         """Cadastro e tipo das culturas gravados como "cana" passam a "outros" no init_db."""
         uid = models.criar_cliente("Zzz Cad Cana Antiga", "segredo1", "", "5565999990081", "", None)

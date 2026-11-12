@@ -57,6 +57,16 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
                 🗑️ Excluir
             </button>
         </div>
+            {% if current_user.is_master and doencas | length > 1 %}
+            {# Fusao manual (pedido do Alan, 11/11/2026): esta doenca e' juntada na escolhida. #}
+            <div class="d-flex align-items-center gap-1 mb-2 fundir-box">
+                <select class="form-select form-select-sm fundir-destino" style="max-width: 20rem;" aria-label="Juntar em" form="naoEnviar">
+                    <option value="">🔗 Fundir com...</option>
+                    {% for o in doencas if o.en != d.en %}<option value="{{ o.en }}">{{ o.pt }}</option>{% endfor %}
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-primary fundir-btn" data-en="{{ d.en }}" disabled>Fundir</button>
+            </div>
+            {% endif %}
         <div class="row gx-2">
             <div class="col-md-5">
                 <label class="form-label small text-muted mb-1" title="Trocar aqui muda o nome em todo o site: Alertas, Manejos, Recomendações, Gráficos, app, WhatsApp e PDF (as anotações vão junto)">✏️ Nome da doença (vale em todo o site)</label>
@@ -115,6 +125,27 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
     <span class="autosave-status small ms-2"></span>
 </form>
 
+
+{% if current_user.is_master %}
+<form method="post" action="{{ url_for('fundir_doenca') }}" id="fundirForm" class="d-none">
+    <input type="hidden" name="origem"><input type="hidden" name="destino">
+</form>
+{% if fusoes %}
+<h6 class="mb-2 mt-4">🔗 Fusões feitas</h6>
+<div class="card shadow-sm"><div class="card-body small">
+    <div class="text-muted mb-2">As leituras do BioScout com o nome juntado (inclusive as que chegarem depois) contam na doença que ficou; no mesmo dia e fazenda vale a contagem mais alta.</div>
+    {% for f in fusoes %}
+    <form method="post" action="{{ url_for('desfazer_fusao_doenca') }}" class="d-flex flex-wrap align-items-center gap-2 mb-1"
+          onsubmit="return confirm('Desfazer? As duas doenças voltam a aparecer separadas.');">
+        <input type="hidden" name="origem" value="{{ f.origem_en }}">
+        <span><strong>{{ f.origem_pt or f.origem_en }}</strong> → {{ (doencas | selectattr('en', 'equalto', f.destino_en) | map(attribute='pt') | first) or f.destino_en }}</span>
+        <span class="text-muted">{{ (f.criado_em or '')[:10] | data_br }}</span>
+        <button class="btn btn-sm btn-outline-secondary py-0" type="submit">Desfazer</button>
+    </form>
+    {% endfor %}
+</div></div>
+{% endif %}
+{% endif %}
 
 <h6 class="mb-2 mt-4">Culturas</h6>
 <form method="post" data-autosave data-autosave-reload class="card shadow-sm mb-2">
@@ -260,6 +291,20 @@ document.querySelectorAll('.buscar-germinacao-btn').forEach(function (btn) {
 // name="display_name_en" uma vez por doenca) -- um submit normal ali
 // dentro mandaria os campos errados. Chama a rota direto via fetch, sem
 // precisar de outro <form> (nao pode aninhar form dentro de form).
+// Fusao de doencas (pedido do Alan, 11/11/2026).
+document.querySelectorAll('.fundir-box').forEach(function (box) {
+    var sel = box.querySelector('.fundir-destino'), btn = box.querySelector('.fundir-btn');
+    sel.addEventListener('change', function () { btn.disabled = !sel.value; });
+    btn.addEventListener('click', function () {
+        if (!sel.value) return;
+        var origem = btn.closest('.card-body').querySelector('input[name="nome_pt"]').value || btn.dataset.en;
+        var destino = sel.options[sel.selectedIndex].text;
+        if (!confirm('"' + origem + '" será juntada em "' + destino + '".\n\nFicam o nome, as culturas e os fungicidas de "' + destino + '" (o que estiver vazio nela vem de "' + origem + '"). As anotações e as leituras do BioScout passam pra "' + destino + '".\n\nDá pra desfazer depois em "Fusões feitas".')) return;
+        var f = document.getElementById('fundirForm');
+        f.origem.value = btn.dataset.en; f.destino.value = sel.value; f.submit();
+    });
+});
+
 document.querySelectorAll('.excluir-doenca-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
         var nome = btn.closest('.card-body').querySelector('input[name="nome_pt"]').value || btn.dataset.en;

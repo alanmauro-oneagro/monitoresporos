@@ -461,6 +461,14 @@ def init_db():
             nome TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS doenca_fusoes (
+            origem_en TEXT PRIMARY KEY,
+            destino_en TEXT NOT NULL,
+            origem_pt TEXT,
+            dados TEXT,
+            criado_em TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS doenca_cultura (
             doenca_en TEXT NOT NULL,
             cultura TEXT NOT NULL,
@@ -2763,6 +2771,114 @@ def set_doenca_culturas(doenca_en, culturas):
         conn.execute("INSERT INTO doenca_cultura (doenca_en, cultura) VALUES (?, ?)", (doenca_en, cultura))
     conn.commit()
     conn.close()
+
+
+_TABELAS_FUNGICIDA_DOENCA = (
+    ("fungicida_overrides", "doenca"), ("fungicida_ordem", "doenca"),
+    ("fungicida_registro_bloqueado", "doenca"), ("fungicida_nota_doenca", "doenca"),
+    ("fungicida_importado_item", "doenca"),
+)
+
+
+def apelidos_de_doencas():
+    """{origem_en: destino_en} das doencas fundidas (destino final, mesmo
+    se o destino tambem foi fundido depois)."""
+    conn = get_db()
+    rows = conn.execute("SELECT origem_en, destino_en FROM doenca_fusoes").fetchall()
+    conn.close()
+    mapa = {r["origem_en"]: r["destino_en"] for r in rows}
+    final = {}
+    for origem in mapa:
+        destino, vistos = mapa[origem], {origem}
+        while destino in mapa and destino not in vistos:
+            vistos.add(destino)
+            destino = mapa[destino]
+        final[origem] = destino
+    return final
+
+
+def get_fusoes_doencas():
+    conn = get_db()
+    rows = conn.execute("SELECT origem_en, destino_en, origem_pt, criado_em FROM doenca_fusoes ORDER BY criado_em DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def fundir_doencas(origem_en, destino_en):
+    """Junta a doenca `origem_en` na `destino_en` (Doenças/Culturas, pedido do
+    Alan, 11/11/2026): fica o nome/culturas/fungicidas do destino; o que
+    estiver vazio no destino vem da origem; culturas e paises somam; as
+    anotacoes por fazenda passam pro destino (as duas, uma embaixo da outra,
+    se ambas existirem); as leituras da origem passam a valer pro destino
+    (`apelidos_de_doencas` -> `data_reader.definir_apelidos`). Guarda o que
+    a origem tinha pra' `desfazer_fusao`."""
+    conn = get_db()
+    linhas = {r["display_name_en"]: dict(r) for r in conn.execute(
+        f"SELECT {_DISEASE_INFO_COLUMNS} FROM disease_translations WHERE display_name_en IN (?, ?)", (origem_en, destino_en))}
+    origem, destino = linhas.get(origem_en), linhas.get(destino_en)
+    if not origem or not destino or origem_en == destino_en:
+        conn.close()
+        return False
+    culturas = [r["cultura"] for r in conn.execute("SELECT cultura FROM doenca_cultura WHERE doenca_en = ?", (origem_en,))]
+    paises = [r["country_code"] for r in conn.execute("SELECT country_code FROM doenca_pais WHERE doenca_en = ?", (origem_en,))]
+    dados = {"linha": origem, "culturas": culturas, "paises": paises}
+    for campo in ("nome_cientifico", "germ_temp_min", "germ_temp_max", "germ_ur_min", "germ_molhamento_horas"):
+        if destino.get(campo) in (None, "") and origem.get(campo) not in (None, ""):
+            conn.execute(f"UPDATE disease_translations SET {campo} = ? WHERE display_name_en = ?", (origem[campo], destino_en))
+    for tabela, coluna in (("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en")) + _TABELAS_FUNGICIDA_DOENCA:
+        conn.execute(f"UPDATE OR IGNORE {tabela} SET {coluna} = ? WHERE {coluna} = ?", (destino_en, origem_en))
+        conn.execute(f"DELETE FROM {tabela} WHERE {coluna} = ?", (origem_en,))
+    # Anotacoes por fazenda (guardadas pelo nome em portugues).
+    nome_o, nome_d = origem["nome_pt"], destino["nome_pt"]
+    if nome_o and nome_d and nome_o != nome_d:
+        notas_d = {r["site_name"]: r["nota"] for r in conn.execute(
+            "SELECT site_name, nota FROM recommendation_notes WHERE doenca = ?", (nome_d,))}
+        for r in conn.execute("SELECT site_name, nota FROM recommendation_notes WHERE doenca = ?", (nome_o,)).fetchall():
+            atual = (notas_d.get(r["site_name"]) or "").strip()
+            nova = (r["nota"] or "").strip()
+            texto = f"{atual}\n{nova}" if atual and nova and nova != atual else (atual or nova)
+            conn.execute("INSERT INTO recommendation_notes (site_name, doenca, nota, updated_at) VALUES (?, ?, ?, ?)"
+                         " ON CONFLICT(site_name, doenca) DO UPDATE SET nota = excluded.nota, updated_at = excluded.updated_at",
+                         (r["site_name"], nome_d, texto, _agora_cuiaba()))
+        conn.execute("DELETE FROM recommendation_notes WHERE doenca = ?", (nome_o,))
+    conn.execute("DELETE FROM disease_translations WHERE display_name_en = ?", (origem_en,))
+    # Quem ja' tinha sido fundido na origem passa a apontar pro destino.
+    conn.execute("UPDATE doenca_fusoes SET destino_en = ? WHERE destino_en = ?", (destino_en, origem_en))
+    conn.execute("INSERT OR REPLACE INTO doenca_fusoes (origem_en, destino_en, origem_pt, dados, criado_em) VALUES (?, ?, ?, ?, ?)",
+                 (origem_en, destino_en, nome_o, json.dumps(dados, ensure_ascii=False), _agora_cuiaba()))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def desfazer_fusao(origem_en):
+    """Separa de novo: a doenca volta com nome, nome cientifico, germinacao,
+    culturas e paises que tinha; as leituras dela voltam a ser dela. As
+    anotacoes e fungicidas que foram pro destino ficam la'."""
+    conn = get_db()
+    row = conn.execute("SELECT dados FROM doenca_fusoes WHERE origem_en = ?", (origem_en,)).fetchone()
+    if not row:
+        conn.close()
+        return False
+    dados = json.loads(row["dados"] or "{}")
+    linha = dados.get("linha") or {"display_name_en": origem_en, "nome_pt": origem_en}
+    usados = {r[0].lower() for r in conn.execute("SELECT nome_pt FROM disease_translations")}
+    nome = linha.get("nome_pt") or origem_en
+    if nome.lower() in usados:
+        nome = origem_en
+    conn.execute(
+        "INSERT OR REPLACE INTO disease_translations (display_name_en, nome_pt, nome_cientifico, germ_temp_min, germ_temp_max,"
+        " germ_ur_min, germ_molhamento_horas, germ_agua_livre_inibe, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (origem_en, nome, linha.get("nome_cientifico"), linha.get("germ_temp_min"), linha.get("germ_temp_max"),
+         linha.get("germ_ur_min"), linha.get("germ_molhamento_horas"), 1 if linha.get("germ_agua_livre_inibe") else 0, None))
+    for c in dados.get("culturas") or []:
+        conn.execute("INSERT OR IGNORE INTO doenca_cultura (doenca_en, cultura) VALUES (?, ?)", (origem_en, c))
+    for pais in dados.get("paises") or []:
+        conn.execute("INSERT OR IGNORE INTO doenca_pais (doenca_en, country_code) VALUES (?, ?)", (origem_en, pais))
+    conn.execute("DELETE FROM doenca_fusoes WHERE origem_en = ?", (origem_en,))
+    conn.commit()
+    conn.close()
+    return True
 
 
 def get_doenca_paises():

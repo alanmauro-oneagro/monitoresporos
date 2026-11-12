@@ -5676,7 +5676,7 @@ def admin_doencas():
         "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, culturas=culturas,
         grupos_cultura=GRUPOS_CULTURA,
         tipo_cultura=[_grupo_da_cultura(c) if c else "" for c in culturas],
-        paises=paises, matriz_paises=matriz_paises,
+        paises=paises, matriz_paises=matriz_paises, fusoes=models.get_fusoes_doencas(),
     )
 
 
@@ -6228,6 +6228,53 @@ def buscar_germinacao_doenca():
         "temp_min": dados["temp_min"], "temp_max": dados["temp_max"], "ur_min": dados["ur_min"],
         "molhamento_horas": dados["molhamento_horas"], "germinacao": _formatar_condicoes_germinacao(salvo),
     })
+
+
+def _sincronizar_apelidos():
+    """Leituras das doencas fundidas valem pra' que ficou (`data_reader.definir_apelidos`)."""
+    try:
+        data_reader.definir_apelidos(models.apelidos_de_doencas())
+    except Exception:
+        app.logger.exception("Falha ao carregar as doencas fundidas")
+
+
+_apelidos_lidos_em = [0.0]
+
+
+@app.before_request
+def _apelidos_em_dia():
+    # Relido a cada 30 s (mais de um processo/replica tambem fica certo).
+    if time.time() - _apelidos_lidos_em[0] > 30:
+        _apelidos_lidos_em[0] = time.time()
+        _sincronizar_apelidos()
+
+
+@app.route("/admin/doencas/fundir", methods=["POST"])
+@master_required
+def fundir_doenca():
+    """Botao "🔗 Fundir com..." em Doenças/Culturas (pedido do Alan, 11/11/2026)."""
+    origem, destino = request.form.get("origem", ""), request.form.get("destino", "")
+    info = models.get_all_disease_info()
+    if origem not in info or destino not in info or origem == destino:
+        flash("Escolha a doença que fica.", "error")
+        return redirect(url_for("admin_doencas"))
+    if models.is_manual_disease(destino) and not models.is_manual_disease(origem):
+        flash(f"'{info[destino]['nome_pt']}' foi cadastrada à mão e não recebe leituras do BioScout -- junte ela "
+              f"dentro de '{info[origem]['nome_pt']}' (a do BioScout fica) e depois troque o nome, se quiser.", "error")
+        return redirect(url_for("admin_doencas"))
+    models.fundir_doencas(origem, destino)
+    _sincronizar_apelidos()
+    flash(f"'{info[origem]['nome_pt']}' foi juntada em '{info[destino]['nome_pt']}'.", "success")
+    return redirect(url_for("admin_doencas"))
+
+
+@app.route("/admin/doencas/desfazer-fusao", methods=["POST"])
+@master_required
+def desfazer_fusao_doenca():
+    if models.desfazer_fusao(request.form.get("origem", "")):
+        _sincronizar_apelidos()
+        flash("Fusão desfeita -- as duas doenças estão separadas de novo.", "success")
+    return redirect(url_for("admin_doencas"))
 
 
 @app.route("/admin/doencas/manual", methods=["POST"])
@@ -9513,6 +9560,7 @@ def _bootstrap_once():
     teria seu proprio agendador e mandaria cada relatorio agendado em
     duplicidade."""
     models.init_db()
+    _sincronizar_apelidos()
     _bootstrap_admin_from_env()
     _bootstrap_master_qap()
     _criar_fazendas_das_lavouras_antigas()
