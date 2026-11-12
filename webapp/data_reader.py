@@ -229,8 +229,38 @@ def _normalizar_display_names(linhas):
     for linha in linhas:
         nome = linha.get("displayName")
         if nome:
-            linha["displayName"] = mapa[nome.lower()]
+            canonico = mapa[nome.lower()]
+            destino = _apelidos.get(canonico)
+            if destino:
+                linha["_apelido"] = canonico
+                canonico = destino
+            linha["displayName"] = canonico
     _ultimo_mapa_canonico = mapa
+
+
+_apelidos = {}  # displayName que foi fundido -> displayName que ficou (Doenças/Culturas, 11/11/2026)
+
+
+def definir_apelidos(mapa):
+    """Doencas fundidas (`models.apelidos_de_doencas`): toda leitura de uma
+    doenca que foi juntada em outra passa a valer pra' que ficou -- em todo
+    o site, inclusive leituras futuras com o nome antigo. Mudou = refaz o
+    cache das leituras."""
+    global _apelidos
+    mapa = dict(mapa or {})
+    if mapa != _apelidos:
+        _apelidos = mapa
+        _csv_cache.pop(DATA_DIR / "spore_counts.csv", None)
+        _derivados_cache.clear()
+        _disease_concentration_lookup_cache.clear()
+
+
+def _mesma_leitura_maior(nova, atual, dt_nova, dt_atual):
+    """Duas leituras do mesmo dia: vale a mais recente; se uma delas veio de
+    doenca fundida, vale a MAIOR contagem (pedido do Alan, 11/11/2026)."""
+    if dt_nova.date() == dt_atual.date() and (nova.get("_apelido") or atual.get("_apelido")):
+        return (_to_float(nova.get("concentration")) or 0) > (_to_float(atual.get("concentration")) or 0)
+    return dt_nova > dt_atual
 
 
 def nome_canonico_para(display_name_en):
@@ -312,9 +342,9 @@ def build_disease_concentration_lookup(spore_rows):
         key = (site, doenca)
         por_dia = grouped.setdefault(key, {})
         data_iso = dt.date().isoformat()
-        if data_iso not in por_dia or dt > por_dia[data_iso]["_dt"]:
+        if data_iso not in por_dia or _mesma_leitura_maior(row, por_dia[data_iso]["_row"], dt, por_dia[data_iso]["_dt"]):
             por_dia[data_iso] = {
-                "_dt": dt, "data": data_iso, "concentracao": conc,
+                "_dt": dt, "_row": row, "data": data_iso, "concentracao": conc,
                 "warn": _to_float(row.get("warningConcentrationThreshold")),
                 "danger": _to_float(row.get("dangerConcentrationThreshold")),
                 "maximo": _to_float(row.get("maximumConcentrationThreshold")),
@@ -322,7 +352,7 @@ def build_disease_concentration_lookup(spore_rows):
     lookup = {}
     for key, por_dia in grouped.items():
         dias_ordenados = sorted(por_dia.values(), key=lambda r: r["_dt"])
-        lookup[key] = [{k: v for k, v in r.items() if k != "_dt"} for r in dias_ordenados]
+        lookup[key] = [{k: v for k, v in r.items() if k not in ("_dt", "_row")} for r in dias_ordenados]
     _disease_concentration_lookup_cache.clear()
     _disease_concentration_lookup_cache[mtime] = lookup
     return lookup
@@ -447,9 +477,10 @@ def get_site_disease_history(site, doenca_en, dias=15):
         if conc is None:
             continue
         data_iso = dt.date().isoformat()
-        if data_iso not in por_dia or dt > por_dia[data_iso]["_dt"]:
+        if data_iso not in por_dia or _mesma_leitura_maior(row, por_dia[data_iso]["_row"], dt, por_dia[data_iso]["_dt"]):
             por_dia[data_iso] = {
                 "_dt": dt,
+                "_row": row,
                 "data": data_iso,
                 "concentracao": conc,
                 "warn": _to_float(row.get("warningConcentrationThreshold")),
@@ -492,7 +523,7 @@ def get_dashboard_data(permitted_site_names=None, translations=None):
             except (KeyError, ValueError):
                 continue
             key = (row.get("siteName"), row.get("displayName"))
-            if key not in latest or dt > latest[key]["_dt"]:
+            if key not in latest or _mesma_leitura_maior(row, latest[key]["row"], dt, latest[key]["_dt"]):
                 latest[key] = {"_dt": dt, "row": row}
         return latest
 
