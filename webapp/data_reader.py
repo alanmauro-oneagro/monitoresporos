@@ -205,7 +205,9 @@ def _build_canonical_map(linhas):
             continue
         chave = nome.lower()
         if chave not in canonico_por_minusculo:
-            canonico_por_minusculo[chave] = _DOENCA_MAP_POR_MINUSCULO.get(chave, nome)
+            # Grafia fixa: a do DOENCA_MAP; senao a que ja' esta' no banco (12/11/2026 -- antes
+            # era a 1a vista no arquivo, que podia trocar a cada busca e "desfazer" o nome editado).
+            canonico_por_minusculo[chave] = _DOENCA_MAP_POR_MINUSCULO.get(chave) or _grafias_preferidas.get(chave, nome)
     return canonico_por_minusculo
 
 
@@ -236,6 +238,30 @@ def _normalizar_display_names(linhas):
                 canonico = destino
             linha["displayName"] = canonico
     _ultimo_mapa_canonico = mapa
+
+
+_grafias_preferidas = {}  # minusculo -> grafia ja' gravada no banco (disease_translations)
+
+
+def definir_grafias_preferidas(nomes):
+    global _grafias_preferidas
+    mapa = {n.lower(): n for n in sorted(nomes or [])}
+    if mapa != _grafias_preferidas:
+        _grafias_preferidas = mapa
+        _csv_cache.pop(DATA_DIR / "spore_counts.csv", None)
+        _derivados_cache.clear()
+        _disease_concentration_lookup_cache.clear()
+
+
+def sites_por_doenca():
+    """displayName -> fazendas (siteName) onde a doenca ja' foi lida."""
+    def calcular(linhas):
+        resultado = {}
+        for row in linhas:
+            if row.get("displayName") and row.get("siteName"):
+                resultado.setdefault(row["displayName"], set()).add(row["siteName"])
+        return resultado
+    return _derivado_das_leituras("sites_por_doenca", calcular)
 
 
 _apelidos = {}  # displayName que foi fundido -> displayName que ficou (Doenças/Culturas, 11/11/2026)

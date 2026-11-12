@@ -343,7 +343,7 @@
             clearTimeout(status._clearTimer);
             status.textContent = data.ok ? '✓ Salvo' : ('⚠ ' + (data.message || 'Erro ao salvar'));
             status.className = 'autosave-status small ms-2 ' + (data.ok ? 'text-success' : 'text-danger');
-            status._clearTimer = setTimeout(function () { status.textContent = ''; }, 2500);
+            status._clearTimer = setTimeout(function () { status.textContent = ''; }, 5000);
         }).catch(function () {
             if (!status) return;
             clearTimeout(status._clearTimer);

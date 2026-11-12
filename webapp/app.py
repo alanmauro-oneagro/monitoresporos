@@ -812,6 +812,7 @@ def _load_translations():
     que sobrou de antes da normalizacao de capitalizacao existir (ver
     `data_reader.nome_canonico_para`/`models.merge_duplicate_disease_translations`)
     e devolve o mapa atual."""
+    _sincronizar_apelidos()  # grafia fixa + doencas fundidas antes de ler os nomes
     try:
         display_names = data_reader.read_unique_display_names()
         models.ensure_disease_translations(display_names, data_reader.DOENCA_MAP, data_reader.read_scientific_names())
@@ -5641,6 +5642,37 @@ def admin_doencas():
     limite_nova = (datetime.strptime(models._agora_cuiaba()[:19], "%Y-%m-%d %H:%M:%S")
                    - timedelta(days=DIAS_DOENCA_NOVA)).strftime("%Y-%m-%d %H:%M:%S")
 
+    # Pais de origem (pedido do Alan, 12/11/2026): o das fazendas onde o BioScout leu a
+    # doenca (pais da fazenda; sem escolha, pela coordenada); sem leitura = paises marcados.
+    pais_por_site = models.get_all_site_countries()
+    coords = _coords_all()
+    nome_pais = {cod: info["nome"] for cod, info in countries.COUNTRIES.items()}
+
+    def _pais_do_site(site):
+        if site in pais_por_site:
+            return pais_por_site[site]
+        c = coords.get(site)
+        return (countries.detectar_pais_por_coordenada(*c) if c else None) or countries.DEFAULT_COUNTRY
+
+    paises_lidos = {en: {nome_pais.get(_pais_do_site(site), _pais_do_site(site)) for site in sites}
+                    for en, sites in data_reader.sites_por_doenca().items()}
+    slots_paises = {_chave_alfabetica(p): p for p in models.get_paises_doenca_slots() if p}
+    for en, paises_en in paises_lidos.items():
+        if en in info and not paises_por_doenca.get(en):
+            marcar = [slots_paises[_chave_alfabetica(p)] for p in paises_en if _chave_alfabetica(p) in slots_paises]
+            if marcar:  # so' preenche quem ainda nao tem pais marcado
+                models.set_doenca_paises(en, marcar)
+                paises_por_doenca[en] = set(marcar)
+
+    def _pais_da_doenca(en):
+        paises = paises_lidos.get(en) or paises_por_doenca.get(en) or set()
+        if not paises or any(_chave_alfabetica(p) == nome_brasil for p in paises):  # sem pais = Brasil
+            return countries.get_country("BR")["nome"]
+        return sorted(paises, key=_chave_alfabetica)[0]
+
+    def _ordem_pais(pais):
+        return (0, "") if _chave_alfabetica(pais) == nome_brasil else (1, _chave_alfabetica(pais))
+
     def _fora_do_brasil(en):
         paises = paises_por_doenca.get(en)
         return bool(paises) and nome_brasil not in map(_chave_alfabetica, paises)
@@ -5655,8 +5687,9 @@ def admin_doencas():
             "manual": models.is_manual_disease(en),
             "sem_traducao": not models.is_manual_disease(en) and (data["nome_pt"] or en) == en,
             "nova": (criadas.get(en) or "") >= limite_nova,
+            "pais": _pais_da_doenca(en),
         }
-        for en, data in sorted(info.items(), key=lambda kv: (_fora_do_brasil(kv[0]), _chave_alfabetica(kv[1]["nome_pt"] or kv[0])))
+        for en, data in sorted(info.items(), key=lambda kv: (_ordem_pais(_pais_da_doenca(kv[0])), _chave_alfabetica(kv[1]["nome_pt"] or kv[0])))
     ]
     culturas_ativas = models.get_culturas_ativas()
     culturas = models.get_culturas()
@@ -6233,6 +6266,7 @@ def buscar_germinacao_doenca():
 def _sincronizar_apelidos():
     """Leituras das doencas fundidas valem pra' que ficou (`data_reader.definir_apelidos`)."""
     try:
+        data_reader.definir_grafias_preferidas(models.get_all_disease_translations().keys())
         data_reader.definir_apelidos(models.apelidos_de_doencas())
     except Exception:
         app.logger.exception("Falha ao carregar as doencas fundidas")

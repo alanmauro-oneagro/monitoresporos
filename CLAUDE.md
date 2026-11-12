@@ -740,6 +740,19 @@ site tem que entrar la'.
   **Recomendações sem cultura na safra** continua sem mostrar doenca (decisao antiga), mas agora
   avisa "Nenhuma cultura definida para esta safra -- escolha em Manejos" em vez de "Nenhuma doença
   em Atenção ou Perigo" (que parecia "tudo bem").
+- **Doenças/Culturas por pais + nome que nao volta** (pedido do Alan, 12/11/2026): os cartoes ficam
+  em grupos "🌎 <pais>" pelo pais das fazendas onde o BioScout leu a doenca
+  (`data_reader.sites_por_doenca` + pais da fazenda -- escolhido ou pela coordenada,
+  `countries.detectar_pais_por_coordenada`); sem leitura = paises marcados; sem pais = Brasil.
+  Brasil primeiro, depois os outros paises em ordem alfabetica; dentro, ordem alfabetica. Doenca
+  lida e ainda sem pais marcado ganha os paises da leitura na matriz (`set_doenca_paises`, so' se
+  vazio). **Nome editado voltava pro ingles**: a mesma doenca vinha com grafias diferentes
+  ("Silver scurf"/"Silver Scurf") e a grafia escolhida era a 1a do arquivo (mudava a cada busca);
+  `merge_duplicate_disease_translations` juntava ficando com o nome em ingles. Agora a grafia e'
+  fixa (a ja' gravada no banco, `data_reader.definir_grafias_preferidas`, chamada em
+  `_sincronizar_apelidos`) e a juncao mantem o nome digitado. Cada cartao tem o proprio
+  "✓ Salvo" ao lado do nome (`data-autosave-group` + `.autosave-status`); o aviso de salvo de
+  todo o site fica 5 s na tela.
 - **Fundir doencas** (pedido do Alan, 11/11/2026; Master): no cartao de cada doenca em
   Doenças/Culturas, "🔗 Fundir com..." + "Fundir" (rota `fundir_doenca`, confirmacao no navegador)
   junta ESTA doenca na escolhida (`models.fundir_doencas`): fica nome/culturas/fungicidas da

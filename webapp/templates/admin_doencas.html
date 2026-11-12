@@ -36,10 +36,15 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 {% else %}
 <form method="post" data-autosave>
 {% for d in doencas %}
-<div class="card shadow-sm doenca-card{% if d.nova %} doenca-nova{% endif %}" data-doenca="{{ d.en }}">
+{% if loop.first or d.pais != doencas[loop.index0 - 1].pais %}
+{# Doencas separadas pelo pais onde o BioScout leu (pedido do Alan, 12/11/2026). #}
+<h6 class="mt-3 mb-2 pais-doencas">🌎 {{ d.pais }} <span class="text-muted fw-normal small">({{ doencas | selectattr('pais', 'equalto', d.pais) | list | length }})</span></h6>
+{% endif %}
+<div class="card shadow-sm doenca-card{% if d.nova %} doenca-nova{% endif %}" data-doenca="{{ d.en }}" data-autosave-group>
     <div class="card-body px-2 px-sm-3">
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start doenca-toggle" data-target="doenca-body-{{ loop.index0 }}">
             <span class="toggle-icon">▶</span> <span class="doenca-nome">{{ d.pt }}</span>
+            <span class="autosave-status small ms-2"></span>
             {% if d.manual %}<span class="badge bg-info text-dark fw-normal ms-1" title="Cadastrada manualmente -- nao vem do BioScout">Manual</span>{% endif %}
             {% if d.nova %}<span class="badge fw-normal ms-1" style="background:#0a2a6b;" title="Entrou há menos de 3 dias">Nova</span>{% endif %}
             {% if d.sem_traducao %}<span class="badge bg-warning text-dark fw-normal ms-1" title="Doença nova do BioScout -- dê o nome em português">🆕 Sem nome em português</span>{% endif %}
