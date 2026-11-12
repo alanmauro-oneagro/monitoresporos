@@ -481,7 +481,7 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         master = self._logado("Zzz Master Modelo")
         models.create_virtual_farm("Zzz Modelo Dup", -12.43, -55.7, 30)
         manejos = master.get("/fazendas").get_data(as_text=True)
-        for campo in ('name="grupo_economico"', 'name="nome_exibicao"', 'name="estacao_codigo"', "Ocultar fazenda"):
+        for campo in ('name="grupo_economico"', 'name="nome_exibicao"', 'name="estacao_codigo"'):  # Ocultar voltou a Manejos (12/11/2026)
             self.assertNotIn(campo, manejos)
         estudo = master.get("/mapa-interpolado").get_data(as_text=True)
         self.assertNotIn("Plano e grupo", estudo)

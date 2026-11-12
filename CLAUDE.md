@@ -267,7 +267,8 @@ TESTING) -- aparece na proxima abertura da tela. **Cartoes iguais** (mesmo pedid
 origem. Ponto "so' clima" NAO entra em
 Gerenciar Clientes (nem nas sem cadastro, nem no "+ Novo cliente"/Ligar --
 `_fazendas_sem_cadastro`; pedido do Alan, 09/11/2026): fica so' no Mapas de
-Estudo. Cada linha de fazenda tem "🙈 Ocultar" (`save_site_ativo`); fazenda
+Estudo. Cada linha de fazenda tem "🙈 Ocultar" (`save_site_ativo`; o mesmo botao VOLTOU ao cabecalho de cada
+fazenda em Manejos, so' equipe -- `.ocultar-manejos`, pedido do Alan, 12/11/2026); fazenda
 OCULTA some de Gerenciar Clientes (sem cadastro e dentro dos cadastros) e
 fica so' em Gerenciar Fazendas Ocultas. Tamanhos dos cartoes: nome 0.95rem,
 selos 0.7rem, linha da fazenda 0.8rem, filtros 0.78rem (CSS no topo do
