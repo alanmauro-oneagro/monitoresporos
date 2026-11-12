@@ -173,6 +173,26 @@ class TelasPorNivelTest(unittest.TestCase):
         novo = next(p for p in models.get_planos() if p["nome"] == "Zzz Plano Auto")
         models.excluir_plano(novo["id"])
 
+    def test_grupo_no_editar_ponto(self):
+        c = self._cliente("master")
+        base = {"lat": "-12.5", "lon": "-55.7", "raio_km": "30", "country_code": "BR"}
+        c.post("/mapa-interpolado/adicionar", data={**base, "tipo": "estudo", "nome": "Zzz Grupo Estudo"})
+        pe = next(p for p in models.get_pontos_estudo() if p["nome"] == "Zzz Grupo Estudo")
+        c.post("/mapa-interpolado/editar", data={**base, "site_name": f"estudo:{pe['id']}", "nome": "Zzz Grupo Estudo",
+                                                 "tipo": "estudo", "grupo_economico": "Zzz Grupo X"})
+        self.assertEqual(models.get_ponto_estudo(pe["id"])["grupo_economico"], "Zzz Grupo X")
+        html = c.get("/mapa-interpolado").get_data(as_text=True)
+        self.assertIn("👥 Zzz Grupo X", html)
+        self.assertIn('<span class="toggle-icon">▶</span> Zzz Grupo Estudo', html)
+        # vira ponto de doenca levando o grupo
+        c.post("/mapa-interpolado/editar", data={**base, "site_name": f"estudo:{pe['id']}", "nome": "Zzz Grupo Estudo",
+                                                 "tipo": "doenca", "grupo_economico": "Zzz Grupo X"})
+        vf = next(v for v in models.get_all_virtual_farms() if v["nome"] == "Zzz Grupo Estudo")
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._grupo_economico_da_fazenda(vf["site_name"]), "Zzz Grupo X")
+        models.salvar_grupo_fazenda_dados(vf["site_name"], None)
+        models.delete_virtual_farm(vf["site_name"])
+
     def test_atualizar_mostra_progresso(self):
         """Botao Atualizar: sem aviso no topo, "Atualizando... XX%" pelo status (11/11/2026)."""
         import threading
