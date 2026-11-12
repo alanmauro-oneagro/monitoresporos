@@ -3992,13 +3992,36 @@ def editar_ponto_virtual():
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
         country_code = countries.DEFAULT_COUNTRY
-    if estudo:
+    tipo = request.form.get("tipo", "estudo" if estudo else "doenca")
+    if tipo not in ("doenca", "clima", "estudo"):
+        tipo = "doenca"
+    if estudo and tipo == "estudo":
         models.atualizar_ponto_estudo(estudo["id"], nome, lat, lon, raio_km, country_code)
         flash(f"Estudo de viabilidade '{nome}' atualizado.", "success")
         return redirect(url_for("mapa_interpolado"))
-    tipo = request.form.get("tipo", "doenca")
-    if tipo not in ("doenca", "clima"):
-        tipo = "doenca"
+    if estudo:
+        # Estudo virando ponto de doenca/clima (pedido do Alan, 12/11/2026).
+        try:
+            models.create_virtual_farm(
+                nome, lat, lon, raio_km, criado_por=current_user.username, country_code=country_code, tipo=tipo
+            )
+        except sqlite3.IntegrityError:
+            flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
+            return redirect(url_for("mapa_interpolado"))
+        models.excluir_ponto_estudo(estudo["id"])
+        flash(f"'{nome}' virou ponto de {'só clima' if tipo == 'clima' else 'monitoramento de doenças'}.", "success")
+        return redirect(url_for("mapa_interpolado") + "#pontos-criados")
+    if tipo == "estudo":
+        # Ponto de doenca/clima virando estudo: deixa de ser fazenda (sai de
+        # todas as telas, envios e permissoes). Fazenda de cliente nao pode.
+        if site_name in models.clientes_por_site():
+            flash("Essa fazenda pertence a um cliente -- desligue em Gerenciar Clientes antes de virar estudo.", "error")
+            return redirect(url_for("mapa_interpolado"))
+        models.criar_ponto_estudo(nome, lat, lon, raio_km, country_code, criado_por=current_user.username)
+        models.delete_virtual_farm(site_name)
+        _weather_cache.pop(site_name, None)
+        flash(f"'{nome}' virou estudo de viabilidade.", "success")
+        return redirect(url_for("mapa_interpolado") + "#pontos-criados")
     try:
         models.update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code=country_code, tipo=tipo)
     except sqlite3.IntegrityError:

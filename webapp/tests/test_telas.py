@@ -130,6 +130,22 @@ class TelasPorNivelTest(unittest.TestCase):
         c.post("/mapa-interpolado/remover", data={"site_name": f"estudo:{pe['id']}"})
         self.assertIsNone(models.get_ponto_estudo(pe["id"]))
 
+    def test_ponto_vira_estudo_e_volta(self):
+        c = self._cliente("master")
+        base = {"lat": "-12.5", "lon": "-55.7", "raio_km": "30", "country_code": "BR"}
+        c.post("/mapa-interpolado/adicionar", data={**base, "tipo": "doenca", "nome": "Zzz Vira Estudo"})
+        vf = next(v for v in models.get_all_virtual_farms() if v["nome"] == "Zzz Vira Estudo")
+        c.post("/mapa-interpolado/editar", data={**base, "site_name": vf["site_name"], "nome": "Zzz Vira Estudo", "tipo": "estudo"})
+        self.assertIsNone(models.get_virtual_farm(vf["site_name"]))
+        pe = next(p for p in models.get_pontos_estudo() if p["nome"] == "Zzz Vira Estudo")
+        html = c.get("/mapa-interpolado").get_data(as_text=True)
+        self.assertIn('value="estudo" selected', html)
+        c.post("/mapa-interpolado/editar", data={**base, "site_name": f"estudo:{pe['id']}", "nome": "Zzz Vira Estudo", "tipo": "clima"})
+        self.assertIsNone(models.get_ponto_estudo(pe["id"]))
+        vf2 = next(v for v in models.get_all_virtual_farms() if v["nome"] == "Zzz Vira Estudo")
+        self.assertEqual(vf2["tipo"], "clima")
+        models.delete_virtual_farm(vf2["site_name"])
+
     def test_atualizar_mostra_progresso(self):
         """Botao Atualizar: sem aviso no topo, "Atualizando... XX%" pelo status (11/11/2026)."""
         import threading
