@@ -286,7 +286,8 @@ sem levar pra Manejos (clique na fazenda real so' abre o balao; ponto criado abr
 O "Tipo de ponto" do Editar tem as 3 opcoes: estudo vira ponto de doenca/clima (cria a fazenda
 estimada) e ponto vira estudo (apaga a fazenda: permissoes, envios, anotacoes; fazenda de cliente
 recusada). Cartao da Anatel logo abaixo do mapa (`#cartao-anatel`). Regua no canto do mapa (📏 distancia km,
-⬠ area ha + perimetro; ✕ limpa; medindo, o clique nao marca ponto novo). Pontos Criados em grupos:
+⬠ area ha + perimetro; ✕ limpa; medindo, o clique nao marca ponto novo; cada ponto da medida e'
+arrastavel pra ajustar antes de terminar -- `.vertice-medida`, pedido do Alan, 12/11/2026). Pontos Criados em grupos:
 Monitoramento de doenças, Só clima, Estudo de viabilidade (macro `cartao_ponto`). Cada cartao RECOLHIDO como
 em Manejos (seta ▶/▼ no nome = o antigo "Editar": abre os dados e o pino arrastavel); dentro: "Grupo
 econômico" (sugestoes `grupos_economicos`; ponto de doenca/clima grava como na Gerenciar Clientes --

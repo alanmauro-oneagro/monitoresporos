@@ -37,6 +37,8 @@
     .op-escala span { width: 10px; height: 10px; display: inline-block; }
     .regua-mapa a { font-size: 15px; line-height: 30px; text-align: center; text-decoration: none; }
     .regua-mapa a.ativo { background: #ffe3e3; }
+    .vertice-medida { display: flex; align-items: center; justify-content: center; cursor: grab; }
+    .vertice-medida span { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid #c92a2a; box-shadow: 0 0 2px rgba(0,0,0,.5); }
     .medida-box { background: #fff; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 0.85rem; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
     .ponto-virtual-card { border: 1px solid #e2d9fb; border-radius: 0.5rem; padding: 0.9rem; margin-bottom: 0.9rem; background: #faf8ff; }
 </style>
@@ -568,7 +570,7 @@
         var pts = medicao.pontos;
         var txt;
         if (medicao.modo === 'distancia') {
-            txt = pts.length < 2 ? 'Toque no mapa para medir a distância'
+            txt = pts.length < 2 ? 'Toque no mapa para medir a distância (arraste os pontos para ajustar)'
                 : '📏 ' + fmtNum(distanciaKm(pts), 2) + ' km';
         } else {
             txt = pts.length < 3 ? 'Toque 3 ou mais pontos para medir a área'
@@ -576,16 +578,28 @@
         }
         box.textContent = txt;
     }
-    map.on('click', function (e) {
-        if (!medicao.modo) return;
-        medicao.pontos.push(e.latlng);
-        medicao.marcas.push(L.circleMarker(e.latlng, { radius: 4, color: '#c92a2a', weight: 2, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(map));
+    // Cada ponto da medida e' arrastavel: ajusta o lugar antes de terminar
+    // (pedido do Alan, 12/11/2026).
+    var verticeIcon = L.divIcon({
+        className: 'vertice-medida', iconSize: [26, 26], iconAnchor: [13, 13],
+        html: '<span></span>',
+    });
+    function redesenharMedida() {
         if (medicao.camada) map.removeLayer(medicao.camada);
         var estilo = { color: '#c92a2a', weight: 2, interactive: false };
         medicao.camada = medicao.modo === 'area' && medicao.pontos.length >= 3
             ? L.polygon(medicao.pontos, Object.assign({ fillOpacity: 0.15 }, estilo)).addTo(map)
             : L.polyline(medicao.pontos, estilo).addTo(map);
         mostrarMedida();
+    }
+    map.on('click', function (e) {
+        if (!medicao.modo) return;
+        var i = medicao.pontos.length;
+        medicao.pontos.push(e.latlng);
+        var m = L.marker(e.latlng, { icon: verticeIcon, draggable: true, autoPan: true, zIndexOffset: 1000 }).addTo(map);
+        m.on('drag', function (ev) { medicao.pontos[i] = ev.target.getLatLng(); redesenharMedida(); });
+        medicao.marcas.push(m);
+        redesenharMedida();
     });
 
     // Abre sempre enquadrado no Brasil (pedido do Alan, 19/10/2026),
