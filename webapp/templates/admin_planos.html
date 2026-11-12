@@ -126,7 +126,8 @@
                 <tr data-ate="{{ f.ate_ha if f.ate_ha else '' }}">
                     {% if f.ate_ha %}
                     <td class="text-nowrap"><span class="d-inline-flex align-items-center gap-1">até
-                        <input type="number" min="1" step="any" class="form-control form-control-sm text-end px-1" style="width: 5.2rem;" name="ate_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="ate_ha" value="{{ f.ate_ha }}" aria-label="Limite da faixa {{ loop.index }} (ha)"> ha</span></td>
+                        <input type="number" min="1" step="any" class="form-control form-control-sm text-end px-1" style="width: 5.2rem;" name="ate_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="ate_ha" value="{{ f.ate_ha }}" aria-label="Limite da faixa {{ loop.index }} (ha)"> ha
+                        <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1 remover-faixa" title="Tirar esta faixa" aria-label="Tirar esta faixa">✕</button></span></td>
                     {% else %}
                     <td class="text-nowrap rotulo-acima">{{ f.rotulo }}</td>
                     {% endif %}
@@ -139,6 +140,7 @@
             </tbody>
         </table>
         </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm mb-2" id="adicionar-faixa">+ Adicionar faixa</button>
         <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
             <label for="simular-area" class="text-muted">Simular área do cliente (ha)</label>
             <input type="number" min="0" step="any" id="simular-area" form="simulacao-sem-salvar" class="form-control form-control-sm" style="max-width: 7rem;">
@@ -197,6 +199,44 @@
         simular();
     });
     document.getElementById('simular-area').addEventListener('input', simular);
+
+    // Quantidade de faixas editavel (pedido do Alan, 13/11/2026): + Adicionar / ✕ tirar,
+    // renumera os campos (ate_ha_i / usd_ha_i; a linha "acima" fica por ultimo) e salva.
+    var corpo = tabela.querySelector('tbody');
+    function renumerar() {
+        linhas = Array.prototype.slice.call(corpo.querySelectorAll('tr'));
+        linhas.forEach(function (tr, i) {
+            tr.querySelectorAll('[data-col]').forEach(function (el) { el.dataset.col = i; });
+            var a = tr.querySelector('[data-campo="ate_ha"]'), u = tr.querySelector('[data-campo="usd_ha"]');
+            if (a) a.name = 'ate_ha_' + i;
+            if (u) u.name = 'usd_ha_' + i;
+        });
+        var faixas = linhas.filter(function (tr) { return tr.querySelector('[data-campo="ate_ha"]'); });
+        faixas.forEach(function (tr) { tr.querySelector('.remover-faixa').classList.toggle('d-none', faixas.length < 2); });
+        document.getElementById('adicionar-faixa').classList.toggle('d-none', faixas.length >= {{ max_faixas }});
+        linhas.forEach(function (_l, i) { recalcular(i); });
+        simular();
+    }
+    function salvar() { seletor.dispatchEvent(new Event('change', { bubbles: true })); }
+    corpo.addEventListener('click', function (e) {
+        var b = e.target.closest('.remover-faixa');
+        if (!b) return;
+        b.closest('tr').remove();
+        renumerar();
+        salvar();
+    });
+    document.getElementById('adicionar-faixa').addEventListener('click', function () {
+        var faixas = linhas.filter(function (tr) { return tr.querySelector('[data-campo="ate_ha"]'); });
+        var ultima = faixas[faixas.length - 1], nova = ultima.cloneNode(true);
+        var limite = ateDe(ultima);
+        nova.querySelector('[data-campo="ate_ha"]').value = isNaN(limite) ? 100 : limite * 2;
+        nova.querySelector('[data-campo="usd_ha"]').value = '';
+        ultima.after(nova);
+        renumerar();
+        salvar();
+        nova.querySelector('[data-campo="ate_ha"]').focus();
+    });
+    renumerar();
 })();
 </script>
 
