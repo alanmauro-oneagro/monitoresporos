@@ -681,7 +681,8 @@ site tem que entrar la'.
   7 funcoes sem uso do models.py (set_ndvi_oculta, set_whatsapp_send_hour, get_whatsapp_days(_pdf),
   delete_farm_ndvi_historico_de_site, atualizar_cliente_ponto, get_plano_fazenda).
 - **Caixas de esporos em Recomendações** (`.mini-card` em base.html, pedido do Alan, 13/11/2026): no
-  maximo 8rem de largura; nome grande quebra em 2+ linhas em vez de esticar a caixa.
+  maximo 8rem de largura; nome grande quebra em 2+ linhas em vez de esticar a caixa. Alertas (`.disease-card`)
+  igual: nome/cientifico grande quebra dentro da caixa e as caixas de cada linha ficam da mesma altura.
 - **Manejos -- TS/Sulco/Folha em boxes** (pedido do Alan, 12/11/2026): cada secao recolhida
   (▶, `.secao-toggle`, numero de boxes preenchidas ao lado) com boxes iguais a Aplicacoes: Data
   aplicacao, Talhao, Fungicidas quimicos, Fungicidas biologicos (campos `cx_*_<momento>`); 1 box

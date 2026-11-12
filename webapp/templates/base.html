@@ -36,6 +36,11 @@
         .disease-card .valor { font-size: 1.5rem; font-weight: 700; }
         .disease-card .doenca { font-weight: 700; font-size: 0.9rem; background: rgba(255,255,255,0.6); border-radius: 0.3rem; padding: 0.15rem 0.45rem; display: inline-block; }
         .disease-card .cientifico { font-style: italic; font-size: 0.72rem; opacity: 0.85; margin-top: 0.3rem; }
+        /* Alertas igual as caixas de Recomendacoes (pedido do Alan, 13/11/2026): nome grande
+           quebra em linhas dentro da caixa e as caixas de cada linha ficam da mesma altura. */
+        .col-disease-5 { display: flex; }
+        .disease-card { flex: 1 1 auto; min-width: 0; }
+        .disease-card .doenca, .disease-card .cientifico { overflow-wrap: anywhere; hyphens: auto; }
         .site-weather-badge { background: rgba(255,255,255,0.7); border-radius: 0.35rem; padding: 0.15rem 0.6rem; font-size: 0.78rem; font-weight: 600; color: #155724; }
         .site-weather-badge .site-weather-date { font-weight: 400; opacity: 0.75; margin-left: 0.2rem; }
         .col-disease-5 { flex: 0 0 33.3333%; max-width: 33.3333%; padding: 0 0.5rem; }
