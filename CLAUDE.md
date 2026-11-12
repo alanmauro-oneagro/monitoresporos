@@ -278,8 +278,10 @@ sem parenteses ("🦠 Monitorar doenças", "☁️ Somente clima", "📐 Estudo 
 viabilidade = tabela PROPRIA `pontos_estudo` (`models.criar/atualizar/excluir_ponto_estudo`), so'
 nesta tela -- nao vira fazenda, nao liga em nada (projeto de venda de estacao); nas rotas
 adicionar/editar/remover do Mapas de Estudo o `site_name` "estudo:<id>" (`_ponto_estudo_do_form`).
-Pino laranja-claro + circulo tracejado do raio, balao com a fazenda BioScout mais proxima e sinal.
-Cartao da Anatel logo abaixo do mapa (`#cartao-anatel`). Regua no canto do mapa (📏 distancia km,
+Pino LILAS claro (`#e5dbff`, pedido do Alan, 12/11/2026) + circulo tracejado do raio, balao com a fazenda BioScout mais proxima e sinal.
+O "Tipo de ponto" do Editar tem as 3 opcoes: estudo vira ponto de doenca/clima (cria a fazenda
+estimada) e ponto vira estudo (apaga a fazenda: permissoes, envios, anotacoes; fazenda de cliente
+recusada). Cartao da Anatel logo abaixo do mapa (`#cartao-anatel`). Regua no canto do mapa (📏 distancia km,
 ⬠ area ha + perimetro; ✕ limpa; medindo, o clique nao marca ponto novo). Pontos Criados em grupos:
 Monitoramento de doenças, Só clima, Estudo de viabilidade (macro `cartao_ponto`).
 **Plano de cada fazenda** (`app._plano_da_fazenda`, selo `selo_plano(site)` --

@@ -153,7 +153,7 @@
         {% if ponto.tipo != 'estudo' %}{{ selo_plano(ponto.site_name) }}{% endif %}
         <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
         {% if ponto.tipo == 'estudo' and ponto.mais_proxima %}
-        <span class="badge text-dark" style="background:#ffe8cc;" title="Fazenda BioScout com leitura mais próxima">📡 {{ ponto.mais_proxima[0] }} · {{ '%.1f'|format(ponto.mais_proxima[1])|replace('.', ',') }} km</span>
+        <span class="badge text-dark" style="background:#e5dbff;" title="Fazenda BioScout com leitura mais próxima">📡 {{ ponto.mais_proxima[0] }} · {{ '%.1f'|format(ponto.mais_proxima[1])|replace('.', ',') }} km</span>
         {% endif %}
         {% if ponto.cliente %}
         <span class="badge text-dark" style="background: #b2f2bb;" title="Criada pelo cliente ao marcar a fazenda no mapa (plano)">🟢 Cliente: {{ ponto.cliente }}</span>
@@ -174,21 +174,20 @@
 
     <div class="d-none border rounded p-2 mb-2" id="editar-ponto-{{ idx }}" style="background:#fff;">
         <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end"
-              onsubmit="return confirm('Salvar essas alteracoes no ponto estimado \'{{ ponto.nome }}\'? Os dados atuais (nome, coordenada, raio) serao substituidos e nao da pra desfazer depois.');">
+              onsubmit="return confirm(this.tipo.value === 'estudo' &amp;&amp; '{{ ponto.tipo }}' !== 'estudo' ? 'Transformar \'{{ ponto.nome }}\' em estudo de viabilidade? Ele deixa de ser fazenda: sai de todas as telas e apaga permissões, agenda de WhatsApp e anotações ligadas a ele.' : 'Salvar essas alterações no ponto \'{{ ponto.nome }}\'? Os dados atuais (nome, coordenada, raio, tipo) serão substituídos.');">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
             <div class="col-12 col-md-3">
                 <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
                 <input type="text" name="nome" class="form-control form-control-sm" value="{{ ponto.nome }}" required>
             </div>
-            {% if ponto.tipo != 'estudo' %}
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">Tipo de ponto</label>
                 <select name="tipo" class="form-select form-select-sm">
-                    <option value="doenca" {% if ponto.tipo != 'clima' %}selected{% endif %}>🦠 Doencas</option>
+                    <option value="doenca" {% if ponto.tipo == 'doenca' %}selected{% endif %}>🦠 Doenças</option>
                     <option value="clima" {% if ponto.tipo == 'clima' %}selected{% endif %}>☁️ Só clima</option>
+                    <option value="estudo" {% if ponto.tipo == 'estudo' %}selected{% endif %}>📐 Estudo de viabilidade</option>
                 </select>
             </div>
-            {% endif %}
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">Latitude</label>
                 <input type="text" name="lat" class="form-control form-control-sm" value="{{ ponto.lat }}" required>
@@ -252,8 +251,8 @@
     // Verde claro -- fazenda criada pelo plano de um cliente do app (lavoura
     // dele, `_criar_fazenda_estimada_da_lavoura`; pedido do Alan, 07/11/2026).
     var PIN_COR_PLANO = '#b2f2bb';
-    // Laranja claro -- Estudo de viabilidade (so' nesta tela, pedido do Alan, 12/11/2026).
-    var PIN_COR_ESTUDO = '#ffc078';
+    // Lilas claro -- Estudo de viabilidade (so' nesta tela, pedido do Alan, 12/11/2026).
+    var PIN_COR_ESTUDO = '#e5dbff';
     // Mesmo padrao do Mapa normal (mapa.html): fazenda/ponto sem leitura
     // nova ha mais de 15 dias (site.inativo, ver
     // app._nivel_dados_defasados/DADOS_BLOQUEIO_DIAS) usa pino reduzido a
@@ -471,7 +470,7 @@
         if (site.tipo === 'estudo') {
             icone = estudoIcon;
             circulo = L.circle([site.lat, site.lon], {
-                radius: site.raio_km * 1000, color: '#e8590c', weight: 1, dashArray: '4 4',
+                radius: site.raio_km * 1000, color: '#9775fa', weight: 1, dashArray: '4 4',
                 fillColor: PIN_COR_ESTUDO, fillOpacity: 0.12, interactive: false,
             }).addTo(map);
         } else if (site.tipo === 'clima') {
