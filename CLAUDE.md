@@ -61,7 +61,7 @@ WhatsApp de cada usuario (tabela `subordinados`), nao um nivel de acesso.
 
 **Cadastro direto (pedido do Alan, 31/10/2026 -- substitui a aprovacao
 e o codigo no WhatsApp de 30/10)**: "Ainda nao tem conta? Cadastre-se"
-(login) e o "Assinar" de `/planos` levam a `/solicitar-acesso`; no login sao BOTOES abaixo de um divisor "ou" (os dois iguais, brancos com contorno e texto verdes, sem icone: "Ainda nao tem conta? Cadastre-se / Gratis por 7 dias" + "Conheca os planos"); veu branco do cartao do login 0.3 no computador e 0.39 no celular (40% mais transparente, pedido do Alan, 13/11/2026) e o "Criar conta" abre com a faixa "🎁 Gratis por 7 dias" (`#aviso-gratis`, so' na modalidade plano; pedido do Alan, 13/11/2026); `/cadastro`
+(login) e o "Assinar" de `/planos` levam a `/solicitar-acesso`; no login sao BOTOES abaixo de um divisor "ou" (os dois iguais, brancos com contorno e texto verdes, sem icone: "Ainda nao tem conta? Cadastre-se / Gratis por 7 dias" + "Conheca os planos"); veu branco do cartao do login 0.3 no computador e 0.39 no celular (40% mais transparente, pedido do Alan, 13/11/2026) (a faixa "🎁 Gratis por 7 dias" no topo do "Criar conta" foi retirada a pedido do Alan, 13/11/2026); `/cadastro`
 so' redireciona pra la'. **Sem a pergunta "O que voce quer?"** (pedido do Alan,
 08/11/2026): o cadastro e' sempre "Assinar plano" (campo escondido
 `modalidade`); so' o link `/solicitar-acesso?modalidade=fazenda` cria
