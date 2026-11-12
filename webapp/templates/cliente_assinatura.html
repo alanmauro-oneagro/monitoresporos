@@ -93,7 +93,7 @@
             </div>
             {% if p.ativo and p.sob_consulta %}<div class="preco-box"><div class="preco-sub">Sob consulta</div></div>
             {% elif not disponivel %}<div class="preco-box"><div class="preco-sub">Em breve</div></div>
-            {% elif p.valor <= 0 %}<div class="preco-box"><div class="preco-parcela">Grátis</div></div>
+            {% elif p.valor <= 0 %}<div class="preco-box"><div class="preco-parcela">Grátis 7 dias</div></div>
             {% else %}{{ p | parcelas_plano(area_total) }}{% endif %}
             {% if p.com_desconto %}<div class="small fw-semibold text-success mb-1">Com o desconto: {% if p.com_desconto.total > 0 %}{{ p.parcelas }}x de {{ p.com_desconto.parcela | dinheiro }} (total {{ p.com_desconto.total | dinheiro }}){% else %}sem nada a pagar{% endif %}</div>{% endif %}
             {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
