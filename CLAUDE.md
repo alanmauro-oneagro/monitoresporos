@@ -1002,6 +1002,11 @@ site tem que entrar la'.
   depois). O campo e' input no HTML (sem JS / fora do Brasil / IBGE fora do ar continua texto livre); cidade
   gravada com outra grafia vira a oficial; gravada e fora da lista continua escolhida "(fora da lista)" -- nunca
   e' apagada pelo autosave.
+- **Previsao de chuva do Mapa em todos os dias** (pedido do Alan, 13/11/2026): a grade em lote
+  (`weather_forecast._grade_diaria`) pede `DIAS_GRADE + 1` (7) dias e `_resultado_vigente` corta os dias que
+  ja' passaram e devolve sempre 6 -- antes, da meia-noite ate' a leitura das 04:45 (ou com a leitura falhando)
+  a grade guardada era de ontem e o ultimo dia do ciclo ficava vazio. No mapa.html o ciclo automatico pula dia
+  sem dado (`malhaChuva.comDados`).
 - **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
   "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
   (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no

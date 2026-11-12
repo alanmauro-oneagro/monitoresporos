@@ -361,16 +361,18 @@
             jMin = Math.min(jMin, n[1]); jMax = Math.max(jMax, n[1]);
         });
         var linhas = iMax - iMin + 1, colunas = jMax - jMin + 1;
-        var dias = [];
+        var dias = [], comDados = [];
         for (var d = 0; d < DIAS_CHUVA.length; d++) {
-            var valores = new Float32Array(linhas * colunas).fill(NaN);
+            var valores = new Float32Array(linhas * colunas).fill(NaN), tem = false;
             nosGrade.forEach(function (n, k) {
                 var mm = ((gradeChuva[k] || {}).chuva_mm_por_dia || [])[d];
-                if (mm !== null && mm !== undefined) valores[(n[0] - iMin) * colunas + (n[1] - jMin)] = mm;
+                if (mm !== null && mm !== undefined) { valores[(n[0] - iMin) * colunas + (n[1] - jMin)] = mm; tem = true; }
             });
             dias.push(valores);
+            comDados.push(tem);
         }
-        malhaChuva = { iMin: iMin, jMin: jMin, linhas: linhas, colunas: colunas, dias: dias };
+        malhaChuva = { iMin: iMin, jMin: jMin, linhas: linhas, colunas: colunas, dias: dias, comDados: comDados };
+        if (!comDados[diaSelecionado]) diaSelecionado = Math.max(0, comDados.indexOf(true));
     }
 
     // Pesos Catmull-Rom (interpolacao bicubica) -- contornos arredondados
@@ -550,7 +552,11 @@
     function iniciarCicloAutomatico() {
         pararCicloAutomatico();
         cicloAutomatico = setInterval(function () {
-            diaSelecionado = (diaSelecionado + 1) % DIAS_CHUVA.length;
+            // Pula dia sem previsao (grade antiga/incompleta) -- nunca mostra um dia vazio.
+            for (var n = 0; n < DIAS_CHUVA.length; n++) {
+                diaSelecionado = (diaSelecionado + 1) % DIAS_CHUVA.length;
+                if (!malhaChuva || malhaChuva.comDados[diaSelecionado]) break;
+            }
             chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
             chuvaStatus.classList.remove('d-none');
             desenharCamadaChuva();
