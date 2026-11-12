@@ -9,7 +9,7 @@
 
 <div class="card shadow-sm" style="max-width: 420px;">
     <div class="card-body">
-        <form method="post">
+        <form method="post" data-senha-auto>
             <div class="mb-2">
                 <label class="form-label">Nova senha</label>
                 <input type="password" name="senha_nova" class="form-control" minlength="6" required autofocus>
@@ -18,8 +18,29 @@
                 <label class="form-label">Confirmar nova senha</label>
                 <input type="password" name="senha_confirmar" class="form-control" minlength="6" required>
             </div>
-            <button type="submit" class="btn btn-success">Salvar nova senha</button>
+            <div class="small text-muted" id="avisoSenhaAuto">A nova senha é salva sozinha quando as duas forem iguais (mínimo 6).</div>
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Salva sozinho (pedido do Alan, 12/11/2026): sem botao, grava ao sair do
+// campo quando tudo esta' preenchido e as duas senhas sao iguais.
+(function () {
+    var form = document.querySelector('form[data-senha-auto]');
+    var nova = form.senha_nova, conf = form.senha_confirmar, aviso = document.getElementById('avisoSenhaAuto');
+    function pronto() { return form.checkValidity() && nova.value === conf.value; }
+    function conferir() {
+        if (conf.value && nova.value !== conf.value) { aviso.className = 'small text-danger'; aviso.textContent = '✗ As senhas não são iguais'; return; }
+        aviso.className = 'small text-muted'; aviso.textContent = 'A nova senha é salva sozinha quando as duas forem iguais (mínimo 6).';
+    }
+    [nova, conf].forEach(function (c) {
+        c.addEventListener('input', conferir);
+        c.addEventListener('change', function () { if (pronto()) { aviso.textContent = 'Salvando...'; form.submit(); } });
+    });
+    form.addEventListener('submit', function (e) { if (!pronto()) { e.preventDefault(); conferir(); } });
+})();
+</script>
 {% endblock %}

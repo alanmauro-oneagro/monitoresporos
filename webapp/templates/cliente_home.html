@@ -88,7 +88,7 @@
     </div>
     <div class="small mb-2" id="aviso_{{ campo }}">&nbsp;</div>
     {% endfor %}
-    <button class="btn btn-success w-100" type="submit" id="botaoSenha" disabled>Salvar senha</button>
+    <div class="small text-muted text-center">A nova senha é salva sozinha quando tudo estiver certo.</div>
 </div></form>
 {% endblock %}
 {% block extra_scripts %}
@@ -126,7 +126,7 @@
     var form = document.getElementById('formSenha');
     if (!form) { return; }
     var atual = form.senha_atual, nova = form.senha_nova, conf = form.senha_confirmar;
-    var botao = document.getElementById('botaoSenha'), atualOk = false, timer = null, pedido = 0;
+    var pronto = false, atualOk = false, timer = null, pedido = 0;
     form.querySelectorAll('.mostrar-senha').forEach(function (b) {
         b.addEventListener('click', function () {
             var campo = document.getElementById(b.dataset.alvo), ver = campo.type === 'password';
@@ -148,8 +148,10 @@
         else { aviso(nova, novaOk, novaOk ? '✓ Nova senha válida' : '✗ Mínimo de 6 caracteres'); }
         if (!conf.value) { aviso(conf, null); }
         else { aviso(conf, confOk, confOk ? '✓ As senhas são iguais' : '✗ As senhas não são iguais'); }
-        botao.disabled = !(atualOk && confOk);
+        pronto = atualOk && confOk;
     }
+    // Salva sozinho (pedido do Alan, 12/11/2026): ao sair do campo com tudo certo.
+    function salvarSePronto() { if (pronto) { form.submit(); } }
     function conferirAtual() {
         var n = ++pedido;
         atualOk = false; atualizar();
@@ -163,12 +165,16 @@
                 atualOk = !!d.ok;
                 aviso(atual, atualOk, atualOk ? '✓ Senha atual correta' : '✗ Senha atual incorreta');
                 atualizar();
+                if (document.activeElement !== nova && document.activeElement !== conf) { salvarSePronto(); }
             })
             .catch(function () { if (n === pedido) { aviso(atual, false, 'Sem conexão para conferir.'); } });
     }
     atual.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(conferirAtual, 500); });
     nova.addEventListener('input', atualizar);
     conf.addEventListener('input', atualizar);
+    nova.addEventListener('change', salvarSePronto);
+    conf.addEventListener('change', salvarSePronto);
+    form.addEventListener('submit', function (e) { if (!pronto) { e.preventDefault(); } });
 })();
 </script>
 <script>

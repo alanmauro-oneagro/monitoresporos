@@ -152,6 +152,27 @@ class TelasPorNivelTest(unittest.TestCase):
         self.assertIn("ocultar-manejos", self._cliente("master").get("/fazendas").get_data(as_text=True))
         self.assertNotIn("ocultar-manejos", self._cliente("cliente").get("/fazendas", follow_redirects=True).get_data(as_text=True))
 
+    def test_salva_sozinho_sem_botao_salvar(self):
+        """Todo o site salva sozinho, sem botao Salvar (12/11/2026)."""
+        c = self._cliente("master")
+        for rota in _rotas_get():
+            resp = c.get(rota, follow_redirects=True)
+            if "text/html" not in resp.content_type:
+                continue
+            html = resp.get_data(as_text=True)
+            with self.subTest(rota=rota):
+                self.assertIsNone(re.search(r">\s*(💾\s*)?Salvar[^<]*</button>", html))
+        h = {"X-Autosave": "1"}
+        base = {"ciclo__novo": "MONTHLY", "max_pontos__novo": "1", "raio_km__novo": "50", "ordem__novo": "9"}
+        r = c.post("/admin/planos/salvar", data={**base, "nome__novo": "Zzz Plano Auto"}, headers=h).get_json()
+        self.assertTrue(r["ok"])
+        self.assertIn("valor", r["aviso"])
+        self.assertNotIn("Zzz Plano Auto", [p["nome"] for p in models.get_planos()])
+        r = c.post("/admin/planos/salvar", data={**base, "nome__novo": "Zzz Plano Auto", "valor__novo": "0"}, headers=h).get_json()
+        self.assertTrue(r["reload"])
+        novo = next(p for p in models.get_planos() if p["nome"] == "Zzz Plano Auto")
+        models.excluir_plano(novo["id"])
+
     def test_atualizar_mostra_progresso(self):
         """Botao Atualizar: sem aviso no topo, "Atualizando... XX%" pelo status (11/11/2026)."""
         import threading
