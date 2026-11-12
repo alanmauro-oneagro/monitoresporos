@@ -207,6 +207,31 @@ class TelasPorNivelTest(unittest.TestCase):
         html = self._cliente("master").get("/admin/fungicidas").get_data(as_text=True)
         self.assertIn('class="mt-3 mb-2 pais-doencas">🌎 Brasil', html)
 
+    def test_manejos_ts_sulco_folha_em_boxes(self):
+        """TS/Sulco/Folha em boxes iguais a Aplicacoes, recolhidos (12/11/2026)."""
+        site = models.create_virtual_farm("Zzz Boxes Manejo", -12.5, -55.7, 30)
+        try:
+            # linha antiga (sem caixa) com ingrediente ativo
+            models.set_farm_produtos(site, "safra1", "ts", "quimico", [("antes do plantio", "Zzz Prod", "Zzz IA")])
+            c = self._cliente("master")
+            html = c.get("/fazendas").get_data(as_text=True)
+            self.assertIn('class="btn btn-link text-decoration-none p-0 fw-bold secao-toggle"', html)
+            self.assertIn('value="Zzz Prod (Zzz IA)"', html)
+            self.assertIn('type="text" name="cx_data_ts" class="form-control form-control-sm" value="antes do plantio"', html)
+            self.assertNotIn("Nome do produto", html)
+            c.post("/fazendas/save", data={
+                "site_name": site, "safra": "safra1",
+                "cx_data_ts": ["2026-11-10", ""], "cx_talhao_ts": ["T1", ""],
+                "cx_quimicos_ts": ["Zzz Prod", ""], "cx_biologicos_ts": ["Zzz Bio", ""]}, headers={"X-Autosave": "1"})
+            p = models.get_all_farm_produtos()[site]
+            q, b = p[("safra1", "ts", "quimico")], p[("safra1", "ts", "biologico")]
+            self.assertEqual((q[0]["nome"], q[0]["ingrediente_ativo"], q[0]["talhao"], q[0]["caixa"]), ("Zzz Prod", "Zzz IA", "T1", 0))
+            self.assertEqual((b[0]["nome"], b[0]["caixa"], b[0]["data_anotacao"]), ("Zzz Bio", 0, "2026-11-10"))
+            html = c.get("/fazendas").get_data(as_text=True)
+            self.assertIn('value="Zzz Bio"', html)
+        finally:
+            models.delete_virtual_farm(site)
+
     def test_atualizar_mostra_progresso(self):
         """Botao Atualizar: sem aviso no topo, "Atualizando... XX%" pelo status (11/11/2026)."""
         import threading
