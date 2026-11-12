@@ -697,6 +697,11 @@ def init_db():
     # tabela chegou a existir em producao por pouco tempo, entao o DROP
     # cuida de limpar quem ja tiver ela criada.
     conn.execute("DROP TABLE IF EXISTS farm_sulco_plantio")
+    for coluna in ("talhao TEXT", "caixa INTEGER"):  # TS/Sulco/Folha em boxes (12/11/2026)
+        try:
+            conn.execute(f"ALTER TABLE farm_produtos ADD COLUMN {coluna}")
+        except sqlite3.OperationalError:
+            pass
     try:
         conn.execute("ALTER TABLE pontos_estudo ADD COLUMN grupo_economico TEXT")
     except sqlite3.OperationalError:
@@ -2030,7 +2035,8 @@ def get_all_farm_produtos():
     (na ordem em que foram salvos -- usado pela aba Fazendas e Recomendacoes)."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT site_name, safra, momento, tipo, data_anotacao, nome, ingrediente_ativo FROM farm_produtos ORDER BY id"
+        "SELECT id, site_name, safra, momento, tipo, data_anotacao, nome, ingrediente_ativo, talhao, caixa "
+        "FROM farm_produtos ORDER BY id"
     ).fetchall()
     conn.close()
     result = {}
@@ -2040,6 +2046,8 @@ def get_all_farm_produtos():
             "data_anotacao": r["data_anotacao"] or "",
             "nome": r["nome"] or "",
             "ingrediente_ativo": r["ingrediente_ativo"] or "",
+            "talhao": r["talhao"] or "",
+            "caixa": r["caixa"], "id": r["id"],
         })
     return result
 
@@ -2067,6 +2075,37 @@ def set_farm_produtos(site_name, safra, momento, tipo, linhas):
                 (site_name, safra, momento, tipo, data_anotacao, nome, ingrediente_ativo),
             )
             _catalogar_produto(conn, tipo, nome, ingrediente_ativo)
+    conn.commit()
+    conn.close()
+
+
+def set_farm_produtos_caixas(site_name, safra, momento, caixas):
+    """TS/Sulco/Folha em boxes (pedido do Alan, 12/11/2026): cada box =
+    (data, talhao, fungicidas quimicos, fungicidas biologicos), igual a
+    Aplicacoes. Cada box vira ate' 2 linhas (quimico e biologico) com o
+    mesmo `caixa`; o ingrediente ativo de um produto que ja' existia fica."""
+    conn = get_db()
+    ia_antigo = {(r["tipo"], (r["nome"] or "").strip().lower()): r["ingrediente_ativo"] for r in conn.execute(
+        "SELECT tipo, nome, ingrediente_ativo FROM farm_produtos WHERE site_name = ? AND safra = ? AND momento = ?",
+        (site_name, safra, momento))}
+    conn.execute("DELETE FROM farm_produtos WHERE site_name = ? AND safra = ? AND momento = ?", (site_name, safra, momento))
+    n = 0
+    for data, talhao, quimicos, biologicos in caixas:
+        data, talhao = (data or "").strip(), (talhao or "").strip()
+        quimicos, biologicos = (quimicos or "").strip(), (biologicos or "").strip()
+        if not (data or talhao or quimicos or biologicos):
+            continue
+        linhas = [(t, nome) for t, nome in (("quimico", quimicos), ("biologico", biologicos)) if nome] or [("quimico", "")]
+        for tipo, nome in linhas:
+            ia = ia_antigo.get((tipo, nome.lower())) or ""
+            conn.execute(
+                "INSERT INTO farm_produtos (site_name, safra, momento, tipo, data_anotacao, nome, ingrediente_ativo, talhao, caixa) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (site_name, safra, momento, tipo, data, nome, ia, talhao, n),
+            )
+            if nome:
+                _catalogar_produto(conn, tipo, nome, ia)
+        n += 1
     conn.commit()
     conn.close()
 

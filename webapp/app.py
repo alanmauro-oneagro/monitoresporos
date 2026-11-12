@@ -4621,10 +4621,9 @@ def fazendas():
     site_countries = models.get_all_site_countries()
     grades = [
         ("ts", "TS (Tratamento de Sementes)"),
-        ("sulco", "Sulco (aplicacao no sulco de plantio)"),
-        ("folha", "Folha (aplicacao foliar)"),
+        ("sulco", "Sulco (aplicação no sulco de plantio)"),
+        ("folha", "Folha (aplicação foliar)"),
     ]
-    tipos = [("quimico", "Fungicidas quimicos"), ("biologico", "Biologicos")]
     culturas_by_site = models.get_all_farm_culturas()
     doenca_culturas = models.get_doenca_culturas()
     translations = _load_translations()
@@ -4650,14 +4649,10 @@ def fazendas():
         for safra, safra_label in models.SAFRAS:
             secoes = []
             for momento, momento_label in grades:
-                grupos = []
-                for tipo, tipo_label in tipos:
-                    linhas = list(existentes.get((safra, momento, tipo), []))
-                    linhas_min = max(1, len(linhas) + 1)
-                    while len(linhas) < linhas_min:
-                        linhas.append({"data_anotacao": "", "nome": "", "ingrediente_ativo": ""})
-                    grupos.append({"tipo": tipo, "titulo": tipo_label, "linhas": linhas})
-                secoes.append({"momento": momento, "titulo": momento_label, "grupos": grupos})
+                caixas = _caixas_de_produtos(existentes, safra, momento)
+                preenchidas = len(caixas)
+                caixas.append({"data": "", "data_texto": False, "talhao": "", "quimicos": "", "biologicos": ""})
+                secoes.append({"momento": momento, "titulo": momento_label, "caixas": caixas, "preenchidas": preenchidas})
 
             plantio_linhas = list(plantio_existente.get(safra, []))
             # So' de exibicao -- um <input type="date"> fica em branco pra
@@ -5451,6 +5446,34 @@ def save_site_display_name():
     return _save_response(f"Nome de exibicao atualizado para '{novo_nome}'.", "fazendas")
 
 
+def _caixas_de_produtos(existentes, safra, momento):
+    """Boxes de TS/Sulco/Folha em Manejos (pedido do Alan, 12/11/2026): cada
+    box = data, talhao, fungicidas quimicos e biologicos (igual Aplicacoes).
+    Linha antiga (sem `caixa`) vira uma box sozinha; data que nao e' data
+    (anotacao livre antiga) fica num campo de texto pra nao se perder."""
+    linhas = []
+    for tipo in models.TIPOS_PRODUTO:
+        for r in existentes.get((safra, momento, tipo), []):
+            linhas.append((r, tipo))
+    caixas, por_chave = [], {}
+    for r, tipo in sorted(linhas, key=lambda x: (x[0].get("caixa") is None, x[0].get("caixa") or 0, x[0].get("id") or 0)):
+        chave = ("c", r["caixa"]) if r.get("caixa") is not None else ("id", r.get("id"))
+        cx = por_chave.get(chave)
+        if cx is None:
+            data = r["data_anotacao"]
+            iso = models.parse_data_flexivel(data) if data else ""
+            cx = {"data": iso or data, "data_texto": bool(data and not iso), "talhao": r.get("talhao") or "",
+                  "quimicos": "", "biologicos": ""}
+            por_chave[chave] = cx
+            caixas.append(cx)
+        campo = "quimicos" if tipo == "quimico" else "biologicos"
+        nome = r["nome"]
+        if r.get("caixa") is None and r["ingrediente_ativo"] and r["ingrediente_ativo"].lower() not in nome.lower():
+            nome = f"{nome} ({r['ingrediente_ativo']})" if nome else r["ingrediente_ativo"]
+        cx[campo] = ", ".join(x for x in (cx[campo], nome) if x)
+    return caixas
+
+
 @app.route("/fazendas/save", methods=["POST"])
 @login_required
 def save_farm_produtos():
@@ -5461,6 +5484,12 @@ def save_farm_produtos():
             abort(403)
     safra = _safra_or_default(request.form)
     for momento in models.MOMENTOS:
+        if f"cx_data_{momento}" in request.form:  # boxes (12/11/2026)
+            f = request.form
+            models.set_farm_produtos_caixas(site_name, safra, momento, list(zip(
+                f.getlist(f"cx_data_{momento}"), f.getlist(f"cx_talhao_{momento}"),
+                f.getlist(f"cx_quimicos_{momento}"), f.getlist(f"cx_biologicos_{momento}"))))
+            continue
         for tipo in models.TIPOS_PRODUTO:
             if f"data_{momento}_{tipo}" not in request.form:
                 continue  # autosave manda so' a secao editada -- nao apagar as outras

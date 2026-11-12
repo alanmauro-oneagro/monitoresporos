@@ -680,6 +680,14 @@ site tem que entrar la'.
   recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e
   7 funcoes sem uso do models.py (set_ndvi_oculta, set_whatsapp_send_hour, get_whatsapp_days(_pdf),
   delete_farm_ndvi_historico_de_site, atualizar_cliente_ponto, get_plano_fazenda).
+- **Manejos -- TS/Sulco/Folha em boxes** (pedido do Alan, 12/11/2026): cada secao recolhida
+  (▶, `.secao-toggle`, numero de boxes preenchidas ao lado) com boxes iguais a Aplicacoes: Data
+  aplicacao, Talhao, Fungicidas quimicos, Fungicidas biologicos (campos `cx_*_<momento>`); 1 box
+  vazia por padrao e mais uma aparece ao preencher. Gravado em `farm_produtos` (colunas novas
+  `talhao`, `caixa`; `models.set_farm_produtos_caixas`: uma linha por tipo preenchido, mesmo
+  `caixa`; o ingrediente ativo de produto que ja' existia fica). Linha antiga (sem caixa) vira uma
+  box sozinha com "Produto (ingrediente)"; data/anotacao que nao e' data fica em campo de texto
+  (`app._caixas_de_produtos`). Recomendações/texto/PDF continuam lendo o nome por tipo.
 - **Renomear fazenda virtual**: `models.update_virtual_farm(...)` muda o
   `nome`, que muda o proprio `site_name` (cascata em varias tabelas).
   Acessivel tanto por Mapa Interpolado quanto pela aba Manejos (campo "Nome

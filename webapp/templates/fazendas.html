@@ -91,32 +91,31 @@
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <input type="hidden" name="safra" value="{{ safra_group.safra }}">
                     {% for secao in safra_group.secoes %}
-                    <div class="mb-3 pb-2 {% if not loop.last %}border-bottom{% endif %}" data-autosave-group>
-                        <div class="fw-bold mb-2">{{ secao.titulo }}</div>
-                        <div class="row gx-4">
-                            {% for grupo in secao.grupos %}
-                            <div class="col-12 col-lg-6 mb-3">
-                                <div class="small text-muted mb-1">{{ grupo.titulo }}</div>
-                                <div class="table-responsive">
-                                    <table class="table table-sm mb-0 produtos-table">
-                                        <thead>
-                                            <tr><th>Data/Anotacao</th><th>Nome do produto</th><th>Ingrediente ativo</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for linha in grupo.linhas %}
-                                            <tr>
-                                                <td data-label="Data/Anotação"><input type="text" name="data_{{ secao.momento }}_{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.data_anotacao }}"></td>
-                                                <td data-label="Nome do produto"><input type="text" name="nome_{{ secao.momento }}_{{ grupo.tipo }}" list="catalogo-nomes-{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.nome }}"></td>
-                                                <td data-label="Ingrediente ativo" class="campo-largo"><input type="text" name="ia_{{ secao.momento }}_{{ grupo.tipo }}" list="catalogo-ia-{{ grupo.tipo }}" class="form-control form-control-sm" value="{{ linha.ingrediente_ativo }}"></td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
+                    {# TS/Sulco/Folha recolhidos, em boxes iguais a Aplicacoes (pedido do Alan, 12/11/2026). #}
+                    <div class="secao-produtos mb-2" data-autosave-group>
+                        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold secao-toggle" data-target="secao-{{ farm_idx }}-{{ safra_group.safra }}-{{ secao.momento }}">
+                            <span class="toggle-icon">▶</span> {{ secao.titulo }}{% if secao.preenchidas %} <span class="badge bg-light text-dark border fw-normal">{{ secao.preenchidas }}</span>{% endif %}
+                        </button>
                         <span class="autosave-status small"></span>
+                        <div class="d-none mt-2" id="secao-{{ farm_idx }}-{{ safra_group.safra }}-{{ secao.momento }}">
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0 produtos-table">
+                                    <thead>
+                                        <tr><th>Data aplicação</th><th>Talhão</th><th>Fungicidas químicos</th><th>Fungicidas biológicos</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for cx in secao.caixas %}
+                                        <tr>
+                                            <td data-label="Data aplicação"><input type="{{ 'text' if cx.data_texto else 'date' }}" name="cx_data_{{ secao.momento }}" class="form-control form-control-sm" value="{{ cx.data }}"></td>
+                                            <td data-label="Talhão"><input type="text" name="cx_talhao_{{ secao.momento }}" class="form-control form-control-sm" value="{{ cx.talhao }}"></td>
+                                            <td data-label="Fungicidas químicos" class="campo-largo"><input type="text" name="cx_quimicos_{{ secao.momento }}" list="catalogo-nomes-quimico" class="form-control form-control-sm" value="{{ cx.quimicos }}"></td>
+                                            <td data-label="Fungicidas biológicos" class="campo-largo"><input type="text" name="cx_biologicos_{{ secao.momento }}" list="catalogo-nomes-biologico" class="form-control form-control-sm" value="{{ cx.biologicos }}"></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                     {% endfor %}
                 </form>
@@ -219,6 +218,14 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
         icon.textContent = expanded ? '▶' : '▼';
     });
 });
+document.querySelectorAll('.secao-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var body = document.getElementById(btn.dataset.target);
+        var aberto = !body.classList.contains('d-none');
+        body.classList.toggle('d-none');
+        btn.querySelector('.toggle-icon').textContent = aberto ? '▶' : '▼';
+    });
+});
 document.querySelectorAll('table.produtos-table tbody').forEach(function (tbody) {
     tbody.addEventListener('input', function (e) {
         var row = e.target.closest('tr');
@@ -226,7 +233,10 @@ document.querySelectorAll('table.produtos-table tbody').forEach(function (tbody)
         row.dataset.grown = '1';
         var clone = row.cloneNode(true);
         delete clone.dataset.grown;
-        clone.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
+        clone.querySelectorAll('input').forEach(function (inp) {
+            inp.value = '';
+            if (inp.name.indexOf('cx_data_') === 0) inp.type = 'date';
+        });
         tbody.appendChild(clone);
     });
 });
