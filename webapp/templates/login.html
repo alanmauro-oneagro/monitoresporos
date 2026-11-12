@@ -28,7 +28,7 @@
     }
     .login-ou { display: flex; align-items: center; gap: .5rem; color: #333; font-size: .85rem; }
     .login-ou::before, .login-ou::after { content: ""; flex: 1; border-top: 1px solid rgba(0, 0, 0, .35); }
-    .login-cadastre { line-height: 1.25; box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
+    .login-cadastre { line-height: 1.25; }
     @media (max-width: 767.98px) {
         /* A foto de fundo do mobile (login-bg-mobile.jpg) e' bem mais
            escura que a do desktop -- com a mesma transparencia de cima,
@@ -74,8 +74,8 @@
                     {% if not no_app_loja %}
                     {# Destaque pro cadastro (pedido do Alan, 13/11/2026): botoes em vez de links. #}
                     <div class="login-ou my-3"><span>ou</span></div>
-                    <a href="{{ url_for('solicitar_acesso') }}" class="btn btn-warning w-100 fw-semibold login-cadastre">Ainda não tem conta? Cadastre-se<span class="d-block small fw-normal">Grátis por 7 dias</span></a>
-                    <a href="{{ url_for('planos_publico') }}" class="btn btn-light w-100 mt-2 fw-semibold border border-success text-success">📋 Conheça os planos</a>
+                    <a href="{{ url_for('solicitar_acesso') }}" class="btn btn-light w-100 fw-semibold border border-success text-success login-cadastre">Ainda não tem conta? Cadastre-se<span class="d-block small fw-normal">Grátis por 7 dias</span></a>
+                    <a href="{{ url_for('planos_publico') }}" class="btn btn-light w-100 mt-2 fw-semibold border border-success text-success">Conheça os planos</a>
                     {% endif %}
                 </div>
             </div>
