@@ -3732,27 +3732,18 @@ def mapa_interpolado():
             s["sinal_html"] = str(linha_sinal(sinal_por_site[s["site"]]))
 
     # Estudo de viabilidade (pedido do Alan, 12/11/2026): so' nesta tela,
-    # nao vira fazenda nem liga em nada; mostra a fazenda real mais proxima.
+    # nao vira fazenda nem liga em nada.
     pontos_estudo = []
     for pe in models.get_pontos_estudo():
         chave = f"estudo:{pe['id']}"
-        mais_proxima = None
-        for site, (lat_r, lon_r) in coords_reais.items():
-            if site in desativadas or site not in cards_reais:
-                continue
-            d = virtual_farms._haversine_km(pe["lat"], pe["lon"], lat_r, lon_r)
-            if mais_proxima is None or d < mais_proxima[1]:
-                mais_proxima = (_nome_exibicao(site), d)
         pontos_estudo.append({
-            **pe, "site_name": chave, "tipo": "estudo",
+            **pe, "site_name": chave, "tipo": "estudo", "ativo": True,
             "criado_em": models.fmt_data_br(pe["criado_em"]),
             "pais_nome": countries.get_country(pe["country_code"])["nome"],
-            "mais_proxima": mais_proxima, "ativo": True,
         })
         info = {
             "site": chave, "nome_exibicao": pe["nome"], "lat": pe["lat"], "lon": pe["lon"],
             "virtual": True, "tipo": "estudo", "cards": [], "raio_km": pe["raio_km"],
-            "mais_proxima": f"{mais_proxima[0]} · {mais_proxima[1]:.1f} km".replace(".", ",") if mais_proxima else "",
         }
         if pe["country_code"] == countries.DEFAULT_COUNTRY:
             sinal = sinal_celular.estimar(pe["lat"], pe["lon"], buscar_frequencias=False)

@@ -120,6 +120,8 @@ class TelasPorNivelTest(unittest.TestCase):
         self.assertIn('data-grupo="e"', html)
         self.assertIn("Zzz Estudo Viabilidade", html)
         self.assertNotIn("(interpola fazendas reais no raio)", html)
+        self.assertNotIn("FAZENDAS_URL", html)  # pino so' marca, nao leva pra Manejos
+        self.assertNotIn("mapa-tt-row", html)  # sem quadro de esporos no balao
         self.assertLess(html.index('id="cartao-anatel"'), html.index('id="form-novo-ponto"'))
         for rota in ("/recommendations", "/fazendas", "/dashboard", "/whatsapp"):
             self.assertNotIn("Zzz Estudo Viabilidade", c.get(rota, follow_redirects=True).get_data(as_text=True))
