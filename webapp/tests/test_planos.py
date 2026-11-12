@@ -669,8 +669,9 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         html = master.get("/admin/planos").get_data(as_text=True)
         self.assertIn("Tabela de apoio: preço em <span class=\"moeda-simbolo\">U$</span> pela área monitorada", html)
         self.assertEqual(html.count(" data-campo=\"usd_ha\" value="), 9)  # 9 faixas fixas
-        for rotulo in ("até 100 ha", "até 250 ha", "até 1.000 ha", "até 10.000 ha", "acima de 10.000 ha"):
-            self.assertIn(f">{rotulo}<", html)
+        for i, ate in enumerate((100, 250, 500, 1000, 2000, 3000, 5000, 10000)):  # limites editaveis (13/11/2026)
+            self.assertIn(f'name="ate_ha_{i}" data-col="{i}" data-campo="ate_ha" value="{ate}"', html)
+        self.assertIn(">acima de 10.000 ha<", html)
         self.assertIn(">0,56<", html)  # raio de 100 ha
         dados = {f"usd_ha_{i}": "" for i in range(9)}
         dados.update({"usd_ha_3": "0.5", "usd_ha_8": "0.2"})
@@ -684,8 +685,27 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         self.assertIn("U$ 500,00", html)
         self.assertIn("R$ 2.500,00", html)  # 500 x 5,00
         ruim = master.post("/admin/planos/tabela", data={**dados, "usd_ha_0": "-1"}, follow_redirects=True)
-        self.assertIn("sem negativos", ruim.get_data(as_text=True))
+        self.assertIn("maiores que zero", ruim.get_data(as_text=True))
         self.assertEqual(self._logado("Zzz Teste Admin Tabela").post("/admin/planos/tabela", data=dados).status_code, 403)
+
+    def test_area_das_faixas_editavel(self):
+        master = self._logado("Zzz Teste Master Tabela")
+        dados = {f"usd_ha_{i}": "" for i in range(9)}
+        dados.update({f"ate_ha_{i}": str(a) for i, a in enumerate((100, 300, 500, 1000, 2000, 3000, 5000, 12000))})
+        dados["usd_ha_1"] = "2"
+        try:
+            r = master.post("/admin/planos/tabela", data=dados, headers={"X-Autosave": "1"}).get_json()
+            self.assertTrue(r["ok"])
+            self.assertEqual(webapp._faixas_preco(), [100, 300, 500, 1000, 2000, 3000, 5000, 12000, None])
+            self.assertEqual(webapp.preco_pela_area(280)["faixa"], "até 300 ha")
+            self.assertEqual(webapp.preco_pela_area(280)["usd_ha"], 2)
+            self.assertEqual(webapp.preco_pela_area(20000)["faixa"], "acima de 12.000 ha")
+            fora = master.post("/admin/planos/tabela", data={**dados, "ate_ha_2": "200"}, headers={"X-Autosave": "1"}).get_json()
+            self.assertFalse(fora["ok"])
+            self.assertIn("ordem crescente", fora["message"])
+            self.assertEqual(webapp._faixas_preco()[2], 500)  # nada gravado
+        finally:
+            models.set_setting("tabela_precificacao", "[]")
 
     def test_preco_pela_area_busca_a_faixa_de_cima(self):
         import json

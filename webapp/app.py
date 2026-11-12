@@ -9301,7 +9301,24 @@ _TABELA_MOEDA_KEY = "tabela_precificacao_moeda"
 def _moeda_tabela():
     moeda = models.get_setting(_TABELA_MOEDA_KEY) or "USD"
     return moeda if moeda in models.MOEDAS else "USD"
-FAIXAS_PRECO = [100, 250, 500, 1000, 2000, 3000, 5000, 10000, None]  # None = acima de 10.000 ha
+FAIXAS_PRECO = [100, 250, 500, 1000, 2000, 3000, 5000, 10000, None]  # padrao; None = acima da ultima
+
+
+def _faixas_preco():
+    """Limites das faixas da Tabela de apoio -- editaveis (pedido do Alan, 13/11/2026):
+    os `ate_ha` gravados no setting, em ordem crescente, + None (acima da ultima).
+    Sem nada gravado (ou gravado errado) = `FAIXAS_PRECO`."""
+    try:
+        salvo = json.loads(models.get_setting(_TABELA_PRECO_KEY) or "[]")
+    except ValueError:
+        salvo = []
+    limites = [item.get("ate_ha") for item in salvo if isinstance(item, dict) and "ate_ha" in item] if isinstance(salvo, list) else []
+    numeros = [a for a in limites if a is not None]
+    if (len(limites) == len(FAIXAS_PRECO) and limites[-1] is None and len(numeros) == len(FAIXAS_PRECO) - 1
+            and all(isinstance(a, (int, float)) and a > 0 for a in numeros)
+            and all(a < b for a, b in zip(numeros, numeros[1:]))):
+        return limites
+    return list(FAIXAS_PRECO)
 
 
 def _raio_km(area_ha):
@@ -9311,7 +9328,7 @@ def _raio_km(area_ha):
 
 def _rotulo_faixa(ate_ha):
     if ate_ha is None:
-        return f"acima de {FAIXAS_PRECO[-2]:,} ha".replace(",", ".")
+        return f"acima de {_faixas_preco()[-2]:,} ha".replace(",", ".")
     return f"até {ate_ha:,} ha".replace(",", ".")
 
 
@@ -9328,7 +9345,7 @@ def _usd_ha_por_faixa():
             continue
         if "ate_ha" in item:
             valores[item["ate_ha"]] = item["usd_ha"]
-        elif item.get("area_ha") in FAIXAS_PRECO:
+        elif item.get("area_ha") in _faixas_preco():
             valores.setdefault(item["area_ha"], item["usd_ha"])
     return valores
 
@@ -9336,7 +9353,7 @@ def _usd_ha_por_faixa():
 def _tabela_precificacao():
     valores = _usd_ha_por_faixa()
     faixas = []
-    for ate in FAIXAS_PRECO:
+    for ate in _faixas_preco():
         usd_ha = valores.get(ate)
         faixas.append({"ate_ha": ate, "rotulo": _rotulo_faixa(ate), "usd_ha": usd_ha,
                        "raio_km": _raio_km(ate) if ate else None,
@@ -9345,7 +9362,7 @@ def _tabela_precificacao():
 
 
 def _faixa_da_area(area_ha):
-    for ate in FAIXAS_PRECO:
+    for ate in _faixas_preco():
         if ate is None or area_ha <= ate:
             return ate
 
@@ -9386,11 +9403,20 @@ def admin_planos_tabela():
             raise ValueError
         return int(valor) if valor.is_integer() else valor
     faixas = []
+    atuais = _faixas_preco()
     try:
-        for i, ate in enumerate(FAIXAS_PRECO):
+        for i, ate in enumerate(atuais):
+            if ate is not None and f"ate_ha_{i}" in request.form:  # limite da faixa editavel (13/11/2026)
+                ate = numero(request.form.get(f"ate_ha_{i}"))
+                if not ate:
+                    raise ValueError
             faixas.append({"ate_ha": ate, "usd_ha": numero(request.form.get(f"usd_ha_{i}"))})
     except ValueError:
-        return _save_response("Tabela de apoio: o valor por hectare precisa ser um número (sem negativos).", "admin_planos", ok=False)
+        return _save_response("Tabela de apoio: área e valor por hectare precisam ser números maiores que zero.", "admin_planos", ok=False)
+    limites = [f["ate_ha"] for f in faixas if f["ate_ha"] is not None]
+    if any(a >= b for a, b in zip(limites, limites[1:])):
+        return _save_response("Tabela de apoio: as áreas precisam ficar em ordem crescente (cada faixa maior que a de cima).",
+                              "admin_planos", ok=False)
     models.set_setting(_TABELA_PRECO_KEY, json.dumps(faixas))
     if request.form.get("moeda") in models.MOEDAS:
         models.set_setting(_TABELA_MOEDA_KEY, request.form["moeda"])

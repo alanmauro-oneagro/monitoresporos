@@ -482,7 +482,10 @@ cliente em Gerenciar Clientes mostra "Preco pela area" (U$, ≈ R$, faixa,
 U$/ha, raio da area). Setting `tabela_precificacao` = lista
 {ate_ha (null = acima), usd_ha}; o formato antigo (10 areas livres)
 aproveita so' as areas iguais a uma faixa. Rota `admin_planos_tabela`.
-So' apoio: nao muda plano nem cobranca. **Moeda da tabela** (pedido do Alan,
+So' apoio: nao muda plano nem cobranca. **Area de cada faixa editavel** (pedido do Alan, 13/11/2026): coluna Area
+  vira campo "ate' [N] ha" (`ate_ha_<i>`, salva sozinho; a ultima linha "acima de N" segue a penultima);
+  `app._faixas_preco()` le os limites gravados no setting (crescentes; senao `FAIXAS_PRECO` padrao) e
+  vale em toda conta (`_faixa_da_area`, `preco_pela_area`, cadastro); fora de ordem = recusado. **Moeda da tabela** (pedido do Alan,
 09/11/2026): seletor "Moeda da tabela" Dolar (U$) / Real (R$) na propria
 tabela (setting `tabela_precificacao_moeda`, `app._moeda_tabela`; os campos
 seguem `usd_ha`/`total_usd` por compatibilidade, mas o valor esta' na moeda
