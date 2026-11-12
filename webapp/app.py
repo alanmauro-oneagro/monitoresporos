@@ -9423,10 +9423,12 @@ def admin_planos_tabela():
             faixas.append({"ate_ha": ate, "usd_ha": numero(request.form.get(f"usd_ha_{i}"))})
     except ValueError:
         return _save_response("Tabela de apoio: área e valor por hectare precisam ser números maiores que zero.", "admin_planos", ok=False)
+    # Sempre em ordem de area (pedido do Alan, 13/11/2026): ordena aqui; so' area repetida e' recusada.
+    faixas = sorted((f for f in faixas if f["ate_ha"] is not None), key=lambda f: f["ate_ha"]) + \
+        [f for f in faixas if f["ate_ha"] is None]
     limites = [f["ate_ha"] for f in faixas if f["ate_ha"] is not None]
-    if any(a >= b for a, b in zip(limites, limites[1:])):
-        return _save_response("Tabela de apoio: as áreas precisam ficar em ordem crescente (cada faixa maior que a de cima).",
-                              "admin_planos", ok=False)
+    if any(a == b for a, b in zip(limites, limites[1:])):
+        return _save_response("Tabela de apoio: duas faixas com a mesma área -- mude uma delas.", "admin_planos", ok=False)
     models.set_setting(_TABELA_PRECO_KEY, json.dumps(faixas))
     if request.form.get("moeda") in models.MOEDAS:
         models.set_setting(_TABELA_MOEDA_KEY, request.form["moeda"])

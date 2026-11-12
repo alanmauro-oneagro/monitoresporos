@@ -700,10 +700,15 @@ class TabelaPrecificacaoTest(unittest.TestCase):
             self.assertEqual(webapp.preco_pela_area(280)["faixa"], "até 300 ha")
             self.assertEqual(webapp.preco_pela_area(280)["usd_ha"], 2)
             self.assertEqual(webapp.preco_pela_area(20000)["faixa"], "acima de 12.000 ha")
-            fora = master.post("/admin/planos/tabela", data={**dados, "ate_ha_2": "200"}, headers={"X-Autosave": "1"}).get_json()
-            self.assertFalse(fora["ok"])
-            self.assertIn("ordem crescente", fora["message"])
-            self.assertEqual(webapp._faixas_preco()[2], 500)  # nada gravado
+            # fora de ordem: grava ordenado por area (13/11/2026), o valor acompanha a area
+            fora = master.post("/admin/planos/tabela", data={**dados, "ate_ha_7": "250", "usd_ha_7": "9"},
+                               headers={"X-Autosave": "1"}).get_json()
+            self.assertTrue(fora["ok"])
+            self.assertEqual(webapp._faixas_preco(), [100, 250, 300, 500, 1000, 2000, 3000, 5000, None])
+            self.assertEqual(webapp.preco_pela_area(250)["usd_ha"], 9)
+            repetida = master.post("/admin/planos/tabela", data={**dados, "ate_ha_2": "300"}, headers={"X-Autosave": "1"}).get_json()
+            self.assertFalse(repetida["ok"])
+            self.assertIn("mesma área", repetida["message"])
         finally:
             models.set_setting("tabela_precificacao", "[]")
 
