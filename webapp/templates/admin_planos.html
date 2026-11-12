@@ -165,13 +165,13 @@
         var area = parseFloat(document.getElementById('simular-area').value), saida = document.getElementById('simular-resultado');
         if (!(area > 0)) { saida.textContent = ''; return; }
         var tr = linhas.filter(function (l) { var a = ateDe(l); return isNaN(a) || area <= a; })[0];
-        var v = usdHa(tr), raio = Math.sqrt(area * 0.01 / Math.PI).toFixed(2).replace('.', ',');
+        var v = usdHa(tr);
         var faixa = rotulo(tr);
-        if (v === null) { saida.textContent = faixa + ' -- sem ' + simbolo() + '/ha na faixa · raio ' + raio + ' km'; return; }
+        if (v === null) { saida.textContent = faixa + ' -- sem ' + simbolo() + '/ha na faixa'; return; }
         var caixaFixo = tr.querySelector('[data-campo="fixo"]');
         var fixo = caixaFixo && caixaFixo.checked && !isNaN(ateDe(tr));
         var total = (fixo ? ateDe(tr) : area) * v;
-        saida.textContent = faixa + ': ' + dinheiro(total, simbolo()) + (!emDolar() || isNaN(cotacao) ? '' : ' (≈ ' + dinheiro(total * cotacao, 'R$') + ')') + ' · raio ' + raio + ' km';
+        saida.textContent = faixa + ': ' + dinheiro(total, simbolo()) + (!emDolar() || isNaN(cotacao) ? '' : ' (≈ ' + dinheiro(total * cotacao, 'R$') + ')');
     }
     function recalcular(col) {
         var tr = linhas[col], ate = ateDe(tr), v = usdHa(tr);
