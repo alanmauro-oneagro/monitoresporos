@@ -7512,7 +7512,8 @@ def _plano_para_area(plano, area_ha, cot=None):
         return p
     total = round(preco["total_usd"], 2)
     p.update(sob_consulta=False, moeda=preco["moeda"], simbolo=preco["simbolo"], valor=total,
-             valor_parcela=round(total / p["parcelas"], 2), faixa=preco["faixa"], usd_ha=preco["usd_ha"])
+             valor_parcela=round(total / p["parcelas"], 2), faixa=preco["faixa"], usd_ha=preco["usd_ha"],
+             preco_fixo=preco["preco_fixo"], area_cobrada=preco["area_cobrada"])
     return p
 
 
@@ -7662,7 +7663,7 @@ def _contexto_cadastro(culturas):
         "grupo_de": {c: _grupo_da_cultura(c) for c in culturas},
         "planos": models.get_planos(apenas_ativos=True), "recursos": models.RECURSOS_PLANO,
         "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"]} for f in _tabela_precificacao()],
-        "moeda_tabela": _moeda_tabela(),
+        "moeda_tabela": _moeda_tabela(), "preco_fixo": _preco_fixo(),
         "cotacao_valor": cot["valor"] if cot else None, "contato_comercial": CONTATO_COMERCIAL, "max_extras": MAX_EXTRAS_RELATORIO,
     }
 
@@ -9279,6 +9280,7 @@ def admin_planos():
         recursos_ocultos=RECURSOS_FORA_DA_TELA,
         ciclos=models.CICLOS_PLANO, moedas=models.MOEDAS, cotacao_dolar=cotacao.dolar(),
         tabela_preco=_tabela_precificacao(), moeda_tabela=_moeda_tabela(), max_faixas=MAX_FAIXAS,
+        preco_fixo=_preco_fixo(),
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
         hoje=_hoje_cuiaba().isoformat(),
@@ -9296,6 +9298,15 @@ _TABELA_PRECO_KEY = "tabela_precificacao"
 # Moeda da tabela de apoio: U$ ou R$ (pedido do Alan, 09/11/2026). Os campos
 # continuam "usd_ha"/"total_usd" por compatibilidade -- o valor esta' na moeda da tabela.
 _TABELA_MOEDA_KEY = "tabela_precificacao_moeda"
+
+
+# Preco fixo (pedido do Alan, 13/11/2026): marcado, o cliente paga a area do LIMITE da faixa
+# (350 ha cai em "ate' 400" e paga 400 x valor/ha); a faixa "acima de" segue pela area.
+_TABELA_FIXO_KEY = "tabela_preco_fixo"
+
+
+def _preco_fixo():
+    return models.get_setting(_TABELA_FIXO_KEY) == "1"
 
 
 def _moeda_tabela():
@@ -9380,7 +9391,9 @@ def preco_pela_area(area_ha, cot=None):
         return None
     ate = _faixa_da_area(area)
     usd_ha = _usd_ha_por_faixa().get(ate)
-    total = area * usd_ha if usd_ha is not None else None
+    fixo = _preco_fixo() and ate is not None
+    area_cobrada = ate if fixo else area
+    total = area_cobrada * usd_ha if usd_ha is not None else None
     moeda = _moeda_tabela()
     if moeda == "BRL":
         total_brl = total
@@ -9389,7 +9402,8 @@ def preco_pela_area(area_ha, cot=None):
             cot = cotacao.dolar()
         total_brl = total * cot["valor"] if total is not None and cot else None
     return {"area_ha": area, "faixa": _rotulo_faixa(ate), "usd_ha": usd_ha, "total_usd": total,
-            "total_brl": total_brl, "raio_km": _raio_km(area), "moeda": moeda, "simbolo": models.MOEDAS[moeda]}
+            "total_brl": total_brl, "raio_km": _raio_km(area), "moeda": moeda, "simbolo": models.MOEDAS[moeda],
+            "preco_fixo": fixo, "area_cobrada": area_cobrada}
 
 
 @app.route("/admin/planos/tabela", methods=["POST"])
@@ -9432,6 +9446,8 @@ def admin_planos_tabela():
     models.set_setting(_TABELA_PRECO_KEY, json.dumps(faixas))
     if request.form.get("moeda") in models.MOEDAS:
         models.set_setting(_TABELA_MOEDA_KEY, request.form["moeda"])
+    if request.form.get("tem_preco_fixo"):
+        models.set_setting(_TABELA_FIXO_KEY, "1" if request.form.get("preco_fixo") else "0")
     if request.headers.get("X-Autosave") == "1":
         return {"ok": True, "message": "Tabela de apoio salva."}
     flash("Tabela de apoio salva.", "success")

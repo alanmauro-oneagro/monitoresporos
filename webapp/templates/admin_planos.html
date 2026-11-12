@@ -109,6 +109,11 @@
                 <option value="USD" {% if moeda_tabela != 'BRL' %}selected{% endif %}>Dólar (U$)</option>
                 <option value="BRL" {% if moeda_tabela == 'BRL' %}selected{% endif %}>Real (R$)</option>
             </select>
+            <input type="hidden" name="tem_preco_fixo" value="1">
+            <div class="form-check ms-2 mb-0" title="Marcado: o cliente paga a área do limite da faixa (350 ha cai em &quot;até 400 ha&quot; e paga 400 ha)">
+                <input class="form-check-input" type="checkbox" name="preco_fixo" id="preco-fixo" {% if preco_fixo %}checked{% endif %}>
+                <label class="form-check-label" for="preco-fixo">Preço fixo</label>
+            </div>
         </div>
         <div class="table-responsive">
         <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem; max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}" data-moeda="{{ moeda_tabela }}">
@@ -166,7 +171,8 @@
         var v = usdHa(tr), raio = Math.sqrt(area * 0.01 / Math.PI).toFixed(2).replace('.', ',');
         var faixa = rotulo(tr);
         if (v === null) { saida.textContent = faixa + ' -- sem ' + simbolo() + '/ha na faixa · raio ' + raio + ' km'; return; }
-        var total = area * v;
+        var fixo = document.getElementById('preco-fixo').checked && !isNaN(ateDe(tr));
+        var total = (fixo ? ateDe(tr) : area) * v;
         saida.textContent = faixa + ': ' + dinheiro(total, simbolo()) + (!emDolar() || isNaN(cotacao) ? '' : ' (≈ ' + dinheiro(total * cotacao, 'R$') + ')') + ' · raio ' + raio + ' km';
     }
     function recalcular(col) {
@@ -191,6 +197,7 @@
         simular();
     });
     document.getElementById('simular-area').addEventListener('input', simular);
+    document.getElementById('preco-fixo').addEventListener('change', simular);
 
     // Quantidade de faixas editavel (pedido do Alan, 13/11/2026): + Adicionar / ✕ tirar,
     // renumera os campos (ate_ha_i / usd_ha_i; a linha "acima" fica por ultimo) e salva.

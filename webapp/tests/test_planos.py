@@ -712,6 +712,29 @@ class TabelaPrecificacaoTest(unittest.TestCase):
         finally:
             models.set_setting("tabela_precificacao", "[]")
 
+    def test_preco_fixo_cobra_o_limite_da_faixa(self):
+        """Preco fixo (13/11/2026): 350 ha cai em "ate' 400" e paga 400 ha."""
+        master = self._logado("Zzz Teste Master Tabela")
+        h = {"X-Autosave": "1"}
+        dados = {"ate_ha_0": "300", "ate_ha_1": "400", "usd_ha_0": "14", "usd_ha_1": "13", "usd_ha_2": "3",
+                 "moeda": "BRL", "tem_preco_fixo": "1"}
+        try:
+            master.post("/admin/planos/tabela", data=dados, headers=h)
+            p = webapp.preco_pela_area(350)
+            self.assertEqual((p["total_usd"], p["preco_fixo"]), (350 * 13, False))
+            master.post("/admin/planos/tabela", data={**dados, "preco_fixo": "on"}, headers=h)
+            p = webapp.preco_pela_area(350)
+            self.assertEqual((p["faixa"], p["total_usd"], p["area_cobrada"], p["preco_fixo"]), ("até 400 ha", 400 * 13, 400, True))
+            self.assertEqual(webapp.preco_pela_area(1000)["total_usd"], 3000)  # "acima de": pela area
+            self.assertIn('id="preco-fixo" checked', master.get("/admin/planos").get_data(as_text=True))
+            plano = {"preco_por_area": True, "parcelas": 1, "valor": 0}
+            self.assertEqual(webapp._plano_para_area(plano, 350)["valor"], 5200)
+            self.assertIn("var PRECO_FIXO = true", webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True))
+        finally:
+            models.set_setting("tabela_precificacao", "[]")
+            models.set_setting("tabela_preco_fixo", "0")
+            models.set_setting("tabela_precificacao_moeda", "USD")
+
     def test_quantidade_de_faixas_editavel(self):
         master = self._logado("Zzz Teste Master Tabela")
         h = {"X-Autosave": "1"}
