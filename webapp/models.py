@@ -865,21 +865,24 @@ def init_db():
         conn.execute("ALTER TABLE planos_fazenda ADD COLUMN grupo_economico TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe
-    # Nomes novos dos planos (pedido do Alan, 09/11/2026): Free = Essencial,
-    # Premium = Avancado, Premium + Estacao = Inteligencia.
-    for antigo, novo in PLANOS_RENOMEADOS:
-        if not conn.execute("SELECT 1 FROM planos WHERE lower(nome) = lower(?)", (novo,)).fetchone():
-            conn.execute("UPDATE planos SET nome = ? WHERE lower(nome) = lower(?)", (novo, antigo))
-    # Planos padrao (pedido do Alan, 31/10/2026) -- so' cria o que ainda nao
-    # existe pelo nome; os pagos nascem fora de venda ate' o Master por o
-    # preco em Configuracoes > Planos e clientes.
-    for ordem, (nome, recursos, max_pontos, ativo) in enumerate(PLANOS_PADRAO, 1):
-        if not conn.execute("SELECT 1 FROM planos WHERE lower(nome) = lower(?)", (nome,)).fetchone():
-            conn.execute(
-                "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, preco_por_area)"
-                " VALUES (?, '', 0, 'MONTHLY', ?, 50, ?, ?, ?, ?)",
-                (nome, max_pontos, json.dumps(recursos), 1 if ativo else 0, ordem, 1 if nome == "Avançado" else 0),
-            )
+    # Planos padrao e nomes novos so' UMA vez (pedido do Alan, 13/11/2026): antes o init_db
+    # recriava pelo nome a cada subida -- plano renomeado/excluido na tela voltava.
+    if not conn.execute("SELECT 1 FROM app_settings WHERE key = 'planos_padrao_feitos'").fetchone():
+        # Nomes novos (pedido do Alan, 09/11/2026): Free = Essencial, Premium = Avancado,
+        # Premium + Estacao = Inteligencia.
+        for antigo, novo in PLANOS_RENOMEADOS:
+            if not conn.execute("SELECT 1 FROM planos WHERE lower(nome) = lower(?)", (novo,)).fetchone():
+                conn.execute("UPDATE planos SET nome = ? WHERE lower(nome) = lower(?)", (novo, antigo))
+        # Planos padrao (pedido do Alan, 31/10/2026) -- so' num banco ainda sem plano nenhum;
+        # os pagos nascem fora de venda ate' o Master por o preco em Planos e Valores.
+        if not conn.execute("SELECT 1 FROM planos").fetchone():
+            for ordem, (nome, recursos, max_pontos, ativo) in enumerate(PLANOS_PADRAO, 1):
+                conn.execute(
+                    "INSERT INTO planos (nome, descricao, valor, ciclo, max_pontos, raio_km, recursos, ativo, ordem, preco_por_area)"
+                    " VALUES (?, '', 0, 'MONTHLY', ?, 50, ?, ?, ?, ?)",
+                    (nome, max_pontos, json.dumps(recursos), 1 if ativo else 0, ordem, 1 if nome == "Avançado" else 0),
+                )
+        conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('planos_padrao_feitos', '1')")
     # Cadastro direto (pedido do Alan, 31/10/2026): cada linha e' o registro
     # de uma conta criada em /solicitar-acesso (status 'cadastrado'), pra
     # tela "Novos cadastros" do Master. As colunas de codigo/token ficaram
@@ -4217,9 +4220,10 @@ def fim_free(assinatura):
 
 
 def plano_free():
-    """O plano gratis (pelo nome "Essencial", ex-"Free"; senao o 1o de valor 0 sem preco pela area)."""
+    """O plano gratis (pelo nome "Essencial", ex-"Free"; senao o 1o de valor 0 sem preco pela area, a venda antes)."""
     planos = get_planos()
     return (next((p for p in planos if p["nome"].strip().lower() in ("essencial", "free")), None)
+            or next((p for p in planos if p["valor"] <= 0 and not p.get("preco_por_area") and p["ativo"]), None)
             or next((p for p in planos if p["valor"] <= 0 and not p.get("preco_por_area")), None))
 
 

@@ -199,7 +199,7 @@ que sobraram ao abrir a tela/contar).
 **Nomes dos planos (pedido do Alan, 09/11/2026)**: Free = **Essencial**,
 Premium = **Avançado**, Premium + Estação = **Inteligência** (Básico igual).
 `models.PLANOS_RENOMEADOS` troca no `init_db` (so' se o nome novo nao
-existir; o id fica o mesmo); `plano_free()` acha "Essencial" (ou "Free").
+existir; o id fica o mesmo); **planos padrao e nomes novos so' UMA vez** (setting `planos_padrao_feitos`; os padrao so' num banco sem plano nenhum -- antes o `init_db` recriava pelo nome a cada subida e plano renomeado/excluido na tela voltava; pedido do Alan, 13/11/2026); `plano_free()` acha "Essencial" (ou "Free"; senao o 1o plano de valor 0 sem preco pela area, os a venda antes).
 Onde este arquivo diz Free/Premium/Premium + Estacao, sao esses planos.
 **Modelo unico de fazenda em Gerenciar Clientes** (pedido do Alan,
 09/11/2026 -- substitui o "💳 Plano e grupo" do Mapas de Estudo e as

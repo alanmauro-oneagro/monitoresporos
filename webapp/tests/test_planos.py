@@ -54,6 +54,22 @@ class PlanosTest(unittest.TestCase):
         models.init_db()  # rodar de novo nao duplica
         self.assertEqual(sum(1 for p in models.get_planos() if p["nome"] == "Essencial"), 1)
 
+    def test_plano_renomeado_ou_excluido_nao_volta(self):
+        # Pedido do Alan, 13/11/2026: o init_db recriava o plano padrao a cada subida.
+        plano = self.planos["Inteligência"]
+        conn = models.get_db()
+        conn.execute("UPDATE planos SET nome = 'Zzz Teste Inteligencia' WHERE id = ?", (plano["id"],))
+        conn.commit()
+        conn.close()
+        try:
+            models.init_db()
+            self.assertFalse(any(p["nome"] == "Inteligência" for p in models.get_planos()))
+        finally:
+            conn = models.get_db()
+            conn.execute("UPDATE planos SET nome = 'Inteligência' WHERE id = ?", (plano["id"],))
+            conn.commit()
+            conn.close()
+
     def test_master_define_preco_e_abas(self):
         master = self._logado(models.get_user_by_username("Zzz Teste Master Planos")["id"])
         premium = self.planos["Avançado"]
@@ -359,6 +375,7 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         essencial = self._plano("Essencial")
         conn = models.get_db()
         conn.execute("UPDATE planos SET nome = 'Free' WHERE id = ?", (essencial["id"],))
+        conn.execute("DELETE FROM app_settings WHERE key = 'planos_padrao_feitos'")  # banco antigo, antes da troca
         conn.commit()
         conn.close()
         models.init_db()
