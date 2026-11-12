@@ -70,18 +70,19 @@
             </div>
 
             <div class="mt-3 pt-3 border-top">
-            <form method="post" action="{{ url_for('admin_fazenda_dados_salvar') }}" class="row g-2 align-items-end form-culturas" data-autosave>
+            <form method="post" action="{{ url_for('admin_fazenda_dados_salvar') }}" class="row g-2 align-items-end form-culturas par-uf-cidade" data-autosave>
                 <input type="hidden" name="site_name" value="{{ fz.site }}">
-                <div class="col-8 col-md-4">
-                    <label class="form-label small text-muted mb-0" for="cid_{{ fz.idx }}">Município</label>
-                    <input type="text" name="cidade" id="cid_{{ fz.idx }}" class="form-control form-control-sm" value="{{ fz.cidade or '' }}" maxlength="80">
-                </div>
+                {# Estado primeiro; municipio da lista do IBGE (pedido do Alan, 13/11/2026). #}
                 <div class="col-4 col-md-2">
                     <label class="form-label small text-muted mb-0" for="uf_{{ fz.idx }}">Estado</label>
-                    <select name="uf" id="uf_{{ fz.idx }}" class="form-select form-select-sm">
+                    <select name="uf" id="uf_{{ fz.idx }}" class="form-select form-select-sm" data-uf-ibge>
                         <option value="">UF</option>
                         {% for uf in ufs %}<option value="{{ uf }}" {% if fz.uf == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}
                     </select>
+                </div>
+                <div class="col-8 col-md-4">
+                    <label class="form-label small text-muted mb-0" for="cid_{{ fz.idx }}">Município</label>
+                    <input type="text" name="cidade" id="cid_{{ fz.idx }}" class="form-control form-control-sm" value="{{ fz.cidade or '' }}" maxlength="80" data-cidade-ibge>
                 </div>
                 {# Culturas no mesmo padrao do app (cliente_ponto_novo.html). #}
                 <div class="col-12">

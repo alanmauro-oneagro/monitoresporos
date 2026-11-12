@@ -11,12 +11,12 @@
 <h1 class="titulo">{{ "Editar fazenda" if editar else "Nova fazenda monitorada" }}</h1>
 <form method="post" id="formPonto">
     <input class="form-control mb-2" name="nome" value="{{ form.get('nome', '') if form else '' }}" placeholder="Nome (ex.: Faz Mourão)" maxlength="60" required aria-label="Nome da fazenda">
-    <div class="row g-2 mb-3">
-        <div class="col-8"><input class="form-control" name="cidade" value="{{ form.get('cidade', '') if form else '' }}" placeholder="Cidade" maxlength="80" aria-label="Cidade"></div>
-        <div class="col-4"><select class="form-select" name="uf" aria-label="Estado">
+    <div class="row g-2 mb-3 par-uf-cidade">
+        <div class="col-4"><select class="form-select" name="uf" aria-label="Estado" data-uf-ibge>
             <option value="">UF</option>
             {% for uf in ufs %}<option value="{{ uf }}" {% if form and form.get('uf') == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}
         </select></div>
+        <div class="col-8"><input class="form-control" name="cidade" value="{{ form.get('cidade', '') if form else '' }}" placeholder="Cidade (escolha o estado primeiro)" maxlength="80" aria-label="Cidade" data-cidade-ibge></div>
     </div>
 
     <div class="small fw-semibold mb-1">Tipo de cultura</div>

@@ -327,6 +327,7 @@ document.addEventListener('click', function (e) {
         .then(function (r) { if (!r.ok) { throw new Error(); } return r.text(); })
         .then(function (html) {
             corpo.innerHTML = html; corpo.dataset.carregado = '1';
+            if (window.cidadesIbge) window.cidadesIbge(corpo);
             corpo.querySelectorAll('.form-culturas').forEach(atualizarCulturas);
         })
         .catch(function () { corpo.textContent = 'Não foi possível abrir os dados agora.'; });

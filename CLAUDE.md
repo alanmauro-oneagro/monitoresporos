@@ -995,6 +995,13 @@ site tem que entrar la'.
   `bioscout_fetch.fetch_recent`; agrofit = bytes baixados / processando; anatel = mapas
   feitos/total) e a pagina recarrega ao terminar. Abrir a tela com a busca ja' rodando (ex.: a
   auto-atualizacao do Alertas) ja' mostra o progresso.
+- **Estado primeiro, cidade da lista do IBGE** (pedido do Alan, 13/11/2026): no cadastro (cada Local), em
+  Nova/Editar fazenda do app e em "Dados da fazenda" (Gerenciar Clientes) o Estado vem antes e a cidade vira um
+  select com os municipios daquela UF (`_cidade_por_estado.html`, incluido em base.html e cliente_base.html: par
+  `.par-uf-cidade` com `[data-uf-ibge]` e `[data-cidade-ibge]`; `window.cidadesIbge(raiz)` pra conteudo carregado
+  depois). O campo e' input no HTML (sem JS / fora do Brasil / IBGE fora do ar continua texto livre); cidade
+  gravada com outra grafia vira a oficial; gravada e fora da lista continua escolhida "(fora da lista)" -- nunca
+  e' apagada pelo autosave.
 - **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
   "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
   (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no
