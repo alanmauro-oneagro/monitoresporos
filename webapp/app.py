@@ -6194,6 +6194,9 @@ _PESQUISA_GERMINACAO = {
     "rhizoctonia solani": _G(25, 32, 90, 12),
     "thanatephorus": _G(25, 32, 90, 12),
     "thanatephorus cucumeris": _G(25, 32, 90, 12),
+    "waitea": _G(25, 32, 90, 12),                 # Rhizoctonia zeae/oryzae (mancha salmao)
+    "waitea zeae": _G(25, 32, 90, 12),
+    "waitea circinata": _G(25, 32, 90, 12),
     "sclerotium rolfsii": _G(25, 35, 90, 12),     # murcha de esclerocio
     "athelia rolfsii": _G(25, 35, 90, 12),
     "ascochyta": _G(15, 25, 90, 12),
