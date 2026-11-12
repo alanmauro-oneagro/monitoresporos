@@ -3946,20 +3946,24 @@ def adicionar_ponto_virtual():
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
         country_code = countries.DEFAULT_COUNTRY
+    grupo = (request.form.get("grupo_economico") or "").strip()[:40] or None
     tipo = request.form.get("tipo", "doenca")
     if tipo == "estudo":
-        models.criar_ponto_estudo(nome, lat, lon, raio_km, country_code, criado_por=current_user.username)
+        models.criar_ponto_estudo(nome, lat, lon, raio_km, country_code, criado_por=current_user.username,
+                                  grupo_economico=grupo)
         flash(f"Estudo de viabilidade '{nome}' criado.", "success")
         return redirect(url_for("mapa_interpolado") + "#pontos-criados")
     if tipo not in ("doenca", "clima"):
         tipo = "doenca"
     try:
-        models.create_virtual_farm(
+        novo_site = models.create_virtual_farm(
             nome, lat, lon, raio_km, criado_por=current_user.username, country_code=country_code, tipo=tipo
         )
     except sqlite3.IntegrityError:
         flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
         return redirect(url_for("mapa_interpolado"))
+    if grupo:
+        models.salvar_grupo_fazenda_dados(novo_site, grupo)
     flash(f"Ponto estimado '{nome}' criado -- defina quem pode ve-lo na aba Usuarios.", "success")
     return redirect(url_for("mapa_interpolado"))
 
