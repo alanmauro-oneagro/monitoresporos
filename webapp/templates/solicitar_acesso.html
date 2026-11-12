@@ -207,6 +207,7 @@
     // outra) abre o campo da area; soma a area total e calcula o preco pela area.
     var locaisEl = document.getElementById('locais');
     var FAIXAS = {{ faixas_preco | tojson }}, COTACAO = {{ cotacao_valor | tojson }}, MOEDA_TABELA = {{ moeda_tabela | tojson }};
+    var PRECO_FIXO = {{ preco_fixo | tojson }};
     function numero(v) { v = (v || '').trim().replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
     function dinheiro(v, s) { return s + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     // So' troca o HTML se mudou: sair do campo de area dispara "change" no mesmo
@@ -267,7 +268,7 @@
                     trocar(el, '<div class="preco-box"><div class="preco-sub">' + (areaPreco > 0 ? 'Sob consulta' : 'Informe a área para calcular') + '</div></div>');
                     return;
                 }
-                totalPlano = Math.round(areaPreco * faixa.usd_ha * 100) / 100; usd = MOEDA_TABELA !== 'BRL'; simbolo = usd ? 'U$' : 'R$';
+                totalPlano = Math.round((PRECO_FIXO && faixa.ate ? faixa.ate : areaPreco) * faixa.usd_ha * 100) / 100; usd = MOEDA_TABELA !== 'BRL'; simbolo = usd ? 'U$' : 'R$';
             } else {
                 totalPlano = parseFloat(el.dataset.valor);
                 if (!(totalPlano > 0)) return;  // Free: fica "Gratis"

@@ -146,7 +146,7 @@ details.card > summary { font-size: 0.9rem; }
             <dt>Área total</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
             {% set pr = c.preco_area %}
             {% if pr %}<dt>Preço pela área</dt><dd>{% if pr.total_usd is not none %}<strong>{{ pr.total_usd | dinheiro(pr.simbolo) }}</strong>{% if pr.moeda == 'USD' and pr.total_brl is not none %} (≈ {{ pr.total_brl | dinheiro }}){% endif %}
-                <span class="text-muted">· {{ pr.faixa }}, {{ pr.simbolo }} {{ ('%.2f' | format(pr.usd_ha)) | replace('.', ',') }}/ha</span>{% else %}<span class="text-muted">{{ pr.faixa }} -- sem {{ pr.simbolo }}/ha na <a href="{{ url_for('admin_planos') }}#tabela-precificacao">tabela de apoio</a></span>{% endif %}
+                <span class="text-muted">· {{ pr.faixa }}, {{ pr.simbolo }} {{ ('%.2f' | format(pr.usd_ha)) | replace('.', ',') }}/ha{% if pr.preco_fixo %} · preço fixo: cobrado por {{ '{:,.0f}'.format(pr.area_cobrada).replace(',', '.') }} ha{% endif %}</span>{% else %}<span class="text-muted">{{ pr.faixa }} -- sem {{ pr.simbolo }}/ha na <a href="{{ url_for('admin_planos') }}#tabela-precificacao">tabela de apoio</a></span>{% endif %}
                 <span class="text-muted">· raio {{ ('%.1f' | format(pr.raio_km)) | replace('.', ',') }} km</span></dd>{% endif %}
             <dt>Mensagem</dt><dd>{{ c.mensagem or '-' }}</dd>
             {% endif %}

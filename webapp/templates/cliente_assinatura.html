@@ -97,7 +97,7 @@
             {% else %}{{ p | parcelas_plano(area_total) }}{% endif %}
             {% if p.com_desconto %}<div class="small fw-semibold text-success mb-1">Com o desconto: {% if p.com_desconto.total > 0 %}{{ p.parcelas }}x de {{ p.com_desconto.parcela | dinheiro }} (total {{ p.com_desconto.total | dinheiro }}){% else %}sem nada a pagar{% endif %}</div>{% endif %}
             {% if p.descricao %}<div class="small text-muted">{{ p.descricao }}</div>{% endif %}
-            {% if p.preco_por_area and p.area_preco_ha %}<div class="small text-muted">Preço pela sua área: {{ '{:,.0f}'.format(p.area_preco_ha).replace(',', '.') }} ha{% if p.faixa %} ({{ p.faixa }}){% endif %}.</div>{% endif %}
+            {% if p.preco_por_area and p.area_preco_ha %}<div class="small text-muted">Preço pela sua área: {{ '{:,.0f}'.format(p.area_preco_ha).replace(',', '.') }} ha{% if p.faixa %} ({{ p.faixa }}){% endif %}{% if p.preco_fixo %} -- valor da faixa: {{ '{:,.0f}'.format(p.area_cobrada).replace(',', '.') }} ha{% endif %}.</div>{% endif %}
             {% if p.moeda == 'USD' and p.valor > 0 and disponivel %}<div class="small text-muted">Cobrado em reais, pela cotação do dólar do dia (Banco Central).</div>{% endif %}
             <ul class="small ps-4 mt-1">
                 {% for chave, rotulo in recursos %}{% if chave in p.recursos %}<li>{{ rotulo }}</li>{% endif %}{% endfor %}
