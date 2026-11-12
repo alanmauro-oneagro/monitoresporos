@@ -3706,6 +3706,7 @@ def mapa_interpolado():
             "pais_nome": countries.get_country(_pais_code_vf)["nome"],
             "ativo": vf["site_name"] not in desativadas,
             "cliente": clientes_site.get(vf["site_name"]),
+            "grupo": _grupo_economico_da_fazenda(vf["site_name"]),
         })
         # Fazenda do cliente (plano) aparece sempre, com o pino verde-claro, mesmo
         # sem fazenda real no raio ainda (pedido do Alan, 08/11/2026).
@@ -3737,7 +3738,7 @@ def mapa_interpolado():
     for pe in models.get_pontos_estudo():
         chave = f"estudo:{pe['id']}"
         pontos_estudo.append({
-            **pe, "site_name": chave, "tipo": "estudo", "ativo": True,
+            **pe, "site_name": chave, "tipo": "estudo", "ativo": True, "grupo": pe.get("grupo_economico"),
             "criado_em": models.fmt_data_br(pe["criado_em"]),
             "pais_nome": countries.get_country(pe["country_code"])["nome"],
         })
@@ -3763,6 +3764,7 @@ def mapa_interpolado():
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
         pontos_estudo=pontos_estudo,
+        grupos_economicos=sorted(set(models.grupos_economicos()) | {p["grupo"] for p in pontos_estudo if p["grupo"]}, key=str.lower),
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
         # Sinal de celular (ex-aba Sinal telefonia): camada por operadora
         info_cobertura=info_cobertura,
@@ -3983,11 +3985,16 @@ def editar_ponto_virtual():
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
         country_code = countries.DEFAULT_COUNTRY
+    # Grupo economico no Editar (pedido do Alan, 12/11/2026).
+    tem_grupo = "grupo_economico" in request.form
+    grupo = (request.form.get("grupo_economico") or "").strip()[:40] or None
+    if not tem_grupo:
+        grupo = estudo.get("grupo_economico") if estudo else _grupo_economico_da_fazenda(site_name)
     tipo = request.form.get("tipo", "estudo" if estudo else "doenca")
     if tipo not in ("doenca", "clima", "estudo"):
         tipo = "doenca"
     if estudo and tipo == "estudo":
-        models.atualizar_ponto_estudo(estudo["id"], nome, lat, lon, raio_km, country_code)
+        models.atualizar_ponto_estudo(estudo["id"], nome, lat, lon, raio_km, country_code, grupo)
         flash(f"Estudo de viabilidade '{nome}' atualizado.", "success")
         return redirect(url_for("mapa_interpolado"))
     if estudo:
@@ -4000,6 +4007,9 @@ def editar_ponto_virtual():
             flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
             return redirect(url_for("mapa_interpolado"))
         models.excluir_ponto_estudo(estudo["id"])
+        novo = next((v["site_name"] for v in models.get_all_virtual_farms() if v["nome"] == nome), None)
+        if novo and grupo:
+            models.salvar_grupo_fazenda_dados(novo, grupo)
         flash(f"'{nome}' virou ponto de {'só clima' if tipo == 'clima' else 'monitoramento de doenças'}.", "success")
         return redirect(url_for("mapa_interpolado") + "#pontos-criados")
     if tipo == "estudo":
@@ -4008,7 +4018,8 @@ def editar_ponto_virtual():
         if site_name in models.clientes_por_site():
             flash("Essa fazenda pertence a um cliente -- desligue em Gerenciar Clientes antes de virar estudo.", "error")
             return redirect(url_for("mapa_interpolado"))
-        models.criar_ponto_estudo(nome, lat, lon, raio_km, country_code, criado_por=current_user.username)
+        models.criar_ponto_estudo(nome, lat, lon, raio_km, country_code, criado_por=current_user.username,
+                                  grupo_economico=grupo)
         models.delete_virtual_farm(site_name)
         _weather_cache.pop(site_name, None)
         flash(f"'{nome}' virou estudo de viabilidade.", "success")
@@ -4022,6 +4033,13 @@ def editar_ponto_virtual():
     # `_weather_cache` continuava servindo o clima da coordenada ANTIGA
     # por ate' `WEATHER_CACHE_TTL_SECONDS` (30min) depois de mover o ponto.
     _weather_cache.pop(site_name, None)
+    if tem_grupo:
+        novo_site = next((v["site_name"] for v in models.get_all_virtual_farms() if v["nome"] == nome), site_name)
+        ponto_cad = _ponto_da_fazenda(novo_site)
+        if ponto_cad:
+            models.atualizar_dados_cadastro(ponto_cad["user_id"], grupo_economico=grupo)
+        else:
+            models.salvar_grupo_fazenda_dados(novo_site, grupo)
     flash(f"Ponto estimado '{nome}' atualizado.", "success")
     return redirect(url_for("mapa_interpolado"))
 

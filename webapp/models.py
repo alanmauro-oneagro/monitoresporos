@@ -698,6 +698,10 @@ def init_db():
     # cuida de limpar quem ja tiver ela criada.
     conn.execute("DROP TABLE IF EXISTS farm_sulco_plantio")
     try:
+        conn.execute("ALTER TABLE pontos_estudo ADD COLUMN grupo_economico TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
         conn.execute("ALTER TABLE disease_translations ADD COLUMN nome_cientifico TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
@@ -3214,12 +3218,12 @@ def get_ponto_estudo(ponto_id):
     return dict(row) if row else None
 
 
-def criar_ponto_estudo(nome, lat, lon, raio_km, country_code="BR", criado_por=None):
+def criar_ponto_estudo(nome, lat, lon, raio_km, country_code="BR", criado_por=None, grupo_economico=None):
     conn = get_db()
     cur = conn.execute(
-        "INSERT INTO pontos_estudo (nome, lat, lon, raio_km, country_code, criado_em, criado_por) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (nome, lat, lon, raio_km, country_code, _agora_cuiaba(), criado_por),
+        "INSERT INTO pontos_estudo (nome, lat, lon, raio_km, country_code, criado_em, criado_por, grupo_economico) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (nome, lat, lon, raio_km, country_code, _agora_cuiaba(), criado_por, grupo_economico),
     )
     conn.commit()
     novo_id = cur.lastrowid
@@ -3227,11 +3231,11 @@ def criar_ponto_estudo(nome, lat, lon, raio_km, country_code="BR", criado_por=No
     return novo_id
 
 
-def atualizar_ponto_estudo(ponto_id, nome, lat, lon, raio_km, country_code="BR"):
+def atualizar_ponto_estudo(ponto_id, nome, lat, lon, raio_km, country_code="BR", grupo_economico=None):
     conn = get_db()
     conn.execute(
-        "UPDATE pontos_estudo SET nome = ?, lat = ?, lon = ?, raio_km = ?, country_code = ? WHERE id = ?",
-        (nome, lat, lon, raio_km, country_code, ponto_id),
+        "UPDATE pontos_estudo SET nome = ?, lat = ?, lon = ?, raio_km = ?, country_code = ?, grupo_economico = ? WHERE id = ?",
+        (nome, lat, lon, raio_km, country_code, grupo_economico, ponto_id),
     )
     conn.commit()
     conn.close()

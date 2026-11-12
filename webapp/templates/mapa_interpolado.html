@@ -139,34 +139,35 @@
 
 
 <h6 class="fw-bold mt-4 mb-2" id="pontos-criados">Pontos Criados</h6>
+<datalist id="grupos-economicos">{% for g in grupos_economicos %}<option value="{{ g }}">{% endfor %}</datalist>
 {% macro cartao_ponto(ponto, idx) %}
 <div class="ponto-virtual-card">
-    <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-        <strong>{{ ponto.nome }}</strong>
+    {# Cartao recolhido como em Manejos: a seta abre os dados (pedido do Alan, 12/11/2026). #}
+    <div class="d-flex align-items-center flex-wrap gap-2">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold editar-ponto-toggle" data-target="editar-ponto-{{ idx }}" data-site="{{ ponto.site_name }}">
+            <span class="toggle-icon">▶</span> {{ ponto.nome }}
+        </button>
         {% if ponto.tipo != 'estudo' %}{{ selo_plano(ponto.site_name) }}{% endif %}
         <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
+        {% if ponto.grupo %}<span class="badge bg-light text-dark border fw-normal">👥 {{ ponto.grupo }}</span>{% endif %}
         {% if ponto.cliente %}
         <span class="badge text-dark" style="background: #b2f2bb;" title="Criada pelo cliente ao marcar a fazenda no mapa (plano)">🟢 Cliente: {{ ponto.cliente }}</span>
         {% endif %}
         {% if not ponto.ativo %}
         <span class="badge bg-secondary" title="Reativar em Configurações > Gerenciar Fazendas Ocultas">Oculto</span>
         {% endif %}
-        <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
-        <div class="ms-auto d-flex gap-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ idx }}" data-site="{{ ponto.site_name }}">✏️ Editar</button>
-            <form method="post" action="{{ url_for('remover_ponto_virtual') }}" class="mb-0"
-                  onsubmit="return confirm({% if ponto.tipo == 'estudo' %}'Remover o estudo de viabilidade \'{{ ponto.nome }}\'?'{% else %}'Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga também permissões, agenda de WhatsApp e anotações ligadas a ele.'{% endif %});">
-                <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Remover</button>
-            </form>
-        </div>
     </div>
 
-    <div class="d-none border rounded p-2 mb-2" id="editar-ponto-{{ idx }}" style="background:#fff;">
+    <div class="d-none border rounded p-2 mt-2" id="editar-ponto-{{ idx }}" style="background:#fff;">
         {# Salva sozinho e recarrega (pedido do Alan, 12/11/2026); virar estudo pede confirmacao. #}
         <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end form-editar-ponto" data-autosave data-autosave-reload
               data-tipo-original="{{ ponto.tipo }}" data-msg-estudo="Transformar '{{ ponto.nome }}' em estudo de viabilidade? Ele deixa de ser fazenda: sai de todas as telas e apaga permissões, agenda de WhatsApp e anotações ligadas a ele.">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <div class="col-12 col-md-3">
+                <label class="form-label small text-muted mb-1">Grupo econômico</label>
+                <input type="text" name="grupo_economico" class="form-control form-control-sm" value="{{ ponto.grupo or '' }}" maxlength="40" list="grupos-economicos" placeholder="(sem grupo)"
+                       {% if ponto.cliente %}title="Fazenda de cliente: muda o grupo do cadastro dele"{% endif %}>
+            </div>
             <div class="col-12 col-md-3">
                 <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
                 <input type="text" name="nome" class="form-control form-control-sm" value="{{ ponto.nome }}" required>
@@ -199,7 +200,13 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="col-12 small text-muted">Criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</div>
             <div class="col-12 small text-muted">Salva sozinho ao sair do campo (ou ao soltar o pino no mapa)<span class="autosave-status small ms-2"></span></div>
+        </form>
+        <form method="post" action="{{ url_for('remover_ponto_virtual') }}" class="mt-2 text-end"
+              onsubmit="return confirm({% if ponto.tipo == 'estudo' %}'Remover o estudo de viabilidade \'{{ ponto.nome }}\'?'{% else %}'Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga também permissões, agenda de WhatsApp e anotações ligadas a ele.'{% endif %});">
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Remover</button>
         </form>
     </div>
 
@@ -933,6 +940,8 @@
             var painel = document.getElementById(btn.dataset.target);
             var vaiAbrir = painel.classList.contains('d-none');
             painel.classList.toggle('d-none');
+            var seta = btn.querySelector('.toggle-icon');
+            if (seta) seta.textContent = vaiAbrir ? '▼' : '▶';
             if (vaiAbrir) {
                 iniciarEdicaoPin(painel);
             } else {

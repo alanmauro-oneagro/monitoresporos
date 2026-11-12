@@ -287,7 +287,11 @@ O "Tipo de ponto" do Editar tem as 3 opcoes: estudo vira ponto de doenca/clima (
 estimada) e ponto vira estudo (apaga a fazenda: permissoes, envios, anotacoes; fazenda de cliente
 recusada). Cartao da Anatel logo abaixo do mapa (`#cartao-anatel`). Regua no canto do mapa (📏 distancia km,
 ⬠ area ha + perimetro; ✕ limpa; medindo, o clique nao marca ponto novo). Pontos Criados em grupos:
-Monitoramento de doenças, Só clima, Estudo de viabilidade (macro `cartao_ponto`).
+Monitoramento de doenças, Só clima, Estudo de viabilidade (macro `cartao_ponto`). Cada cartao RECOLHIDO como
+em Manejos (seta ▶/▼ no nome = o antigo "Editar": abre os dados e o pino arrastavel); dentro: "Grupo
+econômico" (sugestoes `grupos_economicos`; ponto de doenca/clima grava como na Gerenciar Clientes --
+cadastro do cliente ou `fazendas_dados`; estudo em `pontos_estudo.grupo_economico`; o grupo vai junto
+quando o tipo muda), os campos, "Criado em ... por" abaixo do Pais e o Remover (pedidos do Alan, 12/11/2026).
 **Plano de cada fazenda** (`app._plano_da_fazenda`, selo `selo_plano(site)` --
 template global): fazenda REAL (BioScout) = Inteligência (`models.PLANO_FAZENDA_REAL`),
 com a validade do cadastro se estiver ligada; as outras = o plano que vale hoje
