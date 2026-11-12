@@ -336,6 +336,26 @@ class CadastroTest(unittest.TestCase):
             data_reader.definir_apelidos({})
         self.assertIn("Septoria", data_reader.read_unique_display_names())
 
+    def test_nome_editado_nao_volta_ao_juntar_grafias(self):
+        """"Silver scurf" x "Silver Scurf": a juncao das grafias mantem o nome digitado (12/11/2026)."""
+        conn = models.get_db()
+        for en, pt in (("Zzz Silver Scurf", "Zzz Silver Scurf"), ("Zzz Silver scurf", "Zzz Sarna Prateada")):
+            conn.execute("INSERT OR REPLACE INTO disease_translations (display_name_en, nome_pt) VALUES (?, ?)", (en, pt))
+        conn.commit(); conn.close()
+        try:
+            models.merge_duplicate_disease_translations({"Zzz Silver scurf": "Zzz Silver Scurf"})
+            info = models.get_all_disease_translations()
+            self.assertNotIn("Zzz Silver scurf", info)
+            self.assertEqual(info["Zzz Silver Scurf"]["nome_pt"], "Zzz Sarna Prateada")
+        finally:
+            models.delete_disease_translation("Zzz Silver Scurf")
+            models.delete_disease_translation("Zzz Silver scurf")
+
+    def test_doencas_separadas_por_pais_e_salvo_por_cartao(self):
+        html = self._logado("Zzz Teste Master Cad").get("/admin/doencas").get_data(as_text=True)
+        self.assertIn('class="mt-3 mb-2 pais-doencas">🌎 Brasil', html)
+        self.assertIn("data-autosave-group>", html)
+
     def test_cana_virou_outros_no_banco(self):
         """Cadastro e tipo das culturas gravados como "cana" passam a "outros" no init_db."""
         uid = models.criar_cliente("Zzz Cad Cana Antiga", "segredo1", "", "5565999990081", "", None)

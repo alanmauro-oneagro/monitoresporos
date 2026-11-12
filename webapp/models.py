@@ -1621,8 +1621,14 @@ def merge_duplicate_disease_translations(canonico_por_atual):
                 conn.commit()
                 continue
         base = por_atual[canonico]
+        grafias = {v.lower() for v in variantes} | {canonico.lower()}
         for sobra in sobras:
             dup = por_atual[sobra]
+            # Nome digitado no site nunca se perde na juncao (pedido do Alan, 12/11/2026):
+            # se a que fica ainda tem o nome em ingles e a outra foi renomeada, vale o renomeado.
+            if (base.get("nome_pt") or "").lower() in grafias and dup.get("nome_pt") \
+                    and dup["nome_pt"].lower() not in grafias:
+                base["nome_pt"] = dup["nome_pt"]
             if not base.get("nome_cientifico") and dup.get("nome_cientifico"):
                 base["nome_cientifico"] = dup["nome_cientifico"]
             for campo in ("germ_temp_min", "germ_temp_max", "germ_ur_min", "germ_molhamento_horas"):
@@ -1642,12 +1648,12 @@ def merge_duplicate_disease_translations(canonico_por_atual):
         conn.execute(
             """
             UPDATE disease_translations
-            SET nome_cientifico = ?, germ_temp_min = ?, germ_temp_max = ?, germ_ur_min = ?, germ_molhamento_horas = ?
+            SET nome_pt = ?, nome_cientifico = ?, germ_temp_min = ?, germ_temp_max = ?, germ_ur_min = ?, germ_molhamento_horas = ?
             WHERE display_name_en = ?
             """,
             (
-                base.get("nome_cientifico"), base.get("germ_temp_min"), base.get("germ_temp_max"),
-                base.get("germ_ur_min"), base.get("germ_molhamento_horas"), canonico,
+                base.get("nome_pt") or canonico, base.get("nome_cientifico"), base.get("germ_temp_min"),
+                base.get("germ_temp_max"), base.get("germ_ur_min"), base.get("germ_molhamento_horas"), canonico,
             ),
         )
     conn.commit()
