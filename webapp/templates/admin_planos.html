@@ -210,6 +210,22 @@
         simular();
     }
     function salvar() { seletor.dispatchEvent(new Event('change', { bubbles: true })); }
+    // Sempre em ordem de area: ao sair do campo de area, reordena as linhas (a "acima" fica no fim).
+    function ordenar() {
+        var faixas = linhas.filter(function (tr) { return tr.querySelector('[data-campo="ate_ha"]'); });
+        var acima = linhas.filter(function (tr) { return !tr.querySelector('[data-campo="ate_ha"]'); });
+        var ordenadas = faixas.slice().sort(function (a, b) {
+            var x = ateDe(a), y = ateDe(b);
+            return (isNaN(x) ? Infinity : x) - (isNaN(y) ? Infinity : y);
+        });
+        if (ordenadas.every(function (tr, i) { return tr === faixas[i]; })) return false;
+        ordenadas.concat(acima).forEach(function (tr) { corpo.appendChild(tr); });
+        renumerar();
+        return true;
+    }
+    corpo.addEventListener('change', function (e) {
+        if (e.target.dataset.campo === 'ate_ha' && ordenar()) salvar();
+    });
     corpo.addEventListener('click', function (e) {
         var b = e.target.closest('.remover-faixa');
         if (!b) return;
