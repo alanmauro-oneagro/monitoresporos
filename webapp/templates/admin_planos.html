@@ -124,8 +124,13 @@
             <tbody>
                 {% for f in tabela_preco %}
                 <tr data-ate="{{ f.ate_ha if f.ate_ha else '' }}">
-                    <td class="text-nowrap">{{ f.rotulo }}</td>
-                    <td class="text-end text-muted">{{ ('%.2f' | format(f.raio_km)) | replace('.', ',') if f.raio_km else '-' }}</td>
+                    {% if f.ate_ha %}
+                    <td class="text-nowrap"><span class="d-inline-flex align-items-center gap-1">até
+                        <input type="number" min="1" step="any" class="form-control form-control-sm text-end px-1" style="width: 5.2rem;" name="ate_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="ate_ha" value="{{ f.ate_ha }}" aria-label="Limite da faixa {{ loop.index }} (ha)"> ha</span></td>
+                    {% else %}
+                    <td class="text-nowrap rotulo-acima">{{ f.rotulo }}</td>
+                    {% endif %}
+                    <td class="text-end text-muted" data-saida="raio" data-col="{{ loop.index0 }}">{{ ('%.2f' | format(f.raio_km)) | replace('.', ',') if f.raio_km else '-' }}</td>
                     <td><input type="number" min="0" step="any" class="form-control form-control-sm text-end px-1" style="min-width: 3.6rem;" name="usd_ha_{{ loop.index0 }}" data-col="{{ loop.index0 }}" data-campo="usd_ha" value="{{ f.usd_ha if f.usd_ha is not none else '' }}" aria-label="Valor por hectare {{ f.rotulo }}"></td>
                     <td class="text-end fw-bold text-nowrap" data-saida="usd" data-col="{{ loop.index0 }}">{{ f.total_usd | dinheiro(sm) if f.total_usd is not none else '-' }}</td>
                     <td class="text-end text-nowrap col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" data-saida="brl" data-col="{{ loop.index0 }}">{{ (f.total_usd * cotacao_dolar.valor) | dinheiro if f.total_usd is not none and cotacao_dolar else '-' }}</td>
@@ -156,18 +161,24 @@
         return simbolo + ' ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     function usdHa(tr) { var v = parseFloat(tr.querySelector('[data-campo="usd_ha"]').value); return isNaN(v) ? null : v; }
+    function ateDe(tr) { var i = tr.querySelector('[data-campo="ate_ha"]'); return i ? parseFloat(i.value) : NaN; }
+    function rotulo(tr) { var a = ateDe(tr); return isNaN(a) ? tr.cells[0].textContent.trim() : 'até ' + a.toLocaleString('pt-BR') + ' ha'; }
     function simular() {
         var area = parseFloat(document.getElementById('simular-area').value), saida = document.getElementById('simular-resultado');
         if (!(area > 0)) { saida.textContent = ''; return; }
-        var tr = linhas.filter(function (l) { return !l.dataset.ate || area <= parseFloat(l.dataset.ate); })[0];
+        var tr = linhas.filter(function (l) { var a = ateDe(l); return isNaN(a) || area <= a; })[0];
         var v = usdHa(tr), raio = Math.sqrt(area * 0.01 / Math.PI).toFixed(2).replace('.', ',');
-        var faixa = tr.cells[0].textContent;
+        var faixa = rotulo(tr);
         if (v === null) { saida.textContent = faixa + ' -- sem ' + simbolo() + '/ha na faixa · raio ' + raio + ' km'; return; }
         var total = area * v;
         saida.textContent = faixa + ': ' + dinheiro(total, simbolo()) + (!emDolar() || isNaN(cotacao) ? '' : ' (≈ ' + dinheiro(total * cotacao, 'R$') + ')') + ' · raio ' + raio + ' km';
     }
     function recalcular(col) {
-        var tr = linhas[col], ate = parseFloat(tr.dataset.ate), v = usdHa(tr);
+        var tr = linhas[col], ate = ateDe(tr), v = usdHa(tr);
+        var raio = tabela.querySelector('[data-col="' + col + '"][data-saida="raio"]');
+        if (raio) raio.textContent = !isNaN(ate) && ate > 0 ? Math.sqrt(ate * 0.01 / Math.PI).toFixed(2).replace('.', ',') : '-';
+        var acima = tabela.querySelector('.rotulo-acima'), penultima = linhas[linhas.length - 2];
+        if (acima && penultima && !isNaN(ateDe(penultima))) acima.textContent = 'acima de ' + ateDe(penultima).toLocaleString('pt-BR') + ' ha';
         var total = !isNaN(ate) && v !== null ? ate * v : null;
         tabela.querySelector('[data-col="' + col + '"][data-saida="usd"]').textContent = total !== null ? dinheiro(total, simbolo()) : '-';
         tabela.querySelector('[data-col="' + col + '"][data-saida="brl"]').textContent = total !== null && !isNaN(cotacao) ? dinheiro(total * cotacao, 'R$') : '-';
