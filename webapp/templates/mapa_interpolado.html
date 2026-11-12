@@ -42,6 +42,9 @@
     .op-check input { accent-color: var(--op-cor); }
     .op-escala { display: inline-flex; vertical-align: middle; border-radius: 3px; overflow: hidden; margin-left: 0.3rem; }
     .op-escala span { width: 10px; height: 10px; display: inline-block; }
+    .regua-mapa a { font-size: 15px; line-height: 30px; text-align: center; text-decoration: none; }
+    .regua-mapa a.ativo { background: #ffe3e3; }
+    .medida-box { background: #fff; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 0.85rem; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
     .ponto-virtual-card { border: 1px solid #e2d9fb; border-radius: 0.5rem; padding: 0.9rem; margin-bottom: 0.9rem; background: #faf8ff; }
 </style>
 {% endblock %}
@@ -74,6 +77,18 @@
             {% endif %}
         </div>
         <div id="farm-map"></div>
+<div class="card shadow-sm mt-2" id="cartao-anatel"><div class="card-body small">
+    <strong>📶 Mapas de cobertura de celular (Anatel)</strong>
+    {% if info_cobertura.rodando %}-- baixando agora{% if info_cobertura.progresso.total %} ({{ info_cobertura.progresso.feitos }} de {{ info_cobertura.progresso.total }}){% endif %}...
+    {% elif info_cobertura.baixado_em %}-- baixados em {{ info_cobertura.baixado_em[:10] | data_br }}.
+    {% else %}-- ainda não baixados.{% endif %}
+    {% if info_cobertura.erro and not info_cobertura.rodando %}<div class="text-danger">Última tentativa falhou: {{ info_cobertura.erro }}</div>{% endif %}
+    <div class="text-muted">Vivo, Claro e TIM, 3G a 5G (Mosaico SMP da Anatel). Também aparece em Manejos e em Gerenciar Clientes. O servidor baixa sozinho uma vez por mês.</div>
+    {% if current_user.is_master %}
+    {% import "_botao_atualizar.html" as atualizar %}
+    <div class="mt-2">{{ atualizar.botao_atualizar("anatel", url_for('atualizar_cobertura_anatel'), '🔄 Baixar agora', "btn btn-sm btn-outline-primary") }}</div>
+    {% endif %}
+</div></div>
     </div>
     <div class="col-mapa-interpolado-form">
         <div class="card shadow-sm h-100">
@@ -83,15 +98,17 @@
                     <div class="mb-2">
                         <label class="form-label small text-muted mb-1">Tipo de ponto</label>
                         <select name="tipo" id="novo-tipo" class="form-select form-select-sm">
-                            <option value="doenca" selected>🦠 Monitorar doencas (interpola fazendas reais no raio)</option>
-                            <option value="clima">☁️ Somente clima (referencia de clima pro cliente, sem doenca)</option>
+                            <option value="doenca" selected>🦠 Monitorar doenças</option>
+                            <option value="clima">☁️ Somente clima</option>
+                            <option value="estudo">📐 Estudo de viabilidade</option>
                         </select>
                     </div>
 
                     <div class="border rounded p-2 mb-3 d-flex align-items-center gap-2 flex-wrap" style="background:#faf8ff;">
-                        <label class="form-label small fw-bold mb-0" for="novo-raio">Raio de interpolacao (km)</label>
+                        <label class="form-label small fw-bold mb-0" for="novo-raio">Raio (km)</label>
                         <input type="number" name="raio_km" id="novo-raio" class="form-control form-control-sm" style="max-width: 100px;" min="1" step="1" value="120" required>
-                        <span class="text-muted small w-100 d-none" id="novo-raio-nota-clima">Nao usado em ponto "so clima" -- nenhuma interpolacao de doenca acontece aqui.</span>
+                        <span class="text-muted small w-100 d-none" id="novo-raio-nota-clima">Não usado em ponto "só clima" -- nenhuma interpolação de doença acontece aqui.</span>
+                        <span class="text-muted small w-100 d-none" id="novo-raio-nota-estudo">Estudo de viabilidade: o raio só desenha a área de cobertura no mapa. O ponto fica só nesta tela, não vira fazenda.</span>
                     </div>
 
                     <div class="mb-2">
@@ -127,31 +144,16 @@
 </div>
 
 
-<div class="card shadow-sm mt-3"><div class="card-body small">
-    <strong>📶 Mapas de cobertura de celular (Anatel)</strong>
-    {% if info_cobertura.rodando %}-- baixando agora{% if info_cobertura.progresso.total %} ({{ info_cobertura.progresso.feitos }} de {{ info_cobertura.progresso.total }}){% endif %}...
-    {% elif info_cobertura.baixado_em %}-- baixados em {{ info_cobertura.baixado_em[:10] | data_br }}.
-    {% else %}-- ainda não baixados.{% endif %}
-    {% if info_cobertura.erro and not info_cobertura.rodando %}<div class="text-danger">Última tentativa falhou: {{ info_cobertura.erro }}</div>{% endif %}
-    <div class="text-muted">Vivo, Claro e TIM, 3G a 5G (Mosaico SMP da Anatel). Também aparece em Manejos e em Gerenciar Clientes. O servidor baixa sozinho uma vez por mês.</div>
-    {% if current_user.is_master %}
-    {% import "_botao_atualizar.html" as atualizar %}
-    <div class="mt-2">{{ atualizar.botao_atualizar("anatel", url_for('atualizar_cobertura_anatel'), '🔄 Baixar agora', "btn btn-sm btn-outline-primary") }}</div>
-    {% endif %}
-</div></div>
 
 <h6 class="fw-bold mt-4 mb-2" id="pontos-criados">Pontos Criados</h6>
-{% if not pontos_virtuais %}
-<div class="alert alert-info small">Nenhum ponto estimado ainda -- use o formulario acima.</div>
-{% endif %}
-{% for ponto in pontos_virtuais %}
+{% macro cartao_ponto(ponto, idx) %}
 <div class="ponto-virtual-card">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
         <strong>{{ ponto.nome }}</strong>
-        {{ selo_plano(ponto.site_name) }}
+        {% if ponto.tipo != 'estudo' %}{{ selo_plano(ponto.site_name) }}{% endif %}
         <span class="badge bg-secondary">{{ ponto.pais_nome }}</span>
-        {% if ponto.tipo == 'clima' %}
-        <span class="badge bg-info text-dark">☁️ So clima</span>
+        {% if ponto.tipo == 'estudo' and ponto.mais_proxima %}
+        <span class="badge text-dark" style="background:#ffe8cc;" title="Fazenda BioScout com leitura mais próxima">📡 {{ ponto.mais_proxima[0] }} · {{ '%.1f'|format(ponto.mais_proxima[1])|replace('.', ',') }} km</span>
         {% endif %}
         {% if ponto.cliente %}
         <span class="badge text-dark" style="background: #b2f2bb;" title="Criada pelo cliente ao marcar a fazenda no mapa (plano)">🟢 Cliente: {{ ponto.cliente }}</span>
@@ -161,16 +163,16 @@
         {% endif %}
         <span class="text-muted small">criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</span>
         <div class="ms-auto d-flex gap-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ loop.index0 }}" data-site="{{ ponto.site_name }}">✏️ Editar</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary editar-ponto-toggle" data-target="editar-ponto-{{ idx }}" data-site="{{ ponto.site_name }}">✏️ Editar</button>
             <form method="post" action="{{ url_for('remover_ponto_virtual') }}" class="mb-0"
-                  onsubmit="return confirm('Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga tambem permissoes, agenda de WhatsApp e anotacoes ligadas a ele.');">
+                  onsubmit="return confirm({% if ponto.tipo == 'estudo' %}'Remover o estudo de viabilidade \'{{ ponto.nome }}\'?'{% else %}'Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga também permissões, agenda de WhatsApp e anotações ligadas a ele.'{% endif %});">
                 <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
                 <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Remover</button>
             </form>
         </div>
     </div>
 
-    <div class="d-none border rounded p-2 mb-2" id="editar-ponto-{{ loop.index0 }}" style="background:#fff;">
+    <div class="d-none border rounded p-2 mb-2" id="editar-ponto-{{ idx }}" style="background:#fff;">
         <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end"
               onsubmit="return confirm('Salvar essas alteracoes no ponto estimado \'{{ ponto.nome }}\'? Os dados atuais (nome, coordenada, raio) serao substituidos e nao da pra desfazer depois.');">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
@@ -178,13 +180,15 @@
                 <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
                 <input type="text" name="nome" class="form-control form-control-sm" value="{{ ponto.nome }}" required>
             </div>
+            {% if ponto.tipo != 'estudo' %}
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">Tipo de ponto</label>
                 <select name="tipo" class="form-select form-select-sm">
                     <option value="doenca" {% if ponto.tipo != 'clima' %}selected{% endif %}>🦠 Doencas</option>
-                    <option value="clima" {% if ponto.tipo == 'clima' %}selected{% endif %}>☁️ So clima</option>
+                    <option value="clima" {% if ponto.tipo == 'clima' %}selected{% endif %}>☁️ Só clima</option>
                 </select>
             </div>
+            {% endif %}
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1">Latitude</label>
                 <input type="text" name="lat" class="form-control form-control-sm" value="{{ ponto.lat }}" required>
@@ -211,11 +215,25 @@
         </form>
     </div>
 
-    {% if ponto.tipo != 'clima' and not ponto.estacoes_usadas %}
+    {% if ponto.tipo == 'doenca' and not ponto.estacoes_usadas %}
     <div class="alert alert-secondary small mb-2">Nenhuma fazenda real dentro do raio de {{ ponto.raio_km|int }} km -- sem estacao pra interpolar, esse ponto nao gera estimativa (nao aparece em nenhuma outra tela ate ter uma fazenda real por perto ou o raio aumentar).</div>
     {% endif %}
 </div>
-{% endfor %}
+{% endmacro %}
+{% set grupos_pontos = [
+    ("🦠 Monitoramento de doenças", pontos_virtuais | selectattr("tipo", "equalto", "doenca") | list, "d"),
+    ("☁️ Só clima", pontos_virtuais | selectattr("tipo", "equalto", "clima") | list, "c"),
+    ("📐 Estudo de viabilidade", pontos_estudo, "e"),
+] %}
+{% if not pontos_virtuais and not pontos_estudo %}
+<div class="alert alert-info small">Nenhum ponto criado ainda -- use o formulário acima.</div>
+{% endif %}
+{% for titulo, lista, pref in grupos_pontos %}{% if lista %}
+<div class="grupo-pontos mb-3" data-grupo="{{ pref }}">
+    <div class="fw-semibold mb-2">{{ titulo }} <span class="text-muted small">({{ lista | length }})</span></div>
+    {% for ponto in lista %}{{ cartao_ponto(ponto, pref ~ loop.index0) }}{% endfor %}
+</div>
+{% endif %}{% endfor %}
 {% endblock %}
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -234,6 +252,8 @@
     // Verde claro -- fazenda criada pelo plano de um cliente do app (lavoura
     // dele, `_criar_fazenda_estimada_da_lavoura`; pedido do Alan, 07/11/2026).
     var PIN_COR_PLANO = '#b2f2bb';
+    // Laranja claro -- Estudo de viabilidade (so' nesta tela, pedido do Alan, 12/11/2026).
+    var PIN_COR_ESTUDO = '#ffc078';
     // Mesmo padrao do Mapa normal (mapa.html): fazenda/ponto sem leitura
     // nova ha mais de 15 dias (site.inativo, ver
     // app._nivel_dados_defasados/DADOS_BLOQUEIO_DIAS) usa pino reduzido a
@@ -263,6 +283,7 @@
     }
 
     var climaIcon = buildPinIcon(PIN_COR_CLIMA);
+    var estudoIcon = buildPinIcon(PIN_COR_ESTUDO);
     var novoIcon = L.divIcon({
         html: '<div style="background:#fff;border:3px solid #7048e8;border-radius:50%;' +
             'width:18px;height:18px;"></div>',
@@ -281,6 +302,12 @@
         return html.slice(0, -'</div>'.length) + '<div class="mapa-tt-sinal">' + site.sinal_html + '</div></div>';
     }
     function buildTooltipBase(site) {
+        if (site.tipo === 'estudo') {
+            return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
+                '<div class="mapa-tt-data">📐 Estudo de viabilidade · raio ' + Math.round(site.raio_km) + ' km</div>' +
+                (site.mais_proxima ? '<div class="mapa-tt-data">📡 Mais próxima: ' + escapeHtml(site.mais_proxima) + '</div>' : '') +
+                '</div>';
+        }
         if (site.tipo === 'clima') {
             // Ponto so' de clima -- nao monitora doenca nenhuma, entao nao
             // faz sentido mostrar "Leitura de -" nem uma lista vazia.
@@ -441,7 +468,13 @@
     sites.forEach(function (site) {
         var icone;
         var circulo = null;
-        if (site.tipo === 'clima') {
+        if (site.tipo === 'estudo') {
+            icone = estudoIcon;
+            circulo = L.circle([site.lat, site.lon], {
+                radius: site.raio_km * 1000, color: '#e8590c', weight: 1, dashArray: '4 4',
+                fillColor: PIN_COR_ESTUDO, fillOpacity: 0.12, interactive: false,
+            }).addTo(map);
+        } else if (site.tipo === 'clima') {
             icone = climaIcon;
             // Area de referencia do ponto -- mesmo raio configurado no
             // formulario (so' visual, esse raio nao interpola doenca
@@ -503,6 +536,93 @@
         });
     }
 
+    // Régua (pedido do Alan, 12/11/2026): mede distância (km) e área (ha)
+    // clicando pontos no mapa. Enquanto mede, o clique nao marca ponto novo.
+    var medicao = { modo: null, pontos: [], camada: null, marcas: [] };
+    function distanciaKm(pts) {
+        var total = 0;
+        for (var i = 1; i < pts.length; i++) total += pts[i - 1].distanceTo(pts[i]) / 1000;
+        return total;
+    }
+    function areaHa(pts) {
+        // Area esferica (mesma formula do Leaflet.draw / Google): m2 -> ha.
+        if (pts.length < 3) return 0;
+        var R = 6378137, a = 0, rad = Math.PI / 180;
+        for (var i = 0; i < pts.length; i++) {
+            var p1 = pts[i], p2 = pts[(i + 1) % pts.length];
+            a += (p2.lng - p1.lng) * rad * (2 + Math.sin(p1.lat * rad) + Math.sin(p2.lat * rad));
+        }
+        return Math.abs(a * R * R / 2) / 10000;
+    }
+    function fmtNum(v, casas) {
+        return v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    }
+    var reguaCtrl = L.control({ position: 'topleft' });
+    reguaCtrl.onAdd = function () {
+        var div = L.DomUtil.create('div', 'leaflet-bar regua-mapa');
+        div.innerHTML = '<a href="#" role="button" data-modo="distancia" title="Medir distância">📏</a>'
+            + '<a href="#" role="button" data-modo="area" title="Medir área">⬠</a>'
+            + '<a href="#" role="button" data-modo="limpar" title="Limpar medida">✕</a>';
+        L.DomEvent.disableClickPropagation(div);
+        div.addEventListener('click', function (e) {
+            var a = e.target.closest('a');
+            if (!a) return;
+            e.preventDefault();
+            var modo = a.dataset.modo;
+            limparMedida();
+            if (modo !== 'limpar' && medicao.modoAnterior !== modo) {
+                medicao.modo = modo;
+                a.classList.add('ativo');
+                map.getContainer().style.cursor = 'crosshair';
+                mostrarMedida();
+            }
+            medicao.modoAnterior = medicao.modo;
+        });
+        return div;
+    };
+    reguaCtrl.addTo(map);
+    var medidaBox = L.control({ position: 'topright' });
+    medidaBox.onAdd = function () {
+        var d = L.DomUtil.create('div', 'medida-box d-none');
+        L.DomEvent.disableClickPropagation(d);
+        return d;
+    };
+    medidaBox.addTo(map);
+    function limparMedida() {
+        if (medicao.camada) map.removeLayer(medicao.camada);
+        medicao.marcas.forEach(function (m) { map.removeLayer(m); });
+        medicao = { modo: null, pontos: [], camada: null, marcas: [], modoAnterior: medicao.modoAnterior };
+        document.querySelectorAll('.regua-mapa a').forEach(function (a) { a.classList.remove('ativo'); });
+        map.getContainer().style.cursor = '';
+        mostrarMedida();
+    }
+    function mostrarMedida() {
+        var box = medidaBox.getContainer();
+        if (!medicao.modo) { box.classList.add('d-none'); return; }
+        box.classList.remove('d-none');
+        var pts = medicao.pontos;
+        var txt;
+        if (medicao.modo === 'distancia') {
+            txt = pts.length < 2 ? 'Toque no mapa para medir a distância'
+                : '📏 ' + fmtNum(distanciaKm(pts), 2) + ' km';
+        } else {
+            txt = pts.length < 3 ? 'Toque 3 ou mais pontos para medir a área'
+                : '⬠ ' + fmtNum(areaHa(pts), 1) + ' ha · perímetro ' + fmtNum(distanciaKm(pts.concat([pts[0]])), 2) + ' km';
+        }
+        box.textContent = txt;
+    }
+    map.on('click', function (e) {
+        if (!medicao.modo) return;
+        medicao.pontos.push(e.latlng);
+        medicao.marcas.push(L.circleMarker(e.latlng, { radius: 4, color: '#c92a2a', weight: 2, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(map));
+        if (medicao.camada) map.removeLayer(medicao.camada);
+        var estilo = { color: '#c92a2a', weight: 2, interactive: false };
+        medicao.camada = medicao.modo === 'area' && medicao.pontos.length >= 3
+            ? L.polygon(medicao.pontos, Object.assign({ fillOpacity: 0.15 }, estilo)).addTo(map)
+            : L.polyline(medicao.pontos, estilo).addTo(map);
+        mostrarMedida();
+    });
+
     // Abre sempre enquadrado no Brasil (pedido do Alan, 19/10/2026),
     // mesmo com ponto fora do pais.
     map.fitBounds([[-33.8, -74.0], [5.3, -34.8]]);
@@ -562,8 +682,10 @@
     var tipoSelect = document.getElementById('novo-tipo');
     var raioNotaClima = document.getElementById('novo-raio-nota-clima');
     if (tipoSelect && raioNotaClima) {
+        var raioNotaEstudo = document.getElementById('novo-raio-nota-estudo');
         tipoSelect.addEventListener('change', function () {
             raioNotaClima.classList.toggle('d-none', tipoSelect.value !== 'clima');
+            raioNotaEstudo.classList.toggle('d-none', tipoSelect.value !== 'estudo');
         });
     }
 
@@ -609,7 +731,10 @@
         }
     }
 
-    map.on('click', function (e) { atualizarPreview(e.latlng); detectarPaisPreview(e.latlng); });
+    map.on('click', function (e) {
+        if (medicao.modo) return;  // medindo: o clique marca a medida, nao o ponto novo
+        atualizarPreview(e.latlng); detectarPaisPreview(e.latlng);
+    });
 
     // Um clique sem querer no mapa (rolando/dando zoom, por exemplo) larga
     // um pino de previa e preenche latitude/longitude -- nada e' salvo de

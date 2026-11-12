@@ -258,6 +258,17 @@ def init_db():
             tipo TEXT NOT NULL DEFAULT 'doenca'
         );
 
+        CREATE TABLE IF NOT EXISTS pontos_estudo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            lat REAL NOT NULL,
+            lon REAL NOT NULL,
+            raio_km REAL NOT NULL,
+            country_code TEXT NOT NULL DEFAULT 'BR',
+            criado_em TEXT NOT NULL,
+            criado_por TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS user_site_permissions (
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
@@ -3184,6 +3195,53 @@ def get_all_virtual_farms():
     rows = conn.execute("SELECT * FROM virtual_farms ORDER BY nome").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_pontos_estudo():
+    """Pontos "Estudo de viabilidade" do Mapas de Estudo (pedido do Alan,
+    12/11/2026): so' marcacao pra projeto de venda de estacao -- nao viram
+    fazenda, nao aparecem em nenhuma outra tela."""
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM pontos_estudo ORDER BY nome COLLATE NOCASE").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_ponto_estudo(ponto_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM pontos_estudo WHERE id = ?", (ponto_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def criar_ponto_estudo(nome, lat, lon, raio_km, country_code="BR", criado_por=None):
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO pontos_estudo (nome, lat, lon, raio_km, country_code, criado_em, criado_por) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (nome, lat, lon, raio_km, country_code, _agora_cuiaba(), criado_por),
+    )
+    conn.commit()
+    novo_id = cur.lastrowid
+    conn.close()
+    return novo_id
+
+
+def atualizar_ponto_estudo(ponto_id, nome, lat, lon, raio_km, country_code="BR"):
+    conn = get_db()
+    conn.execute(
+        "UPDATE pontos_estudo SET nome = ?, lat = ?, lon = ?, raio_km = ?, country_code = ? WHERE id = ?",
+        (nome, lat, lon, raio_km, country_code, ponto_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def excluir_ponto_estudo(ponto_id):
+    conn = get_db()
+    conn.execute("DELETE FROM pontos_estudo WHERE id = ?", (ponto_id,))
+    conn.commit()
+    conn.close()
 
 
 def virtual_farm_site_names():

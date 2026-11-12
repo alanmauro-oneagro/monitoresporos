@@ -3731,6 +3731,35 @@ def mapa_interpolado():
         if sinal_por_site.get(s["site"]):
             s["sinal_html"] = str(linha_sinal(sinal_por_site[s["site"]]))
 
+    # Estudo de viabilidade (pedido do Alan, 12/11/2026): so' nesta tela,
+    # nao vira fazenda nem liga em nada; mostra a fazenda real mais proxima.
+    pontos_estudo = []
+    for pe in models.get_pontos_estudo():
+        chave = f"estudo:{pe['id']}"
+        mais_proxima = None
+        for site, (lat_r, lon_r) in coords_reais.items():
+            if site in desativadas or site not in cards_reais:
+                continue
+            d = virtual_farms._haversine_km(pe["lat"], pe["lon"], lat_r, lon_r)
+            if mais_proxima is None or d < mais_proxima[1]:
+                mais_proxima = (_nome_exibicao(site), d)
+        pontos_estudo.append({
+            **pe, "site_name": chave, "tipo": "estudo",
+            "criado_em": models.fmt_data_br(pe["criado_em"]),
+            "pais_nome": countries.get_country(pe["country_code"])["nome"],
+            "mais_proxima": mais_proxima, "ativo": True,
+        })
+        info = {
+            "site": chave, "nome_exibicao": pe["nome"], "lat": pe["lat"], "lon": pe["lon"],
+            "virtual": True, "tipo": "estudo", "cards": [], "raio_km": pe["raio_km"],
+            "mais_proxima": f"{mais_proxima[0]} · {mais_proxima[1]:.1f} km".replace(".", ",") if mais_proxima else "",
+        }
+        if pe["country_code"] == countries.DEFAULT_COUNTRY:
+            sinal = sinal_celular.estimar(pe["lat"], pe["lon"], buscar_frequencias=False)
+            if sinal:
+                info["sinal_html"] = str(linha_sinal(sinal))
+        sites_data.append(info)
+
     # Todo pais ativo (com fazenda/ponto marcado) MAIS todo pais que ja'
     # tem integracao de estacao oficial (`paises_com_estacoes`) -- a tela
     # serve pra criar o PRIMEIRO ponto de um pais novo, entao a fronteira
@@ -3742,6 +3771,7 @@ def mapa_interpolado():
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
+        pontos_estudo=pontos_estudo,
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
         # Sinal de celular (ex-aba Sinal telefonia): camada por operadora
         info_cobertura=info_cobertura,
@@ -3892,6 +3922,20 @@ def sinal_celular_ponto():
                     "pendente": sinal_celular.frequencias_pendentes(lat, lon)})
 
 
+def _ponto_estudo_do_form(site_name):
+    """Ponto "Estudo de viabilidade" quando o site_name do formulario e'
+    "estudo:<id>" (ver `mapa_interpolado`), senao None."""
+    if not site_name.startswith("estudo:"):
+        return None
+    try:
+        ponto = models.get_ponto_estudo(int(site_name.split(":", 1)[1]))
+    except ValueError:
+        ponto = None
+    if not ponto:
+        abort(404)
+    return ponto
+
+
 @app.route("/mapa-interpolado/adicionar", methods=["POST"])
 @aba_required("mapa_interpolado")
 def adicionar_ponto_virtual():
@@ -3910,6 +3954,10 @@ def adicionar_ponto_virtual():
     if country_code not in countries.COUNTRIES:
         country_code = countries.DEFAULT_COUNTRY
     tipo = request.form.get("tipo", "doenca")
+    if tipo == "estudo":
+        models.criar_ponto_estudo(nome, lat, lon, raio_km, country_code, criado_por=current_user.username)
+        flash(f"Estudo de viabilidade '{nome}' criado.", "success")
+        return redirect(url_for("mapa_interpolado") + "#pontos-criados")
     if tipo not in ("doenca", "clima"):
         tipo = "doenca"
     try:
@@ -3927,7 +3975,8 @@ def adicionar_ponto_virtual():
 @aba_required("mapa_interpolado")
 def editar_ponto_virtual():
     site_name = request.form.get("site_name", "")
-    if not models.get_virtual_farm(site_name):
+    estudo = _ponto_estudo_do_form(site_name)
+    if not estudo and not models.get_virtual_farm(site_name):
         abort(404)
     nome = request.form.get("nome", "").strip()
     try:
@@ -3943,6 +3992,10 @@ def editar_ponto_virtual():
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
         country_code = countries.DEFAULT_COUNTRY
+    if estudo:
+        models.atualizar_ponto_estudo(estudo["id"], nome, lat, lon, raio_km, country_code)
+        flash(f"Estudo de viabilidade '{nome}' atualizado.", "success")
+        return redirect(url_for("mapa_interpolado"))
     tipo = request.form.get("tipo", "doenca")
     if tipo not in ("doenca", "clima"):
         tipo = "doenca"
@@ -3963,6 +4016,11 @@ def editar_ponto_virtual():
 @aba_required("mapa_interpolado")
 def remover_ponto_virtual():
     site_name = request.form.get("site_name", "")
+    estudo = _ponto_estudo_do_form(site_name)
+    if estudo:
+        models.excluir_ponto_estudo(estudo["id"])
+        flash("Estudo de viabilidade removido.", "success")
+        return redirect(url_for("mapa_interpolado") + "#pontos-criados")
     if not models.get_virtual_farm(site_name):
         abort(404)
     models.delete_virtual_farm(site_name)
