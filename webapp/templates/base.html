@@ -59,7 +59,9 @@
         .site-heading-bloqueado { background: #ff6b6b; color: #282828; }
         .mini-card { border-radius: 0.35rem; padding: 0.35rem 0.5rem; font-size: 0.72rem; line-height: 1.2; min-width: 90px; }
         .mini-card .valor { font-weight: 700; font-size: 0.95rem; }
-        .mini-card .doenca { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* Nome grande quebra em 2+ linhas em vez de esticar a caixa (pedido do Alan, 13/11/2026). */
+        .mini-card { max-width: 8rem; }
+        .mini-card .doenca { font-weight: 600; white-space: normal; overflow-wrap: anywhere; hyphens: auto; }
         .mini-thumbs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.9rem; }
         .manual-note-box { background: #f8f9fa; border: 1px solid #e2e5e8; border-radius: 0.4rem; padding: 0.6rem 0.7rem; }
         .auto-grow-textarea { overflow-y: hidden; resize: none; }
