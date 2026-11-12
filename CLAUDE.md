@@ -687,7 +687,9 @@ site tem que entrar la'.
   `talhao`, `caixa`; `models.set_farm_produtos_caixas`: uma linha por tipo preenchido, mesmo
   `caixa`; o ingrediente ativo de produto que ja' existia fica). Linha antiga (sem caixa) vira uma
   box sozinha com "Produto (ingrediente)"; data/anotacao que nao e' data fica em campo de texto
-  (`app._caixas_de_produtos`). Recomendações/texto/PDF continuam lendo o nome por tipo.
+  (`app._caixas_de_produtos`). Recomendações/texto/PDF continuam lendo o nome por tipo. Dados de
+  Plantio (com o Espacamento dentro), Dados de Aplicacoes e Anotacoes por doenca tambem recolhidos
+  (mesmo `.secao-toggle`, numero de preenchidos ao lado; pedido do Alan, 13/11/2026).
 - **Renomear fazenda virtual**: `models.update_virtual_farm(...)` muda o
   `nome`, que muda o proprio `site_name` (cascata em varias tabelas).
   Acessivel tanto por Mapa Interpolado quanto pela aba Manejos (campo "Nome
