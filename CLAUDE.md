@@ -690,7 +690,13 @@ site tem que entrar la'.
   "✓ Salvo"); Editar ponto do Mapas de Estudo com `data-autosave-reload` (soltar o pino acha o
   pais e salva; virar estudo pede confirmacao antes); Cortesia em Gerenciar Clientes (ex-"OK");
   Trocar senha / Definir nova senha / senha do app gravam sozinhas ao sair do campo com tudo
-  certo. Botoes de CRIAR/ACAO ficam: "➕ Criar ponto", "➕ Adicionar fazenda", "✅ Pôr na galeria" (NDVI).
+  certo. **Criar tambem salva sozinho** (pedido do Alan, 13/11/2026): formularios `data-autocriar` (JS no fim do
+  base.html) -- Novo usuário, Novo subordinado, + Novo cliente, Adicionar doença -- sem botao: com os `required`
+  preenchidos, cria quando a pessoa sai do quadro (1,5 s sem voltar; Enter tambem envia; falta obrigatorio = aviso
+  na `.autocriar-status`). Ligar fazenda (Gerenciar Clientes e "Dados da fazenda") = select `data-auto-enviar`
+  (confirma e envia ao escolher). Agrofit manual e CAR do NDVI enviam ao escolher o arquivo. Continuam com botao
+  so' ACOES: login/cadastro/assinatura, enviar WhatsApp, Pré-visualizar/Pôr na galeria (NDVI), Redefinir senha,
+  Excluir/Remover/Ocultar/Reativar, e os que dependem de clique no mapa ("➕ Criar ponto", "➕ Adicionar fazenda").
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR
   recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e

@@ -522,5 +522,43 @@ window.OneAgroPrefs = (function () {
     document.querySelectorAll('.botao-atualizar[data-rodando="1"]').forEach(acompanhar);
 })();
 </script>
+<script>
+// Formularios de CRIAR (novo usuario, subordinado, cliente, doenca) sem botao: com os obrigatorios
+// preenchidos, cria sozinho quando a pessoa sai do quadro (1,5 s sem voltar pra ele) -- pedido do Alan,
+// 13/11/2026. Enter tambem envia. Selects `data-auto-enviar` enviam ao escolher (ligar fazenda).
+(function () {
+    document.querySelectorAll('form[data-autocriar]').forEach(function (form) {
+        var timer = null, mexeu = false, enviado = false;
+        var st = form.querySelector('.autocriar-status');
+        function tentar() {
+            if (enviado || !mexeu) return;
+            if (!form.checkValidity()) {
+                if (st) st.textContent = '⚠ Preencha os campos obrigatórios para salvar.';
+                return;
+            }
+            enviado = true;
+            if (st) st.textContent = '⏳ Salvando...';
+            if (form.requestSubmit) form.requestSubmit(); else form.submit();
+        }
+        form.addEventListener('input', function () { mexeu = true; });
+        form.addEventListener('change', function () { mexeu = true; });
+        form.addEventListener('focusin', function () { clearTimeout(timer); });
+        form.addEventListener('focusout', function (e) {
+            if (e.relatedTarget && form.contains(e.relatedTarget)) return;
+            clearTimeout(timer);
+            timer = setTimeout(function () { if (!form.contains(document.activeElement)) tentar(); }, 1500);
+        });
+        form.addEventListener('submit', function () { enviado = true; clearTimeout(timer); });
+    });
+    document.addEventListener('change', function (e) {
+        var sel = e.target.closest('[data-auto-enviar]');
+        if (!sel || !sel.value) return;
+        var form = sel.form;
+        var nome = sel.options[sel.selectedIndex].text.trim();
+        if (sel.dataset.autoEnviar && !confirm(sel.dataset.autoEnviar.replace('{nome}', nome))) { sel.value = ''; return; }
+        if (form.requestSubmit) form.requestSubmit(); else form.submit();
+    });
+})();
+</script>
 </body>
 </html>

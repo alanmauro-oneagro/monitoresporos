@@ -66,7 +66,7 @@
 {% endmacro %}
 
 <details class="card shadow-sm mb-3"><summary class="card-body py-2 fw-semibold text-success" style="cursor: pointer;">+ Novo cliente (ex.: fazendas da BioScout)</summary>
-    <form method="post" action="{{ url_for('admin_cliente_novo') }}" class="card-body pt-0 row g-2">
+    <form method="post" action="{{ url_for('admin_cliente_novo') }}" class="card-body pt-0 row g-2" data-autocriar>
         <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">Nome completo</label><input class="form-control form-control-sm" name="nome_completo" required maxlength="80"></div>
         <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Usuário (login)</label><input class="form-control form-control-sm" name="username" required maxlength="60"></div>
         <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Senha (mín. 6)</label><input class="form-control form-control-sm" name="password" type="text" required minlength="6"></div>
@@ -86,7 +86,7 @@
                 <label class="form-check-label" for="novo_{{ loop.index }}">{{ fz.nome_exibicao }} <span class="text-muted">· {{ {'bioscout': 'BioScout', 'estudo': 'Mapas de Estudo', 'app': 'App'}[fz.origem] }}</span></label></div>
             {% else %}<div class="small text-muted">Todas as fazendas já têm cadastro.</div>{% endfor %}
             </div></div>
-        <div class="col-12"><button class="btn btn-success btn-sm" type="submit">Criar cliente</button>
+        <div class="col-12"><span class="autocriar-status small text-muted">Salva sozinho ao terminar de preencher.</span>
             <span class="small text-muted ms-2">O cliente entra no app com esse usuário e senha; a cobrança ele faz em Assinatura.</span></div>
     </form>
 </details>
@@ -186,10 +186,11 @@
             {% endfor %}
             {% if cl and sem_cadastro %}
             <form method="post" action="{{ url_for('admin_cliente_vincular', user_id=cl.id) }}" class="d-flex flex-wrap gap-1 mt-1">
-                <select class="form-select form-select-sm" style="max-width: 320px;" name="site_name" aria-label="Fazenda para ligar">
+                <select class="form-select form-select-sm" style="max-width: 320px;" name="site_name" aria-label="Fazenda para ligar" required
+                        data-auto-enviar="Ligar &quot;{nome}&quot; a este cadastro?">
+                    <option value="" selected>+ Ligar fazenda a este cadastro...</option>
                     {% for fz in sem_cadastro %}<option value="{{ fz.site }}">{{ fz.nome_exibicao }} ({{ {'bioscout': 'BioScout', 'estudo': 'Mapas de Estudo', 'app': 'App'}[fz.origem] }})</option>{% endfor %}
                 </select>
-                <button class="btn btn-sm btn-outline-success" type="submit">+ Ligar fazenda a este cadastro</button>
             </form>
             {% endif %}
         </div>
@@ -357,10 +358,6 @@ document.addEventListener('submit', function (e) {
         if (!f.querySelector('select').value) { e.preventDefault(); return; }
         f.action = f.querySelector('select').value;
     }
-});
-document.addEventListener('change', function (e) {
-    var f = e.target.closest('.ligar-a-cliente');
-    if (f) { f.querySelector('button').disabled = !e.target.value; }
 });
 document.querySelectorAll('.cad-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {

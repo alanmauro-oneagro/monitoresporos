@@ -30,13 +30,13 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 {% block content %}
 <h4 class="mb-2">Doenças/Culturas</h4>
 
-<form method="post" action="{{ url_for('adicionar_doenca_manual') }}" class="card shadow-sm mb-3">
+<form method="post" action="{{ url_for('adicionar_doenca_manual') }}" class="card shadow-sm mb-3" data-autocriar>
     <div class="card-body">
         <div class="small fw-bold mb-1">Adicionar doença manualmente</div>
         <div class="d-flex flex-wrap gap-2">
             <input type="text" name="nome_pt" class="form-control form-control-sm" style="max-width: 320px;" placeholder="Nome. Ex.: Mancha-alvo" required>
             <input type="text" name="nome_cientifico" class="form-control form-control-sm fst-italic" style="max-width: 320px;" placeholder="Nome cientifico. Ex.: Corynespora cassiicola">
-            <button type="submit" class="btn btn-sm btn-success">+ Adicionar doença</button>
+            <span class="autocriar-status small text-muted">Salva sozinho ao terminar de preencher.</span>
         </div>
     </div>
 </form>
