@@ -251,6 +251,10 @@
         return rotulos;
     })();
     var GRADE_PASSO_GRAUS = 1.0;
+    // Grade mais fina (0,5 grau, ~55 km) so' em volta das fazendas (pedido do Alan, 13/11/2026):
+    // o resto continua a cada 1 grau (limite diario de consultas da Open-Meteo).
+    var GRADE_FINA_PASSO = 0.5, GRADE_FINA_RAIO = 3, GRADE_FINA_MAX = 1500;
+    var nosFina = [], gradeFina = null, malhaFina = null, buscandoFina = false;
     var diaSelecionado = 0;
     var gradeChuva = null;
     var chuvaLayers = [];
@@ -353,10 +357,10 @@
         return Object.keys(todos).map(function (chave) { return todos[chave]; });
     }
 
-    function montarMalhaChuva() {
-        if (!nosGrade.length || !gradeChuva || gradeChuva.length !== nosGrade.length) { malhaChuva = null; return; }
+    function montarMalha(nos, grade, passo) {
+        if (!nos.length || !grade || grade.length !== nos.length) return null;
         var iMin = Infinity, iMax = -Infinity, jMin = Infinity, jMax = -Infinity;
-        nosGrade.forEach(function (n) {
+        nos.forEach(function (n) {
             iMin = Math.min(iMin, n[0]); iMax = Math.max(iMax, n[0]);
             jMin = Math.min(jMin, n[1]); jMax = Math.max(jMax, n[1]);
         });
@@ -364,15 +368,31 @@
         var dias = [], comDados = [];
         for (var d = 0; d < DIAS_CHUVA.length; d++) {
             var valores = new Float32Array(linhas * colunas).fill(NaN), tem = false;
-            nosGrade.forEach(function (n, k) {
-                var mm = ((gradeChuva[k] || {}).chuva_mm_por_dia || [])[d];
+            nos.forEach(function (n, k) {
+                var mm = ((grade[k] || {}).chuva_mm_por_dia || [])[d];
                 if (mm !== null && mm !== undefined) { valores[(n[0] - iMin) * colunas + (n[1] - jMin)] = mm; tem = true; }
             });
             dias.push(valores);
             comDados.push(tem);
         }
-        malhaChuva = { iMin: iMin, jMin: jMin, linhas: linhas, colunas: colunas, dias: dias, comDados: comDados };
-        if (!comDados[diaSelecionado]) diaSelecionado = Math.max(0, comDados.indexOf(true));
+        return { iMin: iMin, jMin: jMin, linhas: linhas, colunas: colunas, dias: dias, comDados: comDados, passo: passo };
+    }
+    function montarMalhaChuva() {
+        malhaChuva = montarMalha(nosGrade, gradeChuva, GRADE_PASSO_GRAUS);
+        if (malhaChuva && !malhaChuva.comDados[diaSelecionado]) diaSelecionado = Math.max(0, malhaChuva.comDados.indexOf(true));
+    }
+    function gerarNosFina() {
+        var vistos = {}, nos = [];
+        sites.forEach(function (s) {
+            var ci = Math.round(s.lat / GRADE_FINA_PASSO), cj = Math.round(s.lon / GRADE_FINA_PASSO);
+            for (var di = -GRADE_FINA_RAIO; di <= GRADE_FINA_RAIO; di++) {
+                for (var dj = -GRADE_FINA_RAIO; dj <= GRADE_FINA_RAIO; dj++) {
+                    var k = (ci + di) + ',' + (cj + dj);
+                    if (!vistos[k] && nos.length < GRADE_FINA_MAX) { vistos[k] = 1; nos.push([ci + di, cj + dj]); }
+                }
+            }
+        });
+        return nos;
     }
 
     // Pesos Catmull-Rom (interpolacao bicubica) -- contornos arredondados
@@ -383,8 +403,8 @@
     }
     // Por coluna (lon) ou linha (lat) da tela: indice do no a esquerda/
     // abaixo e os pesos -- iguais pra linha/coluna inteira, calculados 1x.
-    function eixoInterpolacao(coord, origem, total) {
-        var g = coord / GRADE_PASSO_GRAUS - origem;
+    function eixoInterpolacao(coord, origem, total, passo) {
+        var g = coord / (passo || GRADE_PASSO_GRAUS) - origem;
         if (!(g >= 0 && g <= total - 1)) return null;
         var k0 = Math.min(Math.floor(g), total - 2);
         var t = g - k0;
@@ -457,6 +477,15 @@
             linhasY.push(eixoInterpolacao(map.containerPointToLatLng(L.point(0, y0 + (py + 0.5) / escala)).lat, malhaChuva.iMin, malhaChuva.linhas));
         }
         var valores = malhaChuva.dias[diaSelecionado];
+        var fina = malhaFina, colunasF = [], linhasF = [], valoresF = fina && fina.dias[diaSelecionado];
+        if (fina) {
+            for (px = 0; px < largura; px++) {
+                colunasF.push(eixoInterpolacao(map.containerPointToLatLng(L.point(x0 + (px + 0.5) / escala, 0)).lng, fina.jMin, fina.colunas, fina.passo));
+            }
+            for (py = 0; py < altura; py++) {
+                linhasF.push(eixoInterpolacao(map.containerPointToLatLng(L.point(0, y0 + (py + 0.5) / escala)).lat, fina.iMin, fina.linhas, fina.passo));
+            }
+        }
         var bruto = document.createElement('canvas');
         bruto.width = largura; bruto.height = altura;
         var ctxBruto = bruto.getContext('2d');
@@ -467,7 +496,10 @@
             for (px = 0; px < largura; px++) {
                 var ex = colunasX[px];
                 if (!ex) continue;
-                var rgb = rgbParaMm(valorNaMalha(valores, malhaChuva.colunas, malhaChuva.linhas, ex, ey));
+                var mmPx = NaN;
+                if (fina && colunasF[px] && linhasF[py]) mmPx = valorNaMalha(valoresF, fina.colunas, fina.linhas, colunasF[px], linhasF[py]);
+                if (mmPx !== mmPx) mmPx = valorNaMalha(valores, malhaChuva.colunas, malhaChuva.linhas, ex, ey);
+                var rgb = rgbParaMm(mmPx);
                 if (!rgb) continue;
                 var idx = (py * largura + px) * 4;
                 img.data[idx] = rgb.r; img.data[idx + 1] = rgb.g; img.data[idx + 2] = rgb.b; img.data[idx + 3] = 255;
@@ -575,19 +607,20 @@
         }, ms);
     }
 
-    function pedirGradeChuva() {
+    function pedirGradeChuva(nos, passo, silencioso) {
+        nos = nos || nosGrade; passo = passo || GRADE_PASSO_GRAUS;
         return fetch('{{ url_for("chuva_grade") }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                lats: nosGrade.map(function (n) { return +(n[0] * GRADE_PASSO_GRAUS).toFixed(3); }),
-                lons: nosGrade.map(function (n) { return +(n[1] * GRADE_PASSO_GRAUS).toFixed(3); }),
+                lats: nos.map(function (n) { return +(n[0] * passo).toFixed(3); }),
+                lons: nos.map(function (n) { return +(n[1] * passo).toFixed(3); }),
                 sem_esperar: true,
             }),
         }).then(function (r) {
             if (r.status === 202) {
                 return r.json().catch(function () { return {}; }).then(function (j) {
-                    if (!malhaChuva) chuvaStatus.textContent = 'Carregando previsão de chuva... ' + ((j && j.pct) || 0) + '%';
+                    if (!malhaChuva && !silencioso) chuvaStatus.textContent = 'Carregando previsão de chuva... ' + ((j && j.pct) || 0) + '%';
                     return null;
                 });
             }
@@ -649,7 +682,7 @@
                 gradeChuva = cache.dados;
                 chuvaDoCache = mostrarChuva();
             }
-        }).then(pedirGradeChuva)
+        }).then(function () { return pedirGradeChuva(); })
             .then(function (dados) {
                 buscandoChuva = false;
                 if (dados === null) { agendarNovoPedidoChuva(5000); return; }
@@ -657,6 +690,7 @@
                 if (!mostrarChuva()) throw new Error('grade de chuva vazia');
                 chuvaDoCache = false;
                 salvarCacheChuva();
+                buscarGradeFina();
             })
             .catch(function () {
                 // Open-Meteo fora/limite estourado: sem mensagem de erro na
@@ -665,6 +699,21 @@
                 if (!chuvaToggle.checked) { chuvaStatus.classList.add('d-none'); return; }
                 agendarNovoPedidoChuva(60000);
             });
+    }
+
+    // Grade fina em volta das fazendas: busca depois da grade geral, sem mensagem na tela.
+    function buscarGradeFina() {
+        if (buscandoFina || malhaFina || !chuvaToggle.checked) return;
+        if (!nosFina.length) nosFina = gerarNosFina();
+        if (!nosFina.length) return;
+        buscandoFina = true;
+        pedirGradeChuva(nosFina, GRADE_FINA_PASSO, true).then(function (dados) {
+            buscandoFina = false;
+            if (dados === null) { setTimeout(buscarGradeFina, 15000); return; }
+            gradeFina = dados;
+            malhaFina = montarMalha(nosFina, gradeFina, GRADE_FINA_PASSO);
+            if (malhaFina && chuvaToggle.checked && malhaChuva) desenharCamadaChuva();
+        }).catch(function () { buscandoFina = false; setTimeout(buscarGradeFina, 60000); });
     }
 
     chuvaToggle.addEventListener('change', function () {
@@ -682,6 +731,7 @@
             chuvaStatus.textContent = 'Mostrando: ' + DIAS_CHUVA[diaSelecionado];
             chuvaStatus.classList.remove('d-none');
             iniciarCicloAutomatico();
+            buscarGradeFina();
         } else {
             buscarGradeChuva();
         }

@@ -396,6 +396,7 @@ def _aplicar_previsao_orgao(data, previsao):
                 "chuva": round((chuva or 0) / 3, 2),
             })
     nuvens_open_meteo = {d["data"]: d.get("nuvens_pct") for d in data.get("previsao_5_dias") or []}
+    prob_open_meteo = {d["data"]: d.get("chuva_prob") for d in data.get("previsao_5_dias") or []}
     previsao_5_dias = []
     for dia in sorted(d for d in por_dia if d > hoje)[:5]:
         pontos = [previsao[h] for h in previsao if h[:10] == dia]
@@ -405,6 +406,7 @@ def _aplicar_previsao_orgao(data, previsao):
             "temp_max": max(p[0] for p in pontos),
             "temp_min": min(p[0] for p in pontos),
             "nuvens_pct": nuvens_open_meteo.get(dia),
+            "chuva_prob": prob_open_meteo.get(dia),
         })
     data["previsao_horaria_por_dia"] = por_dia
     data["previsao_5_dias"] = previsao_5_dias
@@ -1449,10 +1451,16 @@ CONTATO_RELATORIO = export_pdf.CONTATO_RELATORIO
 _QUANTIDADE_ESPOROS = {"Perigo": "🔴 Alta", "Atencao": "🟡 Média", "Normal": "🟢 Baixa"}
 
 
+def _prob_chuva(dia):
+    """" (80%)" -- probabilidade de chuva do dia (pedido do Alan, 13/11/2026); "" sem dado."""
+    prob = dia.get("chuva_prob")
+    return f" ({prob:.0f}%)" if isinstance(prob, (int, float)) else ""
+
+
 def _linhas_previsao_chuva(previsao):
     """Previsao de chuva 2 dias por linha: "09/11: 12.2 mm // 10/11: 3.7 mm"
     (pedido do Alan, 09/11/2026)."""
-    dias = [f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" for d in previsao]
+    dias = [f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" + _prob_chuva(d) for d in previsao]
     return [" // ".join(dias[i:i + 2]) for i in range(0, len(dias), 2)]
 
 

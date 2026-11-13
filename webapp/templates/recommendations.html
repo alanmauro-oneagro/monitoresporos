@@ -241,7 +241,7 @@
         <div class="clima-titulo clima-previsao-titulo">Previsão de chuva</div>
         <div class="clima-previsao">
             {% for d in w.previsao_5_dias %}
-            <div class="clima-prev-dia"><div class="clima-rotulo">{{ d.data[8:10] }}/{{ d.data[5:7] }}</div><div class="clima-valor">{{ d.chuva_mm }} mm</div></div>
+            <div class="clima-prev-dia"><div class="clima-rotulo">{{ d.data[8:10] }}/{{ d.data[5:7] }}</div><div class="clima-valor">{{ d.chuva_mm }} mm</div>{% if d.chuva_prob is number %}<div class="clima-rotulo" title="Probabilidade de chuva">{{ "%.0f"|format(d.chuva_prob) }}%</div>{% endif %}</div>
             {% endfor %}
         </div>
         {% endif %}

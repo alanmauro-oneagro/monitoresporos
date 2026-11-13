@@ -204,12 +204,17 @@ def _cabecalho_clima(weather, leitura_bioscout):
         esquerda.append(Spacer(1, 2))
         datas = [Paragraph(f"{d['data'][8:10]}/{d['data'][5:7]}", _ESTILO_PREV_DATA) for d in previsao]
         mms = [Paragraph(f"{d['chuva_mm']} mm", _ESTILO_PREV_MM) for d in previsao]
-        tabela = Table([datas, mms], colWidths=[largura_esq / len(previsao)] * len(previsao), hAlign="LEFT")
+        linhas_prev = [datas, mms]
+        if any(isinstance(d.get("chuva_prob"), (int, float)) for d in previsao):
+            # Probabilidade de chuva do dia (pedido do Alan, 13/11/2026).
+            linhas_prev.append([Paragraph(f"{d['chuva_prob']:.0f}%" if isinstance(d.get("chuva_prob"), (int, float)) else "",
+                                          _ESTILO_PREV_DATA) for d in previsao])
+        tabela = Table(linhas_prev, colWidths=[largura_esq / len(previsao)] * len(previsao), hAlign="LEFT")
         tabela.setStyle(TableStyle([
             ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#dee2e6")),
             ("LINEAFTER", (0, 0), (-2, -1), 0.6, colors.HexColor("#dee2e6")),
             ("TOPPADDING", (0, 0), (-1, 0), 4), ("BOTTOMPADDING", (0, 0), (-1, 0), 0),
-            ("TOPPADDING", (0, 1), (-1, 1), 1), ("BOTTOMPADDING", (0, 1), (-1, 1), 5),
+            ("TOPPADDING", (0, 1), (-1, -1), 1), ("BOTTOMPADDING", (0, 1), (-1, -1), 5),
             ("ROUNDEDCORNERS", [4, 4, 4, 4]),
         ]))
         esquerda.append(tabela)
