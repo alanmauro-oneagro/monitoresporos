@@ -1544,8 +1544,9 @@ def _format_whatsapp_message(
                 partes.append(f"🌡️ {weather['temperatura_atual']} °C")
             if weather.get("umidade_atual") is not None:
                 partes.append(f"💧 {weather['umidade_atual']}%")
-            if weather.get("chuva_atual_mm") is not None:
-                partes.append(f"🌧️ {weather['chuva_atual_mm']} mm agora")
+            if weather.get("chuva_hoje_mm") is not None:
+                partes.append(f"🌧️ {weather['chuva_hoje_mm']} mm hoje (prev.)"
+                              + _prob_chuva({"chuva_prob": weather.get("chuva_hoje_prob")}))
             if weather.get("chuva_24h_mm") is not None:
                 partes.append(f"☔ {weather['chuva_24h_mm']} mm em 24h")
             linhas.append("🌤️ *Clima agora*")

@@ -177,9 +177,11 @@ def _cabecalho_clima(weather, leitura_bioscout):
     indicadores = []
     for rotulo, chave, unidade in (
         ("Temperatura", "temperatura_atual", " °C"), ("Umidade", "umidade_atual", "%"),
-        ("Chuva agora", "chuva_atual_mm", " mm"), ("Chuva 24h", "chuva_24h_mm", " mm"),
+        ("Chuva hoje (prevista)", "chuva_hoje_mm", " mm"), ("Chuva 24h", "chuva_24h_mm", " mm"),
     ):
         if weather.get(chave) is not None:
+            if chave == "chuva_hoje_mm" and isinstance(weather.get("chuva_hoje_prob"), (int, float)):
+                unidade = f" mm ({weather['chuva_hoje_prob']:.0f}%)"
             indicadores.append([
                 Paragraph(rotulo, _ESTILO_ROTULO_CLIMA), Paragraph(f"{weather[chave]}{unidade}", _ESTILO_VALOR_CLIMA),
             ])

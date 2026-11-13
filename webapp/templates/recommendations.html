@@ -228,7 +228,7 @@
 
         {% if site_group.weather %}
         {% set w = site_group.weather %}
-        {% set indicadores = [('Temperatura', w.temperatura_atual, ' °C'), ('Umidade', w.umidade_atual, '%'), ('Chuva agora', w.chuva_atual_mm, ' mm'), ('Chuva 24h', w.chuva_24h_mm, ' mm')] | selectattr(1, 'ne', none) | list %}
+        {% set indicadores = [('Temperatura', w.temperatura_atual, ' °C'), ('Umidade', w.umidade_atual, '%'), ('Chuva hoje (prevista)', w.chuva_hoje_mm, ' mm' ~ (' (%.0f%%)'|format(w.chuva_hoje_prob) if w.chuva_hoje_prob is number else '')), ('Chuva 24h', w.chuva_24h_mm, ' mm')] | selectattr(1, 'ne', none) | list %}
         {% if indicadores %}
         <div class="clima-titulo">Clima agora</div>
         <div class="clima-indicadores">
