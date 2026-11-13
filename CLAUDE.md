@@ -1172,6 +1172,18 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
   3 consultas por usuario), permissoes, Recomendacoes/Manejos (filtro e
   carga sob demanda por cartao), Envios; markercluster nos mapas; indices
   em fazenda/usuario/data.
+- **API oficial da Meta -- parametros prontos no site** (pedido do Alan, 13/11/2026): variaveis no Railway
+  `WHATSAPP_PROVIDER=cloud_api`, `WHATSAPP_CLOUD_ACCESS_TOKEN`, `WHATSAPP_CLOUD_PHONE_NUMBER_ID`,
+  `WHATSAPP_CLOUD_APP_SECRET`, `WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN` (opcionais: `..._TEMPLATE_RELATORIO`
+  [relatorio_fazenda], `..._TEMPLATE_RELATORIO_TEXTO` [relatorio_fazenda_texto], `..._TEMPLATE_NDVI` [ndvi_fazenda],
+  `..._TEMPLATE_IDIOMA` [pt_BR], `..._API_VERSION` [v21.0]). 3 modelos: com PDF (cabecalho documento + {{1}} nome,
+  {{2}} fazenda, {{3}} data, {{4}} doencas), sem PDF (mesmo corpo; plano so' texto e ponto so' clima --
+  `send_relatorio_texto_modelo`) e NDVI (cabecalho imagem + {{1}}..{{3}}; `app._enviar_ndvi`). Webhook
+  `/webhooks/whatsapp` (sem login; GET = verify token, POST = assinatura X-Hub-Signature-256 com o APP_SECRET):
+  status entregue/lido/falhou vai pra `whatsapp_envio_log.status_meta` (achado pelo `[wamid]` que o envio grava no
+  texto; aparece no Historico de envios) e mensagens recebidas pra tabela `whatsapp_recebidas`. Gerenciar WhatsApp
+  tem o quadro "API oficial da Meta" (variaveis preenchidas ✅/⬜ sem mostrar valor, modelos, URL do webhook,
+  ultimas mensagens recebidas). Testes `ApiOficialMetaTest` e o envio por plano em `test_fazenda_estimada`.
 - **Fase 5 -- WhatsApp em volume**: `WHATSAPP_PROVIDER=cloud_api`
   (`whatsapp_cloud_api.py`), exige verificacao da empresa na Meta e
   modelos aprovados, custo por conversa; fila com novas tentativas;

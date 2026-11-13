@@ -285,6 +285,22 @@ def send_relatorio_modelo(phone, pdf_bytes, filename, variaveis):
 
 
 @_um_envio_por_vez
+def send_relatorio_texto_modelo(phone, variaveis):
+    """Relatorio sem PDF pelo modelo aprovado (so' na API oficial)."""
+    if not usa_modelo_oficial():
+        return False, "Modelo de mensagem so' existe na API oficial (WHATSAPP_PROVIDER=cloud_api)."
+    return whatsapp_cloud_api.send_relatorio_texto_modelo(phone, variaveis)
+
+
+@_um_envio_por_vez
+def send_ndvi_modelo(phone, imagem_bytes, variaveis):
+    """Imagem do NDVI pelo modelo aprovado (so' na API oficial)."""
+    if not usa_modelo_oficial():
+        return False, "Modelo de mensagem so' existe na API oficial (WHATSAPP_PROVIDER=cloud_api)."
+    return whatsapp_cloud_api.send_ndvi_modelo(phone, imagem_bytes, variaveis)
+
+
+@_um_envio_por_vez
 def send_whatsapp_document(phone, pdf_bytes, filename, caption=None):
     """Manda um PDF como documento anexado (nao so' texto) -- o mesmo
     /send do bridge, so' que com `documentBase64`/`fileName` em vez de

@@ -90,6 +90,42 @@
     </div>
 </div>
 
+{# API oficial da Meta (pedido do Alan, 13/11/2026): o que ja' esta' preenchido no Railway,
+   os modelos a aprovar e o endereco do webhook -- nunca mostra o valor de nenhuma variavel. #}
+<div class="card shadow-sm mt-4" id="api-meta">
+    <div class="card-body">
+        <h6 class="mb-2">API oficial da Meta (WhatsApp Business)</h6>
+        <div class="small text-muted mb-2">Variáveis do serviço no Railway:</div>
+        <ul class="list-unstyled small mb-3">
+            {% for nome, descricao, ok in parametros_meta %}
+            <li class="mb-1">{{ '✅' if ok else '⬜' }} <code>{{ nome }}</code> -- {{ descricao }}</li>
+            {% endfor %}
+        </ul>
+        <div class="small text-muted mb-1">Modelos de mensagem a aprovar no WhatsApp Manager (idioma pt_BR, categoria Utilidade):</div>
+        <ul class="small mb-3">
+            <li><code>{{ modelos_meta[0] }}</code> -- cabeçalho Documento (PDF) + corpo com {{ '{{1}}' }} nome, {{ '{{2}}' }} fazenda, {{ '{{3}}' }} data, {{ '{{4}}' }} doenças em alerta</li>
+            <li><code>{{ modelos_meta[1] }}</code> -- sem cabeçalho, corpo com as mesmas 4 variáveis (plano só com texto e ponto só clima)</li>
+            <li><code>{{ modelos_meta[2] }}</code> -- cabeçalho Imagem (NDVI) + corpo com {{ '{{1}}' }} nome, {{ '{{2}}' }} fazenda, {{ '{{3}}' }} data</li>
+        </ul>
+        <div class="small text-muted mb-1">Webhook (Configuração do app na Meta > WhatsApp > Webhook; assinar o campo <code>messages</code>):</div>
+        <div class="input-group input-group-sm mb-3" style="max-width: 40rem;">
+            <input class="form-control" readonly value="{{ webhook_url }}" id="webhook-url">
+            <button type="button" class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('webhook-url').value)">Copiar</button>
+        </div>
+        <div class="small text-muted mb-1">Últimas mensagens recebidas dos clientes:</div>
+        {% if recebidas %}
+        <ul class="list-unstyled small mb-0">
+            {% for m in recebidas %}
+            <li class="border-top py-1"><span class="text-muted">{{ m.criado_em[:16] | replace('T', ' ') }}</span> ·
+                <b>{{ m.nome or '-' }}</b> ({{ m.telefone | telefone_br if m.telefone else '-' }}): {{ m.texto }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="small text-muted">Nenhuma ainda.</div>
+        {% endif %}
+    </div>
+</div>
+
 
 <script>
 (function () {

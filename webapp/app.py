@@ -47,6 +47,7 @@ import bioscout_fetch
 import export_excel
 import export_pdf
 import whatsapp
+import whatsapp_cloud_api
 import weather_forecast
 import inmet_stations
 import virtual_farms
@@ -2073,8 +2074,10 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
             sucesso.append(rotulo)
             continue
         if modelo_oficial and pdf_dest is None:
-            ok_texto, message = whatsapp.send_whatsapp(phone, texto_dest)
-            models.log_whatsapp_envio(site, rotulo, phone, ok_texto, message)
+            # API oficial sem PDF (plano so' com texto, ponto so' clima): modelo sem cabecalho.
+            primeiro_nome = (rotulo or "").split()[0] if rotulo else "produtor"
+            ok_texto, message = whatsapp.send_relatorio_texto_modelo(phone, [primeiro_nome] + variaveis_base)
+            models.log_whatsapp_envio(site, rotulo, phone, ok_texto, f"Modelo oficial (resumo): {message}")
             if not ok_texto:
                 erros.append(message)
         elif modelo_oficial:
@@ -2119,6 +2122,15 @@ def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, de
     ok_texto_geral = (not enviar_texto) or algum_texto_ok
     ok_pdf_geral = (not enviar_pdf) or algum_pdf_ok
     return ok_texto_geral, ok_pdf_geral, resumo
+
+
+def _enviar_ndvi(phone, rotulo, imagem, legenda, nome_fazenda, data_br):
+    """Imagem do NDVI: na API oficial vai pelo modelo aprovado (fora da janela de 24h so' modelo
+    sai); no bridge, imagem com legenda como sempre."""
+    if whatsapp.usa_modelo_oficial():
+        primeiro_nome = (rotulo or "").split()[0] if rotulo else "produtor"
+        return whatsapp.send_ndvi_modelo(phone, imagem, [primeiro_nome, nome_fazenda, data_br])
+    return whatsapp.send_whatsapp_image(phone, imagem, caption=legenda)
 
 
 def _variaveis_modelo_relatorio(site, diseases, mostrar_secao_doencas, riscos_climaticos=()):
@@ -2444,7 +2456,7 @@ def _run_scheduled_ndvi_sends():
                     for phone, rotulo in _site_whatsapp_destinations(site):
                         if phone not in ativos:
                             continue
-                        ok, mensagem = whatsapp.send_whatsapp_image(phone, imagem, caption=legenda)
+                        ok, mensagem = _enviar_ndvi(phone, rotulo, imagem, legenda, nome_exibicao, data_br)
                         models.log_whatsapp_envio(site, rotulo, phone, ok, f"NDVI agendado {data_br}: {mensagem}")
         except Exception:
             pass  # nunca deixa o loop do agendador morrer -- tenta de novo no proximo ciclo
@@ -5245,7 +5257,7 @@ def enviar_ndvi_historico_whatsapp():
             legenda += f" ({item['cobertura_nuvens']:.0f}% de nuvens)"
         ok_alguma = False
         for phone, rotulo in destinos:
-            ok, mensagem = whatsapp.send_whatsapp_image(phone, imagem, caption=legenda)
+            ok, mensagem = _enviar_ndvi(phone, rotulo, imagem, legenda, nome_exibicao, data_br)
             models.log_whatsapp_envio(site_name, rotulo, phone, ok, f"NDVI {data_br}: {mensagem}")
             if ok:
                 ok_alguma = True
@@ -7042,7 +7054,46 @@ def admin_whatsapp():
     """Tela de pareamento do WhatsApp corporativo (QR code/codigo de
     pareamento, teste de envio, trocar numero) -- so' Master
     tem acesso, ja que controla o remetente usado por TODAS as fazendas."""
-    return render_template("admin_whatsapp.html", status=whatsapp.get_status())
+    return render_template(
+        "admin_whatsapp.html", status=whatsapp.get_status(), parametros_meta=whatsapp_cloud_api.parametros(),
+        # A Meta so' aceita https (o site roda atras do proxy do Railway, que chega aqui como http).
+        webhook_url=url_for("whatsapp_webhook", _external=True, _scheme="http"
+                            if request.host.split(":")[0] in ("127.0.0.1", "localhost") else "https"),
+        recebidas=models.whatsapp_recebidas(),
+        modelos_meta=[whatsapp_cloud_api.TEMPLATE_RELATORIO, whatsapp_cloud_api.TEMPLATE_RELATORIO_TEXTO,
+                      whatsapp_cloud_api.TEMPLATE_NDVI],
+    )
+
+
+@app.route("/webhooks/whatsapp", methods=["GET", "POST"])
+def whatsapp_webhook():
+    """Webhook da API oficial da Meta (pedido do Alan, 13/11/2026). GET = verificacao do painel
+    (hub.verify_token = WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN, devolve hub.challenge). POST = avisos
+    assinados com o APP_SECRET: status de cada mensagem (entregue/lido/falhou, marca a linha do
+    historico de envios) e mensagens que os clientes mandaram (tela Gerenciar WhatsApp)."""
+    if request.method == "GET":
+        token = whatsapp_cloud_api.WEBHOOK_VERIFY_TOKEN
+        if token and request.args.get("hub.mode") == "subscribe" and secrets.compare_digest(
+                request.args.get("hub.verify_token", ""), token):
+            return request.args.get("hub.challenge", ""), 200
+        abort(403)
+    corpo = request.get_data()
+    if not whatsapp_cloud_api.assinatura_valida(corpo, request.headers.get("X-Hub-Signature-256", "")):
+        abort(403)
+    dados = request.get_json(silent=True) or {}
+    for entrada in dados.get("entry") or []:
+        for mudanca in entrada.get("changes") or []:
+            valor = mudanca.get("value") or {}
+            for st in valor.get("statuses") or []:
+                erro = "; ".join(e.get("title") or e.get("message") or "" for e in st.get("errors") or []) or None
+                if st.get("id") and st.get("status"):
+                    models.atualizar_status_meta(st["id"], st["status"], erro)
+            nomes = {c.get("wa_id"): ((c.get("profile") or {}).get("name") or "") for c in valor.get("contacts") or []}
+            for msg in valor.get("messages") or []:
+                texto = ((msg.get("text") or {}).get("body") or (msg.get("button") or {}).get("text")
+                         or f"[{msg.get('type', 'mensagem')}]")
+                models.registrar_whatsapp_recebida(msg.get("from"), nomes.get(msg.get("from"), ""), texto[:1000])
+    return jsonify(ok=True)
 
 
 @app.route("/admin/whatsapp/status")
