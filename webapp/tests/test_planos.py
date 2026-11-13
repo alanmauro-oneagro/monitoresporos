@@ -1037,3 +1037,27 @@ class NdviNuvensNaFazendaTest(unittest.TestCase):
             res, erro = n.buscar_ndvi(aneis, data_alvo=date(2026, 11, 12), cobertura_maxima=0)
             self.assertIsNone(res)
             self.assertIn("11/11: 90%", erro)
+
+
+class AtendimentoPaisesEstadosTest(unittest.TestCase):
+    """Paises atendidos e raio por estado no mapa de atendimento (pedido do Alan, 13/11/2026)."""
+
+    def test_salvar(self):
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Atend"):
+            models.create_user("Zzz Master Atend", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Atend")["id"])
+            s["_fresh"] = True
+        html = c.get("/admin/planos").get_data(as_text=True)
+        self.assertIn('name="pais_atendido" value="BR"', html)
+        self.assertIn('name="uf_raio__MT"', html)
+        r = c.post("/admin/planos/atendimento", headers={"X-Autosave": "1"}, data={
+            "pais_atendido": ["BR", "XX"], "uf_on__MT": "on", "uf_raio__MT": "80", "uf_raio__PR": "30", "uf_on__GO": "on"})
+        self.assertTrue(r.get_json()["ok"])
+        cfg = webapp._atendimento_config()
+        self.assertEqual(cfg["paises"], ["BR"])
+        self.assertEqual(cfg["raio_uf"], {"MT": 80.0})
+        models.set_setting("atendimento_paises", "null")
+        models.set_setting("atendimento_raio_uf", "{}")

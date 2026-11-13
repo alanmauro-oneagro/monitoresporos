@@ -446,7 +446,14 @@ Leaflet): seletor do plano, estacoes BioScout instaladas (`_estacoes_atendimento
 coordenada, sem as ocultas) com o raio do plano -- le o raio digitado na tabela, redesenha ao mudar. Box "Raio
 [N] km" ao lado do seletor (`#raio-mapa`; escreve no `raio_km__<id>` da tabela, que salva sozinho) e raios que se
 encontram viram UMA figura (uniao com Turf 6.5.0 `turf.circle`/`turf.union`; sem Turf, circulos soltos); resumo
-"N estação(ões) · N área(s) de atendimento" (pedido do Alan, 13/11/2026).
+"N estação(ões) · N área(s) de atendimento" (pedido do Alan, 13/11/2026). **Paises atendidos e raio por estado** (mesmo dia):
+no cartao, form `#form-atendimento` (salva sozinho, rota `admin_planos_atendimento`): caixas "Países atendidos"
+(`countries.COUNTRIES`, com o n. de estacoes; setting `atendimento_paises`, null = todos) e "Raio de trabalho por
+estado (Brasil)" (caixa + km por UF de `UFS_BR`, digitar o km ja' marca; setting `atendimento_raio_uf` {UF: km};
+`_atendimento_config`). O mapa so' mostra estacoes dos paises marcados (pais da fazenda ou pela coordenada,
+`_estacoes_atendimento`) e usa o raio do estado da estacao quando marcado (UF pelo contorno dos estados do IBGE,
+`intrarregiao=UF`, `codarea` -> sigla, `turf.booleanPointInPolygon`), senao o do plano. So' mapa/planejamento: nao
+muda o raio das fazendas estimadas.
 **Linhas fora da tela** (pedido do
 Alan, 07/11/2026): Lavouras e as abas fazenda_estimada/esporos/
 risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na
