@@ -180,6 +180,45 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("Informe a empresa", c.post("/solicitar-acesso", data=dict(dados, perfil="tecnico", empresa="")).get_data(as_text=True))
         models.apagar_pedido_contato(pedido["id"])
 
+    def test_etapa1_do_produtor_gravada_e_no_excel(self):
+        """1a etapa gravada no "Avançar" (sem senha), aparece em Gerenciar Clientes e no Excel; vira "Conta
+        criada" quando a pessoa termina (pedido do Alan, 13/11/2026)."""
+        import io
+        from openpyxl import load_workbook
+        import export_excel
+        html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
+        self.assertIn("/solicitar-acesso/etapa1", html)
+        dados = _form(username="Zzz Etapa Um", nome_completo="Zzz Etapa Um Silva", numero_telefone="65999990381",
+                      grupo_economico="Zzz Grupo Etapa", local_idx="0", local_nome__0="Faz Zzz Etapa",
+                      local_cidade__0="Sinop", local_uf__0="MT", local_lat__0="-11.86", local_lon__0="-55.5", **{"culturas__0": "Soja", "area_cultura__0__Soja": "350"},
+                      grupo_cultura="cereais")
+        c = webapp.app.test_client()
+        self.assertTrue(c.post("/solicitar-acesso/etapa1", data=dados).get_json()["ok"])
+        self.assertTrue(c.post("/solicitar-acesso/etapa1", data=dados).get_json()["ok"])  # mesma linha
+        pedidos = [p for p in models.pedidos_contato() if p["nome"] == "Zzz Etapa Um Silva"]
+        self.assertEqual(len(pedidos), 1)
+        self.assertEqual(pedidos[0]["grupo_economico"], "Zzz Grupo Etapa")
+        self.assertIn("Faz Zzz Etapa (Sinop/MT): Soja 350 ha", pedidos[0]["fazendas"])
+        self.assertFalse(c.post("/solicitar-acesso/etapa1", data={"nome_completo": "Zzz"}).get_json()["ok"])
+        tela = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        self.assertIn("Zzz Etapa Um Silva", tela)
+        self.assertIn("Cadastro não concluído", tela)
+        abas = load_workbook(io.BytesIO(export_excel.build_workbook().getvalue()))
+        linhas = [[x.value for x in r] for r in abas["Pré-cadastros"].iter_rows(min_row=2)]
+        self.assertTrue(any(r[2] == "Zzz Etapa Um Silva" and r[4] == "Cadastro não concluído" for r in linhas))
+        # terminou o cadastro: sai da tela, fica no Excel como "Conta criada"
+        self.assertEqual(c.post("/solicitar-acesso", data=dados).status_code, 302)
+        self.assertFalse([p for p in models.pedidos_contato() if p["nome"] == "Zzz Etapa Um Silva"])
+        abas = load_workbook(io.BytesIO(export_excel.build_workbook().getvalue()))
+        linhas = [[x.value for x in r] for r in abas["Pré-cadastros"].iter_rows(min_row=2)]
+        self.assertTrue(any(r[2] == "Zzz Etapa Um Silva" and r[4] == "Conta criada" for r in linhas))
+
+    def test_aviso_disponibilidade_na_forma_de_pagamento(self):
+        html = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 "templates", "cliente_assinatura.html"), encoding="utf-8").read()
+        self.assertIn("verificar a disponibilidade do serviço na sua região", html)
+        self.assertIn("contato_comercial.celular", html)
+
     def test_perfil_unico_e_varios_tipos_de_cultura(self):
         """Voce e': um so' (radio); Tipo de cultura: varios (pedido do Alan, 08/11/2026)."""
         html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)

@@ -747,6 +747,24 @@ def _planos_rows():
     return rows
 
 
+def _pre_cadastros_rows():
+    """Pedidos de contato (Tecnico / Representante) e 1a etapa do cadastro do produtor (pedido do Alan, 13/11/2026)."""
+    perfis = {"produtor": "Produtor", "tecnico": "Técnico do setor", "representante": "Quero representar a OneAgro"}
+    rows = []
+    for p in models.pedidos_contato(incluir_concluidos=True):
+        if p["perfil"] == "produtor":
+            situacao = "Conta criada" if p.get("concluido") else "Cadastro não concluído"
+        else:
+            situacao = "Pedido de contato"
+        data, hora = _data_hora_excel(p.get("criado_em"))
+        rows.append([
+            data, hora.strftime("%H:%M") if hora else "", p["nome"] or "", perfis.get(p["perfil"], p["perfil"] or ""), situacao,
+            models.fmt_telefone_br(p["telefone"]) or "", p["email"] or "", p["empresa"] or "",
+            p.get("grupo_economico") or "", p.get("fazendas") or "", _data_hora_excel(p.get("atualizado_em"))[0],
+        ])
+    return rows
+
+
 def build_workbook(completar_clima=None):
     wb = Workbook()
     wb.remove(wb.active)
@@ -785,6 +803,12 @@ def build_workbook(completar_clima=None):
          "Cadastrado em", "Plano", "Valor do plano", "Moeda", "Ciclo", "Situação", "Acesso liberado", "Pago até",
          "Cortesia até", "Áreas monitoradas", "Locais de plantio", "Também recebem o relatório", "Grupo econômico"],
         _clientes_rows, date_columns=(10, 17, 18),
+    )
+    _try_sheet(
+        wb, "Pré-cadastros",
+        ["Data", "Hora", "Nome", "Perfil", "Situação", "Celular", "E-mail", "Empresa", "Grupo econômico", "Fazendas",
+         "Atualizado em"],
+        _pre_cadastros_rows, date_columns=(0, 10),
     )
     _try_sheet(
         wb, "Planos",

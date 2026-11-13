@@ -7750,9 +7750,36 @@ def verificar_contato_cadastro():
     return jsonify({"erros": erros})
 
 
+@app.route("/solicitar-acesso/etapa1", methods=["POST"])
+def salvar_etapa1_cadastro():
+    """1a etapa do cadastro do produtor gravada ao clicar em "Avançar" (pedido do Alan, 13/11/2026): fica em
+    Gerenciar Clientes e no Excel mesmo se a pessoa nao terminar."""
+    form = request.form
+    nome = " ".join(form.get("nome_completo", "").split())[:120]
+    telefone = _telefone_from_form(form)
+    email = form.get("email", "").strip()[:120]
+    if not _is_valid_phone(telefone):
+        telefone = ""
+    if not _is_valid_email(email):
+        email = ""
+    if not nome or not (telefone or email):
+        return jsonify({"ok": False})
+    culturas = models.get_culturas_ativas()
+    grupos = [g for g in GRUPOS_CULTURA if g in form.getlist("grupo_cultura")]
+    partes = []
+    for loc in _locais_do_form(form, culturas, grupos):
+        onde = "/".join(x for x in (loc["cidade"], loc["uf"]) if x)
+        areas = ", ".join(f"{c} {_fmt_ha(a)} ha" if a else c for c, a, _g in loc["areas_grupo"])
+        partes.append(f"{loc['nome'] or 'Fazenda'}" + (f" ({onde})" if onde else "") + (f": {areas}" if areas else ""))
+    pedido_id = models.salvar_pre_cadastro(nome, telefone, email, " ".join(form.get("grupo_economico", "").split())[:40],
+                                           "; ".join(partes)[:1000])
+    return jsonify({"ok": True, "id": pedido_id})
+
+
 # Contato mostrado pro Tecnico do setor no cadastro (pedido do Alan, 08/11/2026).
 CONTATO_COMERCIAL = {"nome": "Alan Mauro", "celular": "(43) 99114-7595", "whatsapp": "5543991147595",
                      "email": "contato@oneagro.com.br"}
+app.jinja_env.globals.setdefault("contato_comercial", CONTATO_COMERCIAL)
 
 
 def _area_txt(texto):
@@ -7961,6 +7988,7 @@ def solicitar_acesso():
                 "grupo_economico": " ".join(form.get("grupo_economico", "").split())[:40],
             }
             models.registrar_cadastro(registro)
+            models.concluir_pre_cadastro(telefone, email)
             if modalidade == "plano":
                 _criar_locais_e_extras(user_id, username, locais, extras, plano_escolhido)
             _avisar_master_cadastro(registro)

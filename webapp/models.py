@@ -4192,23 +4192,71 @@ _CAMPOS_SOLICITACAO = (
 )
 
 
+def _tabela_pedidos_contato(conn):
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pedidos_contato (id INTEGER PRIMARY KEY AUTOINCREMENT, perfil TEXT, nome TEXT, "
+        "empresa TEXT, telefone TEXT, email TEXT, criado_em TEXT)")
+    # 1a etapa do cadastro do produtor (pedido do Alan, 13/11/2026): grupo, fazendas e se virou conta.
+    for coluna in ("grupo_economico TEXT", "fazendas TEXT", "concluido INTEGER DEFAULT 0", "atualizado_em TEXT"):
+        try:
+            conn.execute(f"ALTER TABLE pedidos_contato ADD COLUMN {coluna}")
+        except sqlite3.OperationalError:
+            pass
+
+
 def registrar_pedido_contato(perfil, nome, empresa, telefone, email):
     """Tecnico do setor / quem quer representar a OneAgro (pedido do Alan, 13/11/2026): nao cria conta,
     so' guarda o pedido pra OneAgro entrar em contato (Gerenciar Clientes > Pedidos de contato)."""
     conn = get_db()
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS pedidos_contato (id INTEGER PRIMARY KEY AUTOINCREMENT, perfil TEXT, nome TEXT, "
-        "empresa TEXT, telefone TEXT, email TEXT, criado_em TEXT)")
+    _tabela_pedidos_contato(conn)
     conn.execute("INSERT INTO pedidos_contato (perfil, nome, empresa, telefone, email, criado_em) VALUES (?, ?, ?, ?, ?, ?)",
                  (perfil, nome, empresa, telefone, email, _agora_cuiaba()))
     conn.commit()
     conn.close()
 
 
-def pedidos_contato():
+def salvar_pre_cadastro(nome, telefone, email, grupo_economico, fazendas):
+    """Produtor que passou da 1a etapa do cadastro (pedido do Alan, 13/11/2026): os dados ficam gravados
+    mesmo se nao terminar. Mesmo celular ou e-mail ainda nao concluido = atualiza a mesma linha."""
+    conn = get_db()
+    _tabela_pedidos_contato(conn)
+    agora = _agora_cuiaba()
+    row = conn.execute(
+        "SELECT id FROM pedidos_contato WHERE perfil = 'produtor' AND COALESCE(concluido, 0) = 0 "
+        "AND ((telefone = ? AND ? != '') OR (lower(email) = lower(?) AND ? != '')) ORDER BY id DESC LIMIT 1",
+        (telefone, telefone, email, email)).fetchone()
+    if row:
+        conn.execute("UPDATE pedidos_contato SET nome = ?, telefone = ?, email = ?, grupo_economico = ?, fazendas = ?, "
+                     "atualizado_em = ? WHERE id = ?", (nome, telefone, email, grupo_economico, fazendas, agora, row["id"]))
+        pedido_id = row["id"]
+    else:
+        cur = conn.execute(
+            "INSERT INTO pedidos_contato (perfil, nome, empresa, telefone, email, criado_em, grupo_economico, fazendas, "
+            "concluido, atualizado_em) VALUES ('produtor', ?, '', ?, ?, ?, ?, ?, 0, ?)",
+            (nome, telefone, email, agora, grupo_economico, fazendas, agora))
+        pedido_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return pedido_id
+
+
+def concluir_pre_cadastro(telefone, email):
+    """A conta foi criada: o pre-cadastro sai de Gerenciar Clientes (fica no Excel como "Conta criada")."""
+    conn = get_db()
+    _tabela_pedidos_contato(conn)
+    conn.execute("UPDATE pedidos_contato SET concluido = 1, atualizado_em = ? WHERE perfil = 'produtor' "
+                 "AND COALESCE(concluido, 0) = 0 AND ((telefone = ? AND ? != '') OR (lower(email) = lower(?) AND ? != ''))",
+                 (_agora_cuiaba(), telefone, telefone, email, email))
+    conn.commit()
+    conn.close()
+
+
+def pedidos_contato(incluir_concluidos=False):
     conn = get_db()
     try:
-        rows = conn.execute("SELECT * FROM pedidos_contato ORDER BY id DESC").fetchall()
+        _tabela_pedidos_contato(conn)
+        rows = conn.execute("SELECT * FROM pedidos_contato" + ("" if incluir_concluidos else " WHERE COALESCE(concluido, 0) = 0")
+                            + " ORDER BY id DESC").fetchall()
     except sqlite3.OperationalError:
         rows = []
     conn.close()
