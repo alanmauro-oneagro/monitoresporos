@@ -705,6 +705,12 @@ site tem que entrar la'.
   `models.get/set_ndvi_nuvens`, rota `salvar_ndvi_nuvens`, salva sozinho; vazio = padrao 5% no Pre-visualizar e 3%
   no automatico) vale no Pre-visualizar e no envio automatico; "📋 Copiar mensagem" copia o texto das imagens
   marcadas (mesma legenda do envio) pra mandar a mao; "Recebem o NDVI" fica no rodape do cartao.
+  **Nuvem medida SOBRE A FAZENDA** (pedido do Alan, 13/11/2026: o `eo:cloud_cover` do catalogo e' do quadro de
+  100 x 100 km -- "2% de nuvens" com a fazenda encoberta): o `EVALSCRIPT_NDVI` pinta nuvem com alfa ~0.1 (fora do
+  contorno alfa 0), `ndvi_service.nuvens_na_fazenda` conta; `buscar_ndvi` tenta os dias mais perto da data
+  (`MAX_CENAS_TENTADAS` = 6, quadro ate' `NUVEM_MAXIMA_DO_QUADRO` 90%) e fica com o 1o com a fazenda dentro do
+  limite (erro lista o % de cada dia tentado). Pre-visualizacao: URL com `?v=` + `no-store` (o navegador mostrava a
+  imagem anterior) e tocar na imagem abre grande.
 - **Manejos -- TS/Sulco/Folha em boxes** (pedido do Alan, 12/11/2026): cada secao recolhida
   (▶, `.secao-toggle`, numero de boxes preenchidas ao lado) com boxes iguais a Aplicacoes: Data
   aplicacao, Talhao, Fungicidas quimicos, Fungicidas biologicos (campos `cx_*_<momento>`); 1 box

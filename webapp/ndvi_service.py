@@ -34,7 +34,7 @@ PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 CATALOG_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search"
 
 TOKEN_CACHE_MARGIN_SECONDS = 60  # renova um pouco antes do token expirar de verdade
-COBERTURA_NUVENS_MAXIMA = 5  # % -- cenas com mais nuvem que isso sao descartadas
+COBERTURA_NUVENS_MAXIMA = 5  # % de nuvem SOBRE A FAZENDA -- imagens com mais que isso sao descartadas (`nuvens_na_fazenda`)
 
 KML_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 
@@ -80,8 +80,13 @@ function corDaRampa(v) {
 
 function evaluatePixel(s) {
   var nublado = [3, 8, 9, 10, 11].indexOf(s.SCL) !== -1;
-  if (s.dataMask === 0 || nublado) {
+  if (s.dataMask === 0) {
     return [0, 0, 0, 0];
+  }
+  if (nublado) {
+    // quase transparente (alfa ~0.1): continua preto na imagem, mas da' pra contar quanto da
+    // FAZENDA esta' coberto de nuvem (`nuvens_na_fazenda`) -- fora do contorno o alfa e' 0.
+    return [0, 0, 0, 0.1];
   }
   var ndvi = (s.B08 - s.B04) / (s.B08 + s.B04 + 1e-6);
   var cor = corDaRampa(Math.max(-1, Math.min(1, ndvi)));
@@ -469,6 +474,28 @@ def _resumir_erro_process_api(corpo_erro):
     return " -- ".join(partes)
 
 
+MAX_CENAS_TENTADAS = 6  # imagens pedidas a' Process API, no maximo, ate' achar uma com a fazenda limpa
+NUVEM_MAXIMA_DO_QUADRO = 90  # % do quadro inteiro (100 x 100 km) -- acima disso nem tenta
+
+
+def nuvens_na_fazenda(imagem_png):
+    """% da FAZENDA coberto de nuvem/sombra/neve na imagem do `EVALSCRIPT_NDVI` (pedido do Alan,
+    13/11/2026: o eo:cloud_cover do catalogo e' do quadro inteiro de 100 x 100 km -- "2% de nuvens"
+    com a fazenda toda encoberta). Alfa 0 = fora do contorno; alfa baixo = nuvem; alto = leitura boa.
+    None = nenhum pixel da fazenda na imagem."""
+    from PIL import Image
+    try:
+        alfa = Image.open(io.BytesIO(imagem_png)).convert("RGBA").getchannel("A")
+    except Exception:
+        return None
+    hist = alfa.histogram()
+    nuvem = sum(hist[1:128])
+    boa = sum(hist[128:])
+    if nuvem + boa == 0:
+        return None
+    return 100.0 * nuvem / (nuvem + boa)
+
+
 def _buscar_cenas(token, geometria, desde, ate):
     """Consulta a Catalog API (STAC) por cenas Sentinel-2 L2A que tocam a
     geometria dada, num intervalo de datas -- devolve so' data e cobertura
@@ -650,22 +677,23 @@ def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_
     except Exception as exc:
         return None, f"Falha ao consultar cenas disponiveis: {exc}"
 
-    boas = [
-        c for c in cenas
-        if c.get("properties", {}).get("eo:cloud_cover", 100) <= limite_nuvem
-    ]
-    if not boas:
-        return None, (
-            f"Nenhuma imagem Sentinel-2 com {limite_nuvem}% de nuvens ou menos "
-            f"encontrada entre {desde.isoformat()} e {ate.isoformat()}. Tente uma data diferente."
-        )
-
     def _data_da_cena(cena):
         return datetime.fromisoformat(cena["properties"]["datetime"].replace("Z", "+00:00")).date()
 
-    melhor = min(boas, key=lambda c: abs((_data_da_cena(c) - alvo).days))
-    data_da_cena = _data_da_cena(melhor)
-    cobertura = melhor["properties"].get("eo:cloud_cover")
+    # Uma entrada por dia (o mesmo dia pode vir em 2 quadros), com a menor nuvem do quadro.
+    por_dia = {}
+    for c in cenas:
+        nuvem_quadro = c.get("properties", {}).get("eo:cloud_cover", 100)
+        dia = _data_da_cena(c)
+        if nuvem_quadro <= NUVEM_MAXIMA_DO_QUADRO and nuvem_quadro < por_dia.get(dia, 101):
+            por_dia[dia] = nuvem_quadro
+    # Mais perto da data pedida primeiro; no empate, o quadro menos nublado.
+    candidatas = sorted(por_dia, key=lambda d: (abs((d - alvo).days), por_dia[d]))
+    if not candidatas:
+        return None, (
+            f"Nenhuma imagem Sentinel-2 aproveitavel entre {desde.isoformat()} e {ate.isoformat()}. "
+            "Tente uma data diferente."
+        )
 
     min_lon, min_lat, max_lon, max_lat = _bbox([anel for aneis in lista_de_aneis_por_car for anel in aneis])
     largura_graus = max(max_lon - min_lon, 0.0005)
@@ -676,53 +704,65 @@ def buscar_ndvi(lista_de_aneis_por_car, data_alvo=None, janela_dias=90, largura_
     # 2500px e' o limite por lado da propria Process API da Copernicus.
     altura_px = min(2500, max(1, round(largura_px * altura_graus / largura_graus)))
 
-    corpo = {
-        "input": {
-            "bounds": {
-                "geometry": geometria,
-                "properties": {"crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"},
-            },
-            "data": [{
-                "type": "sentinel-2-l2a",
-                "dataFilter": {
-                    "timeRange": {
-                        "from": f"{data_da_cena.isoformat()}T00:00:00Z",
-                        "to": f"{data_da_cena.isoformat()}T23:59:59Z",
-                    },
-                    "mosaickingOrder": "leastCC",
+    def _pedir_imagem(data_da_cena):
+        corpo = {
+            "input": {
+                "bounds": {
+                    "geometry": geometria,
+                    "properties": {"crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"},
                 },
-            }],
-        },
-        "output": {
-            "width": largura_px,
-            "height": altura_px,
-            "responses": [{"identifier": "default", "format": {"type": "image/png"}}],
-        },
-        "evalscript": EVALSCRIPT_NDVI,
-    }
+                "data": [{
+                    "type": "sentinel-2-l2a",
+                    "dataFilter": {
+                        "timeRange": {
+                            "from": f"{data_da_cena.isoformat()}T00:00:00Z",
+                            "to": f"{data_da_cena.isoformat()}T23:59:59Z",
+                        },
+                        "mosaickingOrder": "leastCC",
+                    },
+                }],
+            },
+            "output": {
+                "width": largura_px,
+                "height": altura_px,
+                "responses": [{"identifier": "default", "format": {"type": "image/png"}}],
+            },
+            "evalscript": EVALSCRIPT_NDVI,
+        }
+        req = urllib.request.Request(
+            PROCESS_URL,
+            data=json.dumps(corpo).encode(),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "image/png",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return resp.read(), None
+        except urllib.error.HTTPError as exc:
+            detalhe = _resumir_erro_process_api(exc.read().decode(errors="replace"))
+            return None, f"Copernicus recusou o pedido (HTTP {exc.code}): {detalhe}"
+        except Exception as exc:
+            return None, f"Falha ao buscar imagem NDVI: {exc}"
 
-    req = urllib.request.Request(
-        PROCESS_URL,
-        data=json.dumps(corpo).encode(),
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "image/png",
-        },
+    # Pede a imagem de cada dia candidato e mede a nuvem SOBRE A FAZENDA (nao a do quadro):
+    # o 1o dia com a fazenda dentro do limite e' o escolhido.
+    vistas = []
+    for data_da_cena in candidatas[:MAX_CENAS_TENTADAS]:
+        imagem, erro = _pedir_imagem(data_da_cena)
+        if erro:
+            return None, erro
+        cobertura = nuvens_na_fazenda(imagem)
+        if cobertura is not None and cobertura <= limite_nuvem:
+            # Nao desenha nada aqui dentro -- `desenhar_informacoes` (data, Norte,
+            # chuva/vento) e' chamada por quem chama, que so' sabe calcular chuva/vento
+            # depois de saber `data_da_cena`.
+            return {"imagem": imagem, "data": data_da_cena, "cobertura_nuvens": round(cobertura, 1)}, None
+        vistas.append(f"{data_da_cena.strftime('%d/%m')}: {'sem dado' if cobertura is None else f'{cobertura:.0f}%'}")
+    return None, (
+        f"Nenhuma imagem com {limite_nuvem}% de nuvens ou menos sobre a fazenda nas {len(vistas)} datas mais "
+        f"proximas ({'; '.join(vistas)}). Aumente o limite de nuvens ou escolha outra data."
     )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            imagem = resp.read()
-    except urllib.error.HTTPError as exc:
-        detalhe = _resumir_erro_process_api(exc.read().decode(errors="replace"))
-        return None, f"Copernicus recusou o pedido (HTTP {exc.code}): {detalhe}"
-    except Exception as exc:
-        return None, f"Falha ao buscar imagem NDVI: {exc}"
-
-    # Nao desenha nada aqui dentro -- `desenhar_informacoes` (data, Norte,
-    # chuva/vento) e' chamada por quem chama (`pre_visualizar_ndvi` em
-    # app.py), ja' que a chuva acumulada e o vento predominante dos
-    # ultimos 30 dias so' dao pra calcular DEPOIS de saber `data_da_cena`
-    # (a data real da cena escolhida, que so' e' resolvida aqui dentro).
-    return {"imagem": imagem, "data": data_da_cena, "cobertura_nuvens": cobertura}, None
