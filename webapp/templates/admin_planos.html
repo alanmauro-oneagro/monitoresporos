@@ -290,8 +290,35 @@
             </div>
             <span class="small text-muted" id="resumo-atendimento"></span>
         </div>
+        <form method="post" action="{{ url_for('admin_planos_atendimento') }}" data-autosave id="form-atendimento" class="mb-2">
+            <div class="small fw-semibold mb-1">Países atendidos</div>
+            <div class="d-flex flex-wrap gap-3 mb-2">
+                {% for cod, nome in paises_atendimento %}
+                {% set n_est = estacoes_atendimento | selectattr('pais', 'equalto', cod) | list | length %}
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" name="pais_atendido" value="{{ cod }}" id="pais_at_{{ cod }}"
+                           {% if atendimento.paises is none or cod in atendimento.paises %}checked{% endif %}>
+                    <label class="form-check-label small" for="pais_at_{{ cod }}">{{ nome }}{% if n_est %} <span class="text-muted">({{ n_est }})</span>{% endif %}</label>
+                </div>
+                {% endfor %}
+            </div>
+            <details {% if atendimento.raio_uf %}open{% endif %}>
+                <summary class="small fw-semibold">Raio de trabalho por estado (Brasil){% if atendimento.raio_uf %} <span class="text-muted fw-normal">-- {{ atendimento.raio_uf | length }} estado(s) com raio próprio</span>{% endif %}</summary>
+                <div class="small text-muted my-1">Marque o estado e digite o raio; estado sem marca usa o raio do plano.</div>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for uf in ufs_br %}
+                    <div class="input-group input-group-sm flex-nowrap" style="width: 8.6rem;">
+                        <span class="input-group-text"><input class="form-check-input mt-0 me-1" type="checkbox" name="uf_on__{{ uf }}" id="uf_on_{{ uf }}" aria-label="Raio próprio para {{ uf }}" {% if uf in atendimento.raio_uf %}checked{% endif %}><label for="uf_on_{{ uf }}" class="mb-0">{{ uf }}</label></span>
+                        <input type="number" class="form-control" name="uf_raio__{{ uf }}" min="1" max="2000" step="1" inputmode="decimal"
+                               value="{{ '%g' | format(atendimento.raio_uf[uf]) if uf in atendimento.raio_uf else '' }}" placeholder="km" aria-label="Raio (km) em {{ uf }}">
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+            <span class="autosave-status small"></span>
+        </form>
         <div id="mapa-atendimento-mapa" style="height: 420px;" class="border rounded"></div>
-        <div class="small text-muted mt-1">Pontos = estações BioScout instaladas; área verde = perímetro atendido no raio do plano (raios que se encontram viram uma figura só). O raio mudado aqui salva no plano.</div>
+        <div class="small text-muted mt-1">Pontos = estações BioScout instaladas nos países marcados; área verde = perímetro atendido (raio do estado, se marcado; senão o do plano). Raios que se encontram viram uma figura só. O raio mudado aqui salva no plano.</div>
     </div>
 </div>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -306,14 +333,36 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(mapa);
     var area = L.layerGroup().addTo(mapa);
     var pontos = L.layerGroup().addTo(mapa);
-    estacoes.forEach(function (e) {
-        L.circleMarker([e.lat, e.lon], { radius: 5, color: '#0b5d1e', weight: 2, fillColor: '#2f9e44', fillOpacity: 1 })
-            .bindTooltip(e.nome).addTo(pontos);
-    });
     var sel = document.getElementById('plano-mapa');
     var caixa = document.getElementById('raio-mapa');
     var resumo = document.getElementById('resumo-atendimento');
     var estilo = { color: '#2f9e44', weight: 2, fillColor: '#69db7c', fillOpacity: 0.3 };
+    var formAt = document.getElementById('form-atendimento');
+    // UF de cada estacao do Brasil pelo contorno dos estados do IBGE (carregado uma vez).
+    var COD_UF = { 11: 'RO', 12: 'AC', 13: 'AM', 14: 'RR', 15: 'PA', 16: 'AP', 17: 'TO', 21: 'MA', 22: 'PI', 23: 'CE',
+        24: 'RN', 25: 'PB', 26: 'PE', 27: 'AL', 28: 'SE', 29: 'BA', 31: 'MG', 32: 'ES', 33: 'RJ', 35: 'SP', 41: 'PR',
+        42: 'SC', 43: 'RS', 50: 'MS', 51: 'MT', 52: 'GO', 53: 'DF' };
+    fetch('https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?formato=application/vnd.geo+json&intrarregiao=UF')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (g) {
+            if (!g || !window.turf) return;
+            L.geoJSON(g, { style: { color: '#868e96', weight: 1, fill: false }, interactive: false }).addTo(mapa);
+            estacoes.forEach(function (e) {
+                if (e.pais !== 'BR') return;
+                var pt = turf.point([e.lon, e.lat]);
+                g.features.forEach(function (f) {
+                    if (!e.uf && turf.booleanPointInPolygon(pt, f)) e.uf = COD_UF[parseInt(f.properties.codarea, 10)];
+                });
+            });
+            desenhar(false);
+        }).catch(function () {});
+    function paisesMarcados() {
+        return Array.from(formAt.querySelectorAll('input[name="pais_atendido"]:checked')).map(function (i) { return i.value; });
+    }
+    function raioDoEstado(uf) {
+        if (!uf || !formAt.querySelector('input[name="uf_on__' + uf + '"]:checked')) return 0;
+        return parseFloat((formAt.querySelector('input[name="uf_raio__' + uf + '"]').value || '').replace(',', '.')) || 0;
+    }
     function campoDoPlano() {
         var opt = sel.options[sel.selectedIndex];
         return opt && document.querySelector('input[name="raio_km__' + opt.value + '"]');
@@ -325,25 +374,34 @@
     // Circulos que se encontram viram UMA figura (uniao geodesica com o Turf); sem o Turf, circulos soltos.
     function desenhar(enquadrar) {
         area.clearLayers();
-        var raio = raioAtual();
+        pontos.clearLayers();
+        var raioPlano = raioAtual();
+        var paises = paisesMarcados();
+        var ativas = estacoes.filter(function (e) { return paises.indexOf(e.pais) !== -1; });
         var figuras = 0;
-        if (raio > 0 && estacoes.length) {
+        var uniao = null;
+        ativas.forEach(function (e) {
+            var r = raioDoEstado(e.uf) || raioPlano;
+            L.circleMarker([e.lat, e.lon], { radius: 5, color: '#0b5d1e', weight: 2, fillColor: '#2f9e44', fillOpacity: 1 })
+                .bindTooltip(e.nome + (e.uf ? ' (' + e.uf + ')' : '') + ' · ' + String(r).replace('.', ',') + ' km').addTo(pontos);
+            if (!(r > 0)) return;
             if (window.turf) {
-                var uniao = null;
-                estacoes.forEach(function (e) {
-                    var c = turf.circle([e.lon, e.lat], raio, { steps: 64, units: 'kilometers' });
-                    uniao = uniao ? (turf.union(uniao, c) || uniao) : c;
-                });
-                var camada = L.geoJSON(uniao, { style: function () { return estilo; } }).addTo(area);
-                figuras = uniao.geometry.type === 'MultiPolygon' ? uniao.geometry.coordinates.length : 1;
-                if (enquadrar) mapa.fitBounds(camada.getBounds(), { padding: [10, 10] });
+                var c = turf.circle([e.lon, e.lat], r, { steps: 64, units: 'kilometers' });
+                uniao = uniao ? (turf.union(uniao, c) || uniao) : c;
             } else {
-                estacoes.forEach(function (e) { L.circle([e.lat, e.lon], Object.assign({ radius: raio * 1000 }, estilo)).addTo(area); });
-                figuras = estacoes.length;
-                if (enquadrar) mapa.fitBounds(L.featureGroup(area.getLayers()).getBounds(), { padding: [10, 10] });
+                L.circle([e.lat, e.lon], Object.assign({ radius: r * 1000 }, estilo)).addTo(area);
+                figuras += 1;
             }
+        });
+        if (uniao) {
+            L.geoJSON(uniao, { style: function () { return estilo; } }).addTo(area);
+            figuras = uniao.geometry.type === 'MultiPolygon' ? uniao.geometry.coordinates.length : 1;
         }
-        resumo.textContent = estacoes.length + ' estação(ões) · ' + figuras + ' área(s) de atendimento';
+        if (enquadrar && area.getLayers().length) {
+            var b = L.featureGroup(area.getLayers()).getBounds();
+            if (b.isValid()) mapa.fitBounds(b, { padding: [10, 10] });
+        }
+        resumo.textContent = ativas.length + ' estação(ões) · ' + figuras + ' área(s) de atendimento';
     }
     function trocarPlano() { caixa.value = raioAtual() || ''; desenhar(true); }
     sel.addEventListener('change', trocarPlano);
@@ -368,6 +426,15 @@
             if (e.target === campoDoPlano()) caixa.value = raioAtual() || '';
             desenhar(false);
         }
+    });
+    formAt.addEventListener('change', function () { desenhar(false); });
+    formAt.addEventListener('input', function (e) {
+        // Digitou o raio do estado: ja' marca a caixa dele.
+        if (e.target.name && e.target.name.indexOf('uf_raio__') === 0 && e.target.value) {
+            var chk = formAt.querySelector('input[name="uf_on__' + e.target.name.slice(9) + '"]');
+            if (chk && !chk.checked) { chk.checked = true; chk.dispatchEvent(new Event('change', { bubbles: true })); }
+        }
+        desenhar(false);
     });
     trocarPlano();
 })();

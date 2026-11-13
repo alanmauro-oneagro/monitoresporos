@@ -9441,19 +9441,67 @@ def admin_planos():
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
         hoje=_hoje_cuiaba().isoformat(), estacoes_atendimento=_estacoes_atendimento(),
+        atendimento=_atendimento_config(), ufs_br=UFS_BR,
+        paises_atendimento=[(c, d["nome"]) for c, d in countries.COUNTRIES.items()],
     )
 
 
 def _estacoes_atendimento():
     """Estacoes BioScout instaladas (fazendas reais com coordenada, sem as ocultas) pro "Mapa de
-    atendimento por assinatura" de Planos e Valores (pedido do Alan, 13/11/2026)."""
+    atendimento por assinatura" de Planos e Valores (pedido do Alan, 13/11/2026), com o pais
+    (marcado na fazenda ou pela coordenada)."""
     ocultas = models.get_deactivated_site_names()
     coords = data_reader.read_site_coordinates()
-    return [
-        {"nome": _nome_exibicao(site), "lat": lat, "lon": lon}
-        for site, (lat, lon) in sorted(coords.items(), key=lambda kv: _ordem_fazenda(kv[0]))
-        if site not in ocultas and lat is not None and lon is not None
-    ]
+    paises = models.get_all_site_countries()
+    lista = []
+    for site, (lat, lon) in sorted(coords.items(), key=lambda kv: _ordem_fazenda(kv[0])):
+        if site in ocultas or lat is None or lon is None:
+            continue
+        pais = paises.get(site)
+        if not pais:
+            try:
+                pais = countries.detectar_pais_por_coordenada(lat, lon)
+            except Exception:
+                pais = countries.DEFAULT_COUNTRY
+        lista.append({"nome": _nome_exibicao(site), "lat": lat, "lon": lon, "pais": pais})
+    return lista
+
+
+_ATENDIMENTO_PAISES = "atendimento_paises"
+_ATENDIMENTO_RAIO_UF = "atendimento_raio_uf"
+
+
+def _atendimento_config():
+    """Paises atendidos (None = todos) e raio de trabalho por estado do Brasil {UF: km} -- cartao do
+    mapa de atendimento em Planos e Valores (pedido do Alan, 13/11/2026)."""
+    try:
+        paises = json.loads(models.get_setting(_ATENDIMENTO_PAISES) or "null")
+    except ValueError:
+        paises = None
+    try:
+        raio_uf = json.loads(models.get_setting(_ATENDIMENTO_RAIO_UF) or "{}")
+    except ValueError:
+        raio_uf = {}
+    return {"paises": paises, "raio_uf": {uf: float(v) for uf, v in raio_uf.items() if uf in UFS_BR}}
+
+
+@app.route("/admin/planos/atendimento", methods=["POST"])
+@master_required
+def admin_planos_atendimento():
+    paises = [p for p in request.form.getlist("pais_atendido") if p in countries.COUNTRIES]
+    raio_uf = {}
+    for uf in UFS_BR:
+        if not request.form.get(f"uf_on__{uf}"):
+            continue
+        try:
+            km = float((request.form.get(f"uf_raio__{uf}") or "").replace(",", "."))
+        except ValueError:
+            continue
+        if 0 < km <= 2000:
+            raio_uf[uf] = km
+    models.set_setting(_ATENDIMENTO_PAISES, json.dumps(paises))
+    models.set_setting(_ATENDIMENTO_RAIO_UF, json.dumps(raio_uf))
+    return _save_response("Atendimento salvo.", "admin_planos")
 
 
 # Tabela de apoio pra precificar em dolar pela area monitorada (pedido do
