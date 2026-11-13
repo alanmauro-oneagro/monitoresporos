@@ -84,6 +84,7 @@ if hasattr(time, "tzset"):
 # a importar de verdade.
 
 WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"]  # 0=Segunda ... 6=Domingo (Python date.weekday())
+NDVI_OPCOES_NUVENS = (0, 3, 5, 10, 20, 30, 50, 100)  # % maximo de nuvens que a pessoa escolhe na aba NDVI
 NDVI_AGENDAMENTO_COBERTURA_MAXIMA = 3  # % -- mais estrito que o preview manual (5%), pedido explicito do usuario pro envio automatico
 INTERPOLACAO_SENTINEL = "__interp3__"  # valor especial de weather_station_overrides.estacao_codigo -- "media das 3 estacoes mais proximas" em vez de uma estacao so (ver _weather_coords_all/_get_weather_for_site)
 WEATHER_CACHE_TTL_SECONDS = 30 * 60  # nao busca de novo na Open-Meteo antes disso, por fazenda
@@ -2438,7 +2439,8 @@ def _run_scheduled_ndvi_sends():
             if cars_kml:
                 lista_de_aneis_por_car = [ndvi_service.parse_kml_poligono(kml) for kml in cars_kml]
                 resultado, erro = ndvi_service.buscar_ndvi(
-                    lista_de_aneis_por_car, data_alvo=hoje, cobertura_maxima=NDVI_AGENDAMENTO_COBERTURA_MAXIMA
+                    lista_de_aneis_por_car, data_alvo=hoje,
+                    cobertura_maxima=models.get_ndvi_nuvens().get(site, NDVI_AGENDAMENTO_COBERTURA_MAXIMA),
                 )
                 if resultado and not models.ndvi_historico_tem_data(site, resultado["data"].isoformat()):
                     chuva, vento = _chuva_vento_ultimos_30_dias(site, resultado["data"])
@@ -4321,6 +4323,12 @@ def _grupo_economico_da_fazenda(site):
     return cadastros[dono]
 
 
+@app.template_global("nome_fazenda")
+def _nome_fazenda_tela(site):
+    """Nome de exibicao da fazenda nos templates (permissoes de usuario; pedido do Alan, 13/11/2026)."""
+    return _nome_exibicao(site)
+
+
 @app.template_global("nome_sem_grupo")
 def _nome_sem_grupo(site):
     """Nome de exibicao sem o "<grupo> - " da frente (subordinados na aba
@@ -4756,6 +4764,7 @@ def ndvi():
             return render_template("ndvi.html", sites_data=[], no_access=True, credenciais_ok=True)
 
     cars_by_site = models.get_all_farm_ndvi_cars()
+    nuvens = models.get_ndvi_nuvens()
     coords = _coords_all()
     sites_data = [
         {
@@ -4765,6 +4774,7 @@ def ndvi():
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
             "preview": _get_ndvi_preview(site),
+            "nuvens": nuvens.get(site),
             # Quem recebe o NDVI e' marcado na aba Envios (`toggle_ndvi_ativo`).
             "ndvi_destinatarios": [
                 {"telefone": telefone, "rotulo": rotulo}
@@ -4776,7 +4786,8 @@ def ndvi():
         for ativos in [models.get_ndvi_ativos(site)]
     ]
     return render_template(
-        "ndvi.html", sites_data=sites_data, no_access=False,
+        "ndvi.html", sites_data=sites_data, no_access=False, opcoes_nuvens=NDVI_OPCOES_NUVENS,
+        nuvens_padrao=ndvi_service.COBERTURA_NUVENS_MAXIMA, nuvens_padrao_auto=NDVI_AGENDAMENTO_COBERTURA_MAXIMA,
         credenciais_ok=ndvi_service.credenciais_configuradas(),
         hoje=datetime.now(timezone.utc).date().isoformat(),
     )
@@ -5095,7 +5106,8 @@ def pre_visualizar_ndvi():
         lista_de_aneis_por_car = [ndvi_service.parse_kml_poligono(kml) for kml in cars_kml]
     except ValueError as exc:
         return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' invalido: {exc}", "ndvi", ok=False)
-    resultado, erro = ndvi_service.buscar_ndvi(lista_de_aneis_por_car, data_alvo=data_alvo)
+    resultado, erro = ndvi_service.buscar_ndvi(lista_de_aneis_por_car, data_alvo=data_alvo,
+                                               cobertura_maxima=models.get_ndvi_nuvens().get(site_name))
     if erro:
         return _save_response(f"Nao foi possivel gerar o NDVI de '{_nome_exibicao(site_name)}': {erro}", "ndvi", ok=False)
     chuva_acumulada, vento_predominante = _chuva_vento_ultimos_30_dias(site_name, resultado["data"])
@@ -5276,6 +5288,20 @@ def enviar_ndvi_historico_whatsapp():
     if falhas:
         resumo += f" Falhas: {'; '.join(falhas)}."
     return _save_response(resumo, "ndvi", ok=not falhas)
+
+
+@app.route("/ndvi/nuvens", methods=["POST"])
+@aba_required("ndvi")
+def salvar_ndvi_nuvens():
+    """% maximo de nuvens das imagens da fazenda (pedido do Alan, 13/11/2026): vale no
+    Pre-visualizar e no envio automatico. Vazio = padrao."""
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    valor = (request.form.get("nuvens") or "").strip()
+    if valor and (not valor.isdigit() or int(valor) not in NDVI_OPCOES_NUVENS):
+        return _save_response("Valor de nuvens inválido.", "ndvi", ok=False)
+    models.set_ndvi_nuvens(site_name, int(valor) if valor else None)
+    return _save_response(f"Nuvens de '{_nome_exibicao(site_name)}' salvas.", "ndvi")
 
 
 @app.route("/ndvi/debug/<path:site_name>")
@@ -7171,7 +7197,7 @@ def admin_user_permissions(user_id):
     if request.method == "POST":
         selected_ids = {int(v) for v in request.form.getlist("site_ids")}
         models.set_user_permissions(user_id, selected_ids)
-        return _save_response(f"Permissoes de '{user_row['username']}' atualizadas.", "admin_users")
+        return _save_response(f"Permissões de '{user_row['username']}' atualizadas.", "admin_users")
     all_sites = sorted(models.get_all_sites(), key=lambda s: _ordem_fazenda(s["site_name"]))
     permitted_ids = models.get_user_permitted_site_ids(user_id)
     return render_template(

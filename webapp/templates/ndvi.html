@@ -66,6 +66,17 @@
             </div>
             <div class="col-12 col-lg-6">
                 {% if site_group.cars %}
+                <form method="post" action="{{ url_for('salvar_ndvi_nuvens') }}" data-autosave class="mb-2 d-flex align-items-center flex-wrap gap-2">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="small text-muted mb-0" for="nuvens_{{ site_idx }}">Nuvens até:</label>
+                    <select class="form-select form-select-sm" style="width: auto;" id="nuvens_{{ site_idx }}" name="nuvens">
+                        <option value="" {% if site_group.nuvens is none %}selected{% endif %}>Padrão ({{ nuvens_padrao }}%; automático {{ nuvens_padrao_auto }}%)</option>
+                        {% for pct in opcoes_nuvens %}
+                        <option value="{{ pct }}" {% if site_group.nuvens == pct %}selected{% endif %}>{{ pct }}%</option>
+                        {% endfor %}
+                    </select>
+                    <span class="autosave-status small"></span>
+                </form>
                 <form method="post" action="{{ url_for('pre_visualizar_ndvi') }}" class="mb-2 d-flex align-items-center flex-wrap gap-2">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <label class="small text-muted mb-0" for="data_alvo_{{ site_idx }}">Data (opcional):</label>
@@ -98,13 +109,6 @@
                     </div>
                 </div>
                 {% endif %}
-                <div class="small text-muted mb-2">
-                    Recebem o NDVI:
-                    {% for destinatario in site_group.ndvi_destinatarios %}<strong>{{ destinatario.rotulo }}</strong>{% if not loop.last %}, {% endif %}
-                    <input type="hidden" form="ndvi_whats_{{ site_idx }}" name="destino_telefones" value="{{ destinatario.telefone }}">
-                    {% else %}ninguem marcado{% endfor %}
-                    -- muda em <a href="{{ url_for('whatsapp_gerenciamento') }}">Programação de Envios</a>.
-                </div>
                 {% if site_group.historico %}
                 <form method="post" action="{{ url_for('enviar_ndvi_historico_whatsapp') }}" id="ndvi_whats_{{ site_idx }}">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
@@ -114,7 +118,8 @@
                     <div class="text-center flex-shrink-0" style="width: 90px;">
                         <div class="form-check mb-1" title="Marcar pra enviar por WhatsApp">
                             <input class="form-check-input" type="checkbox" form="ndvi_whats_{{ site_idx }}"
-                                   name="historico_ids" value="{{ item.id }}" id="ndvi_sel_{{ site_idx }}_{{ item.id }}">
+                                   name="historico_ids" value="{{ item.id }}" id="ndvi_sel_{{ site_idx }}_{{ item.id }}"
+                                   data-mensagem="🛰️ NDVI - {{ site_group.nome_exibicao }} - {{ item.data_alvo | data_br }}{% if item.cobertura_nuvens is not none %} ({{ '%.0f'|format(item.cobertura_nuvens) }}% de nuvens){% endif %}">
                             <label class="form-check-label small" for="ndvi_sel_{{ site_idx }}_{{ item.id }}">Selecionar</label>
                         </div>
                         <a href="{{ url_for('ver_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
@@ -139,6 +144,8 @@
                         title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp{% elif site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Programação de Envios){% endif %}">
                     📲 Enviar selecionadas por WhatsApp
                 </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-2 copiar-ndvi" data-form="ndvi_whats_{{ site_idx }}"
+                        title="Copia o texto das imagens marcadas pra mandar pelo seu WhatsApp">📋 Copiar mensagem</button>
                 {% else %}
                 <div class="text-muted small">Nenhuma imagem gerada ainda.</div>
                 {% endif %}
@@ -147,9 +154,31 @@
                 {% endif %}
             </div>
         </div>
+        {% if site_group.cars %}
+        <div class="small text-muted border-top pt-2 mt-3">
+            Recebem o NDVI:
+            {% for destinatario in site_group.ndvi_destinatarios %}<strong>{{ destinatario.rotulo }}</strong>{% if not loop.last %}, {% endif %}
+            <input type="hidden" form="ndvi_whats_{{ site_idx }}" name="destino_telefones" value="{{ destinatario.telefone }}">
+            {% else %}ninguém marcado{% endfor %}
+            -- muda em <a href="{{ url_for('whatsapp_gerenciamento') }}">Programação de Envios</a>.
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endfor %}
 {% endif %}
 
+<script>
+document.querySelectorAll('.copiar-ndvi').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+        var marcadas = document.querySelectorAll('input[name="historico_ids"][form="' + botao.dataset.form + '"]:checked');
+        if (!marcadas.length) { alert('Marque pelo menos uma imagem.'); return; }
+        var texto = Array.from(marcadas).map(function (c) { return c.dataset.mensagem; }).join('\n');
+        var pronto = function () { var antes = botao.textContent; botao.textContent = '✓ Copiado'; setTimeout(function () { botao.textContent = antes; }, 2000); };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(texto).then(pronto, function () { prompt('Copie a mensagem:', texto); });
+        } else { prompt('Copie a mensagem:', texto); }
+    });
+});
+</script>
 {% endblock %}
