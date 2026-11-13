@@ -9440,8 +9440,20 @@ def admin_planos():
         tabela_preco=_tabela_precificacao(), moeda_tabela=_moeda_tabela(), max_faixas=MAX_FAIXAS,
         asaas_configurado=asaas.configurado(), asaas_webhook_ok=bool(asaas.token_webhook()),
         asaas_producao=os.environ.get("ASAAS_AMBIENTE", "").lower() == "producao",
-        hoje=_hoje_cuiaba().isoformat(),
+        hoje=_hoje_cuiaba().isoformat(), estacoes_atendimento=_estacoes_atendimento(),
     )
+
+
+def _estacoes_atendimento():
+    """Estacoes BioScout instaladas (fazendas reais com coordenada, sem as ocultas) pro "Mapa de
+    atendimento por assinatura" de Planos e Valores (pedido do Alan, 13/11/2026)."""
+    ocultas = models.get_deactivated_site_names()
+    coords = data_reader.read_site_coordinates()
+    return [
+        {"nome": _nome_exibicao(site), "lat": lat, "lon": lon}
+        for site, (lat, lon) in sorted(coords.items(), key=lambda kv: _ordem_fazenda(kv[0]))
+        if site not in ocultas and lat is not None and lon is not None
+    ]
 
 
 # Tabela de apoio pra precificar em dolar pela area monitorada (pedido do
