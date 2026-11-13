@@ -158,7 +158,7 @@
             <div class="mb-1"><span class="text-muted">Situação:</span> <strong>{{ sit.texto }}</strong></div>
             <div class="mb-2"><span class="text-muted">Relatório por WhatsApp:</span> {{ sit.formato }}
                 <span class="text-muted">· {{ c.areas | length }} área{{ '' if c.areas | length == 1 else 's' }} monitorada{{ '' if c.areas | length == 1 else 's' }}</span></div>
-            <form method="post" action="{{ url_for('admin_cliente_cortesia', user_id=cl.id) }}" class="d-flex flex-wrap align-items-center gap-1" data-autosave data-autosave-reload>
+            <form method="post" action="{{ url_for('admin_cliente_cortesia', user_id=cl.id) }}" class="d-flex flex-wrap align-items-center gap-1" data-autosave>
                 <label class="text-muted me-1" for="cortesia_{{ cl.id }}">Cortesia até</label>
                 <input class="form-control form-control-sm" style="max-width: 160px;" type="date" name="cortesia_ate" id="cortesia_{{ cl.id }}" value="{{ cl.cortesia_ate or '' }}">
                 <select class="form-select form-select-sm" style="max-width: 190px;" name="plano_id" aria-label="Plano">
