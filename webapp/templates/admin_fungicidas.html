@@ -35,12 +35,12 @@
     <div class="mt-2">
         O portal do MAPA pode recusar o download feito pelo servidor. Nesse caso, abra
         <a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit/resource/d30b30d7-e256-484e-9ab8-cd40974e1238" target="_blank" rel="noopener">Agrofit -- Produto Formulado</a>,
-        clique em <strong>Baixar</strong> e envie o arquivo .csv aqui. Faca isso uma vez por mes.
+        clique em <strong>Baixar</strong> e escolha o arquivo .csv aqui (envia sozinho). Faça isso uma vez por mês.
         Antes de enviar, o proprio navegador separa so' os fungicidas e compacta o arquivo
         (fica bem menor).
         <form method="post" action="{{ url_for('agrofit_enviar_arquivo') }}" enctype="multipart/form-data" class="d-flex flex-wrap align-items-center gap-2 mt-2" id="agrofitEnvioForm">
-            <input type="file" name="arquivo" accept=".csv,.zip,.gz" class="form-control form-control-sm" style="max-width: 22rem;" required>
-            <button type="submit" class="btn btn-sm btn-primary">Enviar</button>
+            <input type="file" name="arquivo" accept=".csv,.zip,.gz" class="form-control form-control-sm" style="max-width: 22rem;" required
+                   onchange="if (this.files.length) { this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit(); }">
             <span class="small text-muted" id="agrofitEnvioStatus"></span>
         </form>
     </div>

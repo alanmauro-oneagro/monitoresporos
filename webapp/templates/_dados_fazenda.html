@@ -23,7 +23,7 @@
             <form method="post" class="d-flex flex-wrap align-items-center gap-1 mb-3 ligar-a-cliente">
                 <input type="hidden" name="site_name" value="{{ fz.site }}">
                 <span class="text-muted me-1">Ligar ao cliente:</span>
-                <select class="form-select form-select-sm" style="max-width: 280px;" aria-label="Cliente">
+                <select class="form-select form-select-sm" style="max-width: 280px;" aria-label="Cliente" data-auto-enviar="Ligar esta fazenda a &quot;{nome}&quot;?">
                     <option value="" selected>-</option>
                     {% if clientes_lista %}<optgroup label="Clientes do app">
                     {% for cli in clientes_lista %}<option value="{{ url_for('admin_cliente_vincular', user_id=cli.id) }}">{{ cli.nome }}</option>{% endfor %}
@@ -33,7 +33,6 @@
                     {% for u in usuarios_lista if u.id not in ja %}<option value="{{ url_for('admin_usuario_ligar_fazenda', user_id=u.id) }}">{{ u.nome }}</option>{% endfor %}
                     </optgroup>
                 </select>
-                <button class="btn btn-sm btn-outline-success" type="submit" disabled>Ligar</button>
             </form>
             {% endif %}
             {# Grupo: no cadastro (vale pra todas as fazendas dele) ou, sem cadastro, na propria fazenda. #}

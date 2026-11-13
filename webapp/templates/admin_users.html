@@ -110,7 +110,7 @@
 <div class="card shadow-sm mt-4">
     <div class="card-body p-4 form-compact">
         <h6 class="mb-3">Novo usuário</h6>
-        <form method="post" action="{{ url_for('admin_create_user') }}">
+        <form method="post" action="{{ url_for('admin_create_user') }}" data-autocriar>
             <div class="mb-3 row g-2">
                 <div class="col-md-4">
                     <label class="form-label">Usuário</label>
@@ -140,7 +140,7 @@
                     {% endif %}
                 </select>
             </div>
-            <button type="submit" class="btn btn-success">Criar usuário</button>
+            <span class="autocriar-status small text-muted">Salva sozinho ao terminar de preencher.</span>
         </form>
     </div>
 </div>

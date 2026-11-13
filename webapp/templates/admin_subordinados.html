@@ -70,8 +70,8 @@
 
 <div class="card shadow-sm mt-4">
     <div class="card-body p-4 form-compact">
-        <h5 class="mb-3">Novo subordinado</h5>
-        <form method="post" action="{{ url_for('admin_user_subordinados', user_id=user.id) }}">
+        <h6 class="mb-3">Novo subordinado</h6>
+        <form method="post" action="{{ url_for('admin_user_subordinados', user_id=user.id) }}" data-autocriar>
             <input type="hidden" name="form_id" value="add">
             <div class="mb-3 row g-2">
                 <div class="col-md-4">
@@ -86,7 +86,7 @@
                     </div>
                 </div>
             </div>
-            <button type="submit" class="btn btn-success">Adicionar</button>
+            <span class="autocriar-status small text-muted">Salva sozinho ao terminar de preencher.</span>
         </form>
     </div>
 </div>
