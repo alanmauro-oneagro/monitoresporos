@@ -27,6 +27,7 @@ import urllib.request
 import urllib.error
 
 import whatsapp_cloud_api
+import whatsapp_umbler
 
 # Local: aponta pro whatsapp-bridge rodando na mesma maquina (padrao).
 # Hospedado (Railway/Render): aponta pro hostname interno do servico do
@@ -34,7 +35,7 @@ import whatsapp_cloud_api
 # -- nunca uma URL publica, ja que o /send do bridge nao tem autenticacao.
 BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "http://127.0.0.1:3001")
 
-# "bridge" (Baileys, atual, padrao) ou "cloud_api" (API oficial da Meta,
+# "bridge" (Baileys, atual, padrao), "umbler" (Umbler Talk, whatsapp_umbler.py) ou "cloud_api" (API oficial da Meta,
 # ver whatsapp_cloud_api.py) -- unico interruptor pra trocar de provedor,
 # sem mexer em nenhum lugar que chama send_whatsapp/send_whatsapp_document
 # (app.py inteiro so' conhece as funcoes deste modulo, nunca o provedor
@@ -84,6 +85,8 @@ def get_status():
     None, "error": str opcional} -- do provedor ativo (`WHATSAPP_PROVIDER`)."""
     if WHATSAPP_PROVIDER == "cloud_api":
         return whatsapp_cloud_api.get_status()
+    if WHATSAPP_PROVIDER == "umbler":
+        return whatsapp_umbler.get_status()
     return _get_status_bridge()
 
 
@@ -126,6 +129,8 @@ def request_pairing_code(phone):
     (o numero e' registrado direto no Business Manager da Meta)."""
     if WHATSAPP_PROVIDER == "cloud_api":
         return False, "Pareamento por QR/codigo nao existe na API oficial -- o numero e' registrado no WhatsApp Manager da Meta."
+    if WHATSAPP_PROVIDER == "umbler":
+        return False, "Pareamento por QR/codigo nao existe aqui com a Umbler Talk -- o numero e' conectado no painel da Umbler."
     try:
         payload = json.dumps({"phone": phone}).encode("utf-8")
         req = urllib.request.Request(
@@ -156,6 +161,8 @@ def reset_session():
     phone number id, trocados direto nas variaveis de ambiente)."""
     if WHATSAPP_PROVIDER == "cloud_api":
         return False, "Nao ha' sessao pra resetar na API oficial -- troque WHATSAPP_CLOUD_ACCESS_TOKEN/WHATSAPP_CLOUD_PHONE_NUMBER_ID."
+    if WHATSAPP_PROVIDER == "umbler":
+        return False, "Nao ha' sessao pra resetar na Umbler Talk -- troque o canal no painel da Umbler ou UMBLER_TALK_FROM_PHONE."
     try:
         req = urllib.request.Request(
             f"{BRIDGE_URL}/reset", data=b"{}",
@@ -179,6 +186,8 @@ def send_whatsapp(phone, text):
     """Retorna (ok: bool, mensagem: str) -- do provedor ativo (`WHATSAPP_PROVIDER`)."""
     if WHATSAPP_PROVIDER == "cloud_api":
         return whatsapp_cloud_api.send_whatsapp(phone, text)
+    if WHATSAPP_PROVIDER == "umbler":
+        return whatsapp_umbler.send_whatsapp(phone, text)
     return _send_whatsapp_bridge(phone, text)
 
 
@@ -231,6 +240,8 @@ def send_whatsapp_image(phone, imagem_bytes, caption=None):
     mensagem: str) -- do provedor ativo (`WHATSAPP_PROVIDER`)."""
     if WHATSAPP_PROVIDER == "cloud_api":
         return whatsapp_cloud_api.send_whatsapp_image(phone, imagem_bytes, caption=caption)
+    if WHATSAPP_PROVIDER == "umbler":
+        return whatsapp_umbler.send_whatsapp_image(phone, imagem_bytes, caption=caption)
     return _send_whatsapp_image_bridge(phone, imagem_bytes, caption=caption)
 
 
@@ -272,7 +283,13 @@ def usa_modelo_oficial():
     """True quando o relatorio sai pelo MODELO aprovado da API oficial da
     Meta (texto curto + PDF), em vez do texto corrido do bridge -- ver
     `app._send_site_whatsapp`."""
+    if WHATSAPP_PROVIDER == "umbler":
+        return whatsapp_umbler.usa_modelos()
     return WHATSAPP_PROVIDER == "cloud_api"
+
+
+def _modelos():
+    return whatsapp_umbler if WHATSAPP_PROVIDER == "umbler" else whatsapp_cloud_api
 
 
 @_um_envio_por_vez
@@ -280,24 +297,24 @@ def send_relatorio_modelo(phone, pdf_bytes, filename, variaveis):
     """Relatorio pelo modelo aprovado (so' na API oficial, ver
     `whatsapp_cloud_api.send_relatorio_modelo`)."""
     if not usa_modelo_oficial():
-        return False, "Modelo de mensagem so' existe na API oficial (WHATSAPP_PROVIDER=cloud_api)."
-    return whatsapp_cloud_api.send_relatorio_modelo(phone, pdf_bytes, filename, variaveis)
+        return False, "Modelo de mensagem so' existe na API oficial (cloud_api) ou na Umbler Talk com os ids dos modelos."
+    return _modelos().send_relatorio_modelo(phone, pdf_bytes, filename, variaveis)
 
 
 @_um_envio_por_vez
 def send_relatorio_texto_modelo(phone, variaveis):
     """Relatorio sem PDF pelo modelo aprovado (so' na API oficial)."""
     if not usa_modelo_oficial():
-        return False, "Modelo de mensagem so' existe na API oficial (WHATSAPP_PROVIDER=cloud_api)."
-    return whatsapp_cloud_api.send_relatorio_texto_modelo(phone, variaveis)
+        return False, "Modelo de mensagem so' existe na API oficial (cloud_api) ou na Umbler Talk com os ids dos modelos."
+    return _modelos().send_relatorio_texto_modelo(phone, variaveis)
 
 
 @_um_envio_por_vez
 def send_ndvi_modelo(phone, imagem_bytes, variaveis):
     """Imagem do NDVI pelo modelo aprovado (so' na API oficial)."""
     if not usa_modelo_oficial():
-        return False, "Modelo de mensagem so' existe na API oficial (WHATSAPP_PROVIDER=cloud_api)."
-    return whatsapp_cloud_api.send_ndvi_modelo(phone, imagem_bytes, variaveis)
+        return False, "Modelo de mensagem so' existe na API oficial (cloud_api) ou na Umbler Talk com os ids dos modelos."
+    return _modelos().send_ndvi_modelo(phone, imagem_bytes, variaveis)
 
 
 @_um_envio_por_vez
@@ -309,6 +326,8 @@ def send_whatsapp_document(phone, pdf_bytes, filename, caption=None):
     upload do arquivo pro WhatsApp demora mais que so' mandar texto."""
     if WHATSAPP_PROVIDER == "cloud_api":
         return whatsapp_cloud_api.send_whatsapp_document(phone, pdf_bytes, filename, caption=caption)
+    if WHATSAPP_PROVIDER == "umbler":
+        return whatsapp_umbler.send_whatsapp_document(phone, pdf_bytes, filename, caption=caption)
     return _send_whatsapp_document_bridge(phone, pdf_bytes, filename, caption=caption)
 
 
