@@ -860,7 +860,7 @@ class PlanosLinhasForaDaTelaTest(unittest.TestCase):
             s["_user_id"] = str(models.get_user_by_username("Zzz Teste Master Linhas")["id"])
             s["_fresh"] = True
         pagina = c.get("/admin/planos").get_data(as_text=True)
-        for rotulo in ("<td>Lavouras</td>", "<td>Raio (km)</td>", "Esporos estimados na região", "Mapa da região com as estações"):
+        for rotulo in ("<td>Lavouras</td>", "<td>Raio (km)</td>", "Raio de alcance das estações", "raio-mapa", "Esporos estimados na região", "Mapa da região com as estações"):
             self.assertNotIn(rotulo, pagina)
         self.assertIn(">Site: Mapa<", pagina)
         # envia o formulario exatamente como a tela monta (sem mexer em nada)
