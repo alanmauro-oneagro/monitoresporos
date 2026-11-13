@@ -115,9 +115,9 @@
         if (solo && solo.classe) {
             textoSolo = '🌱 ' + escapeHtml(solo.classe) + ' <span class="text-muted">(' + escapeHtml(solo.fonte) + ')</span>';
         } else if (solo) {
-            textoSolo = '<span class="text-muted">Sem dado de solo disponivel.</span>';
+            textoSolo = '<span class="text-muted">Sem dado de solo disponível.</span>';
         } else {
-            textoSolo = '<span class="text-muted">Ainda nao resolvido.</span>';
+            textoSolo = '<span class="text-muted">Ainda não resolvido.</span>';
         }
         L.circleMarker([site.lat, site.lon], {
             radius: 6, color: '#0a1f44', weight: 2,

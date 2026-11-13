@@ -2818,7 +2818,7 @@ def login():
             login_user(User(row), remember=lembrar)
             session["deve_definir_senha"] = True
             return redirect(url_for("definir_nova_senha"))
-        flash("Usuario ou senha invalidos.", "error")
+        flash("Usuário ou senha inválidos.", "error")
     return render_template("login.html")
 
 
@@ -2897,7 +2897,7 @@ def definir_nova_senha():
         if not nova or len(nova) < 6:
             flash("A nova senha precisa ter pelo menos 6 caracteres.", "error")
         elif nova != confirmar:
-            flash("A confirmacao nao bate com a nova senha.", "error")
+            flash("A confirmação não bate com a nova senha.", "error")
         else:
             models.set_user_password(int(current_user.id), nova)
             session.pop("deve_definir_senha", None)
@@ -3947,10 +3947,10 @@ def adicionar_ponto_virtual():
         lon = float(request.form.get("lon", ""))
         raio_km = float(request.form.get("raio_km", ""))
     except ValueError:
-        flash("Preencha nome, coordenadas e raio (numeros validos) pra adicionar um ponto estimado.", "error")
+        flash("Preencha nome, coordenadas e raio (números válidos) para adicionar um ponto estimado.", "error")
         return redirect(url_for("mapa_interpolado"))
     if not nome or raio_km <= 0:
-        flash("Nome obrigatorio e o raio precisa ser maior que zero.", "error")
+        flash("Nome obrigatório e o raio precisa ser maior que zero.", "error")
         return redirect(url_for("mapa_interpolado"))
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
@@ -3969,7 +3969,7 @@ def adicionar_ponto_virtual():
             nome, lat, lon, raio_km, criado_por=current_user.username, country_code=country_code, tipo=tipo
         )
     except sqlite3.IntegrityError:
-        flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
+        flash(f"Já existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
         return redirect(url_for("mapa_interpolado"))
     if grupo:
         models.salvar_grupo_fazenda_dados(novo_site, grupo)
@@ -3990,10 +3990,10 @@ def editar_ponto_virtual():
         lon = float(request.form.get("lon", ""))
         raio_km = float(request.form.get("raio_km", ""))
     except ValueError:
-        flash("Preencha nome, coordenadas e raio (numeros validos) pra editar o ponto estimado.", "error")
+        flash("Preencha nome, coordenadas e raio (números válidos) para editar o ponto estimado.", "error")
         return redirect(url_for("mapa_interpolado"))
     if not nome or raio_km <= 0:
-        flash("Nome obrigatorio e o raio precisa ser maior que zero.", "error")
+        flash("Nome obrigatório e o raio precisa ser maior que zero.", "error")
         return redirect(url_for("mapa_interpolado"))
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
@@ -4017,7 +4017,7 @@ def editar_ponto_virtual():
                 nome, lat, lon, raio_km, criado_por=current_user.username, country_code=country_code, tipo=tipo
             )
         except sqlite3.IntegrityError:
-            flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
+            flash(f"Já existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
             return redirect(url_for("mapa_interpolado"))
         models.excluir_ponto_estudo(estudo["id"])
         novo = next((v["site_name"] for v in models.get_all_virtual_farms() if v["nome"] == nome), None)
@@ -4040,7 +4040,7 @@ def editar_ponto_virtual():
     try:
         models.update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code=country_code, tipo=tipo)
     except sqlite3.IntegrityError:
-        flash(f"Ja existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
+        flash(f"Já existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
         return redirect(url_for("mapa_interpolado"))
     # Mesmo motivo do pop em `save_weather_station_override` -- sem isso,
     # `_weather_cache` continuava servindo o clima da coordenada ANTIGA
@@ -4485,12 +4485,12 @@ def send_site_whatsapp(site_name):
         if numero:
             telefone = _telefone_from_form(request.form)
             if not _is_valid_phone(telefone):
-                flash(f"Numero '{numero}' invalido -- use DDD + numero (ex.: 65 99999-9999), com o codigo do pais ao lado.", "error")
+                flash(f"Número '{numero}' inválido -- use DDD + número (ex.: 65 99999-9999), com o código do país ao lado.", "error")
                 return redirect(url_for("recommendations", safra=safra))
             if telefone not in dict(destinos):
                 destinos.append((telefone, f"numero digitado ({telefone})"))
         if not destinos:
-            flash("Escolha pelo menos um destinatario ou digite um numero.", "error")
+            flash("Escolha pelo menos um destinatário ou digite um número.", "error")
             return redirect(url_for("recommendations", safra=safra))
     ok_texto, ok_pdf, message = _enviar_whatsapp_manual_escalonado(site_name, safra, enviar_texto, enviar_pdf, destinos=destinos)
     ok = (ok_texto if enviar_texto else True) and (ok_pdf if enviar_pdf else True)
@@ -6014,7 +6014,7 @@ def agrofit_enviar_arquivo():
         flash("Escolha o arquivo do Agrofit (.csv ou .zip).", "warning")
         return redirect(url_for("admin_fungicidas"))
     if agrofit_dados.status()["baixando"]:
-        flash("Ja' tem uma atualizacao da base em andamento -- aguarde terminar.", "warning")
+        flash("Já tem uma atualização da base em andamento -- aguarde terminar.", "warning")
         return redirect(url_for("admin_fungicidas"))
     destino = agrofit_dados.INDICE_PATH.with_suffix(".upload")
     arquivo.save(destino)
@@ -6617,13 +6617,13 @@ def admin_create_user():
     if _RANK_NIVEL.get(nivel, 0) > _rank_atual():
         nivel = "usuario"
     if not username:
-        flash("Usuario e obrigatorio.", "error")
+        flash("Usuário é obrigatório.", "error")
     elif not _is_valid_email(email):
-        flash("Informe um email valido.", "error")
+        flash("Informe um email válido.", "error")
     elif not _is_valid_phone(telefone):
-        flash("Informe um numero de telefone valido, com codigo do pais (ex.: 5511999999999).", "error")
+        flash("Informe um número de telefone válido, com código do país (ex.: 5511999999999).", "error")
     elif models.get_user_by_username(username):
-        flash("Ja existe um usuario com esse nome.", "error")
+        flash("Já existe um usuário com esse nome.", "error")
     else:
         models.create_user(
             username, models.DEFAULT_PASSWORD, nivel != "usuario", email=email, telefone=telefone,
@@ -6701,10 +6701,10 @@ def admin_reset_password(user_id):
     if not user_row:
         abort(404)
     if user_row["is_master"] and current_user.username != ALAN_MAURO_USERNAME:
-        flash("So' o Alan Mauro pode redefinir a senha de um usuario Master.", "error")
+        flash("Só o Alan Mauro pode redefinir a senha de um usuário Master.", "error")
         return redirect(url_for("admin_users"))
     if _RANK_NIVEL[_nivel_acesso(user_row)] > _rank_atual():
-        flash("Voce nao pode redefinir a senha de um usuario com nivel acima do seu.", "error")
+        flash("Você não pode redefinir a senha de um usuário com nível acima do seu.", "error")
         return redirect(url_for("admin_users"))
     models.set_user_password(user_id, models.DEFAULT_PASSWORD)
     flash(f"Senha de '{user_row['username']}' redefinida para '{models.DEFAULT_PASSWORD}'.", "success")
@@ -6724,7 +6724,7 @@ def change_password():
         elif not nova or len(nova) < 6:
             flash("A nova senha precisa ter pelo menos 6 caracteres.", "error")
         elif nova != confirmar:
-            flash("A confirmacao nao bate com a nova senha.", "error")
+            flash("A confirmação não bate com a nova senha.", "error")
         else:
             models.set_user_password(int(current_user.id), nova)
             flash("Senha alterada com sucesso.", "success")
@@ -6761,14 +6761,14 @@ def admin_subordinado_whatsapp_pausado(subordinado_id):
 def admin_delete_user(user_id):
     user_row = models.get_user_by_id(user_id)
     if str(user_id) == current_user.id:
-        flash("Voce nao pode excluir o proprio usuario logado.", "error")
+        flash("Você não pode excluir o próprio usuário logado.", "error")
     elif user_row and user_row["is_master"] and current_user.username != ALAN_MAURO_USERNAME:
-        flash("So' o Alan Mauro pode excluir um usuario Master.", "error")
+        flash("Só o Alan Mauro pode excluir um usuário Master.", "error")
     elif user_row and _RANK_NIVEL[_nivel_acesso(user_row)] > _rank_atual():
-        flash("Voce nao pode excluir um usuario com nivel acima do seu.", "error")
+        flash("Você não pode excluir um usuário com nível acima do seu.", "error")
     else:
         models.delete_user(user_id)
-        flash("Usuario excluido.", "success")
+        flash("Usuário excluído.", "success")
     return redirect(url_for("admin_users"))
 
 
@@ -6857,11 +6857,11 @@ def reativar_fazenda_oculta():
             cards = _resolve_site_cards(site, _load_translations())
             if cards:
                 liberados[site] = max(c["data"] for c in cards)
-            flash(f"'{_nome_exibicao(site)}' reativada -- doencas e recomendacoes voltam a aparecer "
+            flash(f"'{_nome_exibicao(site)}' reativada -- doenças e recomendações voltam a aparecer "
                   "(ate' chegar leitura nova do BioScout).", "success")
         else:
             liberados.pop(site, None)
-            flash(f"'{_nome_exibicao(site)}' bloqueada de novo (so' clima, sem doencas).", "success")
+            flash(f"'{_nome_exibicao(site)}' bloqueada de novo (só clima, sem doenças).", "success")
         models.set_setting(_BLOQUEIO_LIBERADO_KEY, json.dumps(liberados))
     return redirect(url_for("fazendas_ocultas"))
 
@@ -6941,7 +6941,7 @@ def admin_exportar_download():
     conteudo = buffer.getvalue()
     destino = _save_export_copy_local(conteudo, filename)
     if destino:
-        flash(f"Copia tambem salva em {destino}.", "success")
+        flash(f"Cópia também salva em {destino}.", "success")
     return send_file(
         buffer, as_attachment=True, download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -6992,7 +6992,7 @@ def admin_restaurar_backup():
             flash(erro, "error")
             return redirect(url_for("admin_restaurar_backup"))
         logout_user()  # o id do usuario logado pode ser outro no banco restaurado
-        flash("Backup restaurado no QAP. Entre de novo com o seu usuario e senha da producao.", "success")
+        flash("Backup restaurado no QAP. Entre de novo com o seu usuário e senha da produção.", "success")
         return redirect(url_for("login"))
     return render_template("admin_restaurar_backup.html")
 
@@ -7018,7 +7018,7 @@ def qap_primeiro_acesso():
         if erro:
             flash(erro, "error")
             return redirect(url_for("qap_primeiro_acesso"))
-        flash("Backup restaurado no QAP. Entre com o seu usuario e senha da producao.", "success")
+        flash("Backup restaurado no QAP. Entre com o seu usuário e senha da produção.", "success")
         return redirect(url_for("login"))
     return render_template("admin_restaurar_backup.html", primeiro_acesso=True)
 
@@ -7144,7 +7144,7 @@ def admin_user_subordinados(user_id):
             numero = re.sub(r"\D", "", request.form.get("numero_telefone", ""))
             codigo = re.sub(r"\D", "", request.form.get("codigo_pais", "")) or "55"
             if not nome or not numero:
-                flash("Nome e telefone sao obrigatorios pra adicionar um subordinado.", "error")
+                flash("Nome e telefone são obrigatórios para adicionar um subordinado.", "error")
             else:
                 models.create_subordinado(user_id, nome, codigo + numero)
                 flash(f"Subordinado '{nome}' adicionado.", "success")

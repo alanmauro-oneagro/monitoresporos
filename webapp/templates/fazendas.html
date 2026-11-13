@@ -39,7 +39,7 @@
 <h4 class="mb-2">Manejos</h4>
 
 {% if no_access %}
-<div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
+<div class="alert alert-warning">Seu usuário ainda não tem fazendas liberadas.</div>
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda cadastrada ainda.</div>
 {% else %}
@@ -131,7 +131,7 @@
                         <form method="post" action="{{ url_for('save_farm_espacamento') }}" class="d-flex align-items-center gap-1 mb-0" data-autosave>
                             <input type="hidden" name="site_name" value="{{ site_group.site }}">
                             <input type="hidden" name="safra" value="{{ safra_group.safra }}">
-                            <label class="small text-muted mb-0" for="espacamento_{{ farm_idx }}_{{ safra_group.safra }}">Espacamento:</label>
+                            <label class="small text-muted mb-0" for="espacamento_{{ farm_idx }}_{{ safra_group.safra }}">Espaçamento:</label>
                             <input type="text" name="espacamento" id="espacamento_{{ farm_idx }}_{{ safra_group.safra }}"
                                    class="form-control form-control-sm" style="max-width: 130px;"
                                    value="{{ safra_group.espacamento }}" placeholder="Ex.: 45 cm">

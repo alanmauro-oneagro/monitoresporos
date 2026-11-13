@@ -92,7 +92,7 @@
 {% endif %}
 
 {% if no_access %}
-<div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
+<div class="alert alert-warning">Seu usuário ainda não tem fazendas liberadas.</div>
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda encontrada.</div>
 {% else %}
@@ -175,7 +175,7 @@
                 </div>
                 <a class="btn btn-sm btn-outline-primary acao-pdf" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
                    title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- PDF vem so' com o clima{% else %}Gerar PDF com clima, recomendacoes, produtos, datas de plantio e de pulverizacao -- pra encaminhar pra alguem{% endif %}">
-                    📄 <span class="d-none d-sm-inline">Recomendacao (PDF)</span><span class="d-sm-none">Abrir PDF</span>
+                    📄 <span class="d-none d-sm-inline">Recomendação (PDF)</span><span class="d-sm-none">Abrir PDF</span>
                 </a>
                 <div class="form-check mb-0 acao-chk-texto" title="Incluir o texto no envio por WhatsApp">
                     <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}" id="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}"{% if not wa_ok %} disabled{% endif %}>
@@ -208,7 +208,7 @@
                             </label>
                         </div>
                         {% else %}
-                        <div class="small text-muted mb-1">Nenhum numero cadastrado pra essa fazenda.</div>
+                        <div class="small text-muted mb-1">Nenhum número cadastrado para essa fazenda.</div>
                         {% endfor %}
                         <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + número, sem espaços -- não fica salvo)</label>
                         <div class="d-flex gap-2">

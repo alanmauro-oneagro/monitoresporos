@@ -16,7 +16,7 @@
 {% for p in planos %}
 <div class="card shadow-sm mb-3">
     <div class="card-body">
-        <h5 class="mb-1">{{ p.nome }}</h5>
+        <div class="plano-nome mb-1">{{ p.nome }}</div>
         {% if p.preco_por_area %}<div class="preco-box"><div class="preco-sub">Preço pela área plantada</div></div>{% elif p.valor <= 0 %}<div class="preco-box"><div class="preco-parcela">Grátis 7 dias</div></div>{% else %}{{ p | parcelas_plano }}{% endif %}
         {% if p.descricao %}<p class="small text-muted mb-2">{{ p.descricao }}</p>{% endif %}
         <ul class="small mb-3 ps-3">

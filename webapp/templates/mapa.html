@@ -36,7 +36,7 @@
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
     <div class="form-check form-switch mb-0">
         <input class="form-check-input" type="checkbox" role="switch" id="chuva-toggle">
-        <label class="form-check-label small fw-bold" for="chuva-toggle">🌧️ Previsao de chuva (acumulado 24h, troca de dia automatica)</label>
+        <label class="form-check-label small fw-bold" for="chuva-toggle">🌧️ Previsão de chuva (acumulado 24h, troca de dia automática)</label>
     </div>
     <span id="chuva-status" class="small text-muted d-none"></span>
 </div>
@@ -106,7 +106,7 @@
     function buildTooltipHtml(site) {
         if (site.tipo === 'clima') {
             return '<div class="mapa-tooltip"><div class="mapa-tt-title">' + escapeHtml(site.nome_exibicao) + '</div>' +
-                '<div class="mapa-tt-data">☁️ Ponto de referencia de clima (sem monitoramento de doenca)</div></div>';
+                '<div class="mapa-tt-data">☁️ Ponto de referência de clima (sem monitoramento de doença)</div></div>';
         }
         if (site.inativo) {
             // Sem leitura nova ha mais de 15 dias -- nao mostra leitura

@@ -31,7 +31,7 @@
                 <input type="text" name="nome" class="form-control form-control-sm" value="{{ sub.nome }}" required>
             </div>
             <div class="col-md-6">
-                <label class="form-label small text-muted mb-1">Telefone (DDD + numero, sem espacos)</label>
+                <label class="form-label small text-muted mb-1">Telefone (DDD + número, sem espaços)</label>
                 <div class="d-flex gap-2">
                     <input type="text" name="codigo_pais__{{ sub.id }}" class="form-control form-control-sm" style="max-width: 5.5rem;" value="{{ sub.codigo_pais }}" aria-label="Codigo do pais">
                     <input type="text" name="numero_telefone__{{ sub.id }}" class="form-control form-control-sm" value="{{ sub.numero_telefone }}" placeholder="11999999999" required>
@@ -79,7 +79,7 @@
                     <input type="text" name="nome" class="form-control" required>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Telefone (DDD + numero, sem espacos)</label>
+                    <label class="form-label">Telefone (DDD + número, sem espaços)</label>
                     <div class="d-flex gap-2">
                         <input type="text" name="codigo_pais" class="form-control" style="max-width: 5.5rem;" value="55">
                         <input type="text" name="numero_telefone" class="form-control" placeholder="11999999999" required>

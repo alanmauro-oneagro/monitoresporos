@@ -131,7 +131,7 @@
                         <label class="form-check-label small" for="est_{{ fz.idx }}_fazenda">Coordenada da própria fazenda (só se tiver estação meteorológica própria)</label>
                     </div>
                     {% if not fz.estacoes_proximas %}
-                    <div class="small text-muted mt-1">Nenhuma estacao oficial perto o suficiente encontrada -- usando a coordenada da propria fazenda.</div>
+                    <div class="small text-muted mt-1">Nenhuma estação oficial perto o suficiente -- usando a coordenada da própria fazenda.</div>
                     {% endif %}
                     {% for estacao in fz.estacoes_proximas %}
                     <div class="form-check">
@@ -150,7 +150,7 @@
                             id="est_{{ fz.idx }}_salva" checked>
                         <label class="form-check-label small" for="est_{{ fz.idx }}_salva">
                             {% if fz.estacao_selecionada == '__interp3__' %}🔀 Interpolacao das 3 estacoes (escolha salva){% else %}📡 Estacao salva ({{ fz.estacao_selecionada }}){% endif %}
-                            <span class="text-muted">-- fora da lista agora (catalogo de estacoes indisponivel no momento); continua valendo</span>
+                            <span class="text-muted">-- fora da lista agora (catálogo de estações indisponível no momento); continua valendo</span>
                         </label>
                     </div>
                     {% endif %}

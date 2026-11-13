@@ -109,7 +109,7 @@
 
 <div class="card shadow-sm mt-4">
     <div class="card-body p-4 form-compact">
-        <h5 class="mb-3">Novo usuário</h5>
+        <h6 class="mb-3">Novo usuário</h6>
         <form method="post" action="{{ url_for('admin_create_user') }}">
             <div class="mb-3 row g-2">
                 <div class="col-md-4">
@@ -121,7 +121,7 @@
                     <input type="email" name="email" class="form-control" required>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Telefone (DDD + numero, sem espacos)</label>
+                    <label class="form-label">Telefone (DDD + número, sem espaços)</label>
                     <div class="d-flex gap-2">
                         <input type="text" name="codigo_pais" class="form-control" style="max-width: 5.5rem;" value="55">
                         <input type="text" name="numero_telefone" class="form-control" placeholder="11999999999" required>
@@ -131,9 +131,9 @@
             <div class="mb-3" style="max-width: 420px;">
                 <label class="form-label" for="nivel">Acesso</label>
                 <select name="nivel" id="nivel" class="form-select">
-                    <option value="usuario">Usuário -- so as fazendas liberadas</option>
+                    <option value="usuario">Usuário -- só as fazendas liberadas</option>
                     {% if current_user.is_admin %}
-                    <option value="admin">Administrador -- todas as fazendas e a aba Configuracoes</option>
+                    <option value="admin">Administrador -- todas as fazendas e a aba Configurações</option>
                     {% endif %}
                     {% if current_user.username == 'Alan Mauro' %}
                     <option value="master">Master -- tudo, inclusive configuracoes gerais</option>

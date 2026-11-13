@@ -230,7 +230,7 @@ class AssinaturasTest(unittest.TestCase):
     def test_conta_junta_culturas_e_sem_excluir(self):
         self._cadastrar("Zzz Teste Conta")
         html = self.client.get("/app").get_data(as_text=True)
-        self.assertIn("Minha conta", html)
+        self.assertIn(">Conta</h1>", html)
         self.assertIn("Trocar senha", html)
         self.assertIn("Fazendas monitoradas", html)
         self.assertNotIn("Excluir minha conta", html)
