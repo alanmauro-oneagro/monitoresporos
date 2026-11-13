@@ -1275,6 +1275,28 @@ def set_user_pref(user_id, chave, valor):
     conn.close()
 
 
+_NDVI_NUVENS_KEY = "ndvi_nuvens_por_fazenda"
+
+
+def get_ndvi_nuvens():
+    """% maximo de nuvens escolhido em cada fazenda na aba NDVI (pedido do Alan, 13/11/2026) -- {site: int}."""
+    try:
+        dados = json.loads(get_setting(_NDVI_NUVENS_KEY) or "{}")
+        return {k: int(v) for k, v in dados.items()} if isinstance(dados, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def set_ndvi_nuvens(site_name, pct):
+    """Grava o limite de nuvens da fazenda (None = volta ao padrao)."""
+    dados = get_ndvi_nuvens()
+    if pct is None:
+        dados.pop(site_name, None)
+    else:
+        dados[site_name] = int(pct)
+    set_setting(_NDVI_NUVENS_KEY, json.dumps(dados))
+
+
 _NDVI_OCULTAS_KEY = "ndvi_fazendas_ocultas"
 
 

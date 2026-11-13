@@ -14,7 +14,7 @@
             <div class="form-check">
                 <input class="form-check-input report-site-checkbox" type="checkbox" name="site_ids" value="{{ site.id }}"
                     id="site{{ site.id }}" {% if site.id in report_ids %}checked{% endif %}>
-                <label class="form-check-label" for="site{{ site.id }}">{{ site.site_name }}</label>
+                <label class="form-check-label" for="site{{ site.id }}">{{ nome_fazenda(site.site_name) }}</label>
             </div>
             {% endfor %}
         </div>

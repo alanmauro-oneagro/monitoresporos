@@ -946,3 +946,43 @@ class DoencaNomeEditadoTest(unittest.TestCase):
         models.save_disease_translation(en, en, "Botrytis spp.")
         models.ensure_disease_translations([en], mapa)
         self.assertEqual(models.get_all_disease_translations()[en]["nome_pt"], en)
+
+
+class PermissoesNomeENdviNuvensTest(unittest.TestCase):
+    """Permissoes com o nome de exibicao e limite de nuvens do NDVI (pedido do Alan, 13/11/2026)."""
+
+    @classmethod
+    def setUpClass(cls):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        models.sync_sites(["Zzz Fazenda Perm Real"])
+        models.set_site_display_name("Zzz Fazenda Perm Real", "Zzz Nome Novo Perm")
+        if not models.get_user_by_username("Zzz Master Perm"):
+            models.create_user("Zzz Master Perm", "x", is_master=True)
+        if not models.get_user_by_username("Zzz Usuario Perm"):
+            models.create_user("Zzz Usuario Perm", "x")
+
+    def _cliente(self):
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Perm")["id"])
+            s["_fresh"] = True
+        return c
+
+    def test_permissoes_mostram_nome_de_exibicao(self):
+        uid = models.get_user_by_username("Zzz Usuario Perm")["id"]
+        c = self._cliente()
+        for url in (f"/admin/users/{uid}/permissions",):
+            h = c.get(url).get_data(as_text=True)
+            self.assertIn("Zzz Nome Novo Perm", h)
+            self.assertNotIn(">Zzz Fazenda Perm Real<", h)
+
+    def test_nuvens_ndvi(self):
+        c = self._cliente()
+        r = c.post("/ndvi/nuvens", data={"site_name": "Zzz Fazenda Perm Real", "nuvens": "20"}, headers={"X-Autosave": "1"})
+        self.assertTrue(r.get_json()["ok"])
+        self.assertEqual(models.get_ndvi_nuvens()["Zzz Fazenda Perm Real"], 20)
+        r = c.post("/ndvi/nuvens", data={"site_name": "Zzz Fazenda Perm Real", "nuvens": "17"}, headers={"X-Autosave": "1"})
+        self.assertFalse(r.get_json()["ok"])
+        c.post("/ndvi/nuvens", data={"site_name": "Zzz Fazenda Perm Real", "nuvens": ""}, headers={"X-Autosave": "1"})
+        self.assertNotIn("Zzz Fazenda Perm Real", models.get_ndvi_nuvens())

@@ -699,6 +699,12 @@ site tem que entrar la'.
 - **Caixas de esporos em Recomendações** (`.mini-card` em base.html, pedido do Alan, 13/11/2026): no
   maximo 8rem de largura; nome grande quebra em 2+ linhas em vez de esticar a caixa. Alertas (`.disease-card`)
   igual: nome/cientifico grande quebra dentro da caixa e as caixas de cada linha ficam da mesma altura.
+- **NDVI e permissoes** (pedido do Alan, 13/11/2026): telas de fazendas liberadas (`admin_permissions.html`,
+  `admin_report_permissions.html`) mostram o nome de exibicao (template global `nome_fazenda`), nao o `site_name`.
+  Na aba NDVI: "Nuvens até" por fazenda (`NDVI_OPCOES_NUVENS`, setting `ndvi_nuvens_por_fazenda`,
+  `models.get/set_ndvi_nuvens`, rota `salvar_ndvi_nuvens`, salva sozinho; vazio = padrao 5% no Pre-visualizar e 3%
+  no automatico) vale no Pre-visualizar e no envio automatico; "📋 Copiar mensagem" copia o texto das imagens
+  marcadas (mesma legenda do envio) pra mandar a mao; "Recebem o NDVI" fica no rodape do cartao.
 - **Manejos -- TS/Sulco/Folha em boxes** (pedido do Alan, 12/11/2026): cada secao recolhida
   (▶, `.secao-toggle`, numero de boxes preenchidas ao lado) com boxes iguais a Aplicacoes: Data
   aplicacao, Talhao, Fungicidas quimicos, Fungicidas biologicos (campos `cx_*_<momento>`); 1 box
