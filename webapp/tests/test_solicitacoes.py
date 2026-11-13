@@ -27,6 +27,10 @@ def _form(**extra):
         "mensagem": "Quero acompanhar a ferrugem", "senha": "segredo1", "senha_confirmar": "segredo1", "aceite": "on",
     }
     dados.update(extra)
+    # E-mail e grupo economico obrigatorios no produtor (pedido do Alan, 13/11/2026).
+    if not dados.get("email"):
+        dados["email"] = dados["username"].lower().replace(" ", ".") + "@teste.invalid"
+    dados.setdefault("grupo_economico", "Grupo Zzz Teste")
     return dados
 
 
@@ -148,22 +152,25 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("Cereais <span class=\"text-muted\">-- área para o preço: 1.000 ha</span>", html)
         self.assertEqual(webapp._culturas_com_area("Soja, Milho (2.000 ha)"), [("Soja", None), ("Milho", "2.000 ha")])
 
-    def test_tecnico_nao_escolhe_plano_e_ve_contato(self):
-        """Tecnico do setor: sem planos no cadastro, so' o contato (pedido do Alan, 08/11/2026)."""
+    def test_tecnico_e_representante_so_deixam_contato(self):
+        """Tecnico do setor / Quero representar a OneAgro: nome, empresa, WhatsApp e e-mail; nao cria conta,
+        guarda o pedido e mostra o contato da OneAgro (pedido do Alan, 13/11/2026)."""
         html = webapp.app.test_client().get("/solicitar-acesso").get_data(as_text=True)
-        self.assertIn('id="contato-tecnico"', html)
-        for trecho in ("Alan Mauro", "(43) 99114-7595", "wa.me/5543991147595", "mailto:contato@oneagro.com.br"):
+        for trecho in ('id="perfil_representante"', "Quero representar a OneAgro", 'name="empresa"', 'id="botao-avancar"', 'id="etapa-2"'):
             self.assertIn(trecho, html)
-        self.assertNotIn("área para o preço", html)
-        self.assertNotIn("o preço usa a área de Soja", html)
-        plano = models.get_planos(apenas_ativos=True)[0]
+        self.assertNotIn('name="mensagem"', html)
         c = webapp.app.test_client()
-        resp = c.post("/solicitar-acesso", data=_form(username="Zzz Cad Tecnico", numero_telefone="65999990061",
-                                                      modalidade="plano", perfil=["tecnico"], plano_id=str(plano["id"])),
-                      follow_redirects=True)
-        self.assertIn("entre em contato com Alan Mauro", resp.get_data(as_text=True))
-        user = models.get_user_by_username("Zzz Cad Tecnico")
-        self.assertIsNone(models.get_assinatura(user["id"])["plano_id"])  # nenhum plano escolhido
+        dados = {"perfil": "representante", "nome_completo": "Zzz Rep Teste", "empresa": "Zzz Agro", "codigo_pais": "55",
+                 "numero_telefone": "65999990061", "email": "zzz.rep@teste.invalid"}
+        resp = c.post("/solicitar-acesso", data=dados)
+        texto = resp.get_data(as_text=True)
+        for trecho in ("Obrigado, Zzz!", "Alan Mauro", "(43) 99114-7595", "wa.me/5543991147595", "mailto:contato@oneagro.com.br"):
+            self.assertIn(trecho, texto)
+        self.assertIsNone(models.get_user_by_username("Zzz Rep Teste"))
+        pedido = [p for p in models.pedidos_contato() if p["nome"] == "Zzz Rep Teste"][0]
+        self.assertEqual((pedido["perfil"], pedido["empresa"], pedido["telefone"]), ("representante", "Zzz Agro", "5565999990061"))
+        self.assertIn("Informe a empresa", c.post("/solicitar-acesso", data=dict(dados, perfil="tecnico", empresa="")).get_data(as_text=True))
+        models.apagar_pedido_contato(pedido["id"])
 
     def test_perfil_unico_e_varios_tipos_de_cultura(self):
         """Voce e': um so' (radio); Tipo de cultura: varios (pedido do Alan, 08/11/2026)."""
@@ -497,7 +504,8 @@ class CadastroTest(unittest.TestCase):
                           ("Retiro", "Soja (300 ha)", 300.0, "Sorriso", "MT")])
         self.assertEqual((reg["empresa"], reg["cidade"], reg["uf"]), ("Sede", "Sinop", "MT"))  # conta = 1a fazenda
         # fazenda sem cidade/UF: nao segue
-        sem = dict(dados, username="Zzz Cad Locais 4", numero_telefone="65999990246", local_cidade__3="")
+        sem = dict(dados, username="Zzz Cad Locais 4", numero_telefone="65999990246", local_cidade__3="",
+                   email="zzz.cad.locais4@teste.invalid")
         for k in ("extra_nome__1", "numero_telefone__extra1", "extra_nome__2", "numero_telefone__extra2"):
             sem.pop(k)
         self.assertIn("Informe a cidade e o estado de: Retiro",
@@ -573,12 +581,14 @@ class CadastroTest(unittest.TestCase):
         self.assertTrue(c.post("/app/conta/conferir-senha", data={"senha": dados["senha"]}).get_json()["ok"])
         self.assertFalse(c.post("/app/conta/conferir-senha", data={"senha": "errada"}).get_json()["ok"])
         # local sem coordenada: nao segue
-        ruim = dict(dados, username="Zzz Cad Locais 2", numero_telefone="65999990244", local_lat__3="")
+        ruim = dict(dados, username="Zzz Cad Locais 2", numero_telefone="65999990244", local_lat__3="",
+                    email="zzz.cad.locais2@teste.invalid")
         ruim.pop("extra_nome__1"); ruim.pop("numero_telefone__extra1"); ruim.pop("extra_nome__2"); ruim.pop("numero_telefone__extra2")
         html = webapp.app.test_client().post("/solicitar-acesso", data=ruim).get_data(as_text=True)
         self.assertIn("Marque no mapa (ou digite as coordenadas) de: Retiro", html)
         # pessoa extra com celular invalido: nao segue
-        ruim2 = dict(dados, username="Zzz Cad Locais 3", numero_telefone="65999990245", numero_telefone__extra1="123")
+        ruim2 = dict(dados, username="Zzz Cad Locais 3", numero_telefone="65999990245", numero_telefone__extra1="123",
+                     email="zzz.cad.locais3@teste.invalid")
         self.assertIn("Contato 1 que recebe o relatório", webapp.app.test_client().post("/solicitar-acesso", data=ruim2).get_data(as_text=True))
 
     def test_grupo_da_cultura(self):
