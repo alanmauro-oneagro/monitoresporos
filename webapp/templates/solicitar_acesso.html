@@ -104,13 +104,15 @@
         <input class="form-control" style="max-width: 4.5rem;" name="codigo_pais" value="{{ form.get('codigo_pais', '55') }}" inputmode="numeric" aria-label="Código do país">
         <input class="form-control" name="numero_telefone" id="numero_telefone" value="{{ form.get('numero_telefone', '') }}" placeholder="DDD + número" inputmode="tel" required>
     </div>
+    <div class="small text-danger mt-n2 mb-3 d-none" id="telefone-status" aria-live="polite"></div>
     <label class="form-label small mb-1" for="email">E-mail</label>
     <input class="form-control mb-3" type="email" name="email" id="email" value="{{ form.get('email', '') }}" autocomplete="email" required>
+    <div class="small text-danger mt-n2 mb-3 d-none" id="email-status" aria-live="polite"></div>
 
     <fieldset id="fs-produtor">
     {# Grupo economico (pedido do Alan, 08/11/2026): vai antes do nome de cada fazenda no relatorio. #}
-    <label class="form-label small mb-1" for="grupo_economico">Nome do grupo econômico</label>
-    <input class="form-control" name="grupo_economico" id="grupo_economico" value="{{ form.get('grupo_economico', '') }}" maxlength="40" placeholder="Ex.: Grupo Mauro" required>
+    <label class="form-label small mb-1" for="grupo_economico">Nome do grupo econômico <span class="text-muted">(opcional)</span></label>
+    <input class="form-control" name="grupo_economico" id="grupo_economico" value="{{ form.get('grupo_economico', '') }}" maxlength="40" placeholder="Ex.: Grupo Mauro">
     <div class="small text-muted mb-3">Como vai aparecer no relatório, antes do nome de cada fazenda: <em>Grupo Mauro - Faz Mourão</em>.</div>
     {% set culturas_sel = form.getlist('culturas') if form else [] %}
     {# Area por cultura (pedido do Alan, 08/11/2026): marcar a cultura abre o campo da area dela. #}
@@ -502,7 +504,29 @@
     });
     mostrarPerfil();
     // Voltou do servidor com erro: produtor ja' estava na etapa 2.
-    irPara({{ 'true' if form and form.get('senha') else 'false' }} && !soContato() ? 2 : 1);
+    // Celular e e-mail conferidos ao sair do campo (pedido do Alan, 13/11/2026: erro avisado na hora).
+    var urlContato = '{{ url_for("verificar_contato_cadastro") }}';
+    var campoTel = document.getElementById('numero_telefone'), campoEmail = document.getElementById('email');
+    var ddi = form.querySelector('input[name="codigo_pais"]');
+    function aviso(campo, idStatus, texto) {
+        var st = document.getElementById(idStatus);
+        st.textContent = texto || ''; st.classList.toggle('d-none', !texto);
+        campo.setCustomValidity(texto || '');
+        campo.classList.toggle('is-invalid', !!texto);
+    }
+    function conferirContato() {
+        if (soContato()) { aviso(campoTel, 'telefone-status', ''); aviso(campoEmail, 'email-status', ''); return; }
+        var params = new URLSearchParams({ codigo_pais: ddi.value, numero: campoTel.value, email: campoEmail.value });
+        fetch(urlContato + '?' + params.toString()).then(function (r) { return r.json(); }).then(function (d) {
+            aviso(campoTel, 'telefone-status', d.erros.telefone);
+            aviso(campoEmail, 'email-status', d.erros.email);
+        }).catch(function () {});
+    }
+    [campoTel, campoEmail, ddi].forEach(function (c) { c.addEventListener('change', conferirContato); });
+    form.querySelectorAll('input[name="perfil"]').forEach(function (r) { r.addEventListener('change', conferirContato); });
+    if (campoTel.value || campoEmail.value) conferirContato();
+    // Erro do servidor: abre na etapa do campo com problema.
+    irPara({{ etapa_erro or 1 }} === 2 && !soContato() ? 2 : 1);
 })();
 </script>
 {% endif %}

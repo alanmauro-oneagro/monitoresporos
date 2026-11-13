@@ -30,7 +30,6 @@ def _form(**extra):
     # E-mail e grupo economico obrigatorios no produtor (pedido do Alan, 13/11/2026).
     if not dados.get("email"):
         dados["email"] = dados["username"].lower().replace(" ", ".") + "@teste.invalid"
-    dados.setdefault("grupo_economico", "Grupo Zzz Teste")
     return dados
 
 
@@ -159,6 +158,15 @@ class CadastroTest(unittest.TestCase):
         for trecho in ('id="perfil_representante"', "Quero representar a OneAgro", 'name="empresa"', 'id="botao-avancar"', 'id="etapa-2"'):
             self.assertIn(trecho, html)
         self.assertNotIn('name="mensagem"', html)
+        # celular/e-mail conferidos ao digitar (erro avisado na hora)
+        c = webapp.app.test_client()
+        if not models.get_user_by_username("Zzz Ja Tem Conta"):
+            models.create_user("Zzz Ja Tem Conta", "x", telefone="5543999990999", email="ja.tem@teste.invalid")
+        r = c.get("/solicitar-acesso/contato?codigo_pais=55&numero=(43)99999-0999&email=JA.TEM@teste.invalid").get_json()
+        self.assertIn("já está cadastrado", r["erros"]["telefone"])
+        self.assertIn("já está cadastrado", r["erros"]["email"])
+        self.assertEqual(c.get("/solicitar-acesso/contato?codigo_pais=55&numero=43999990998&email=novo@teste.invalid").get_json()["erros"], {})
+        self.assertEqual(set(c.get("/solicitar-acesso/contato?numero=123&email=x").get_json()["erros"]), {"telefone", "email"})
         c = webapp.app.test_client()
         dados = {"perfil": "representante", "nome_completo": "Zzz Rep Teste", "empresa": "Zzz Agro", "codigo_pais": "55",
                  "numero_telefone": "65999990061", "email": "zzz.rep@teste.invalid"}

@@ -198,7 +198,7 @@ que sobraram ao abrir a tela/contar).
 
 **Criar conta em 2 etapas** (pedido do Alan, 13/11/2026; substitui a tela unica): "Você é" = Produtor / Técnico
 do setor / Quero representar a OneAgro (`PERFIS_CADASTRO`). **Produtor** -- etapa 1: Nome completo, Número
-WhatsApp, E-mail (obrigatorio), Nome do grupo econômico (obrigatorio), fazendas (tipo de cultura + blocos Local
+WhatsApp, E-mail (obrigatorio), Nome do grupo econômico (OPCIONAL -- pedido do Alan, 13/11/2026), fazendas (tipo de cultura + blocos Local
 com nome, estado/cidade, culturas/areas e mapa; "+ Adicionar mais fazendas") e "Avançar" (confere os campos no
 navegador e mostra a etapa 2); etapa 2 (`#etapa-2`, fieldset): ← Voltar, Escolha o seu plano, Receber relatório (ate'
 2 contatos so' nome + celular -- o "recebe dos locais" saiu: recebem de todas as fazendas), Usuário (ja' sugerido;
@@ -206,7 +206,10 @@ vazio = `_sugerir_usuario`), Senha/Confirmar, termos e "Criar conta". O campo Me
 Quero representar a OneAgro** (`PERFIS_SO_CONTATO`): Nome completo, Empresa, WhatsApp, E-mail e "Avançar" -> NAO
 cria conta (`_pedido_de_contato`): grava em `pedidos_contato` (`models.registrar_pedido_contato`), avisa os Masters
 no WhatsApp e mostra "Obrigado, <nome>!" com o contato comercial (`CONTATO_COMERCIAL`). Gerenciar Clientes mostra
-"📞 Pedidos de contato" no topo (recolhido, com Apagar -- `admin_pedido_contato_apagar`).
+"📞 Pedidos de contato" no topo (recolhido, com Apagar -- `admin_pedido_contato_apagar`). **Erro avisado na hora** (mesmo dia):
+celular e e-mail conferidos ao sair do campo (`/solicitar-acesso/contato`, `verificar_contato_cadastro`: invalido ou
+ja' cadastrado em outra conta -- `conta_com_contato`); o aviso fica embaixo do campo e trava o "Avançar". Erro que
+volta do servidor abre na etapa do campo com problema (`etapa_erro`: usuario/contatos/senha/termos = 2, resto = 1).
 **Nomes dos planos (pedido do Alan, 09/11/2026)**: Free = **Essencial**,
 Premium = **Avançado**, Premium + Estação = **Inteligência** (Básico igual).
 `models.PLANOS_RENOMEADOS` troca no `init_db` (so' se o nome novo nao

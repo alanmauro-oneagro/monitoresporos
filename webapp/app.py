@@ -7730,6 +7730,26 @@ def verificar_usuario_cadastro():
     })
 
 
+@app.route("/solicitar-acesso/contato")
+def verificar_contato_cadastro():
+    """Confere ao digitar (pedido do Alan, 13/11/2026: erro avisado na hora, nao so' no fim do cadastro) se o
+    celular e o e-mail sao validos e se ja' tem conta com eles."""
+    telefone = re.sub(r"\D", "", request.args.get("codigo_pais", "55")) + re.sub(r"\D", "", request.args.get("numero", ""))
+    email = request.args.get("email", "").strip()
+    erros = {}
+    if request.args.get("numero", "").strip():
+        if not _is_valid_phone(telefone):
+            erros["telefone"] = "Celular inválido -- informe DDD + número."
+        elif models.conta_com_contato(telefone, "") == "telefone":
+            erros["telefone"] = "Este celular já está cadastrado na OneAgro. Entre com a sua conta na tela de login."
+    if email:
+        if not _is_valid_email(email):
+            erros["email"] = "E-mail inválido."
+        elif models.conta_com_contato("", email) == "email":
+            erros["email"] = "Este e-mail já está cadastrado na OneAgro. Entre com a sua conta na tela de login."
+    return jsonify({"erros": erros})
+
+
 # Contato mostrado pro Tecnico do setor no cadastro (pedido do Alan, 08/11/2026).
 CONTATO_COMERCIAL = {"nome": "Alan Mauro", "celular": "(43) 99114-7595", "whatsapp": "5543991147595",
                      "email": "contato@oneagro.com.br"}
@@ -7888,8 +7908,6 @@ def solicitar_acesso():
             erro = "Celular inválido -- informe DDD + número."
         elif not email or not _is_valid_email(email):
             erro = "Informe um e-mail válido."
-        elif not " ".join(form.get("grupo_economico", "").split()):
-            erro = "Informe o nome do grupo econômico."
         elif (ja_cadastrado := models.conta_com_contato(telefone, email)):
             # Mesma pessoa tentando um 2o cadastro (pedido do Alan, 01/11/2026)
             erro = (f"Este {'celular' if ja_cadastrado == 'telefone' else 'e-mail'} já está cadastrado na OneAgro. "
@@ -7917,6 +7935,9 @@ def solicitar_acesso():
             erro = "É preciso aceitar os termos de uso para continuar."
         if erro:
             flash(erro, "error")
+            etapa_erro = 2 if erro in (erro_extras,) or any(t in erro for t in ("usuário", "senha", "confirmação", "termos")) else 1
+            return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR,
+                                   modalidades=MODALIDADES_CADASTRO, perfis=PERFIS_CADASTRO, form=form, etapa_erro=etapa_erro)
         else:
             try:
                 if modalidade == "plano":
