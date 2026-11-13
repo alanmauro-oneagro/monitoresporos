@@ -1010,6 +1010,13 @@ site tem que entrar la'.
   Enquanto a grade e' buscada, o Mapa mostra "Carregando previsão de chuva... XX%" (pedido do Alan, 13/11/2026):
   `weather_forecast.progresso_grade` (lotes feitos / total + tempo dentro do lote, ~1 min cada), devolvido como `pct`
   no 202 de `/chuva/grade`; o navegador pergunta a cada 5 s.
+- **Previsao de chuva mais precisa** (pedido do Alan, 13/11/2026): relatorios (texto, PDF, Recomendações,
+  pontos so' clima) usam a MEDIA de 3 modelos (`weather_forecast.MODELOS_CHUVA` = ECMWF IFS 0,25, GFS, ICON;
+  `_chuva_media_modelos`, 2a chamada por ponto e janela, guardada em `registro["chuva_modelos"]`; falhou = modelo
+  padrao) e mostram a probabilidade de chuva (`precipitation_probability_max` em `_DAILY_CAMPOS` -> `chuva_prob`;
+  texto "12.2 mm (80%)" por `app._prob_chuva`, 3a linha no quadro do PDF, numero pequeno nas telas). No Mapa, alem
+  da grade geral de 1 grau, uma grade FINA de 0,5 grau em volta de cada fazenda (+-1,5 grau, `GRADE_FINA_*` no
+  mapa.html, no maximo 1.500 pontos), buscada depois da geral sem mensagem; onde ela tem valor, vale ela.
 - **Paises na chuva do Mapa** (pedido do Alan, 13/11/2026): `countries.paises_com_estacoes()` = pais com
   provedor de estacao integrado (nao `sem_estacoes`; Chile so' com credencial DMC), SEM consultar o catalogo
   na hora -- antes a Bolivia sumia da previsao de chuva quando o servidor do SENAMHI Bolivia caia (502; o

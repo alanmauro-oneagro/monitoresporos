@@ -52,7 +52,10 @@ STORE_PATH = DATA_DIR / "open_meteo_diario.json"
 HORARIOS_LEITURA = ((4, 45), (11, 45), (17, 45))  # (hora, minuto) de Cuiaba
 DIAS_HISTORICO_GUARDADOS = 400
 _HOURLY_CAMPOS = "temperature_2m,relative_humidity_2m,precipitation,wind_direction_10m"
-_DAILY_CAMPOS = "precipitation_sum,temperature_2m_max,temperature_2m_min,cloud_cover_mean"
+_DAILY_CAMPOS = "precipitation_sum,temperature_2m_max,temperature_2m_min,cloud_cover_mean,precipitation_probability_max"
+# Chuva prevista dos relatorios = media de 3 modelos globais (pedido do Alan, 13/11/2026): a media
+# erra menos que um modelo so'. Sem resposta, fica o modelo padrao (best_match) da leitura normal.
+MODELOS_CHUVA = ("ecmwf_ifs025", "gfs_seamless", "icon_seamless")
 
 _lock = threading.RLock()
 _store = None
@@ -153,16 +156,38 @@ def _ponto(lat, lon, salvar=True):
                 _store["pontos"][chave] = registro
             return registro if registro.get("horas") else None
 
+    chuva_modelos = _chuva_media_modelos(lat, lon) if fonte == "Open-Meteo" else None
     corte = (datetime.now() - timedelta(days=DIAS_HISTORICO_GUARDADOS)).strftime("%Y-%m-%d")
     with _lock:
         horas = dict((registro or {}).get("horas") or {})
         horas.update(novas)
         horas = {t: v for t, v in horas.items() if t >= corte}
-        registro = {"dia": dia, "horas": horas, "daily": daily, "utc_offset": utc_offset, "fonte": fonte}
+        registro = {"dia": dia, "horas": horas, "daily": daily, "utc_offset": utc_offset, "fonte": fonte,
+                    "chuva_modelos": chuva_modelos}
         _store["pontos"][chave] = registro
         if salvar:
             _salvar()
     return registro
+
+
+def _chuva_media_modelos(lat, lon):
+    """{"YYYY-MM-DD": mm} = media da chuva diaria prevista pelos modelos de
+    `MODELOS_CHUVA` (so' os que responderam no dia), ou None em falha."""
+    params = {
+        "latitude": lat, "longitude": lon, "daily": "precipitation_sum",
+        "models": ",".join(MODELOS_CHUVA), "forecast_days": 7, "timezone": "auto",
+    }
+    try:
+        daily = _abrir_json(f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}", timeout=30).get("daily", {})
+    except Exception:
+        return None
+    series = [daily.get(f"precipitation_sum_{m}") or [] for m in MODELOS_CHUVA]
+    saida = {}
+    for i, dia in enumerate(daily.get("time", [])):
+        valores = [s[i] for s in series if i < len(s) and s[i] is not None]
+        if valores:
+            saida[dia] = round(sum(valores) / len(valores), 1)
+    return saida or None
 
 
 def _estacao(country_code, codigo, uf, salvar=True):
@@ -404,13 +429,16 @@ def get_weather_forecast(lat, lon):
     tmax = daily.get("temperature_2m_max", [])
     tmin = daily.get("temperature_2m_min", [])
     nuvens = daily.get("cloud_cover_mean", [])
+    probabilidade = daily.get("precipitation_probability_max", [])
+    media_modelos = registro.get("chuva_modelos") or {}
     previsao = []
     for i in range(len(dias)):
         if dias[i] <= hoje:
             continue
         previsao.append({
             "data": dias[i],
-            "chuva_mm": chuva[i] if i < len(chuva) else None,
+            "chuva_mm": media_modelos.get(dias[i], chuva[i] if i < len(chuva) else None),
+            "chuva_prob": probabilidade[i] if i < len(probabilidade) else None,
             "temp_max": tmax[i] if i < len(tmax) else None,
             "temp_min": tmin[i] if i < len(tmin) else None,
             "nuvens_pct": nuvens[i] if i < len(nuvens) else None,
@@ -487,6 +515,7 @@ def get_weather_forecast_interpolado(coords_list):
         previsao_5_dias.append({
             "data": dias_i[0]["data"],
             "chuva_mm": _media([d["chuva_mm"] for d in dias_i]),
+            "chuva_prob": _media([d.get("chuva_prob") for d in dias_i]),
             "temp_max": _media([d["temp_max"] for d in dias_i]),
             "temp_min": _media([d["temp_min"] for d in dias_i]),
             "nuvens_pct": _media([d["nuvens_pct"] for d in dias_i]),
