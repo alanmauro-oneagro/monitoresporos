@@ -284,3 +284,50 @@ class UmblerTalkTest(unittest.TestCase):
         conn.close()
         self.assertEqual(st, "lido")
         self.assertIsNotNone(rec)
+
+
+class HistoricoStatusTest(unittest.TestCase):
+    """Historico em Gerenciar WhatsApp, quadro de status com Limpar e agendador parado sem WhatsApp
+    (pedido do Alan, 13/11/2026)."""
+
+    @classmethod
+    def setUpClass(cls):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Hist"):
+            models.create_user("Zzz Master Hist", "x", is_master=True)
+
+    def test_quadro_e_limpar(self):
+        site = "Zzz Fazenda Hist"
+        models.log_whatsapp_envio(site, "Zzz A", "5543999990301", True, "enviado [h1]")
+        models.log_whatsapp_envio(site, "Zzz B", "5543999990302", True, "enviado [h2]")
+        models.log_whatsapp_envio(site, "Zzz C", "5543999990303", False, "erro")
+        models.atualizar_status_meta("h2", "read")
+        self.assertEqual(models.contar_status_envio(site), {"enviado": 1, "entregue": 0, "lido": 1, "falhou": 1})
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Hist")["id"])
+            s["_fresh"] = True
+        h = c.get(f"/admin/whatsapp?site={site}").get_data(as_text=True)
+        self.assertIn('id="historico"', h)
+        self.assertIn("Limpar selecionados", h)
+        self.assertNotIn("Histórico de envios", c.get("/admin/exportar").get_data(as_text=True))
+        r = c.post("/admin/whatsapp/historico/limpar", data={"site": site, "status": ["falhou", "lido"]})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(models.contar_status_envio(site), {"enviado": 1, "entregue": 0, "lido": 0, "falhou": 0})
+        models.limpar_status_envio(["enviado"], site)
+
+    def test_agendador_nao_tenta_sem_whatsapp(self):
+        chamados = []
+        with mock.patch.object(webapp, "AMBIENTE_QAP", False), \
+                mock.patch.object(webapp.whatsapp, "conectado", return_value=False), \
+                mock.patch.object(webapp, "_run_scheduled_whatsapp_sends", side_effect=lambda: chamados.append(1)), \
+                mock.patch.object(webapp, "_atualizar_open_meteo_diario"), \
+                mock.patch.object(webapp.agrofit_dados, "atualizar_se_necessario"), \
+                mock.patch.object(webapp.sinal_celular, "atualizar_se_necessario"), \
+                mock.patch.object(webapp.time, "sleep", side_effect=StopIteration):
+            try:
+                webapp._whatsapp_scheduler_loop()
+            except StopIteration:
+                pass
+        self.assertEqual(chamados, [])
