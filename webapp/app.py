@@ -5115,6 +5115,7 @@ def pre_visualizar_ndvi():
         resultado["imagem"], resultado["data"],
         chuva_acumulada_mm=chuva_acumulada, vento_predominante=vento_predominante,
     )
+    resultado["versao"] = int(time.time())  # vai na URL da imagem: o navegador nao reaproveita a pre-visualizacao anterior
     _ndvi_preview_cache[site_name] = (time.time(), resultado)
     mensagem = f"Pre-visualizacao de '{_nome_exibicao(site_name)}' pronta (cena de {resultado['data'].strftime('%d/%m/%Y')}"
     if resultado["cobertura_nuvens"] is not None:
@@ -5130,7 +5131,9 @@ def imagem_ndvi_preview(site_name):
     preview = _get_ndvi_preview(site_name)
     if not preview:
         abort(404)
-    return send_file(io.BytesIO(preview["imagem"]), mimetype="image/png")
+    resposta = send_file(io.BytesIO(preview["imagem"]), mimetype="image/png")
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
 
 
 @app.route("/ndvi/pre_visualizar/confirmar", methods=["POST"])

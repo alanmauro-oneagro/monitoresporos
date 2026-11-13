@@ -986,3 +986,54 @@ class PermissoesNomeENdviNuvensTest(unittest.TestCase):
         self.assertFalse(r.get_json()["ok"])
         c.post("/ndvi/nuvens", data={"site_name": "Zzz Fazenda Perm Real", "nuvens": ""}, headers={"X-Autosave": "1"})
         self.assertNotIn("Zzz Fazenda Perm Real", models.get_ndvi_nuvens())
+
+
+class NdviNuvensNaFazendaTest(unittest.TestCase):
+    """O limite de nuvens vale SOBRE A FAZENDA, nao no quadro inteiro do satelite (pedido do Alan, 13/11/2026)."""
+
+    def _png(self, nuvem, boa):
+        import io
+        from PIL import Image
+        img = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+        px = [(0, 0, 0, 26)] * nuvem + [(0, 150, 0, 255)] * boa
+        for i, cor in enumerate(px):
+            img.putpixel((i % 10, i // 10), cor)
+        b = io.BytesIO()
+        img.save(b, "PNG")
+        return b.getvalue()
+
+    def test_mede_e_escolhe_dia_com_fazenda_limpa(self):
+        import ndvi_service as n
+        self.assertAlmostEqual(n.nuvens_na_fazenda(self._png(30, 70)), 30.0)
+        self.assertIsNone(n.nuvens_na_fazenda(self._png(0, 0)))
+        cenas = [{"properties": {"datetime": f"2026-11-{d:02d}T13:00:00Z", "eo:cloud_cover": c}}
+                 for d, c in ((11, 2), (6, 40), (1, 95))]
+        imagens = {"2026-11-11": self._png(90, 10), "2026-11-06": self._png(3, 97)}
+
+        class Resp:
+            def __init__(self, b):
+                self.b = b
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+            def read(self):
+                return self.b
+
+        def falso(req, timeout=None):
+            import json
+            dia = json.loads(req.data)["input"]["data"][0]["dataFilter"]["timeRange"]["from"][:10]
+            return Resp(imagens[dia])
+
+        aneis = [[[[-56.9, -14.5], [-56.8, -14.5], [-56.8, -14.4], [-56.9, -14.5]]]]
+        from datetime import date
+        with mock.patch.object(n, "_obter_token", return_value=("t", None)), \
+                mock.patch.object(n, "_buscar_cenas", return_value=cenas), \
+                mock.patch.object(n.urllib.request, "urlopen", falso):
+            res, erro = n.buscar_ndvi(aneis, data_alvo=date(2026, 11, 12), cobertura_maxima=5)
+            self.assertIsNone(erro)
+            self.assertEqual(res["data"], date(2026, 11, 6))
+            self.assertEqual(res["cobertura_nuvens"], 3.0)
+            res, erro = n.buscar_ndvi(aneis, data_alvo=date(2026, 11, 12), cobertura_maxima=0)
+            self.assertIsNone(res)
+            self.assertIn("11/11: 90%", erro)
