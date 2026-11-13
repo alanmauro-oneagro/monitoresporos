@@ -1458,10 +1458,9 @@ def _prob_chuva(dia):
 
 
 def _linhas_previsao_chuva(previsao):
-    """Previsao de chuva 2 dias por linha: "09/11: 12.2 mm // 10/11: 3.7 mm"
-    (pedido do Alan, 09/11/2026)."""
-    dias = [f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" + _prob_chuva(d) for d in previsao]
-    return [" // ".join(dias[i:i + 2]) for i in range(0, len(dias), 2)]
+    """Previsao de chuva 1 dia por linha: "09/11: 12.2 mm (80%)" (pedido do Alan, 13/11/2026 --
+    com a probabilidade, a linha de 2 dias quebrava no meio no WhatsApp)."""
+    return [f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" + _prob_chuva(d) for d in previsao]
 
 
 def _format_whatsapp_message(
