@@ -40,7 +40,6 @@
             <th class="plano-col{{ ' plano-novo' if not p }}">
                 {# Fora da tela (pedido do Alan, 07/11/2026), mas o plano continua com eles. #}
                 <input type="hidden" name="max_pontos__{{ k }}" value="{{ p.max_pontos if p else 1 }}">
-                <input type="hidden" name="raio_km__{{ k }}" value="{{ p.raio_km if p else 50 }}">
                 {% if p %}{% for chave in p.recursos if chave in recursos_ocultos %}<input type="hidden" name="recursos__{{ k }}" value="{{ chave }}">{% endfor %}{% endif %}
                 <input class="form-control form-control-sm fw-bold" name="nome__{{ k }}" value="{{ p.nome if p else '' }}" aria-label="Nome do plano"
                        {% if p %}required{% else %}placeholder="Novo plano (opcional)"{% endif %}>
@@ -66,6 +65,10 @@
             <tr><td>Ciclo</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
                 <td class="plano-col{{ ' plano-novo' if not p }}"><select class="form-select form-select-sm" name="ciclo__{{ k }}" aria-label="Ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }} ({{ 12 // _m }}x)</option>{% endfor %}</select></td>
+                {% endfor %}</tr>
+            <tr><td title="Distância de cada estação BioScout instalada até onde o plano atende (é também o raio das fazendas estimadas do plano)">Raio de alcance das estações <span class="fw-normal text-muted">(km)</span></td>
+                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
+                <td class="plano-col{{ ' plano-novo' if not p }}"><input class="form-control form-control-sm" name="raio_km__{{ k }}" value="{{ ('%g' | format(p.raio_km)).replace('.', ',') if p else 50 }}" inputmode="decimal" aria-label="Raio de alcance (km)"></td>
                 {% endfor %}</tr>
             <tr><td>Ordem</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
@@ -271,4 +274,55 @@
     {% if not asaas_webhook_ok %}Falta <code>ASAAS_WEBHOOK_TOKEN</code> -- sem ela o pagamento não libera o acesso sozinho.{% endif %}
     Webhook no Asaas: <code>{{ url_for('asaas_webhook', _external=True) }}</code> (eventos de cobrança e de assinatura).
 </div>
+
+<div class="card shadow-sm mt-4" id="mapa-atendimento">
+    <div class="card-body">
+        <h6 class="mb-2">🗺️ Mapa de atendimento por assinatura</h6>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <label class="small text-muted mb-0" for="plano-mapa">Plano:</label>
+            <select class="form-select form-select-sm" style="width: auto;" id="plano-mapa">
+                {% for p in planos %}<option value="{{ p.id }}" data-raio="{{ p.raio_km }}">{{ p.nome }}</option>{% endfor %}
+            </select>
+            <span class="small text-muted" id="resumo-atendimento"></span>
+        </div>
+        <div id="mapa-atendimento-mapa" style="height: 420px;" class="border rounded"></div>
+        <div class="small text-muted mt-1">Pontos = estações BioScout instaladas; área verde = perímetro atendido no raio do plano.</div>
+    </div>
+</div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+    var estacoes = {{ estacoes_atendimento | tojson }};
+    var el = document.getElementById('mapa-atendimento-mapa');
+    if (!window.L || !el) return;
+    var mapa = L.map(el, { scrollWheelZoom: false }).setView([-15, -54], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(mapa);
+    var circulos = L.layerGroup().addTo(mapa);
+    var pontos = L.layerGroup().addTo(mapa);
+    estacoes.forEach(function (e) {
+        L.circleMarker([e.lat, e.lon], { radius: 5, color: '#0b5d1e', weight: 2, fillColor: '#2f9e44', fillOpacity: 1 })
+            .bindTooltip(e.nome).addTo(pontos);
+    });
+    var sel = document.getElementById('plano-mapa');
+    var resumo = document.getElementById('resumo-atendimento');
+    function desenhar() {
+        circulos.clearLayers();
+        var opt = sel.options[sel.selectedIndex];
+        var campo = opt && document.querySelector('input[name="raio_km__' + opt.value + '"]');
+        var raio = parseFloat(((campo && campo.value) || (opt && opt.dataset.raio) || '0').replace(',', '.')) || 0;
+        estacoes.forEach(function (e) {
+            L.circle([e.lat, e.lon], { radius: raio * 1000, color: '#2f9e44', weight: 1, fillColor: '#69db7c', fillOpacity: 0.25 }).addTo(circulos);
+        });
+        resumo.textContent = estacoes.length + ' estação(ões) · raio de ' + String(raio).replace('.', ',') + ' km';
+        if (estacoes.length && circulos.getLayers().length) {
+            var b = L.featureGroup(circulos.getLayers()).getBounds();
+            if (b.isValid()) mapa.fitBounds(b, { padding: [10, 10] });
+        }
+    }
+    sel.addEventListener('change', desenhar);
+    document.addEventListener('change', function (e) { if (e.target.name && e.target.name.indexOf('raio_km__') === 0) desenhar(); });
+    desenhar();
+})();
+</script>
 {% endblock %}

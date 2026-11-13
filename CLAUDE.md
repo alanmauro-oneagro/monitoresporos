@@ -439,8 +439,13 @@ UMA tabela comparativa (`.tabela-planos`): uma coluna por plano + "Novo
 plano", 1a coluna fixa com o campo (Nome, Valor, Ciclo, Lavouras, Raio,
 Ordem, A' venda, Descricao) e cada aba liberada (`RECURSOS_PLANO`) numa
 linha, com uma caixa por plano; mesmos nomes de campo (`nome__<id>`,
-`recursos__<id>`...) e um Salvar so'. **Linhas fora da tela** (pedido do
-Alan, 07/11/2026): Lavouras, Raio e as abas fazenda_estimada/esporos/
+`recursos__<id>`...) e um Salvar so'. **Raio de alcance das estacoes** (pedido do Alan, 13/11/2026): linha
+"Raio de alcance das estações (km)" de volta na tabela (`raio_km__<id>`; e' tambem o raio das fazendas
+estimadas do plano) e, abaixo, o cartao "🗺️ Mapa de atendimento por assinatura" (`#mapa-atendimento`,
+Leaflet): seletor do plano, estacoes BioScout instaladas (`_estacoes_atendimento`: fazendas reais com
+coordenada, sem as ocultas) com o circulo do raio do plano -- le o raio digitado na tabela, redesenha ao mudar.
+**Linhas fora da tela** (pedido do
+Alan, 07/11/2026): Lavouras e as abas fazenda_estimada/esporos/
 risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na
 tabela, mas o plano continua com elas (campos escondidos no formulario --
 salvar nao apaga; teste `PlanosLinhasForaDaTelaTest`). **Sem limite de lavouras** (pedido do
