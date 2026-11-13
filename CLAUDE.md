@@ -453,7 +453,9 @@ estado (Brasil)" (caixa + km por UF de `UFS_BR`, digitar o km ja' marca; setting
 `_atendimento_config`). O mapa so' mostra estacoes dos paises marcados (pais da fazenda ou pela coordenada,
 `_estacoes_atendimento`) e usa o raio do estado da estacao quando marcado (UF pelo contorno dos estados do IBGE,
 `intrarregiao=UF`, `codarea` -> sigla, `turf.booleanPointInPolygon`), senao o do plano. So' mapa/planejamento: nao
-muda o raio das fazendas estimadas.
+muda o raio das fazendas estimadas. "Países atendidos" tambem recolhido (`<details>`, resumo "-- todos" / lista dos marcados,
+`#resumo-paises`) e Plano + Raio numa linha so' no celular (rotulo "Plano:" so' a partir de `sm`; resumo das
+estacoes na linha de baixo; pedido do Alan, 13/11/2026).
 **Linhas fora da tela** (pedido do
 Alan, 07/11/2026): Lavouras e as abas fazenda_estimada/esporos/
 risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na
