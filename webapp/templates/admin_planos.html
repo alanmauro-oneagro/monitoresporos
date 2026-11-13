@@ -310,7 +310,7 @@
                     <div class="input-group input-group-sm flex-nowrap" style="width: 8.6rem;">
                         <span class="input-group-text"><input class="form-check-input mt-0 me-1" type="checkbox" name="uf_on__{{ uf }}" id="uf_on_{{ uf }}" aria-label="Raio próprio para {{ uf }}" {% if uf in atendimento.raio_uf %}checked{% endif %}><label for="uf_on_{{ uf }}" class="mb-0">{{ uf }}</label></span>
                         <input type="number" class="form-control" name="uf_raio__{{ uf }}" min="1" max="2000" step="1" inputmode="decimal"
-                               value="{{ '%g' | format(atendimento.raio_uf[uf]) if uf in atendimento.raio_uf else '' }}" placeholder="km" aria-label="Raio (km) em {{ uf }}">
+                               value="{{ '%g' | format(atendimento.raio_uf[uf]) if uf in atendimento.raio_uf else '' }}" placeholder="km" aria-label="Raio em {{ uf }} (km)">
                     </div>
                     {% endfor %}
                 </div>
