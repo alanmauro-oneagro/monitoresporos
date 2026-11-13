@@ -793,6 +793,10 @@ site tem que entrar la'.
   (`display_name_en`), menos as anotacoes por fazenda (`recommendation_notes.doenca` =
   nome em portugues): `models.save_disease_translation` leva as anotacoes pro nome novo.
   Nome igual ao de outra doenca e' recusado (aviso no autosave, fica o nome antigo).
+  **Nome editado nunca volta pra traducao** (pedido do Alan, 13/11/2026; ex.: "Grey Mould", doenca do Chile que
+  deve ficar em ingles): coluna `disease_translations.nome_editado` (1 quando o nome muda no `save_disease_translation`);
+  `ensure_disease_translations` nao traduz linha editada, `merge_duplicate_disease_translations` (Grey Mould x Grey mould)
+  fica com o nome editado e `doencas_sem_traducao` ignora a editada (sem selo "Sem tradução"). Teste `DoencaNomeEditadoTest`.
 - **Doenca nova do BioScout** (pedido do Alan, 11/11/2026): `data_reader.DOENCA_MAP` traz o nome
   em portugues (Brown Spot = Mancha Parda, Purple Seed Stain = Mancha Púrpura, White Mould = Mofo
   Branco e outros nomes comuns); `models.ensure_disease_translations` tambem troca pra portugues a

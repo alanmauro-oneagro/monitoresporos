@@ -919,3 +919,30 @@ class AppClienteCulturasSiteTest(unittest.TestCase):
         d = webapp.app.test_client()
         resp = d.post("/login", data={"username": "Zzz Cli Sem Site", "password": "segredo1"}, follow_redirects=True)
         self.assertTrue(resp.request.path.endswith("/app"))  # plano sem Site: Culturas
+
+
+class DoencaNomeEditadoTest(unittest.TestCase):
+    """Nome trocado a mao (mesmo de volta pro ingles) nunca e' traduzido sozinho (pedido do Alan, 13/11/2026)."""
+
+    def test_nome_em_ingles_escolhido_a_mao_fica(self):
+        models.init_db()
+        en, en2 = "Zzz Grey Mould", "Zzz Grey mould"
+        mapa = {en: "Zzz Mofo Cinzento", en2: "Zzz Mofo Cinzento"}
+        models.ensure_disease_translations([en], mapa)
+        self.assertEqual(models.get_all_disease_translations()[en]["nome_pt"], "Zzz Mofo Cinzento")
+        models.save_disease_translation(en, en, "Botrytis spp.")  # Master troca de volta pro ingles
+        models.ensure_disease_translations([en], mapa)
+        self.assertEqual(models.get_all_disease_translations()[en]["nome_pt"], en)
+        self.assertNotIn(en, webapp.doencas_sem_traducao())
+        # grafia duplicada vinda de outro dispositivo: a juncao mantem o nome escolhido
+        conn = models.get_db()
+        conn.execute("INSERT INTO disease_translations (display_name_en, nome_pt) VALUES (?, ?)", (en2, "Zzz Mofo Cinzento"))
+        conn.commit()
+        conn.close()
+        models.merge_duplicate_disease_translations({en2: en})
+        models.ensure_disease_translations([en], mapa)
+        self.assertEqual(models.get_all_disease_translations()[en]["nome_pt"], en)
+        # salvar o formulario de novo com o mesmo nome nao desmarca
+        models.save_disease_translation(en, en, "Botrytis spp.")
+        models.ensure_disease_translations([en], mapa)
+        self.assertEqual(models.get_all_disease_translations()[en]["nome_pt"], en)

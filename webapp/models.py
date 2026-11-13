@@ -724,6 +724,8 @@ def init_db():
         ("germ_temp_min", "REAL"), ("germ_temp_max", "REAL"), ("germ_ur_min", "REAL"),
         ("germ_molhamento_horas", "REAL"), ("germ_agua_livre_inibe", "INTEGER NOT NULL DEFAULT 0"),
         ("criado_em", "TEXT"),  # quando a doenca entrou (destaque de "nova" por 3 dias, 11/11/2026)
+        # Nome trocado a mao em Doencas/Culturas: nunca mais e' traduzido sozinho (pedido do Alan, 13/11/2026).
+        ("nome_editado", "INTEGER NOT NULL DEFAULT 0"),
     ]:
         try:
             conn.execute(f"ALTER TABLE disease_translations ADD COLUMN {coluna} {tipo}")
@@ -1556,11 +1558,11 @@ def ensure_disease_translations(display_names, default_map, scientific_map=None)
     # Doenca que entrou com o nome em ingles e depois ganhou traducao no
     # DOENCA_MAP passa pro nome em portugues (nunca troca nome editado nem
     # repete o nome de outra doenca) -- pedido do Alan, 11/11/2026.
-    linhas = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico FROM disease_translations").fetchall()
+    linhas = conn.execute("SELECT display_name_en, nome_pt, nome_cientifico, nome_editado FROM disease_translations").fetchall()
     usados = {(r["nome_pt"] or "").lower() for r in linhas}
     for r in linhas:
         novo = default_map.get(r["display_name_en"])
-        if novo and r["nome_pt"] == r["display_name_en"] and novo.lower() not in usados:
+        if novo and not r["nome_editado"] and r["nome_pt"] == r["display_name_en"] and novo.lower() not in usados:
             conn.execute("UPDATE disease_translations SET nome_pt = ? WHERE display_name_en = ?", (novo, r["display_name_en"]))
             usados.add(novo.lower())
         cient = r["nome_cientifico"] or ""
@@ -1588,7 +1590,7 @@ def merge_duplicate_disease_translations(canonico_por_atual):
     (`_load_translations` em app.py); barata quando nao ha' nada pra'
     juntar, se auto-cura sozinha sem precisar de migracao manual."""
     conn = get_db()
-    rows = conn.execute(f"SELECT {_DISEASE_INFO_COLUMNS} FROM disease_translations").fetchall()
+    rows = conn.execute(f"SELECT {_DISEASE_INFO_COLUMNS}, nome_editado FROM disease_translations").fetchall()
     por_atual = {r["display_name_en"]: dict(r) for r in rows}
 
     grupos = {}
@@ -1620,8 +1622,11 @@ def merge_duplicate_disease_translations(canonico_por_atual):
             dup = por_atual[sobra]
             # Nome digitado no site nunca se perde na juncao (pedido do Alan, 12/11/2026):
             # se a que fica ainda tem o nome em ingles e a outra foi renomeada, vale o renomeado.
-            if (base.get("nome_pt") or "").lower() in grafias and dup.get("nome_pt") \
-                    and dup["nome_pt"].lower() not in grafias:
+            # Nome editado a mao (mesmo que seja o proprio nome em ingles) sempre ganha (13/11/2026).
+            if dup.get("nome_editado") and not base.get("nome_editado") and dup.get("nome_pt"):
+                base["nome_pt"], base["nome_editado"] = dup["nome_pt"], 1
+            elif not base.get("nome_editado") and (base.get("nome_pt") or "").lower() in grafias \
+                    and dup.get("nome_pt") and dup["nome_pt"].lower() not in grafias:
                 base["nome_pt"] = dup["nome_pt"]
             if not base.get("nome_cientifico") and dup.get("nome_cientifico"):
                 base["nome_cientifico"] = dup["nome_cientifico"]
@@ -1642,12 +1647,14 @@ def merge_duplicate_disease_translations(canonico_por_atual):
         conn.execute(
             """
             UPDATE disease_translations
-            SET nome_pt = ?, nome_cientifico = ?, germ_temp_min = ?, germ_temp_max = ?, germ_ur_min = ?, germ_molhamento_horas = ?
+            SET nome_pt = ?, nome_cientifico = ?, germ_temp_min = ?, germ_temp_max = ?, germ_ur_min = ?, germ_molhamento_horas = ?,
+                nome_editado = ?
             WHERE display_name_en = ?
             """,
             (
                 base.get("nome_pt") or canonico, base.get("nome_cientifico"), base.get("germ_temp_min"),
-                base.get("germ_temp_max"), base.get("germ_ur_min"), base.get("germ_molhamento_horas"), canonico,
+                base.get("germ_temp_max"), base.get("germ_ur_min"), base.get("germ_molhamento_horas"),
+                1 if base.get("nome_editado") else 0, canonico,
             ),
         )
     conn.commit()
@@ -1658,6 +1665,14 @@ def merge_duplicate_disease_translations(canonico_por_atual):
 # risco de infeccao pelo clima nos relatorios. Chave com prefixo proprio
 # pra nunca colidir com um displayName do BioScout.
 MANUAL_DISEASE_PREFIX = "manual:"
+
+
+def doencas_nome_editado():
+    """display_name_en das doencas com nome trocado a mao em Doencas/Culturas."""
+    conn = get_db()
+    rows = conn.execute("SELECT display_name_en FROM disease_translations WHERE nome_editado = 1").fetchall()
+    conn.close()
+    return {r["display_name_en"] for r in rows}
 
 
 def is_manual_disease(display_name_en):
@@ -1716,12 +1731,14 @@ def save_disease_translation(display_name_en, nome_pt, nome_cientifico=""):
     if antigo and antigo["nome_pt"] and antigo["nome_pt"] != nome_pt:
         conn.execute("UPDATE OR IGNORE recommendation_notes SET doenca = ? WHERE doenca = ?", (nome_pt, antigo["nome_pt"]))
         conn.execute("DELETE FROM recommendation_notes WHERE doenca = ?", (antigo["nome_pt"],))
+    editado = 1 if antigo and antigo["nome_pt"] and antigo["nome_pt"] != nome_pt else 0
     conn.execute(
         """
-        INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico) VALUES (?, ?, ?)
-        ON CONFLICT(display_name_en) DO UPDATE SET nome_pt = excluded.nome_pt, nome_cientifico = excluded.nome_cientifico
+        INSERT INTO disease_translations (display_name_en, nome_pt, nome_cientifico, nome_editado) VALUES (?, ?, ?, ?)
+        ON CONFLICT(display_name_en) DO UPDATE SET nome_pt = excluded.nome_pt, nome_cientifico = excluded.nome_cientifico,
+            nome_editado = MAX(disease_translations.nome_editado, excluded.nome_editado)
         """,
-        (display_name_en, nome_pt, nome_cientifico),
+        (display_name_en, nome_pt, nome_cientifico, editado),
     )
     conn.commit()
     conn.close()
