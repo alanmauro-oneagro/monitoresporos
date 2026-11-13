@@ -8589,7 +8589,7 @@ def _criar_fazenda_estimada_da_lavoura(user_id, ponto_id, nome, lat, lon, plano,
         nome_fazenda = base if tentativa == 1 else f"{base} {tentativa}"
         try:
             site_name = models.create_virtual_farm(
-                nome_fazenda, lat, lon, (plano or {}).get("raio_km") or 50, criado_por=username,
+                nome_fazenda, lat, lon, _raio_cliente(models.uf_do_cliente_ponto(ponto_id), plano), criado_por=username,
                 country_code=countries.detectar_pais_por_coordenada(lat, lon), tipo="doenca",
             )
         except sqlite3.IntegrityError:
@@ -8908,7 +8908,8 @@ def _cards_ponto_cliente(ponto, plano):
     cards_reais = get_dashboard_data(None, _load_translations())
     ocultas = models.get_deactivated_site_names()
     coords_reais = {s: c for s, c in data_reader.read_site_coordinates().items() if s not in ocultas}
-    cards, vizinhas = virtual_farms.interpolar_cards(ponto["lat"], ponto["lon"], plano["raio_km"], cards_reais, coords_reais)
+    cards, vizinhas = virtual_farms.interpolar_cards(ponto["lat"], ponto["lon"], _raio_cliente(ponto.get("uf"), plano),
+                                                     cards_reais, coords_reais)
     corte = (_hoje_cuiaba() - timedelta(days=DADOS_BLOQUEIO_DIAS)).isoformat()
     cards = [c for c in cards if c.get("data") and c["data"] >= corte]
     cultura = ponto["cultura"] or CULTURA_TODOS
@@ -9485,6 +9486,34 @@ def _atendimento_config():
     return {"paises": paises, "raio_uf": {uf: float(v) for uf, v in raio_uf.items() if uf in UFS_BR}}
 
 
+def _raio_cliente(uf, plano):
+    """Raio da fazenda estimada do cliente: o do estado (Planos e Valores > raio por estado) se o
+    estado tiver; senao o do plano (pedido do Alan, 13/11/2026)."""
+    raio_uf = _atendimento_config()["raio_uf"]
+    uf = (uf or "").strip().upper()
+    return raio_uf.get(uf) or (plano or {}).get("raio_km") or 50
+
+
+def _aplicar_raio_estados(antes, depois):
+    """Leva o raio por estado pras fazendas estimadas que ja' existem: estado com raio -> esse raio;
+    estado que perdeu o raio -> volta pro raio do plano do cliente. Devolve quantas mudaram."""
+    mudou = 0
+    for f in models.fazendas_estimadas_de_clientes():
+        uf = (f["uf"] or "").strip().upper()
+        if uf in depois:
+            novo = depois[uf]
+        elif uf in antes:
+            assinatura = models.get_assinatura(f["user_id"]) or {}
+            plano = models.get_plano(assinatura["plano_id"]) if assinatura.get("plano_id") else None
+            novo = (plano or {}).get("raio_km") or 50
+        else:
+            continue
+        if abs((f["raio_km"] or 0) - novo) > 1e-9:
+            models.set_virtual_farm_raio(f["site_name"], novo)
+            mudou += 1
+    return mudou
+
+
 @app.route("/admin/planos/atendimento", methods=["POST"])
 @master_required
 def admin_planos_atendimento():
@@ -9499,9 +9528,12 @@ def admin_planos_atendimento():
             continue
         if 0 < km <= 2000:
             raio_uf[uf] = km
+    antes = _atendimento_config()["raio_uf"]
     models.set_setting(_ATENDIMENTO_PAISES, json.dumps(paises))
     models.set_setting(_ATENDIMENTO_RAIO_UF, json.dumps(raio_uf))
-    return _save_response("Atendimento salvo.", "admin_planos")
+    mudou = _aplicar_raio_estados(antes, raio_uf)
+    return _save_response("Atendimento salvo." + (f" Raio atualizado em {mudou} fazenda(s) estimada(s)." if mudou else ""),
+                          "admin_planos")
 
 
 # Tabela de apoio pra precificar em dolar pela area monitorada (pedido do
