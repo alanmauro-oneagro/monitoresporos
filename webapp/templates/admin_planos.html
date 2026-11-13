@@ -278,21 +278,22 @@
 <div class="card shadow-sm mt-4" id="mapa-atendimento">
     <div class="card-body">
         <h6 class="mb-2">🗺️ Mapa de atendimento por assinatura</h6>
-        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <label class="small text-muted mb-0" for="plano-mapa">Plano:</label>
-            <select class="form-select form-select-sm" style="width: auto;" id="plano-mapa">
+        <div class="d-flex flex-nowrap align-items-center gap-2 mb-1">
+            <label class="small text-muted mb-0 d-none d-sm-inline" for="plano-mapa">Plano:</label>
+            <select class="form-select form-select-sm flex-grow-1" style="min-width: 0; max-width: 14rem;" id="plano-mapa">
                 {% for p in planos %}<option value="{{ p.id }}" data-raio="{{ p.raio_km }}">{{ p.nome }}</option>{% endfor %}
             </select>
             <label class="small text-muted mb-0" for="raio-mapa">Raio:</label>
-            <div class="input-group input-group-sm" style="width: 8.5rem;">
-                <input type="number" class="form-control" id="raio-mapa" min="1" max="1000" step="1" inputmode="decimal" aria-label="Raio de alcance (km)">
-                <span class="input-group-text">km</span>
+            <div class="input-group input-group-sm flex-nowrap flex-shrink-0" style="width: 6.2rem;">
+                <input type="number" class="form-control px-1" id="raio-mapa" min="1" max="1000" step="1" inputmode="decimal" aria-label="Raio de alcance (km)">
+                <span class="input-group-text px-1">km</span>
             </div>
-            <span class="small text-muted" id="resumo-atendimento"></span>
         </div>
+        <div class="small text-muted mb-2" id="resumo-atendimento"></div>
         <form method="post" action="{{ url_for('admin_planos_atendimento') }}" data-autosave id="form-atendimento" class="mb-2">
-            <div class="small fw-semibold mb-1">Países atendidos</div>
-            <div class="d-flex flex-wrap gap-3 mb-2">
+            <details class="mb-2">
+                <summary class="small fw-semibold">Países atendidos <span class="text-muted fw-normal" id="resumo-paises"></span></summary>
+            <div class="d-flex flex-wrap gap-3 mt-1">
                 {% for cod, nome in paises_atendimento %}
                 {% set n_est = estacoes_atendimento | selectattr('pais', 'equalto', cod) | list | length %}
                 <div class="form-check mb-0">
@@ -302,6 +303,7 @@
                 </div>
                 {% endfor %}
             </div>
+            </details>
             <details {% if atendimento.raio_uf %}open{% endif %}>
                 <summary class="small fw-semibold">Raio de trabalho por estado (Brasil){% if atendimento.raio_uf %} <span class="text-muted fw-normal">-- {{ atendimento.raio_uf | length }} estado(s) com raio próprio</span>{% endif %}</summary>
                 <div class="small text-muted my-1">Marque o estado e digite o raio; estado sem marca usa o raio do plano.</div>
@@ -356,6 +358,12 @@
             });
             desenhar(false);
         }).catch(function () {});
+    function resumirPaises() {
+        var marcados = Array.from(formAt.querySelectorAll('input[name="pais_atendido"]:checked'))
+            .map(function (i) { return i.nextElementSibling.textContent.replace(/\s*\(\d+\)\s*$/, '').trim(); });
+        var total = formAt.querySelectorAll('input[name="pais_atendido"]').length;
+        document.getElementById('resumo-paises').textContent = '-- ' + (marcados.length === total ? 'todos' : (marcados.join(', ') || 'nenhum'));
+    }
     function paisesMarcados() {
         return Array.from(formAt.querySelectorAll('input[name="pais_atendido"]:checked')).map(function (i) { return i.value; });
     }
@@ -427,7 +435,8 @@
             desenhar(false);
         }
     });
-    formAt.addEventListener('change', function () { desenhar(false); });
+    formAt.addEventListener('change', function () { resumirPaises(); desenhar(false); });
+    resumirPaises();
     formAt.addEventListener('input', function (e) {
         // Digitou o raio do estado: ja' marca a caixa dele.
         if (e.target.name && e.target.name.indexOf('uf_raio__') === 0 && e.target.value) {
