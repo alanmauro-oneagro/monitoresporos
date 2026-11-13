@@ -1007,6 +1007,10 @@ site tem que entrar la'.
   ja' passaram e devolve sempre 6 -- antes, da meia-noite ate' a leitura das 04:45 (ou com a leitura falhando)
   a grade guardada era de ontem e o ultimo dia do ciclo ficava vazio. No mapa.html o ciclo automatico pula dia
   sem dado (`malhaChuva.comDados`).
+- **Paises na chuva do Mapa** (pedido do Alan, 13/11/2026): `countries.paises_com_estacoes()` = pais com
+  provedor de estacao integrado (nao `sem_estacoes`; Chile so' com credencial DMC), SEM consultar o catalogo
+  na hora -- antes a Bolivia sumia da previsao de chuva quando o servidor do SENAMHI Bolivia caia (502; o
+  catalogo dela e o do Peru nao ficam no repo e se perdiam a cada deploy).
 - **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
   "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
   (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no

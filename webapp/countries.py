@@ -313,27 +313,15 @@ def active_country_codes(site_country_map):
 
 
 def paises_com_estacoes():
-    """Codigos de pais cujo provedor de estacoes ja' devolve pelo menos
-    uma estacao de verdade -- ou seja, ja tem integracao funcionando
-    (INMET, e agora DMC do Chile com credencial configurada), nao so'
-    fronteira cadastrada. Pais com `sem_estacoes.py` como provedor nunca
-    entra aqui (devolve [] sempre), entao um pais "so com fronteira
-    pronta" (a maioria da America do Sul agora) nunca aparece no
-    Mapa/Mapa Interpolado incondicionalmente -- so' quando tiver fazenda
-    de verdade la (`active_country_codes`). Usado junto com
-    `active_country_codes` pra decidir quais paises mostrar mesmo sem
-    fazenda ainda: "mostra se ja tem estacao oficial de verdade pra
-    referenciar", pedido explicito do usuario.
-
-    Busca em PARALELO (thread por pais) -- mesmo motivo de
-    `estacoes_mais_proximas_global`: sequencial somaria o timeout de
-    cada provedor (chega a acontecer todo dia -- o cache de 24h expira
-    e essa funcao e' chamada de novo em toda visita a /mapa e
-    /mapa-interpolado)."""
-    def _tem_estacoes(item):
-        code, info = item
-        return code if info["station_provider"].get_estacoes() else None
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(COUNTRIES)) as executor:
-        resultados = executor.map(_tem_estacoes, COUNTRIES.items())
-    return {code for code in resultados if code}
+    """Codigos de pais com integracao de estacao oficial (provedor que nao
+    e' `sem_estacoes`; o Chile so' com a credencial da DMC configurada) --
+    entram no Mapa/Mapas de Estudo (camada de chuva e contorno) mesmo sem
+    fazenda la'. NAO depende do catalogo responder agora (pedido do Alan,
+    13/11/2026): antes contava so' quem devolvia estacao na hora, e com o
+    servidor do SENAMHI Bolivia fora do ar (502) a Bolivia sumia da
+    previsao de chuva do Mapa."""
+    return {
+        code for code, info in COUNTRIES.items()
+        if info["station_provider"] is not sem_estacoes
+        and getattr(info["station_provider"], "credenciais_configuradas", lambda: True)()
+    }
