@@ -100,3 +100,73 @@ class WhatsappDesconectadoTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ApiOficialMetaTest(unittest.TestCase):
+    """Parametros da API oficial da Meta (pedido do Alan, 13/11/2026): webhook, modelos sem PDF e NDVI."""
+
+    @classmethod
+    def setUpClass(cls):
+        import whatsapp_cloud_api
+        cls.w = whatsapp_cloud_api
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+
+    def _assinar(self, corpo, segredo):
+        import hashlib
+        import hmac
+        return "sha256=" + hmac.new(segredo.encode(), corpo, hashlib.sha256).hexdigest()
+
+    def test_webhook_verificacao_e_avisos(self):
+        import json
+        c = webapp.app.test_client()
+        with mock.patch.object(self.w, "WEBHOOK_VERIFY_TOKEN", "zzz-token"), mock.patch.object(self.w, "APP_SECRET", "zzz-segredo"):
+            r = c.get("/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=zzz-token&hub.challenge=123")
+            self.assertEqual((r.status_code, r.get_data(as_text=True)), (200, "123"))
+            self.assertEqual(c.get("/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=errado&hub.challenge=1").status_code, 403)
+            models.log_whatsapp_envio("Zzz Fazenda Meta", "Zzz Pessoa", "5565999990001", True, "Modelo oficial (resumo): enviado [wamid.ZZZ1]")
+            corpo = json.dumps({"entry": [{"changes": [{"value": {
+                "statuses": [{"id": "wamid.ZZZ1", "status": "read"}],
+                "contacts": [{"wa_id": "5565999990001", "profile": {"name": "Zzz Pessoa"}}],
+                "messages": [{"from": "5565999990001", "type": "text", "text": {"body": "Zzz obrigado"}}],
+            }}]}]}).encode()
+            self.assertEqual(c.post("/webhooks/whatsapp", data=corpo, content_type="application/json",
+                                    headers={"X-Hub-Signature-256": "sha256=errado"}).status_code, 403)
+            r = c.post("/webhooks/whatsapp", data=corpo, content_type="application/json",
+                       headers={"X-Hub-Signature-256": self._assinar(corpo, "zzz-segredo")})
+            self.assertEqual(r.status_code, 200)
+        log = [l for l in models.get_whatsapp_envio_log(site_name="Zzz Fazenda Meta")]
+        self.assertEqual(log[0]["status_meta"], "lido")
+        self.assertTrue(any(m["texto"] == "Zzz obrigado" for m in models.whatsapp_recebidas()))
+        # falha da Meta marca a linha como falha
+        models.atualizar_status_meta("wamid.ZZZ1", "failed", "Fora da janela")
+        log = models.get_whatsapp_envio_log(site_name="Zzz Fazenda Meta")
+        self.assertEqual((log[0]["ok"], log[0]["status_meta"]), (0, "falhou (Fora da janela)"))
+
+    def test_modelos_texto_e_ndvi(self):
+        enviados = []
+        with mock.patch.object(self.w, "_configurado", return_value=True), \
+                mock.patch.object(self.w, "_upload_media", return_value=(True, "MEDIA1")), \
+                mock.patch.object(self.w, "_post_json", side_effect=lambda p, payload, **k: (enviados.append(payload) or True, {"messages": [{"id": "wamid.X"}]})):
+            ok, msg = self.w.send_relatorio_texto_modelo("5565999990001", ["Zzz", "Fazenda", "13/11/2026", "Ferrugem\\n(Perigo)"])
+            self.assertEqual((ok, msg), (True, "enviado [wamid.X]"))
+            ok, msg = self.w.send_ndvi_modelo("5565999990001", b"png", ["Zzz", "Fazenda", "13/11/2026"])
+            self.assertTrue(ok)
+        texto, ndvi = enviados
+        self.assertEqual(texto["template"]["name"], self.w.TEMPLATE_RELATORIO_TEXTO)
+        self.assertEqual(len(texto["template"]["components"]), 1)  # so' corpo, sem cabecalho
+        self.assertEqual(ndvi["template"]["name"], self.w.TEMPLATE_NDVI)
+        self.assertEqual(ndvi["template"]["components"][0]["parameters"][0]["image"]["id"], "MEDIA1")
+
+    def test_tela_mostra_parametros_sem_valor(self):
+        if not models.get_user_by_username("Zzz Master Meta"):
+            models.create_user("Zzz Master Meta", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Meta")["id"])
+            s["_fresh"] = True
+        with mock.patch.object(self.w, "ACCESS_TOKEN", "zzz-segredo-nao-mostrar"):
+            html = c.get("/admin/whatsapp").get_data(as_text=True)
+        self.assertIn("WHATSAPP_CLOUD_PHONE_NUMBER_ID", html)
+        self.assertIn("/webhooks/whatsapp", html)
+        self.assertNotIn("zzz-segredo-nao-mostrar", html)

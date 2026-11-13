@@ -79,7 +79,7 @@
                             <span class="badge bg-danger">Falha</span>
                             {% endif %}
                         </td>
-                        <td class="small text-muted">{{ l.mensagem or '-' }}</td>
+                        <td class="small text-muted">{% if l.status_meta %}<span class="badge bg-light text-dark border me-1" title="Aviso da Meta">{{ l.status_meta }}</span>{% endif %}{{ l.mensagem or '-' }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

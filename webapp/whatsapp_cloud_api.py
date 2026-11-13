@@ -150,6 +150,15 @@ def _upload_media(file_bytes, mime_type, filename):
         return False, f"API oficial do WhatsApp nao respondeu (upload): {exc}"
 
 
+def _resultado_envio(ok, resultado):
+    """(ok, mensagem). O id da mensagem (wamid) vai no texto do historico de envios: o webhook acha
+    a linha por ele pra marcar entregue/lido/falhou (pedido do Alan, 13/11/2026)."""
+    if not ok:
+        return False, resultado
+    wamid = (((resultado or {}).get("messages") or [{}])[0] or {}).get("id") if isinstance(resultado, dict) else None
+    return True, f"enviado [{wamid}]" if wamid else "enviado"
+
+
 def get_status():
     """Equivalente ao `whatsapp.get_status()` do bridge, no mesmo formato
     ({"connected", "qr", "pairingCode", "error"}) pra' a tela
@@ -197,7 +206,7 @@ def send_whatsapp(phone, text):
         "type": "text",
         "text": {"body": text, "preview_url": False},
     })
-    return (True, "enviado") if ok else (False, resultado)
+    return _resultado_envio(ok, resultado)
 
 
 def send_whatsapp_document(phone, pdf_bytes, filename, caption=None):
@@ -222,7 +231,7 @@ def send_whatsapp_document(phone, pdf_bytes, filename, caption=None):
         "type": "document",
         "document": documento,
     })
-    return (True, "enviado") if ok else (False, resultado)
+    return _resultado_envio(ok, resultado)
 
 
 def send_whatsapp_image(phone, imagem_bytes, caption=None):
@@ -246,7 +255,7 @@ def send_whatsapp_image(phone, imagem_bytes, caption=None):
         "type": "image",
         "image": imagem,
     })
-    return (True, "enviado") if ok else (False, resultado)
+    return _resultado_envio(ok, resultado)
 
 
 # Modelo do relatorio (aprovado no WhatsApp Manager -- categoria Utilidade,
@@ -255,6 +264,14 @@ def send_whatsapp_image(phone, imagem_bytes, caption=None):
 # fixa pro site). Nome/idioma configuraveis, pra' trocar sem mexer no codigo.
 TEMPLATE_RELATORIO = os.environ.get("WHATSAPP_CLOUD_TEMPLATE_RELATORIO", "relatorio_fazenda")
 TEMPLATE_IDIOMA = os.environ.get("WHATSAPP_CLOUD_TEMPLATE_IDIOMA", "pt_BR")
+# Modelos extras (pedido do Alan, 13/11/2026): relatorio SEM PDF (cliente cujo plano so' tem
+# texto, ponto so' clima) e a imagem do NDVI -- fora da janela de 24h so' modelo aprovado sai.
+TEMPLATE_RELATORIO_TEXTO = os.environ.get("WHATSAPP_CLOUD_TEMPLATE_RELATORIO_TEXTO", "relatorio_fazenda_texto")
+TEMPLATE_NDVI = os.environ.get("WHATSAPP_CLOUD_TEMPLATE_NDVI", "ndvi_fazenda")
+# Webhook da Meta (entregue/lido/falhou + respostas dos clientes): token que voce inventa e
+# cadastra no painel ("Verify token") + chave secreta do app (assinatura de cada aviso).
+WEBHOOK_VERIFY_TOKEN = os.environ.get("WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN", "")
+APP_SECRET = os.environ.get("WHATSAPP_CLOUD_APP_SECRET", "")
 
 
 def _variavel(texto, limite=700):
@@ -293,6 +310,55 @@ def send_relatorio_modelo(phone, pdf_bytes, filename, variaveis):
     return send_whatsapp_template(phone, TEMPLATE_RELATORIO, TEMPLATE_IDIOMA, components)
 
 
+def send_relatorio_texto_modelo(phone, variaveis):
+    """Relatorio SEM PDF pelo modelo `TEMPLATE_RELATORIO_TEXTO` (corpo {{1}}..{{4}}, sem cabecalho):
+    cliente cujo plano so' libera texto e ponto so' clima."""
+    if not phone:
+        return False, "Numero de WhatsApp nao informado."
+    if not _configurado():
+        return False, _erro_configuracao()
+    components = [{"type": "body", "parameters": [{"type": "text", "text": _variavel(v)} for v in variaveis]}]
+    return send_whatsapp_template(phone, TEMPLATE_RELATORIO_TEXTO, TEMPLATE_IDIOMA, components)
+
+
+def send_ndvi_modelo(phone, imagem_bytes, variaveis):
+    """Imagem do NDVI pelo modelo `TEMPLATE_NDVI` (cabecalho IMAGEM + corpo {{1}} nome, {{2}}
+    fazenda, {{3}} data)."""
+    if not phone:
+        return False, "Numero de WhatsApp nao informado."
+    if not _configurado():
+        return False, _erro_configuracao()
+    ok, media_id_ou_erro = _upload_media(imagem_bytes, "image/png", "ndvi.png")
+    if not ok:
+        return False, f"Falha no upload da imagem: {media_id_ou_erro}"
+    components = [
+        {"type": "header", "parameters": [{"type": "image", "image": {"id": media_id_ou_erro}}]},
+        {"type": "body", "parameters": [{"type": "text", "text": _variavel(v, 200)} for v in variaveis]},
+    ]
+    return send_whatsapp_template(phone, TEMPLATE_NDVI, TEMPLATE_IDIOMA, components)
+
+
+def parametros():
+    """Quais variaveis da API oficial estao preenchidas (tela Gerenciar WhatsApp) -- nunca o valor."""
+    return [
+        ("WHATSAPP_PROVIDER", "Liga a API oficial (valor cloud_api)", os.environ.get("WHATSAPP_PROVIDER") == "cloud_api"),
+        ("WHATSAPP_CLOUD_ACCESS_TOKEN", "Token permanente (Usuário do sistema)", bool(ACCESS_TOKEN)),
+        ("WHATSAPP_CLOUD_PHONE_NUMBER_ID", "ID do número (Phone number ID)", bool(PHONE_NUMBER_ID)),
+        ("WHATSAPP_CLOUD_APP_SECRET", "Chave secreta do app (confere os avisos do webhook)", bool(APP_SECRET)),
+        ("WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN", "Token de verificação do webhook (você inventa)", bool(WEBHOOK_VERIFY_TOKEN)),
+    ]
+
+
+def assinatura_valida(corpo, assinatura):
+    """Cabecalho X-Hub-Signature-256 ("sha256=<hex>") = HMAC-SHA256 do corpo com o APP_SECRET."""
+    import hashlib
+    import hmac
+    if not APP_SECRET or not assinatura or not assinatura.startswith("sha256="):
+        return False
+    esperado = hmac.new(APP_SECRET.encode(), corpo, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(esperado, assinatura[7:])
+
+
 def send_whatsapp_template(phone, template_name, language_code="pt_BR", components=None):
     """Mensagem via MODELO pre-aprovado -- o UNICO tipo que a Meta deixa
     a empresa iniciar fora da janela de 24h (ver docstring do modulo,
@@ -316,4 +382,4 @@ def send_whatsapp_template(phone, template_name, language_code="pt_BR", componen
         "type": "template",
         "template": template,
     })
-    return (True, "enviado") if ok else (False, resultado)
+    return _resultado_envio(ok, resultado)

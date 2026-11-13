@@ -166,6 +166,20 @@ class EnvioPorPlanoTest(unittest.TestCase):
         self.assertNotIn("5565999990141", docs)
         self.assertIn("5565999990142", docs)            # Premium: PDF (com o texto junto ou separado)
         self.assertNotIn("5565999990143", textos + docs)  # sem acesso (Free vencido): nada
+        # API oficial da Meta (13/11/2026): plano so' texto vai pelo modelo sem PDF; com PDF, modelo com documento.
+        modelo_texto, modelo_pdf = [], []
+        with webapp.app.app_context(), \
+                mock.patch.object(webapp, "_nivel_dados_site", return_value="ok"), \
+                mock.patch.object(whatsapp, "usa_modelo_oficial", return_value=True), \
+                mock.patch.object(whatsapp, "send_relatorio_texto_modelo",
+                                  side_effect=lambda tel, v: modelo_texto.append(tel) or (True, "ok")), \
+                mock.patch.object(whatsapp, "send_relatorio_modelo",
+                                  side_effect=lambda tel, b, n, v: modelo_pdf.append(tel) or (True, "ok")), \
+                mock.patch.object(whatsapp, "send_whatsapp", side_effect=AssertionError("texto livre na API oficial")):
+            webapp._send_site_whatsapp(site, enviar_texto=True, enviar_pdf=True)
+        self.assertIn("5565999990141", modelo_texto)
+        self.assertIn("5565999990142", modelo_pdf)
+        self.assertNotIn("5565999990143", modelo_texto + modelo_pdf)
 
 
 class FazendaClienteNoMapaDeEstudoTest(unittest.TestCase):

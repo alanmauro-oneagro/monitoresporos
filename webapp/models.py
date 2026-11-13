@@ -732,6 +732,15 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # coluna ja existe (banco criado antes dessa versao)
     try:
+        # Status vindo do webhook da Meta (entregue/lido/falhou) -- pedido do Alan, 13/11/2026.
+        conn.execute("ALTER TABLE whatsapp_envio_log ADD COLUMN status_meta TEXT")
+    except sqlite3.OperationalError:
+        pass  # coluna ja existe
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS whatsapp_recebidas (id INTEGER PRIMARY KEY AUTOINCREMENT, telefone TEXT, "
+        "nome TEXT, texto TEXT, criado_em TEXT)"
+    )
+    try:
         conn.execute("ALTER TABLE farm_produtos ADD COLUMN data_anotacao TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
@@ -1430,6 +1439,37 @@ def set_whatsapp_days_pdf(site_name, weekdays):
     conn.close()
 
 
+def atualizar_status_meta(wamid, status, erro=None):
+    """Aviso do webhook da Meta (pedido do Alan, 13/11/2026): marca a linha do historico cujo texto
+    tem o id da mensagem -- sent/delivered/read/failed. Devolve quantas linhas mudou."""
+    rotulos = {"sent": "enviado", "delivered": "entregue", "read": "lido", "failed": "falhou"}
+    texto = rotulos.get(status, status) + (f" ({erro})" if erro else "")
+    conn = get_db()
+    cur = conn.execute(
+        "UPDATE whatsapp_envio_log SET status_meta = ?, ok = CASE WHEN ? = 'failed' THEN 0 ELSE ok END WHERE mensagem LIKE ?",
+        (texto, status, f"%[{wamid}]%"),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount
+
+
+def registrar_whatsapp_recebida(telefone, nome, texto):
+    """Mensagem que um cliente mandou pro numero da API oficial (webhook da Meta)."""
+    conn = get_db()
+    conn.execute("INSERT INTO whatsapp_recebidas (telefone, nome, texto, criado_em) VALUES (?, ?, ?, ?)",
+                 (telefone, nome, texto, _agora_cuiaba()))
+    conn.commit()
+    conn.close()
+
+
+def whatsapp_recebidas(limite=30):
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM whatsapp_recebidas ORDER BY id DESC LIMIT ?", (limite,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def log_whatsapp_envio(site_name, destinatario, telefone, ok, mensagem):
     """Registra uma tentativa de envio (uma linha por numero, ou uma
     linha so' com destinatario/telefone None quando o envio nem chegou
@@ -1467,7 +1507,7 @@ def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, dias=None, limit
     where = f"WHERE {' AND '.join(condicoes)}" if condicoes else ""
     params.append(limit)
     rows = conn.execute(
-        f"SELECT site_name, destinatario, telefone, ok, mensagem, criado_em "
+        f"SELECT site_name, destinatario, telefone, ok, mensagem, criado_em, status_meta "
         f"FROM whatsapp_envio_log {where} ORDER BY criado_em DESC, id DESC LIMIT ?",
         params,
     ).fetchall()
