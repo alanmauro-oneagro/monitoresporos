@@ -461,7 +461,10 @@ e nos esporos do app (`_cards_ponto_cliente`); salvar o raio por estado leva o v
 como estao). Editar o estado de uma fazenda no app nao muda o raio dela ate' o proximo salvar do raio por estado. "Países atendidos" tambem recolhido (`<details>`, resumo "-- todos" / lista dos marcados,
 `#resumo-paises`) e Plano + Raio numa linha so' no celular (rotulo "Plano:" so' a partir de `sm`; resumo das
 estacoes na linha de baixo; pedido do Alan, 13/11/2026). Estados em ordem alfabetica descendo pelas colunas
-(`.estados-colunas`, CSS `column-width`) e o seletor do mapa ja' abre no plano Avançado (ex-Premium; mesmo dia).
+(`.estados-colunas`, CSS `column-width`) e o seletor do mapa ja' abre no plano Avançado (ex-Premium; mesmo dia). **Raio do plano saiu da tela** (pedido do Alan, 13/11/2026 -- o trabalho agora e' por estado): a linha
+"Raio de alcance das estações" da tabela e a box "Raio [N] km" do mapa sairam; `raio_km__<id>` ficou como campo
+escondido (o plano continua com o raio, que vale pro estado sem marca -- o texto do raio por estado mostra o valor,
+`#raio-plano` -- e pras fazendas estimadas desses estados).
 **Linhas fora da tela** (pedido do
 Alan, 07/11/2026): Lavouras e as abas fazenda_estimada/esporos/
 risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na

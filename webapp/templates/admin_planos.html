@@ -42,6 +42,8 @@
             <th class="plano-col{{ ' plano-novo' if not p }}">
                 {# Fora da tela (pedido do Alan, 07/11/2026), mas o plano continua com eles. #}
                 <input type="hidden" name="max_pontos__{{ k }}" value="{{ p.max_pontos if p else 1 }}">
+                {# Raio saiu da tela (pedido do Alan, 13/11/2026 -- agora e' por estado); o plano continua com ele. #}
+                <input type="hidden" name="raio_km__{{ k }}" value="{{ ('%g' | format(p.raio_km)).replace('.', ',') if p else 50 }}">
                 {% if p %}{% for chave in p.recursos if chave in recursos_ocultos %}<input type="hidden" name="recursos__{{ k }}" value="{{ chave }}">{% endfor %}{% endif %}
                 <input class="form-control form-control-sm fw-bold" name="nome__{{ k }}" value="{{ p.nome if p else '' }}" aria-label="Nome do plano"
                        {% if p %}required{% else %}placeholder="Novo plano (opcional)"{% endif %}>
@@ -67,10 +69,6 @@
             <tr><td>Ciclo</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
                 <td class="plano-col{{ ' plano-novo' if not p }}"><select class="form-select form-select-sm" name="ciclo__{{ k }}" aria-label="Ciclo">{% for c, (rot, _m) in ciclos.items() %}<option value="{{ c }}" {% if p and p.ciclo == c %}selected{% endif %}>{{ rot }} ({{ 12 // _m }}x)</option>{% endfor %}</select></td>
-                {% endfor %}</tr>
-            <tr><td title="Distância de cada estação BioScout instalada até onde o plano atende (é também o raio das fazendas estimadas do plano)">Raio de alcance das estações <span class="fw-normal text-muted">(km)</span></td>
-                {% for p in colunas %}{% set k = p.id if p else 'novo' %}
-                <td class="plano-col{{ ' plano-novo' if not p }}"><input class="form-control form-control-sm" name="raio_km__{{ k }}" value="{{ ('%g' | format(p.raio_km)).replace('.', ',') if p else 50 }}" inputmode="decimal" aria-label="Raio de alcance (km)"></td>
                 {% endfor %}</tr>
             <tr><td>Ordem</td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
@@ -281,16 +279,11 @@
     <div class="card-body">
         <h6 class="mb-2">🗺️ Mapa de atendimento por assinatura</h6>
         <div class="d-flex flex-nowrap align-items-center gap-2 mb-1">
-            <label class="small text-muted mb-0 d-none d-sm-inline" for="plano-mapa">Plano:</label>
+            <label class="small text-muted mb-0" for="plano-mapa">Plano:</label>
             <select class="form-select form-select-sm flex-grow-1" style="min-width: 0; max-width: 14rem;" id="plano-mapa">
                 {% set padrao_mapa = (planos | selectattr('nome', 'in', ['Avançado', 'Premium']) | first) %}
                 {% for p in planos %}<option value="{{ p.id }}" data-raio="{{ p.raio_km }}" {% if padrao_mapa and p.id == padrao_mapa.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
             </select>
-            <label class="small text-muted mb-0" for="raio-mapa">Raio:</label>
-            <div class="input-group input-group-sm flex-nowrap flex-shrink-0" style="width: 6.2rem;">
-                <input type="number" class="form-control px-1" id="raio-mapa" min="1" max="1000" step="1" inputmode="decimal" aria-label="Raio de alcance (km)">
-                <span class="input-group-text px-1">km</span>
-            </div>
         </div>
         <div class="small text-muted mb-2" id="resumo-atendimento"></div>
         <form method="post" action="{{ url_for('admin_planos_atendimento') }}" data-autosave id="form-atendimento" class="mb-2">
@@ -309,7 +302,7 @@
             </details>
             <details {% if atendimento.raio_uf %}open{% endif %}>
                 <summary class="small fw-semibold">Raio de trabalho por estado (Brasil){% if atendimento.raio_uf %} <span class="text-muted fw-normal">-- {{ atendimento.raio_uf | length }} estado(s) com raio próprio</span>{% endif %}</summary>
-                <div class="small text-muted my-1">Marque o estado e digite o raio; estado sem marca usa o raio do plano.</div>
+                <div class="small text-muted my-1">Marque o estado e digite o raio; estado sem marca usa o raio do plano (<span id="raio-plano"></span> km).</div>
                 <div class="estados-colunas">
                     {% for uf in ufs_br | sort %}
                     <div class="input-group input-group-sm flex-nowrap mb-2" style="width: 8.6rem; break-inside: avoid;">
@@ -339,7 +332,6 @@
     var area = L.layerGroup().addTo(mapa);
     var pontos = L.layerGroup().addTo(mapa);
     var sel = document.getElementById('plano-mapa');
-    var caixa = document.getElementById('raio-mapa');
     var resumo = document.getElementById('resumo-atendimento');
     var estilo = { color: '#2f9e44', weight: 2, fillColor: '#69db7c', fillOpacity: 0.3 };
     var formAt = document.getElementById('form-atendimento');
@@ -413,31 +405,10 @@
             if (b.isValid()) mapa.fitBounds(b, { padding: [10, 10] });
         }
         resumo.textContent = ativas.length + ' estação(ões) · ' + figuras + ' área(s) de atendimento';
+        document.getElementById('raio-plano').textContent = String(raioPlano).replace('.', ',');
     }
-    function trocarPlano() { caixa.value = raioAtual() || ''; desenhar(true); }
+    function trocarPlano() { desenhar(true); }
     sel.addEventListener('change', trocarPlano);
-    // Box do raio: escreve no campo do plano na tabela (que salva sozinho) e redesenha.
-    caixa.addEventListener('change', function () {
-        var v = parseFloat(caixa.value);
-        var campo = campoDoPlano();
-        if (!campo || !(v > 0)) { caixa.value = raioAtual() || ''; return; }
-        campo.value = String(v).replace('.', ',');
-        campo.dispatchEvent(new Event('input', { bubbles: true }));
-        campo.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    caixa.addEventListener('input', function () {
-        if (parseFloat(caixa.value) > 0) {
-            var campo = campoDoPlano();
-            if (campo) { campo.value = String(parseFloat(caixa.value)).replace('.', ','); }
-            desenhar(false);
-        }
-    });
-    document.addEventListener('change', function (e) {
-        if (e.target.name && e.target.name.indexOf('raio_km__') === 0) {
-            if (e.target === campoDoPlano()) caixa.value = raioAtual() || '';
-            desenhar(false);
-        }
-    });
     formAt.addEventListener('change', function () { resumirPaises(); desenhar(false); });
     resumirPaises();
     formAt.addEventListener('input', function (e) {
