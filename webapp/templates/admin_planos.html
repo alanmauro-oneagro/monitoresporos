@@ -283,14 +283,20 @@
             <select class="form-select form-select-sm" style="width: auto;" id="plano-mapa">
                 {% for p in planos %}<option value="{{ p.id }}" data-raio="{{ p.raio_km }}">{{ p.nome }}</option>{% endfor %}
             </select>
+            <label class="small text-muted mb-0" for="raio-mapa">Raio:</label>
+            <div class="input-group input-group-sm" style="width: 8.5rem;">
+                <input type="number" class="form-control" id="raio-mapa" min="1" max="1000" step="1" inputmode="decimal" aria-label="Raio de alcance (km)">
+                <span class="input-group-text">km</span>
+            </div>
             <span class="small text-muted" id="resumo-atendimento"></span>
         </div>
         <div id="mapa-atendimento-mapa" style="height: 420px;" class="border rounded"></div>
-        <div class="small text-muted mt-1">Pontos = estações BioScout instaladas; área verde = perímetro atendido no raio do plano.</div>
+        <div class="small text-muted mt-1">Pontos = estações BioScout instaladas; área verde = perímetro atendido no raio do plano (raios que se encontram viram uma figura só). O raio mudado aqui salva no plano.</div>
     </div>
 </div>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 <script>
 (function () {
     var estacoes = {{ estacoes_atendimento | tojson }};
@@ -298,31 +304,72 @@
     if (!window.L || !el) return;
     var mapa = L.map(el, { scrollWheelZoom: false }).setView([-15, -54], 4);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(mapa);
-    var circulos = L.layerGroup().addTo(mapa);
+    var area = L.layerGroup().addTo(mapa);
     var pontos = L.layerGroup().addTo(mapa);
     estacoes.forEach(function (e) {
         L.circleMarker([e.lat, e.lon], { radius: 5, color: '#0b5d1e', weight: 2, fillColor: '#2f9e44', fillOpacity: 1 })
             .bindTooltip(e.nome).addTo(pontos);
     });
     var sel = document.getElementById('plano-mapa');
+    var caixa = document.getElementById('raio-mapa');
     var resumo = document.getElementById('resumo-atendimento');
-    function desenhar() {
-        circulos.clearLayers();
+    var estilo = { color: '#2f9e44', weight: 2, fillColor: '#69db7c', fillOpacity: 0.3 };
+    function campoDoPlano() {
         var opt = sel.options[sel.selectedIndex];
-        var campo = opt && document.querySelector('input[name="raio_km__' + opt.value + '"]');
-        var raio = parseFloat(((campo && campo.value) || (opt && opt.dataset.raio) || '0').replace(',', '.')) || 0;
-        estacoes.forEach(function (e) {
-            L.circle([e.lat, e.lon], { radius: raio * 1000, color: '#2f9e44', weight: 1, fillColor: '#69db7c', fillOpacity: 0.25 }).addTo(circulos);
-        });
-        resumo.textContent = estacoes.length + ' estação(ões) · raio de ' + String(raio).replace('.', ',') + ' km';
-        if (estacoes.length && circulos.getLayers().length) {
-            var b = L.featureGroup(circulos.getLayers()).getBounds();
-            if (b.isValid()) mapa.fitBounds(b, { padding: [10, 10] });
-        }
+        return opt && document.querySelector('input[name="raio_km__' + opt.value + '"]');
     }
-    sel.addEventListener('change', desenhar);
-    document.addEventListener('change', function (e) { if (e.target.name && e.target.name.indexOf('raio_km__') === 0) desenhar(); });
-    desenhar();
+    function raioAtual() {
+        var campo = campoDoPlano(), opt = sel.options[sel.selectedIndex];
+        return parseFloat(((campo && campo.value) || (opt && opt.dataset.raio) || '0').replace(',', '.')) || 0;
+    }
+    // Circulos que se encontram viram UMA figura (uniao geodesica com o Turf); sem o Turf, circulos soltos.
+    function desenhar(enquadrar) {
+        area.clearLayers();
+        var raio = raioAtual();
+        var figuras = 0;
+        if (raio > 0 && estacoes.length) {
+            if (window.turf) {
+                var uniao = null;
+                estacoes.forEach(function (e) {
+                    var c = turf.circle([e.lon, e.lat], raio, { steps: 64, units: 'kilometers' });
+                    uniao = uniao ? (turf.union(uniao, c) || uniao) : c;
+                });
+                var camada = L.geoJSON(uniao, { style: function () { return estilo; } }).addTo(area);
+                figuras = uniao.geometry.type === 'MultiPolygon' ? uniao.geometry.coordinates.length : 1;
+                if (enquadrar) mapa.fitBounds(camada.getBounds(), { padding: [10, 10] });
+            } else {
+                estacoes.forEach(function (e) { L.circle([e.lat, e.lon], Object.assign({ radius: raio * 1000 }, estilo)).addTo(area); });
+                figuras = estacoes.length;
+                if (enquadrar) mapa.fitBounds(L.featureGroup(area.getLayers()).getBounds(), { padding: [10, 10] });
+            }
+        }
+        resumo.textContent = estacoes.length + ' estação(ões) · ' + figuras + ' área(s) de atendimento';
+    }
+    function trocarPlano() { caixa.value = raioAtual() || ''; desenhar(true); }
+    sel.addEventListener('change', trocarPlano);
+    // Box do raio: escreve no campo do plano na tabela (que salva sozinho) e redesenha.
+    caixa.addEventListener('change', function () {
+        var v = parseFloat(caixa.value);
+        var campo = campoDoPlano();
+        if (!campo || !(v > 0)) { caixa.value = raioAtual() || ''; return; }
+        campo.value = String(v).replace('.', ',');
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+        campo.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    caixa.addEventListener('input', function () {
+        if (parseFloat(caixa.value) > 0) {
+            var campo = campoDoPlano();
+            if (campo) { campo.value = String(parseFloat(caixa.value)).replace('.', ','); }
+            desenhar(false);
+        }
+    });
+    document.addEventListener('change', function (e) {
+        if (e.target.name && e.target.name.indexOf('raio_km__') === 0) {
+            if (e.target === campoDoPlano()) caixa.value = raioAtual() || '';
+            desenhar(false);
+        }
+    });
+    trocarPlano();
 })();
 </script>
 {% endblock %}

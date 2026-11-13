@@ -443,7 +443,10 @@ linha, com uma caixa por plano; mesmos nomes de campo (`nome__<id>`,
 "Raio de alcance das estações (km)" de volta na tabela (`raio_km__<id>`; e' tambem o raio das fazendas
 estimadas do plano) e, abaixo, o cartao "🗺️ Mapa de atendimento por assinatura" (`#mapa-atendimento`,
 Leaflet): seletor do plano, estacoes BioScout instaladas (`_estacoes_atendimento`: fazendas reais com
-coordenada, sem as ocultas) com o circulo do raio do plano -- le o raio digitado na tabela, redesenha ao mudar.
+coordenada, sem as ocultas) com o raio do plano -- le o raio digitado na tabela, redesenha ao mudar. Box "Raio
+[N] km" ao lado do seletor (`#raio-mapa`; escreve no `raio_km__<id>` da tabela, que salva sozinho) e raios que se
+encontram viram UMA figura (uniao com Turf 6.5.0 `turf.circle`/`turf.union`; sem Turf, circulos soltos); resumo
+"N estação(ões) · N área(s) de atendimento" (pedido do Alan, 13/11/2026).
 **Linhas fora da tela** (pedido do
 Alan, 07/11/2026): Lavouras e as abas fazenda_estimada/esporos/
 risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na
