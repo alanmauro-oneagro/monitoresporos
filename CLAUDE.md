@@ -270,9 +270,8 @@ Gerenciar Clientes (nem nas sem cadastro, nem no "+ Novo cliente"/Ligar --
 Estudo. Cada linha de fazenda tem "🙈 Ocultar" (`save_site_ativo`; e' o UNICO lugar com Ocultar -- saiu de Manejos de
 novo, pedido do Alan, 12/11/2026); fazenda
 OCULTA some de Gerenciar Clientes (sem cadastro e dentro dos cadastros) e
-fica so' em Gerenciar Fazendas Ocultas. Tamanhos dos cartoes: nome 0.95rem,
-selos 0.7rem, linha da fazenda 0.8rem, filtros 0.78rem (CSS no topo do
-admin_solicitacoes.html). Mapas de Estudo ficou so' com criar/editar ponto
+fica so' em Gerenciar Fazendas Ocultas. Tamanhos dos cartoes = os da aba Manejos (pedido do Alan, 13/11/2026; ver
+"Padrao Manejos" em Tipografia). Mapas de Estudo ficou so' com criar/editar ponto
 (coordenada, raio, tipo) e remover.
 **Mapas de Estudo -- estudo de viabilidade, regua e grupos** (pedido do Alan, 12/11/2026): tipos
 sem parenteses ("🦠 Monitorar doenças", "☁️ Somente clima", "📐 Estudo de viabilidade"). Estudo de
@@ -976,6 +975,13 @@ site tem que entrar la'.
   topo, culturas menores e "Area total · <nome do dono da conta>"
   (`nome_completo`, senao o usuario) -- o total e' de todas as fazendas,
   nao da 1a (antes mostrava "<fazenda> · <cidade>"; pedidos do Alan, 08/11/2026).
+- **Padrao Manejos em todo o site** (pedido do Alan, 13/11/2026): a aba Manejos e' o modelo -- titulo da tela
+  h4 (1.25rem), nome de cada cartao recolhivel 1rem negrito (`.farm-toggle`, `.cad-toggle`, `.doenca-toggle`,
+  `.fung-toggle`, `.grupo-toggle`, `.relatorio-toggle`, `.editar-ponto-toggle` -- regra unica em `_tipografia.html`),
+  secao dentro do cartao (`.secao-toggle`) no tamanho do conteudo, negrito; selos e textos pequenos nos tamanhos do
+  `_tipografia.html` (sairam os tamanhos proprios de Gerenciar Clientes, o `fs-5`/1.15rem de Recomendações e os
+  `font-size` soltos de 0.7-0.78rem em Planos, NDVI e Graficos do app). Componentes de dado (caixas de esporo,
+  quadro do clima, preco, legendas e baloes de mapa) seguem com tamanho proprio.
 - **Revisao geral de padrao** (pedido do Alan, 10/11/2026): titulo de toda tela (h4/h1.titulo,
   20 px) e o `<title>` = nome da aba no menu ("Usuários", "Gráficos", "Manejos", "Mapa",
   "Alertas", "Fungicidas", "Recomendações"...); textos visiveis com acento. Nenhuma tela

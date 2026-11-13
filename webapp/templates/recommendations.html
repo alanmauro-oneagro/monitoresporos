@@ -44,7 +44,6 @@
    [PDF][Texto] (o que vai no envio) / WhatsApp na largura toda /
    [Recomendacao (PDF)][Copiar] com a mesma largura. */
 @media (max-width: 575.98px) {
-    .farm-toggle { font-size: 1.15rem !important; }
     .rec-acoes { display: grid !important; grid-template-columns: 1fr 1fr; gap: 0.4rem !important; width: 100%; margin-left: 0 !important; margin-top: 0.25rem; }
     .rec-acoes .acao-chk-pdf { order: 1; }
     .rec-acoes .acao-chk-texto { order: 2; }
@@ -107,7 +106,7 @@
 <div class="card shadow-sm mb-3 border-success grupo-card" data-grupo="{{ gr.nome }}">
     <div class="card-body">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 grupo-toggle" data-target="grupo-corpo-{{ safra }}-{{ gr.id }}">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold grupo-toggle" data-target="grupo-corpo-{{ safra }}-{{ gr.id }}">
                 <span class="toggle-icon">▶</span> {{ gr.nome }}
             </button>
             {{ selo_plano(gr.sites[0]) }}
@@ -157,7 +156,7 @@
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold fs-5 farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}" data-site="{{ site_group.site }}">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="rec-body-{{ safra }}-{{ outer_loop.index0 }}" data-site="{{ site_group.site }}">
                 <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
             </button>
             {{ selo_plano(site_group.site) }}
@@ -377,8 +376,8 @@
                 </tbody>
             </table>
             </div>
-            {% if site_group.manuais_sem_germinacao or ns.manual %}<div class="text-muted mt-1" style="font-size: 0.75rem;">* Doenças não monitoradas pela estação</div>{% endif %}
-            <div class="d-sm-none text-muted mt-1" style="font-size: 0.75rem;">A = Alto · M = Médio · B = Baixo</div>
+            {% if site_group.manuais_sem_germinacao or ns.manual %}<div class="text-muted small mt-1">* Doenças não monitoradas pela estação</div>{% endif %}
+            <div class="d-sm-none text-muted small mt-1">A = Alto · M = Médio · B = Baixo</div>
         </div>
         {% endif %}
 

@@ -6,21 +6,14 @@
 .cad-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 0.75rem; margin: 0; font-size: 0.85rem; }
 .cad-card dt { color: #6c757d; font-weight: 400; }
 .cad-card dd { margin: 0; overflow-wrap: anywhere; }
-/* Tamanhos padrao dos cartoes (pedido do Alan, 09/11/2026): nome 0.95rem, selos 0.7rem. */
-.cad-toggle { font-size: 0.95rem; font-weight: 600 !important; text-align: left; }
-.cad-card .badge, .grupo-box .badge { font-size: 0.7rem; font-weight: 600; padding: 0.3em 0.55em; }
-.cad-card .text-muted.small, .cad-card .small.text-muted { font-size: 0.75rem; }
-.fazenda-linha { font-size: 0.8rem; }
-.fazenda-linha .fw-semibold { font-size: 0.85rem; }
-.fazenda-linha .btn-sm { font-size: 0.75rem; }
-#filtro-pessoas .btn, .exibir-por .btn { font-size: 0.78rem; }
-details.card > summary { font-size: 0.9rem; }
+/* Tamanhos iguais aos da aba Manejos (pedido do Alan, 13/11/2026 -- ver _tipografia.html). */
+.cad-toggle { text-align: left; }
 .cad-card { margin-bottom: 0.5rem !important; }
 /* Cartoes iguais (pedido do Alan, 10/11/2026): nome sozinho na 1a linha, selos sempre na 2a. */
 .cad-selos { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.3rem; }
 .cad-selos:empty { display: none; }
 .grupo-resumo { margin-top: 0.4rem; }
-.grupo-item { border-top: 1px solid #e9ecef; padding: 0.35rem 0; font-size: 0.85rem; }
+.grupo-item { border-top: 1px solid #e9ecef; padding: 0.35rem 0; }
 .grupo-item .cad-selos { margin-top: 0.2rem; }
 .cad-card > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
 /* Sinal de celular: mesma linha discreta de Manejos (ver _sinal_celular.linha). */
@@ -159,7 +152,7 @@ details.card > summary { font-size: 0.9rem; }
                 {% set pl = c.plano_cliente %}
                 {% if pl and pl.sob_consulta %}<span class="text-muted">preço pela área -- sem valor na tabela de apoio</span>
                 {% elif pl and pl.valor > 0 %}<span class="plano-parcelas"><strong>{{ pl.parcelas }}x de {{ pl.valor_parcela | dinheiro(pl.simbolo) }}</strong>
-                    <span class="text-muted" style="font-size: 0.75rem;">(total {{ pl.valor | dinheiro(pl.simbolo) }})</span>
+                    <span class="text-muted small">(total {{ pl.valor | dinheiro(pl.simbolo) }})</span>
                     {% if c.por_ha_ano %}<span class="badge rounded-pill text-bg-success bg-opacity-25 text-success-emphasis" title="Total do plano em reais / área plantada total">{{ c.por_ha_ano | dinheiro }} por ha/ano</span>{% endif %}</span>{% elif pl %}<span class="text-muted">grátis</span>{% endif %}
             </div>
             <div class="mb-1"><span class="text-muted">Situação:</span> <strong>{{ sit.texto }}</strong></div>
