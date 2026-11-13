@@ -123,7 +123,10 @@ def _ponto(lat, lon, salvar=True):
     dia = janela_de_leitura()
     with _lock:
         registro = _carregar()["pontos"].get(chave)
-        if registro and (registro.get("dia") == dia or _falhou_ha_pouco(registro)):
+        # Leitura guardada antes da media de modelos/probabilidade (13/11/2026) nao tem
+        # "chuva_modelos": busca de novo 1 vez, sem esperar a proxima janela.
+        atual = registro and "chuva_modelos" in registro
+        if registro and ((registro.get("dia") == dia and atual) or _falhou_ha_pouco(registro)):
             return registro if registro.get("horas") else None
     params = {
         "latitude": lat, "longitude": lon,
@@ -156,7 +159,7 @@ def _ponto(lat, lon, salvar=True):
                 _store["pontos"][chave] = registro
             return registro if registro.get("horas") else None
 
-    chuva_modelos = _chuva_media_modelos(lat, lon) if fonte == "Open-Meteo" else None
+    chuva_modelos = (_chuva_media_modelos(lat, lon) if fonte == "Open-Meteo" else None) or (registro or {}).get("chuva_modelos")
     corte = (datetime.now() - timedelta(days=DIAS_HISTORICO_GUARDADOS)).strftime("%Y-%m-%d")
     with _lock:
         horas = dict((registro or {}).get("horas") or {})
