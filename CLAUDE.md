@@ -1017,6 +1017,8 @@ site tem que entrar la'.
   texto "12.2 mm (80%)" por `app._prob_chuva`, 3a linha no quadro do PDF, numero pequeno nas telas). No Mapa, alem
   da grade geral de 1 grau, uma grade FINA de 0,5 grau em volta de cada fazenda (+-1,5 grau, `GRADE_FINA_*` no
   mapa.html, no maximo 1.500 pontos), buscada depois da geral sem mensagem; onde ela tem valor, vale ela.
+  Leitura guardada sem a chave `chuva_modelos` (formato antigo) e' buscada de novo na hora, sem esperar a
+  proxima janela; falha na media dos modelos mantem a media anterior.
 - **Paises na chuva do Mapa** (pedido do Alan, 13/11/2026): `countries.paises_com_estacoes()` = pais com
   provedor de estacao integrado (nao `sem_estacoes`; Chile so' com credencial DMC), SEM consultar o catalogo
   na hora -- antes a Bolivia sumia da previsao de chuva quando o servidor do SENAMHI Bolivia caia (502; o
