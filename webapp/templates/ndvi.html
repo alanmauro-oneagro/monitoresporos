@@ -42,7 +42,7 @@
                         <form method="post" action="{{ url_for('delete_ndvi_car') }}" onsubmit="return confirm('Remover o CAR &quot;{{ car.nome }}&quot; de {{ site_group.nome_exibicao }}?');">
                             <input type="hidden" name="site_name" value="{{ site_group.site }}">
                             <input type="hidden" name="car_id" value="{{ car.id }}">
-                            <button type="submit" class="btn btn-outline-danger py-0 px-2" style="font-size: 0.75rem;" title="Remover esse CAR">Remover</button>
+                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Remover esse CAR">Remover</button>
                         </form>
                     </div>
                     {% endfor %}
@@ -129,7 +129,7 @@
                               onsubmit="return confirm('Remover essa imagem da galeria?');">
                             <input type="hidden" name="site_name" value="{{ site_group.site }}">
                             <input type="hidden" name="historico_id" value="{{ item.id }}">
-                            <button type="submit" class="btn btn-outline-danger py-1 px-1 w-100" style="font-size: 0.75rem;" title="Remover imagem">Remover</button>
+                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-1 w-100" title="Remover imagem">Remover</button>
                         </form>
                     </div>
                     {% endfor %}

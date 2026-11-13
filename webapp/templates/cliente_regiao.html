@@ -47,7 +47,7 @@
     {% for d in lista %}
     {% set rot = {'vermelho': 'A', 'amarelo': 'M', 'verde': 'B'} %}
     <tr>
-        <td><span class="fw-semibold">{{ d.rotulo }}</span>{% if d.cientifico %}<div class="text-muted fst-italic" style="font-size: 0.7rem;">{{ d.cientifico }}</div>{% endif %}</td>
+        <td><span class="fw-semibold">{{ d.rotulo }}</span>{% if d.cientifico %}<div class="text-muted small fst-italic">{{ d.cientifico }}</div>{% endif %}</td>
         {% if d.sem_medicao %}<td class="text-center text-muted fw-semibold" title="Sem medição de esporos perto da fazenda">(-)</td>
         {% elif d.risco %}<td class="text-center risco-{{ d.risco }}">{{ rot[d.risco] }}</td>{% else %}<td class="text-center text-muted">-</td>{% endif %}
         {% for dt in datas %}

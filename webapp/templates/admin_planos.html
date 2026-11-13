@@ -6,7 +6,7 @@
 .tabela-preco input[type=number]::-webkit-inner-spin-button, .tabela-preco input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .tabela-preco input[type=number] { -moz-appearance: textfield; }
 /* Planos lado a lado (pedido do Alan, 07/11/2026): 1a coluna fixa com o nome do campo. */
-.tabela-planos { font-size: 0.82rem; }
+.tabela-planos { font-size: 0.85rem; }
 .tabela-planos th:first-child, .tabela-planos td:first-child { position: sticky; left: 0; z-index: 2; background: #f8f9fa; font-weight: 600; width: 15rem; min-width: 15rem; line-height: 1.2; }
 .tabela-planos td.plano-col, .tabela-planos th.plano-col { min-width: 8rem; }
 @media (max-width: 575.98px) {
@@ -55,9 +55,9 @@
                         <select class="form-select form-select-sm flex-grow-0" style="width: 4.6rem;" name="moeda__{{ k }}" aria-label="Moeda" title="Plano em dólar é cobrado em reais pela cotação do dia (Banco Central)">{% for cod, simb in moedas.items() %}<option value="{{ cod }}" {% if (p.moeda if p else 'BRL') == cod %}selected{% endif %}>{{ simb }}</option>{% endfor %}</select>
                         <input class="form-control form-control-sm" style="min-width: 4rem;" name="valor__{{ k }}" value="{{ ('%.2f' | format(p.valor)) | replace('.', ',') if p else '' }}" inputmode="decimal" aria-label="Valor">
                     </div>
-                    {% if p and p.preco_por_area %}<div class="text-success" style="font-size: 0.72rem;">Preço pela área do cliente (tabela de apoio) -- este valor não é usado</div>
-                    {% elif p and p.valor > 0 %}<div class="text-muted" style="font-size: 0.72rem;">{{ p.parcelas }}x de {{ p.valor_parcela | dinheiro(p.simbolo) }}</div>{% endif %}
-                    {% if p and p.moeda == 'USD' and p.valor > 0 and cotacao_dolar %}<div class="text-muted" style="font-size: 0.72rem;">≈ {{ (p.valor * cotacao_dolar.valor) | dinheiro }} hoje</div>{% endif %}
+                    {% if p and p.preco_por_area %}<div class="text-success small">Preço pela área do cliente (tabela de apoio) -- este valor não é usado</div>
+                    {% elif p and p.valor > 0 %}<div class="text-muted small">{{ p.parcelas }}x de {{ p.valor_parcela | dinheiro(p.simbolo) }}</div>{% endif %}
+                    {% if p and p.moeda == 'USD' and p.valor > 0 and cotacao_dolar %}<div class="text-muted small">≈ {{ (p.valor * cotacao_dolar.valor) | dinheiro }} hoje</div>{% endif %}
                 </td>{% endfor %}</tr>
             <tr><td title="O valor total vem da tabela de apoio: área do cliente (Cereais = Soja, Cana = Cana, HF = soma) x valor/ha da faixa, na moeda da tabela">Preço pela área <span class="fw-normal text-muted">(tabela de apoio)</span></td>
                 {% for p in colunas %}{% set k = p.id if p else 'novo' %}
@@ -112,7 +112,7 @@
             <input type="hidden" name="tem_preco_fixo" value="1">
         </div>
         <div class="table-responsive">
-        <table class="table table-sm table-bordered align-middle small mb-2 tabela-preco" style="font-size: 0.78rem; max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}" data-moeda="{{ moeda_tabela }}">
+        <table class="table table-sm table-bordered align-middle mb-2 tabela-preco" style="max-width: 40rem;" data-cotacao="{{ cotacao_dolar.valor if cotacao_dolar else '' }}" data-moeda="{{ moeda_tabela }}">
             <thead class="table-light"><tr>
                 <th title="Área monitorada">Área</th>
                 <th title="Valor por hectare"><span class="moeda-simbolo">{{ sm }}</span>/ha</th><th title="Valor total no limite da faixa">Total <span class="moeda-simbolo">{{ sm }}</span></th><th class="col-brl{{ ' d-none' if moeda_tabela == 'BRL' }}" title="Valor total em reais, pela cotação de hoje">≈ Total R$</th><th class="text-center" title="Marcado: quem cai nesta faixa paga a área do limite dela (350 ha em &quot;até 400 ha&quot; paga 400 ha)">Preço fixo</th><th aria-label="Tirar faixa"></th>
