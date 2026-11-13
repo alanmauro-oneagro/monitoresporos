@@ -464,7 +464,10 @@ estacoes na linha de baixo; pedido do Alan, 13/11/2026). Estados em ordem alfabe
 (`.estados-colunas`, CSS `column-width`) e o seletor do mapa ja' abre no plano Avançado (ex-Premium; mesmo dia). **Raio do plano saiu da tela** (pedido do Alan, 13/11/2026 -- o trabalho agora e' por estado): a linha
 "Raio de alcance das estações" da tabela e a box "Raio [N] km" do mapa sairam; `raio_km__<id>` ficou como campo
 escondido (o plano continua com o raio, que vale pro estado sem marca -- o texto do raio por estado mostra o valor,
-`#raio-plano` -- e pras fazendas estimadas desses estados).
+`#raio-plano` -- e pras fazendas estimadas desses estados). **Topicos recolhiveis** (pedido do Alan, 13/11/2026): a pagina e' 4
+`<details class="secao-pagina">` -- Planos (aberto de inicio), Tabela de apoio, 🗺️ Mapa de atendimento, ℹ️ Informações
+(os textos de Gerenciar Clientes / /planos foram pro fim); o navegador lembra os abertos (`planos.secoes`); abrir o
+mapa refaz o tamanho do Leaflet. O quadro "Cobrança (Asaas)" saiu da tela (retomar depois).
 **Linhas fora da tela** (pedido do
 Alan, 07/11/2026): Lavouras e as abas fazenda_estimada/esporos/
 risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na

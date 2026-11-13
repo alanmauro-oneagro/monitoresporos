@@ -14,6 +14,7 @@
     .tabela-planos th:first-child, .tabela-planos td:first-child { width: 6.5rem; min-width: 6.5rem; }
     .tabela-planos td.plano-col, .tabela-planos th.plano-col { min-width: 7rem; }
 }
+.secao-pagina > summary.secao-titulo { font-weight: 700; font-size: 1rem; cursor: pointer; }
 .tabela-planos .plano-novo { background: #f3faf5; }
 .tabela-planos tr.secao td { background: #e9ecef; font-weight: 600; }
 .tabela-planos td.rec { text-align: center; }
@@ -28,6 +29,9 @@
 <form method="post" action="{{ url_for('admin_planos_excluir', plano_id=p.id) }}" id="excluir_plano_{{ p.id }}" class="d-none"
       onsubmit="return confirm('Excluir o plano {{ p.nome|e }}?');"></form>
 {% endfor %}
+<details class="card shadow-sm mb-3 secao-pagina" id="sec-planos" open>
+<summary class="card-body py-2 secao-titulo">Planos</summary>
+<div class="card-body pt-0 px-2 px-sm-3">
 <p class="small text-muted mb-2">💵 Dólar hoje: {% if cotacao_dolar %}<strong>R$ {{ '%.4f' | format(cotacao_dolar.valor) | replace('.', ',') }}</strong>
     <span>(PTAX de venda do Banco Central, {{ cotacao_dolar.data | data_br }})</span>{% else %}cotação indisponível no momento{% endif %}
     -- plano em U$ é cobrado em reais por essa cotação na hora da assinatura.</p>
@@ -96,14 +100,17 @@
         </tbody>
     </table>
     </div>
-    <div class="position-sticky bottom-0 mb-4 small" style="z-index: 5;">
+    <div class="position-sticky bottom-0 small" style="z-index: 5;">
         <span class="autosave-status small"></span>
     </div>
 </form>
+</div>
+</details>
 
-<div class="card shadow-sm mb-4" id="tabela-precificacao"><div class="card-body px-2 px-sm-3">
-    {% set sm = 'R$' if moeda_tabela == 'BRL' else 'U$' %}
-    <h6 class="mb-1">Tabela de apoio: preço em <span class="moeda-simbolo">{{ sm }}</span> pela área monitorada</h6>
+{% set sm = 'R$' if moeda_tabela == 'BRL' else 'U$' %}
+<details class="card shadow-sm mb-3 secao-pagina" id="tabela-precificacao">
+<summary class="card-body py-2 secao-titulo">Tabela de apoio: preço em <span class="moeda-simbolo">{{ sm }}</span> pela área monitorada</summary>
+<div class="card-body pt-0 px-2 px-sm-3">
     <form method="post" action="{{ url_for('admin_planos_tabela') }}" data-autosave>
         {# Moeda da tabela: U$ ou R$ (pedido do Alan, 09/11/2026). #}
         <div class="d-flex align-items-center gap-2 small mb-2">
@@ -147,7 +154,8 @@
         </div>
         <div class="small"><span class="autosave-status small"></span></div>
     </form>
-</div></div>
+</div>
+</details>
 <script>
 // Recalcula a tabela de apoio enquanto digita (mesmas contas do servidor,
 // app._tabela_precificacao / app.preco_pela_area).
@@ -259,25 +267,9 @@
 })();
 </script>
 
-<p class="small text-muted">Os clientes (plano, situação, pago até, cortesia, lavouras) ficam em <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>.</p>
-
-<p class="text-muted small mb-3">
-    Planos que o cliente do app pode assinar em <a href="{{ url_for('planos_publico') }}" target="_blank">{{ url_for('planos_publico', _external=True) }}</a>.
-    O cliente marca as lavouras dele no mapa e vê, em cada uma, o que o plano libera. Os esporos são sempre
-    <strong>estimados</strong> pelas fazendas reais dentro do raio do plano (nunca aparece nome nem leitura de fazenda real).
-    Mudar o valor de um plano só vale para assinaturas novas.
-</p>
-
-<div class="alert {{ 'alert-success' if asaas_configurado and asaas_webhook_ok else 'alert-warning' }} small">
-    <strong>Cobrança (Asaas):</strong>
-    {% if asaas_configurado %}chave configurada, ambiente <strong>{{ 'PRODUÇÃO' if asaas_producao else 'SANDBOX (teste, não cobra)' }}</strong>.{% else %}<strong>não configurada</strong> -- falta a variável <code>ASAAS_API_KEY</code> no Railway; quem se cadastrar fica aguardando liberação manual.{% endif %}
-    {% if not asaas_webhook_ok %}Falta <code>ASAAS_WEBHOOK_TOKEN</code> -- sem ela o pagamento não libera o acesso sozinho.{% endif %}
-    Webhook no Asaas: <code>{{ url_for('asaas_webhook', _external=True) }}</code> (eventos de cobrança e de assinatura).
-</div>
-
-<div class="card shadow-sm mt-4" id="mapa-atendimento">
-    <div class="card-body">
-        <h6 class="mb-2">🗺️ Mapa de atendimento por assinatura</h6>
+<details class="card shadow-sm mb-3 secao-pagina" id="mapa-atendimento">
+    <summary class="card-body py-2 secao-titulo">🗺️ Mapa de atendimento por assinatura</summary>
+    <div class="card-body pt-0">
         <div class="d-flex flex-nowrap align-items-center gap-2 mb-1">
             <label class="small text-muted mb-0" for="plano-mapa">Plano:</label>
             <select class="form-select form-select-sm flex-grow-1" style="min-width: 0; max-width: 14rem;" id="plano-mapa">
@@ -316,9 +308,23 @@
             <span class="autosave-status small"></span>
         </form>
         <div id="mapa-atendimento-mapa" style="height: 420px;" class="border rounded"></div>
-        <div class="small text-muted mt-1">Pontos = estações BioScout instaladas nos países marcados; área verde = perímetro atendido (raio do estado, se marcado; senão o do plano). Raios que se encontram viram uma figura só. O raio mudado aqui salva no plano.</div>
+        <div class="small text-muted mt-1">Pontos = estações BioScout instaladas nos países marcados; área verde = perímetro atendido (raio do estado, se marcado; senão o do plano). Raios que se encontram viram uma figura só.</div>
     </div>
+</details>
+
+<details class="card shadow-sm mb-3 secao-pagina" id="sec-informacoes">
+<summary class="card-body py-2 secao-titulo">ℹ️ Informações</summary>
+<div class="card-body pt-0">
+<p class="small text-muted">Os clientes (plano, situação, pago até, cortesia, lavouras) ficam em <a href="{{ url_for('admin_solicitacoes') }}">Gerenciar Clientes</a>.</p>
+
+<p class="text-muted small mb-0">
+    Planos que o cliente do app pode assinar em <a href="{{ url_for('planos_publico') }}" target="_blank">{{ url_for('planos_publico', _external=True) }}</a>.
+    O cliente marca as lavouras dele no mapa e vê, em cada uma, o que o plano libera. Os esporos são sempre
+    <strong>estimados</strong> pelas fazendas reais dentro do raio do plano (nunca aparece nome nem leitura de fazenda real).
+    Mudar o valor de um plano só vale para assinaturas novas.
+</p>
 </div>
+</details>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
@@ -409,6 +415,10 @@
     }
     function trocarPlano() { desenhar(true); }
     sel.addEventListener('change', trocarPlano);
+    // Mapa dentro de secao recolhida: ao abrir, o Leaflet precisa medir de novo.
+    document.getElementById('mapa-atendimento').addEventListener('toggle', function (e) {
+        if (e.target.open) { setTimeout(function () { mapa.invalidateSize(); desenhar(true); }, 50); }
+    });
     formAt.addEventListener('change', function () { resumirPaises(); desenhar(false); });
     resumirPaises();
     formAt.addEventListener('input', function (e) {
@@ -420,6 +430,22 @@
         desenhar(false);
     });
     trocarPlano();
+})();
+</script>
+<script>
+// Topicos da pagina abrem/fecham; o navegador lembra quais ficaram abertos (pedido do Alan, 13/11/2026).
+(function () {
+    var CHAVE = 'planos.secoes';
+    var salvo = null;
+    try { salvo = JSON.parse(localStorage.getItem(CHAVE) || 'null'); } catch (e) {}
+    document.querySelectorAll('details.secao-pagina').forEach(function (d) {
+        if (salvo && d.id in salvo) d.open = !!salvo[d.id];
+        d.addEventListener('toggle', function () {
+            salvo = salvo || {};
+            salvo[d.id] = d.open;
+            try { localStorage.setItem(CHAVE, JSON.stringify(salvo)); } catch (e) {}
+        });
+    });
 })();
 </script>
 {% endblock %}
