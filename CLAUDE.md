@@ -381,8 +381,8 @@ lavoura, entre em contato com a OneAgro. (43)99114-7595"
 clima" nem "Powered by BioScout", 09/11/2026; ponto so' clima continua
 sem rodape no texto). **Sem "Última leitura BioScout"** no texto (WhatsApp/app) nem no PDF de
 nenhuma fazenda (pedido do Alan, 10/11/2026). **Corpo do texto** (pedido do Alan, 09/11/2026):
-"🌧️ *Previsão de chuvas:*" com 2 dias por linha ("09/11: 12.2 mm // 10/11:
-3.7 mm", `_linhas_previsao_chuva`) e cada doenca como "- *Moniliophthora:*" /
+"🌧️ *Previsão de chuvas:*" com 1 dia por linha ("09/11: 12.2 mm (80%)",
+`_linhas_previsao_chuva`; eram 2 por linha, mas com a probabilidade quebrava no WhatsApp -- pedido do Alan, 13/11/2026) e cada doenca como "- *Moniliophthora:*" /
 "Quantidade de esporos: 🔴 Alta" (Perigo; Atencao = 🟡 Média,
 `_QUANTIDADE_ESPOROS`) / "Risco de infecção:" / "09/11 🟢; 10/11 🟡; ..."
 (so' a cor por dia) / "Recomendações das instituições de pesquisa:" /
