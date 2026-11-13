@@ -3864,7 +3864,7 @@ def chuva_grade():
     if corpo.get("sem_esperar"):
         resultado = weather_forecast.get_rain_forecast_grid(lats, lons, esperar=False)
         if resultado is None:
-            return jsonify({"pendente": True}), 202
+            return jsonify({"pendente": True, "pct": weather_forecast.progresso_grade("chuva", lats, lons) or 0}), 202
         return jsonify(resultado)
     return jsonify(weather_forecast.get_rain_forecast_grid(lats, lons))
 
