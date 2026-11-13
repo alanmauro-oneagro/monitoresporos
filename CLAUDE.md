@@ -1014,9 +1014,14 @@ site tem que entrar la'.
   baixados** (`app._nome_arquivo`): `OneAgro_<Tipo>[_<Nome>]_<AAAA-MM-DD>[_<HHhMM>].<ext>` --
   PDF `OneAgro_Relatorio_<fazenda>_...pdf`, Excel `OneAgro_Exportacao_..._HHhMM.xlsx`,
   backup `OneAgro_Backup_...db.gz`, texto do app `OneAgro_Relatorio_<fazenda>_...txt` /
-  `OneAgro_Relatorios_...txt` (hora de Cuiaba). **Gerenciar Exportações** em 3 cartoes:
-  Planilha Excel (lista as abas), Backup do banco e Historico de envios por WhatsApp (filtros
-  dentro do cartao).
+  `OneAgro_Relatorios_...txt` (hora de Cuiaba). **Gerenciar Exportações** em 2 cartoes:
+  Planilha Excel (lista as abas) e Backup do banco. **Historico de envios por WhatsApp** foi pra
+  **Gerenciar WhatsApp** (`#historico`, `_historico_envios`; pedido do Alan, 13/11/2026) com quadro de status
+  (Enviado/Entregue/Lido/Falhou com a quantidade de todo o historico, da fazenda filtrada se houver --
+  `models.STATUS_ENVIO`/`contar_status_envio`) e "🧹 Limpar selecionados" (`admin_whatsapp_historico_limpar`,
+  `limpar_status_envio`; so' o historico, o "ja' enviado hoje" do agendador fica em outro lugar). **Sem WhatsApp
+  conectado o agendador nao tenta enviar** (`_whatsapp_scheduler_loop` confere `whatsapp.conectado()`; antes tentava
+  todo minuto e enchia o historico de falhas).
 - **Revisao geral de 13/11/2026** (pedido do Alan: vinculos, estrutura, fontes, acessos e hierarquias): crawler
   com os 4 niveis seguindo todo link/formulario interno (nenhum destino quebrado; 404 so' nas telas do QAP), as 10 rotas
   sem login sao as publicas de proposito (login, cadastro, /planos, webhook Asaas...), as so' `@login_required` filtram

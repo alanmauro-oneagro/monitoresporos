@@ -1506,6 +1506,44 @@ def log_whatsapp_envio(site_name, destinatario, telefone, ok, mensagem):
     conn.close()
 
 
+# Status do historico de envios (quadro da tela Gerenciar WhatsApp; pedido do Alan, 13/11/2026).
+STATUS_ENVIO = {
+    "enviado": ("Enviado", "ok = 1 AND (status_meta IS NULL OR (status_meta NOT LIKE 'entregue%' AND status_meta NOT LIKE 'lido%'))"),
+    "entregue": ("Entregue", "ok = 1 AND status_meta LIKE 'entregue%'"),
+    "lido": ("Lido", "ok = 1 AND status_meta LIKE 'lido%'"),
+    "falhou": ("Falhou", "ok = 0"),
+}
+
+
+def contar_status_envio(site_name=None):
+    """{status: quantidade} de TODO o historico (ou so' de uma fazenda)."""
+    conn = get_db()
+    contagem = {}
+    for chave, (_rotulo, cond) in STATUS_ENVIO.items():
+        sql = f"SELECT COUNT(*) FROM whatsapp_envio_log WHERE {cond}" + (" AND site_name = ?" if site_name else "")
+        contagem[chave] = conn.execute(sql, (site_name,) if site_name else ()).fetchone()[0]
+    conn.close()
+    return contagem
+
+
+def limpar_status_envio(status, site_name=None):
+    """Apaga do historico as linhas dos status escolhidos (todas as datas). So' o historico -- o
+    "ja' enviado hoje" do agendador fica em outro lugar. Devolve quantas linhas saiu."""
+    conds = [STATUS_ENVIO[s][1] for s in status if s in STATUS_ENVIO]
+    if not conds:
+        return 0
+    sql = "DELETE FROM whatsapp_envio_log WHERE (" + " OR ".join(f"({c})" for c in conds) + ")"
+    params = ()
+    if site_name:
+        sql += " AND site_name = ?"
+        params = (site_name,)
+    conn = get_db()
+    cur = conn.execute(sql, params)
+    conn.commit()
+    conn.close()
+    return cur.rowcount
+
+
 def get_whatsapp_envio_log(site_name=None, apenas_falhas=False, dias=None, limit=300):
     """Historico de envios, mais recente primeiro. `site_name` filtra por
     uma fazenda; `apenas_falhas` mostra so as tentativas que nao deram

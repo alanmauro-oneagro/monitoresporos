@@ -2496,7 +2496,10 @@ def _whatsapp_scheduler_loop():
                 _atualizar_open_meteo_diario()
             except Exception:
                 pass
-            if not AMBIENTE_QAP:  # QAP (banco copiado da producao) nunca dispara relatorio agendado
+            # QAP (banco copiado da producao) nunca dispara relatorio agendado; sem WhatsApp conectado
+            # tambem nao tenta (pedido do Alan, 13/11/2026 -- antes tentava todo minuto e enchia o
+            # historico de falhas).
+            if not AMBIENTE_QAP and whatsapp.conectado():
                 try:
                     _run_scheduled_whatsapp_sends()
                 except Exception:
@@ -6917,18 +6920,38 @@ def admin_exportar():
     Envios e o registro de fungicidas por cultura na Biblioteca de
     fungicidas (e no Excel) -- tirados daqui pra nao repetir. So'
     usuario Master tem acesso."""
+    return render_template("admin_exportar.html")
+
+
+def _historico_envios():
+    """Historico de envios por WhatsApp (ultimos 7 dias, filtros de fazenda/so' falhas) + quadro de
+    status -- na tela Gerenciar WhatsApp desde 13/11/2026 (antes em Gerenciar Exportações)."""
     site_name = request.args.get("site") or None
     apenas_falhas = request.args.get("falhas") == "1"
     logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas, dias=7)
     for l in logs:
         l["site_nome"] = _nome_exibicao(l["site_name"])
     sites = sorted((set(read_sites()) | models.virtual_farm_site_names()) - models.get_deactivated_site_names(), key=_ordem_fazenda)
-    nomes_exibicao = {s: _nome_exibicao(s) for s in sites}
-    return render_template(
-        "admin_exportar.html",
-        logs=logs, sites=sites, nomes_exibicao=nomes_exibicao,
-        site_selecionado=site_name or "", apenas_falhas=apenas_falhas,
-    )
+    contagem = models.contar_status_envio(site_name)
+    return {
+        "logs": logs, "sites": sites, "nomes_exibicao": {s: _nome_exibicao(s) for s in sites},
+        "site_selecionado": site_name or "", "apenas_falhas": apenas_falhas,
+        "status_envio": [(k, rotulo, contagem[k]) for k, (rotulo, _c) in models.STATUS_ENVIO.items()],
+    }
+
+
+@app.route("/admin/whatsapp/historico/limpar", methods=["POST"])
+@master_required
+def admin_whatsapp_historico_limpar():
+    """Apaga do historico os status marcados no quadro (pedido do Alan, 13/11/2026)."""
+    site_name = request.form.get("site") or None
+    status = request.form.getlist("status")
+    if not status:
+        flash("Marque pelo menos um status para limpar.", "error")
+    else:
+        n = models.limpar_status_envio(status, site_name)
+        flash(f"{n} registro(s) apagado(s) do histórico.", "success")
+    return redirect(url_for("admin_whatsapp", site=site_name or None) + "#historico")
 
 
 @app.route("/admin/estacoes-diagnostico")
@@ -7093,6 +7116,7 @@ def admin_whatsapp():
         modelos_meta=[whatsapp_cloud_api.TEMPLATE_RELATORIO, whatsapp_cloud_api.TEMPLATE_RELATORIO_TEXTO,
                       whatsapp_cloud_api.TEMPLATE_NDVI],
         provedor=whatsapp.WHATSAPP_PROVIDER, parametros_umbler=whatsapp_umbler.parametros(),
+        **_historico_envios(),
         webhook_umbler_url=url_for("umbler_webhook", _external=True, _scheme="http"
                                    if request.host.split(":")[0] in ("127.0.0.1", "localhost") else "https")
         + "?token=SUA_SENHA",
