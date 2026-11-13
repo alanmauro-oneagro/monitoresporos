@@ -1017,6 +1017,10 @@ site tem que entrar la'.
   texto "12.2 mm (80%)" por `app._prob_chuva`, 3a linha no quadro do PDF, numero pequeno nas telas). No Mapa, alem
   da grade geral de 1 grau, uma grade FINA de 0,5 grau em volta de cada fazenda (+-1,5 grau, `GRADE_FINA_*` no
   mapa.html, no maximo 1.500 pontos), buscada depois da geral sem mensagem; onde ela tem valor, vale ela.
+  **"Chuva hoje (prevista)"** no lugar de "Chuva agora" (que era so' a ultima hora; pedido do Alan, 13/11/2026):
+  `chuva_hoje_mm` (media dos modelos do dia de hoje) + `chuva_hoje_prob` em `get_weather_forecast`, no quadro
+  Clima agora do site/PDF ("7.4 mm (49%)") e no texto ("🌧️ 7.4 mm hoje (prev.) (49%)"). `chuva_atual_mm` segue
+  existindo pro calculo de risco.
   Leitura guardada sem a chave `chuva_modelos` (formato antigo) e' buscada de novo na hora, sem esperar a
   proxima janela; falha na media dos modelos mantem a media anterior.
 - **Paises na chuva do Mapa** (pedido do Alan, 13/11/2026): `countries.paises_com_estacoes()` = pais com

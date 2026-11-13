@@ -435,7 +435,12 @@ def get_weather_forecast(lat, lon):
     probabilidade = daily.get("precipitation_probability_max", [])
     media_modelos = registro.get("chuva_modelos") or {}
     previsao = []
+    chuva_hoje_mm = chuva_hoje_prob = None
     for i in range(len(dias)):
+        if dias[i] == hoje:
+            # Chuva prevista pro dia de hoje (pedido do Alan, 13/11/2026: substitui "Chuva agora").
+            chuva_hoje_mm = media_modelos.get(hoje, chuva[i] if i < len(chuva) else None)
+            chuva_hoje_prob = probabilidade[i] if i < len(probabilidade) else None
         if dias[i] <= hoje:
             continue
         previsao.append({
@@ -462,6 +467,8 @@ def get_weather_forecast(lat, lon):
         "temperatura_atual": atual[0],
         "umidade_atual": atual[1],
         "chuva_atual_mm": atual[2],
+        "chuva_hoje_mm": chuva_hoje_mm,
+        "chuva_hoje_prob": chuva_hoje_prob,
         "chuva_24h_mm": chuva_24h_mm,
         "previsao_5_dias": previsao[:5],
         "ultimas_24h": ultimas_24h,
@@ -540,6 +547,8 @@ def get_weather_forecast_interpolado(coords_list):
         "temperatura_atual": _media([r["temperatura_atual"] for r in resultados]),
         "umidade_atual": _media([r["umidade_atual"] for r in resultados]),
         "chuva_atual_mm": _media([r["chuva_atual_mm"] for r in resultados]),
+        "chuva_hoje_mm": _media([r.get("chuva_hoje_mm") for r in resultados]),
+        "chuva_hoje_prob": _media([r.get("chuva_hoje_prob") for r in resultados]),
         "chuva_24h_mm": _media([r["chuva_24h_mm"] for r in resultados]),
         "previsao_5_dias": previsao_5_dias,
         "ultimas_24h": ultimas_24h,
