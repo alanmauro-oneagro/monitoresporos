@@ -43,6 +43,13 @@
         {% endfor %}
     </div>
     {% if not assinatura or not assinatura.forma_pagamento %}<div class="small text-muted mt-1">Sem escolha, você escolhe na hora de pagar a fatura.</div>{% endif %}
+    {# Pedido do Alan, 13/11/2026: a OneAgro confere a regiao antes. #}
+    <div class="alert alert-info small mb-0 mt-2 py-2" id="aviso-disponibilidade">
+        A OneAgro vai verificar a disponibilidade do serviço na sua região e entrar em contato.<br>
+        <strong>{{ contato_comercial.nome }}</strong> ·
+        <a href="https://wa.me/{{ contato_comercial.whatsapp }}" target="_blank" rel="noopener">{{ contato_comercial.celular }}</a> ·
+        <a href="mailto:{{ contato_comercial.email }}">{{ contato_comercial.email }}</a>
+    </div>
 </div></form>
 {% endif %}
 

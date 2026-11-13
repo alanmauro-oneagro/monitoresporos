@@ -34,10 +34,13 @@
         <div class="border-top py-2 small d-flex flex-wrap align-items-start gap-2">
             <div class="flex-grow-1">
                 <strong>{{ pc.nome }}</strong> <span class="badge text-bg-light border">{{ perfis.get(pc.perfil, pc.perfil) }}</span>
-                <span class="text-muted">· {{ (pc.criado_em or '')[:16] | replace('T', ' ') }}</span><br>
-                {{ pc.empresa }} ·
-                <a href="https://wa.me/{{ pc.telefone }}" target="_blank" rel="noopener">{{ pc.telefone | telefone_br }}</a> ·
+                {% if pc.perfil == 'produtor' %}<span class="badge text-bg-warning">Cadastro não concluído</span>{% endif %}
+                <span class="text-muted">· {{ (pc.atualizado_em or pc.criado_em or '')[:16] | replace('T', ' ') }}</span><br>
+                {% if pc.empresa %}{{ pc.empresa }} ·{% endif %}
+                {% if pc.grupo_economico %}👥 {{ pc.grupo_economico }} ·{% endif %}
+                {% if pc.telefone %}<a href="https://wa.me/{{ pc.telefone }}" target="_blank" rel="noopener">{{ pc.telefone | telefone_br }}</a> ·{% endif %}
                 <a href="mailto:{{ pc.email }}">{{ pc.email }}</a>
+                {% if pc.fazendas %}<br><span class="text-muted">🌱 {{ pc.fazendas }}</span>{% endif %}
             </div>
             <form method="post" action="{{ url_for('admin_pedido_contato_apagar', pedido_id=pc.id) }}" onsubmit="return confirm('Apagar o pedido de {{ pc.nome|e }}?');">
                 <button class="btn btn-sm btn-outline-danger py-0" type="submit">Apagar</button>

@@ -206,7 +206,15 @@ vazio = `_sugerir_usuario`), Senha/Confirmar, termos e "Criar conta". O campo Me
 Quero representar a OneAgro** (`PERFIS_SO_CONTATO`): Nome completo, Empresa, WhatsApp, E-mail e "Avançar" -> NAO
 cria conta (`_pedido_de_contato`): grava em `pedidos_contato` (`models.registrar_pedido_contato`), avisa os Masters
 no WhatsApp e mostra "Obrigado, <nome>!" com o contato comercial (`CONTATO_COMERCIAL`). Gerenciar Clientes mostra
-"📞 Pedidos de contato" no topo (recolhido, com Apagar -- `admin_pedido_contato_apagar`). **Erro avisado na hora** (mesmo dia):
+"📞 Pedidos de contato" no topo (recolhido, com Apagar -- `admin_pedido_contato_apagar`). **1a etapa gravada** (pedido do Alan,
+13/11/2026): o "Avançar" do Produtor manda o formulario por fetch pra `/solicitar-acesso/etapa1` (`salvar_etapa1_cadastro`,
+etapa 2 desativada = sem senha) -> `models.salvar_pre_cadastro` (linha `perfil='produtor'` em `pedidos_contato`, com
+`grupo_economico`, `fazendas` = "Faz X (Sinop/MT): Soja 350 ha", mesmo celular/e-mail = atualiza). Aparece no mesmo
+"📞 Pedidos de contato" com o selo "Cadastro não concluído"; criar a conta marca `concluido` (`concluir_pre_cadastro`,
+some da tela). Excel: aba **"Pré-cadastros"** (`export_excel._pre_cadastros_rows`: pedidos de contato + produtores,
+situacao "Cadastro não concluído"/"Conta criada"/"Pedido de contato"). **Minha assinatura > Forma de pagamento** tem o
+aviso "A OneAgro vai verificar a disponibilidade do serviço na sua região e entrar em contato" + contato comercial
+(`contato_comercial` virou global dos templates). **Erro avisado na hora** (mesmo dia):
 celular e e-mail conferidos ao sair do campo (`/solicitar-acesso/contato`, `verificar_contato_cadastro`: invalido ou
 ja' cadastrado em outra conta -- `conta_com_contato`); o aviso fica embaixo do campo e trava o "Avançar". Erro que
 volta do servidor abre na etapa do campo com problema (`etapa_erro`: usuario/contatos/senha/termos = 2, resto = 1).

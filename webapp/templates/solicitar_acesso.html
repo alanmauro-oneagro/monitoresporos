@@ -492,6 +492,8 @@
         if (!etapa1Valida()) return;
         if (soContato()) { etapa2.disabled = true; form.submit(); return; }
         if (!usuario.value.trim()) consultar(true);
+        // Grava a 1a etapa ja' aqui (pedido do Alan, 13/11/2026): a etapa 2 ainda esta' desativada, a senha nao vai.
+        fetch('{{ url_for("salvar_etapa1_cadastro") }}', { method: 'POST', body: new FormData(form) }).catch(function () {});
         irPara(2);
     });
     document.getElementById('botao-voltar').addEventListener('click', function () { irPara(1); });
