@@ -3544,6 +3544,23 @@ def get_all_users(com_clientes=False):
     return rows
 
 
+def contatos_para_envio():
+    """Usuarios (equipe e clientes) e subordinados com celular -- lista do "+ Outros usuários" do envio
+    manual de WhatsApp (pedido do Alan, 13/11/2026). [{chave, nome, telefone}], chave "u:<id>"/"s:<id>"."""
+    conn = get_db()
+    usuarios = conn.execute(
+        "SELECT id, username, telefone FROM users WHERE telefone IS NOT NULL AND telefone != '' ORDER BY username COLLATE NOCASE"
+    ).fetchall()
+    subs = conn.execute(
+        "SELECT s.id, s.nome, s.telefone, u.username AS dono FROM subordinados s LEFT JOIN users u ON u.id = s.owner_user_id "
+        "WHERE s.telefone IS NOT NULL AND s.telefone != '' ORDER BY s.nome COLLATE NOCASE"
+    ).fetchall()
+    conn.close()
+    lista = [{"chave": f"u:{r['id']}", "nome": r["username"], "telefone": r["telefone"]} for r in usuarios]
+    lista += [{"chave": f"s:{r['id']}", "nome": f"{r['nome']} (de {r['dono'] or '-'})", "telefone": r["telefone"]} for r in subs]
+    return lista
+
+
 MASTER_PRINCIPAL = "Alan Mauro"  # sempre Master; unico que designa quem mais e' Master
 
 DEFAULT_PASSWORD = "Oneagro01!"  # senha de todo usuario novo, e pra onde o botao "Redefinir senha" volta

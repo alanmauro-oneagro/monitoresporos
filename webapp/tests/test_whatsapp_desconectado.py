@@ -331,3 +331,33 @@ class HistoricoStatusTest(unittest.TestCase):
             except StopIteration:
                 pass
         self.assertEqual(chamados, [])
+
+
+class OutrosUsuariosEnvioTest(unittest.TestCase):
+    """Envio manual pra outros usuarios escolhidos na hora (pedido do Alan, 13/11/2026)."""
+
+    @classmethod
+    def setUpClass(cls):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        models.sync_sites(["Zzz Fazenda Outros"])
+        if not models.get_user_by_username("Zzz Master Outros"):
+            models.create_user("Zzz Master Outros", "x", is_master=True)
+        if not models.get_user_by_username("Zzz Avulso Outros"):
+            models.create_user("Zzz Avulso Outros", "x", telefone="5543999990444")
+
+    def test_outro_usuario_recebe(self):
+        avulso = models.get_user_by_username("Zzz Avulso Outros")
+        self.assertIn(f"u:{avulso['id']}", [c["chave"] for c in models.contatos_para_envio()])
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Outros")["id"])
+            s["_fresh"] = True
+        h = c.get("/recommendations", follow_redirects=True).get_data(as_text=True)
+        self.assertIn("tpl-outros-usuarios", h)
+        with mock.patch.object(webapp.whatsapp, "conectado", return_value=True), \
+                mock.patch.object(webapp, "_enviar_whatsapp_manual_escalonado", return_value=(True, True, "ok")) as env:
+            c.post("/recommendations/whatsapp/Zzz Fazenda Outros",
+                   data={"safra": "safra1", "escolher_destinos": "1", "enviar_texto": "1",
+                         "usuario_extra": [f"u:{avulso['id']}", "u:999999"]})
+        self.assertEqual(env.call_args.kwargs["destinos"], [("5543999990444", "Zzz Avulso Outros")])

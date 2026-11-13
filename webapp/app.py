@@ -4306,6 +4306,7 @@ def recommendations(safra):
     return render_template(
         "recommendations.html", sites_data=sites_data, no_access=False,
         any_whatsapp_configured=any_whatsapp_configured,
+        contatos_whatsapp=models.contatos_para_envio() if current_user.is_admin else [],
         pontos_clima=_pontos_clima() if current_user.is_master else [],
         safra=safra, safra_label=SAFRA_LABELS[safra], safras=models.SAFRAS,
     )
@@ -4426,6 +4427,9 @@ def send_grupo_whatsapp():
         for tel, rotulo in _site_whatsapp_destinations(s):
             cadastrados.setdefault(tel, rotulo)
     destinos = [(tel, cadastrados[tel]) for tel in request.form.getlist("destino") if tel in cadastrados]
+    for tel, rotulo in _outros_usuarios_do_form():
+        if tel not in dict(destinos):
+            destinos.append((tel, rotulo))
     if request.form.get("numero_telefone", "").strip():
         telefone = _telefone_from_form(request.form)
         if not _is_valid_phone(telefone):
@@ -4505,6 +4509,9 @@ def send_site_whatsapp(site_name):
         # digitado na hora (nao fica salvo em lugar nenhum).
         cadastrados = dict(_site_whatsapp_destinations(site_name))
         destinos = [(tel, cadastrados[tel]) for tel in request.form.getlist("destino") if tel in cadastrados]
+        for tel, rotulo in _outros_usuarios_do_form():
+            if tel not in dict(destinos):
+                destinos.append((tel, rotulo))
         numero = request.form.get("numero_telefone", "").strip()
         if numero:
             telefone = _telefone_from_form(request.form)
@@ -4525,6 +4532,22 @@ def send_site_whatsapp(site_name):
         flash(f"Falha ao enviar WhatsApp de '{nome_exibicao}': {message}", "error")
     return redirect(url_for("recommendations", safra=safra))
 
+
+
+def _outros_usuarios_do_form():
+    """Destinos marcados em "+ Outros usuários" do envio manual (pedido do Alan, 13/11/2026) -- so' pra
+    Administrador/Master; a chave vem do formulario e o telefone sempre do banco."""
+    if not current_user.is_admin:
+        return []
+    marcados = set(request.form.getlist("usuario_extra"))
+    if not marcados:
+        return []
+    destinos = []
+    for c in models.contatos_para_envio():
+        tel = re.sub(r"\D", "", c["telefone"] or "")
+        if c["chave"] in marcados and _is_valid_phone(tel):
+            destinos.append((tel, c["nome"]))
+    return destinos
 
 
 @app.route("/recommendations/pdf/<path:site_name>")
