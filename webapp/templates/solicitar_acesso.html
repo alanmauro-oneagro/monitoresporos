@@ -63,11 +63,25 @@
    plano; o link com ?modalidade=fazenda continua criando acesso a fazenda. #}
 {% set modalidade_sel = 'fazenda' if (form.get('modalidade') or request.args.get('modalidade')) == 'fazenda' else 'plano' %}
 {% set perfis_sel = form.getlist('perfil') if form else [] %}
-<form method="post" class="card shadow-sm mb-3" id="form-cadastro"><div class="card-body">
-
+{% if contato_enviado %}
+{# Tecnico do setor / Quero representar a OneAgro: so' o contato (pedido do Alan, 13/11/2026). #}
+<div class="card shadow-sm mb-3"><div class="card-body">
+    <h6 class="mb-2">Obrigado, {{ contato_enviado.nome }}!</h6>
+    <p class="mb-2">Recebemos os seus dados{% if contato_enviado.perfil == 'representante' %} e o seu interesse em representar a OneAgro{% endif %}. Para seguir, entre em contato com:</p>
+    <div class="alert alert-success mb-0">
+        <strong>{{ contato_comercial.nome }}</strong><br>
+        Cel: <a href="https://wa.me/{{ contato_comercial.whatsapp }}" target="_blank" rel="noopener">{{ contato_comercial.celular }}</a><br>
+        E-mail: <a href="mailto:{{ contato_comercial.email }}">{{ contato_comercial.email }}</a>
+    </div>
+</div></div>
+{% else %}
+<form method="post" class="card shadow-sm mb-3" id="form-cadastro" novalidate><div class="card-body">
     <input type="hidden" name="modalidade" value="{{ modalidade_sel }}">
+
+    {# Etapa 1 (pedido do Alan, 13/11/2026): quem e', dados e fazendas; "Avançar" leva pra etapa 2. #}
+    <div id="etapa-1">
     <h6 class="mb-2">Você é</h6>
-    <div class="d-flex flex-wrap gap-3">
+    <div class="d-flex flex-column gap-1">
         {% for chave, rotulo in perfis.items() %}
         <div class="form-check mb-0">
             <input class="form-check-input" type="radio" name="perfil" id="perfil_{{ chave }}" value="{{ chave }}" {% if chave in perfis_sel %}checked{% endif %} required>
@@ -76,26 +90,28 @@
         {% endfor %}
     </div>
 
+    <div id="dados" class="d-none">
     <h6 class="mt-4 mb-2">Seus dados</h6>
     <label class="form-label small mb-1" for="nome_completo">Nome completo</label>
     <input class="form-control mb-3" name="nome_completo" id="nome_completo" value="{{ form.get('nome_completo', '') }}" autocomplete="name" required>
-    {# Grupo economico (pedido do Alan, 08/11/2026): vai antes do nome de cada fazenda no relatorio. #}
-    <label class="form-label small mb-1" for="grupo_economico">Nome do grupo econômico</label>
-    <input class="form-control" name="grupo_economico" id="grupo_economico" value="{{ form.get('grupo_economico', '') }}" maxlength="40" placeholder="Ex.: Grupo Mauro">
-    <div class="small text-muted mb-3">Como vai aparecer no relatório, antes do nome de cada fazenda: <em>Grupo Mauro - Faz Mourão</em>.</div>
-    <label class="form-label small mb-1" for="username">Usuário (para entrar no sistema)</label>
-    <input class="form-control" name="username" id="username" value="{{ form.get('username', '') }}" autocomplete="username" required>
-    <div class="small mb-3" id="usuario-status" aria-live="polite"></div>
-    <label class="form-label small mb-1" for="numero_telefone">Celular (WhatsApp)</label>
+    <fieldset id="fs-empresa" class="mb-3">
+        <label class="form-label small mb-1" for="empresa">Empresa</label>
+        <input class="form-control" name="empresa" id="empresa" value="{{ form.get('empresa', '') }}" maxlength="80" autocomplete="organization" required>
+    </fieldset>
+    <label class="form-label small mb-1" for="numero_telefone">Número WhatsApp</label>
     <div class="input-group mb-3">
         <span class="input-group-text">+</span>
         <input class="form-control" style="max-width: 4.5rem;" name="codigo_pais" value="{{ form.get('codigo_pais', '55') }}" inputmode="numeric" aria-label="Código do país">
         <input class="form-control" name="numero_telefone" id="numero_telefone" value="{{ form.get('numero_telefone', '') }}" placeholder="DDD + número" inputmode="tel" required>
     </div>
-    <label class="form-label small mb-1" for="email">E-mail (opcional)</label>
-    <input class="form-control mb-3" type="email" name="email" id="email" value="{{ form.get('email', '') }}" autocomplete="email">
+    <label class="form-label small mb-1" for="email">E-mail</label>
+    <input class="form-control mb-3" type="email" name="email" id="email" value="{{ form.get('email', '') }}" autocomplete="email" required>
 
-
+    <fieldset id="fs-produtor">
+    {# Grupo economico (pedido do Alan, 08/11/2026): vai antes do nome de cada fazenda no relatorio. #}
+    <label class="form-label small mb-1" for="grupo_economico">Nome do grupo econômico</label>
+    <input class="form-control" name="grupo_economico" id="grupo_economico" value="{{ form.get('grupo_economico', '') }}" maxlength="40" placeholder="Ex.: Grupo Mauro" required>
+    <div class="small text-muted mb-3">Como vai aparecer no relatório, antes do nome de cada fazenda: <em>Grupo Mauro - Faz Mourão</em>.</div>
     {% set culturas_sel = form.getlist('culturas') if form else [] %}
     {# Area por cultura (pedido do Alan, 08/11/2026): marcar a cultura abre o campo da area dela. #}
     {# Grupo antes das culturas (pedido do Alan, 08/11/2026): mostra so' as culturas do grupo
@@ -116,40 +132,20 @@
     <div id="locais">
         {% for i in idxs %}{{ bloco_local(i, form, loop.first) }}{% endfor %}
     </div>
-    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" id="btn-add-local">+ Adicionar outra fazenda</button>
+    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" id="btn-add-local">+ Adicionar mais fazendas</button>
     <div class="small text-muted mb-3">Área total: <strong id="area-total">-</strong></div>
     </div>
     <template id="tpl-local">{{ bloco_local('__IDX__', {}, False) }}</template>
 
-    {% if modalidade_sel == 'plano' %}
-    {# Ate' 2 pessoas que tambem recebem o relatorio, escolhendo de quais locais. #}
-    <h6 class="mt-4 mb-1">Receber relatório <span class="small text-muted fw-normal">(opcional)</span></h6>
-    <p class="small text-muted mb-2">Até 2 pessoas (ex.: gerente, agrônomo) recebem o relatório no WhatsApp.</p>
-    {% for k in range(1, max_extras + 1) %}
-    <div class="card shadow-sm mb-2 extra-bloco" data-k="{{ k }}"><div class="card-body p-2">
-        <div class="small fw-semibold mb-1">Contato {{ k }}</div>
-        <input class="form-control form-control-sm mb-1" name="extra_nome__{{ k }}" value="{{ form.get('extra_nome__' ~ k, '') }}" placeholder="Nome" aria-label="Nome do contato {{ k }}">
-        <div class="input-group input-group-sm mb-1">
-            <span class="input-group-text">+</span>
-            <input class="form-control" style="max-width: 4rem;" name="codigo_pais__extra{{ k }}" value="{{ form.get('codigo_pais__extra' ~ k, '55') }}" inputmode="numeric" aria-label="Código do país do contato {{ k }}">
-            <input class="form-control" name="numero_telefone__extra{{ k }}" value="{{ form.get('numero_telefone__extra' ~ k, '') }}" placeholder="Celular (DDD + número)" inputmode="tel" aria-label="Celular do contato {{ k }}">
-        </div>
-        <div class="small text-muted">Recebe dos locais:</div>
-        <div class="extra-locais d-flex flex-wrap gap-2 small" data-marcados="{{ (form.getlist('extra_locais__' ~ k) if form else []) | join(',') }}"></div>
-    </div></div>
-    {% endfor %}
-    {% endif %}
-
-    {% if modalidade_sel == 'plano' and planos %}
-    {# Planos ja' no cadastro (pedido do Alan, 08/11/2026); o plano com preco pela area
-       calcula na hora pela tabela de apoio (mesma conta de app._plano_para_area). #}
-    {# Tecnico do setor nao ve os planos: fala com a OneAgro (pedido do Alan, 08/11/2026). #}
-    <div id="contato-tecnico" class="alert alert-success small mt-4 d-none">
-        <strong>Entrar em contato com:</strong><br>
-        {{ contato_comercial.nome }}<br>
-        Cel: <a href="https://wa.me/{{ contato_comercial.whatsapp }}" target="_blank" rel="noopener">{{ contato_comercial.celular }}</a><br>
-        E-mail: <a href="mailto:{{ contato_comercial.email }}">{{ contato_comercial.email }}</a>
+    </fieldset>
+    <button type="button" class="btn btn-success w-100 mt-2" id="botao-avancar">Avançar</button>
     </div>
+    </div>
+
+    {# Etapa 2: plano, quem recebe o relatorio, usuario/senha e Criar conta. #}
+    <fieldset id="etapa-2" class="d-none">
+    <button type="button" class="btn btn-link btn-sm px-0 mb-2" id="botao-voltar">← Voltar</button>
+    {% if modalidade_sel == 'plano' and planos %}
     <div id="bloco-planos">
     <h6 class="mt-4 mb-2">Escolha o seu plano</h6>
     <div id="planos-cadastro" class="mb-3">
@@ -178,10 +174,26 @@
     </div>
     {% endif %}
 
-    <label class="form-label small mb-1" for="mensagem">Mensagem (opcional)</label>
-    <textarea class="form-control mb-3" name="mensagem" id="mensagem" rows="3" placeholder="Conte o que você procura">{{ form.get('mensagem', '') }}</textarea>
+    {% if modalidade_sel == 'plano' %}
+    <h6 class="mt-4 mb-1">Receber relatório <span class="small text-muted fw-normal">(opcional)</span></h6>
+    <p class="small text-muted mb-2">Defina até {{ max_extras }} pessoas para receber o relatório no WhatsApp.</p>
+    {% for k in range(1, max_extras + 1) %}
+    <div class="card shadow-sm mb-2"><div class="card-body p-2">
+        <div class="small fw-semibold mb-1">Contato {{ k }}</div>
+        <input class="form-control form-control-sm mb-1" name="extra_nome__{{ k }}" value="{{ form.get('extra_nome__' ~ k, '') }}" placeholder="Nome" aria-label="Nome do contato {{ k }}">
+        <div class="input-group input-group-sm">
+            <span class="input-group-text">+</span>
+            <input class="form-control" style="max-width: 4rem;" name="codigo_pais__extra{{ k }}" value="{{ form.get('codigo_pais__extra' ~ k, '55') }}" inputmode="numeric" aria-label="Código do país do contato {{ k }}">
+            <input class="form-control" name="numero_telefone__extra{{ k }}" value="{{ form.get('numero_telefone__extra' ~ k, '') }}" placeholder="Celular (DDD + número)" inputmode="tel" aria-label="Celular do contato {{ k }}">
+        </div>
+    </div></div>
+    {% endfor %}
+    {% endif %}
 
-    <h6 class="mt-4 mb-2">Senha</h6>
+    <h6 class="mt-4 mb-2">Acesso</h6>
+    <label class="form-label small mb-1" for="username">Usuário (para entrar no sistema)</label>
+    <input class="form-control" name="username" id="username" value="{{ form.get('username', '') }}" autocomplete="username" required>
+    <div class="small mb-3" id="usuario-status" aria-live="polite"></div>
     <label class="form-label small mb-1" for="senha">Senha (pelo menos 6 caracteres)</label>
     <input class="form-control mb-3" type="password" name="senha" id="senha" minlength="6" autocomplete="new-password" required>
     <label class="form-label small mb-1" for="senha_confirmar">Confirmar senha</label>
@@ -198,8 +210,11 @@
     </div>
     {# So' libera depois de aceitar os termos (pedido do Alan, 08/11/2026). #}
     <button class="btn btn-success w-100" type="submit" id="botao-criar" {% if not form.get('aceite') %}disabled{% endif %}>Criar conta</button>
+    </fieldset>
 </div></form>
+{% endif %}
 <div class="text-center small mb-4"><a href="{{ url_for('login') }}">Já tenho conta</a></div>
+{% if not contato_enviado %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function () {
@@ -255,7 +270,6 @@
             // mesma conta de app._area_preco_grupos, local por local
             areaPreco += (soja > 0 ? soja : porGrupo.cereais) + porGrupo.outros + porGrupo.hf;
         });
-        atualizarExtras();
         document.getElementById('area-total').textContent = total > 0 ? total.toLocaleString('pt-BR') + ' ha' : '-';
         // Quadro de preco de cada plano pago (mesmo HTML de app._parcelas_plano) + "R$ X por ha/ano"
         // pela area plantada TOTAL; o plano com preco pela area calcula o total pela tabela de apoio.
@@ -273,37 +287,6 @@
                 if (!(totalPlano > 0)) return;  // Free: fica "Gratis"
             }
             trocar(el, precoHtml(totalPlano, n, simbolo, usd, total));
-        });
-    }
-    // Tecnico do setor: sem planos, so' o contato da OneAgro.
-    var tecnico = document.getElementById('perfil_tecnico'), planosBloco = document.getElementById('bloco-planos');
-    function perfil() {
-        if (!planosBloco || !tecnico) return;
-        var eh = tecnico.checked;
-        planosBloco.classList.toggle('d-none', eh);
-        document.getElementById('contato-tecnico').classList.toggle('d-none', !eh);
-        planosBloco.querySelectorAll('input[name=plano_id]').forEach(function (r) {
-            if (eh) r.checked = false;
-            r.required = !eh && !{{ no_app_loja | tojson }};
-        });
-    }
-    // radio desmarcado nao dispara "change": escuta as duas opcoes
-    document.querySelectorAll('input[name=perfil]').forEach(function (r) { r.addEventListener('change', perfil); });
-    perfil();
-    // "Recebe dos locais" das pessoas extras: um quadradinho por local (todos marcados de inicio).
-    function atualizarExtras() {
-        var nomes = blocos().map(function (b, n) { return b.querySelector('.local-nome').value.trim() || ('Local ' + (n + 1)); });
-        document.querySelectorAll('.extra-bloco').forEach(function (eb) {
-            var k = eb.dataset.k, cx = eb.querySelector('.extra-locais'), estado = {};
-            var atuais = cx.querySelectorAll('input');
-            if (atuais.length) { atuais.forEach(function (x) { estado[x.value] = x.checked; }); }
-            else if (cx.dataset.marcados) { nomes.forEach(function (_n, i) { estado[i] = cx.dataset.marcados.split(',').indexOf(String(i)) >= 0; }); }
-            var html = nomes.map(function (nome, i) {
-                var marcado = estado[i] === undefined ? true : estado[i];
-                return '<label class="form-check-label"><input type="checkbox" class="form-check-input me-1" name="extra_locais__' + k +
-                    '" value="' + i + '"' + (marcado ? ' checked' : '') + '>' + nome.replace(/[<>&"]/g, '') + '</label>';
-            }).join('');
-            trocar(cx, html);
         });
     }
     // Mapa de cada local: tocar marca, arrastar ajusta, coordenadas digitadas movem o marcador.
@@ -464,15 +447,63 @@
     function liberarBotao() { botaoCriar.disabled = !aceite.checked; }
     aceite.addEventListener('change', liberarBotao);
     liberarBotao();
-    document.getElementById('form-cadastro').addEventListener('submit', function (e) {
-        if (!document.querySelector('input[name="perfil"]:checked')) {
-            e.preventDefault();
-            alert('Marque se você é produtor ou técnico do setor.');
-        } else if (!document.querySelector('input[name="grupo_cultura"]:checked')) {
-            e.preventDefault();
+    // Duas etapas (pedido do Alan, 13/11/2026). Produtor: etapa 1 = dados + fazendas, "Avançar" confere e
+    // mostra a etapa 2 (plano, quem recebe, usuario/senha). Tecnico/Representante: so' nome, empresa,
+    // WhatsApp e e-mail; "Avançar" envia e a tela mostra o contato da OneAgro (sem criar conta).
+    var form = document.getElementById('form-cadastro');
+    function blocos() { return Array.prototype.slice.call(document.querySelectorAll('#locais .local-bloco')); }
+    var dados = document.getElementById('dados'), fsProdutor = document.getElementById('fs-produtor');
+    var fsEmpresa = document.getElementById('fs-empresa'), etapa1 = document.getElementById('etapa-1');
+    var etapa2 = document.getElementById('etapa-2');
+    function perfilAtual() { var r = form.querySelector('input[name="perfil"]:checked'); return r ? r.value : ''; }
+    function soContato() { return ['tecnico', 'representante'].indexOf(perfilAtual()) >= 0; }
+    function mostrarPerfil() {
+        var p = perfilAtual();
+        dados.classList.toggle('d-none', !p);
+        fsEmpresa.disabled = !soContato(); fsEmpresa.classList.toggle('d-none', !soContato());
+        fsProdutor.disabled = soContato(); fsProdutor.classList.toggle('d-none', soContato());
+        if (!soContato()) setTimeout(function () { blocos().forEach(function (b) { if (b._mapa) b._mapa.invalidateSize(); }); }, 50);
+    }
+    form.querySelectorAll('input[name="perfil"]').forEach(function (r) { r.addEventListener('change', mostrarPerfil); });
+    function etapa1Valida() {
+        var campos = Array.prototype.filter.call(etapa1.querySelectorAll('input, select, textarea'), function (c) {
+            return !c.disabled && !c.closest('fieldset:disabled') && !c.closest('.d-none');
+        });
+        for (var i = 0; i < campos.length; i++) {
+            if (!campos[i].checkValidity()) { campos[i].reportValidity(); return false; }
+        }
+        if (!soContato() && !form.querySelector('input[name="grupo_cultura"]:checked')) {
             alert('Escolha o tipo de cultura: Cereais, HF e/ou Outros.');
+            return false;
+        }
+        return true;
+    }
+    function irPara(n) {
+        etapa1.classList.toggle('d-none', n !== 1);
+        etapa2.classList.toggle('d-none', n !== 2);
+        etapa2.disabled = n !== 2;
+        window.scrollTo(0, 0);
+        if (n === 1) setTimeout(function () { blocos().forEach(function (b) { if (b._mapa) b._mapa.invalidateSize(); }); }, 50);
+    }
+    document.getElementById('botao-avancar').addEventListener('click', function () {
+        if (!perfilAtual()) { alert('Marque quem você é.'); return; }
+        if (!etapa1Valida()) return;
+        if (soContato()) { etapa2.disabled = true; form.submit(); return; }
+        if (!usuario.value.trim()) consultar(true);
+        irPara(2);
+    });
+    document.getElementById('botao-voltar').addEventListener('click', function () { irPara(1); });
+    form.addEventListener('submit', function (e) {
+        if (soContato()) return;
+        var campos = etapa2.querySelectorAll('input, select');
+        for (var i = 0; i < campos.length; i++) {
+            if (!campos[i].checkValidity()) { e.preventDefault(); campos[i].reportValidity(); return; }
         }
     });
+    mostrarPerfil();
+    // Voltou do servidor com erro: produtor ja' estava na etapa 2.
+    irPara({{ 'true' if form and form.get('senha') else 'false' }} && !soContato() ? 2 : 1);
 })();
 </script>
+{% endif %}
 {% endblock %}

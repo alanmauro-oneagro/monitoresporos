@@ -25,6 +25,28 @@
 .cad-assinatura { background: #f3faf5; border: 1px solid #cfe8d6; border-radius: 0.5rem; padding: 0.5rem 0.65rem; }
 </style>
 <h4 class="mb-2">Gerenciar Clientes</h4>
+{# Tecnico do setor / Quero representar a OneAgro: so' deixam o contato (pedido do Alan, 13/11/2026). #}
+{% if pedidos_contato %}
+<details class="card shadow-sm mb-3" id="pedidos-contato">
+    <summary class="card-body py-2 fw-bold" style="cursor: pointer;">📞 Pedidos de contato <span class="badge text-bg-danger">{{ pedidos_contato | length }}</span></summary>
+    <div class="card-body pt-0">
+        {% for pc in pedidos_contato %}
+        <div class="border-top py-2 small d-flex flex-wrap align-items-start gap-2">
+            <div class="flex-grow-1">
+                <strong>{{ pc.nome }}</strong> <span class="badge text-bg-light border">{{ perfis.get(pc.perfil, pc.perfil) }}</span>
+                <span class="text-muted">· {{ (pc.criado_em or '')[:16] | replace('T', ' ') }}</span><br>
+                {{ pc.empresa }} ·
+                <a href="https://wa.me/{{ pc.telefone }}" target="_blank" rel="noopener">{{ pc.telefone | telefone_br }}</a> ·
+                <a href="mailto:{{ pc.email }}">{{ pc.email }}</a>
+            </div>
+            <form method="post" action="{{ url_for('admin_pedido_contato_apagar', pedido_id=pc.id) }}" onsubmit="return confirm('Apagar o pedido de {{ pc.nome|e }}?');">
+                <button class="btn btn-sm btn-outline-danger py-0" type="submit">Apagar</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</details>
+{% endif %}
 
 {# Fazenda no modelo unico (pedido do Alan, 09/11/2026): mesma linha e mesmo
    editor pra fazenda da BioScout, do Mapas de Estudo ou do app. #}

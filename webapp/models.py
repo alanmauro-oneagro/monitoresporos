@@ -4192,6 +4192,39 @@ _CAMPOS_SOLICITACAO = (
 )
 
 
+def registrar_pedido_contato(perfil, nome, empresa, telefone, email):
+    """Tecnico do setor / quem quer representar a OneAgro (pedido do Alan, 13/11/2026): nao cria conta,
+    so' guarda o pedido pra OneAgro entrar em contato (Gerenciar Clientes > Pedidos de contato)."""
+    conn = get_db()
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pedidos_contato (id INTEGER PRIMARY KEY AUTOINCREMENT, perfil TEXT, nome TEXT, "
+        "empresa TEXT, telefone TEXT, email TEXT, criado_em TEXT)")
+    conn.execute("INSERT INTO pedidos_contato (perfil, nome, empresa, telefone, email, criado_em) VALUES (?, ?, ?, ?, ?, ?)",
+                 (perfil, nome, empresa, telefone, email, _agora_cuiaba()))
+    conn.commit()
+    conn.close()
+
+
+def pedidos_contato():
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT * FROM pedidos_contato ORDER BY id DESC").fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def apagar_pedido_contato(pedido_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM pedidos_contato WHERE id = ?", (pedido_id,))
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    conn.close()
+
+
 def registrar_cadastro(dados):
     """Registro de uma conta criada em /solicitar-acesso, pra tela "Novos
     cadastros" do Master (nao e' a conta em si -- essa fica em users)."""

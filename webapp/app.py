@@ -7703,7 +7703,9 @@ def _fmt_ha(area):
 
 
 MODALIDADES_CADASTRO = {"plano": "Assinar plano", "fazenda": "Ter acesso à fazenda cadastrada"}
-PERFIS_CADASTRO = {"produtor": "Produtor", "tecnico": "Técnico do setor"}
+PERFIS_CADASTRO = {"produtor": "Produtor", "tecnico": "Técnico do setor", "representante": "Quero representar a OneAgro"}
+# Tecnico e quem quer representar nao criam conta: deixam o contato (pedido do Alan, 13/11/2026).
+PERFIS_SO_CONTATO = ("tecnico", "representante")
 
 
 def _sugerir_usuario(nome_completo):
@@ -7850,9 +7852,13 @@ def solicitar_acesso():
         # Um perfil so' (pedido do Alan, 08/11/2026): Produtor OU Tecnico do setor.
         perfis = [p for p in form.getlist("perfil") if p in PERFIS_CADASTRO][:1]
         nome_completo = " ".join(form.get("nome_completo", "").split())
-        username = " ".join(form.get("username", "").split())
         email = form.get("email", "").strip()
         telefone = _telefone_from_form(form)
+        if perfis and perfis[0] in PERFIS_SO_CONTATO:
+            return _pedido_de_contato(perfis[0], nome_completo, telefone, email, culturas)
+        # Usuario fica na 2a etapa ja' sugerido; vazio = sugestao pelo nome (pedido do Alan, 13/11/2026).
+        username = " ".join(form.get("username", "").split()) or (
+            _sugerir_usuario(nome_completo) if len(nome_completo.split()) >= 2 else "")
         uf = form.get("uf", "")
         # Mais de um tipo de cultura ao mesmo tempo (pedido do Alan, 08/11/2026).
         grupos = [g for g in GRUPOS_CULTURA if g in form.getlist("grupo_cultura")]
@@ -7880,8 +7886,10 @@ def solicitar_acesso():
             erro = f"O usuário \"{username}\" já existe. Sugestão: {_sugerir_usuario(nome_completo)}."
         elif not _is_valid_phone(telefone):
             erro = "Celular inválido -- informe DDD + número."
-        elif email and not _is_valid_email(email):
-            erro = "E-mail inválido."
+        elif not email or not _is_valid_email(email):
+            erro = "Informe um e-mail válido."
+        elif not " ".join(form.get("grupo_economico", "").split()):
+            erro = "Informe o nome do grupo econômico."
         elif (ja_cadastrado := models.conta_com_contato(telefone, email)):
             # Mesma pessoa tentando um 2o cadastro (pedido do Alan, 01/11/2026)
             erro = (f"Este {'celular' if ja_cadastrado == 'telefone' else 'e-mail'} já está cadastrado na OneAgro. "
@@ -7957,6 +7965,35 @@ def solicitar_acesso():
             return redirect(url_for("index"))
     return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
                            perfis=PERFIS_CADASTRO, form=form)
+
+
+def _pedido_de_contato(perfil, nome_completo, telefone, email, culturas):
+    """Tecnico do setor / Quero representar a OneAgro (pedido do Alan, 13/11/2026): sem conta; guarda o
+    pedido, avisa os Masters no WhatsApp e mostra o contato comercial da OneAgro."""
+    form = request.form
+    empresa = " ".join(form.get("empresa", "").split())[:80]
+    erro = None
+    if len(nome_completo.split()) < 2:
+        erro = "Informe o seu nome completo (nome e sobrenome)."
+    elif not empresa:
+        erro = "Informe a empresa."
+    elif not _is_valid_phone(telefone):
+        erro = "Celular inválido -- informe DDD + número."
+    elif not email or not _is_valid_email(email):
+        erro = "Informe um e-mail válido."
+    if erro:
+        flash(erro, "error")
+        return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR,
+                               modalidades=MODALIDADES_CADASTRO, perfis=PERFIS_CADASTRO, form=form)
+    models.registrar_pedido_contato(perfil, nome_completo, empresa, telefone, email)
+    linhas = ["🔔 *Pedido de contato - OneAgro*", f"{nome_completo} -- {PERFIS_CADASTRO[perfil]}", f"Empresa: {empresa}",
+              f"Celular: {models.fmt_telefone_br(telefone)}", f"E-mail: {email}", "",
+              f"Ver: {url_for('admin_solicitacoes', _external=True)}"]
+    for tel in models.get_master_telefones():
+        _whatsapp_em_segundo_plano(tel, "\n".join(linhas))
+    return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR,
+                           modalidades=MODALIDADES_CADASTRO, perfis=PERFIS_CADASTRO, form={},
+                           contato_enviado={"nome": nome_completo.split()[0], "perfil": perfil})
 
 
 def _whatsapp_em_segundo_plano(telefone, texto):
@@ -9193,7 +9230,15 @@ def admin_solicitacoes():
                            sem_cadastro=sem_cadastro, exibir=exibir,
                            grupos=sorted(grupos.values(), key=lambda gr: _chave_alfabetica(gr["nome"])), sem_grupo=sem_grupo,
                            clientes_lista=[{"id": pe["user_id"], "nome": pe.get("nome_completo") or pe["username"]}
-                                           for pe in pessoas if pe.get("cliente")])
+                                           for pe in pessoas if pe.get("cliente")],
+                           pedidos_contato=models.pedidos_contato())
+
+
+@app.route("/admin/pedidos-contato/<int:pedido_id>/apagar", methods=["POST"])
+@master_required
+def admin_pedido_contato_apagar(pedido_id):
+    models.apagar_pedido_contato(pedido_id)
+    return _save_response("Pedido de contato apagado.", "admin_solicitacoes")
 
 
 def _preencher_estacoes(fazendas):
