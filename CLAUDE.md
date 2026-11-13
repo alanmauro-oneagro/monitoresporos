@@ -1007,6 +1007,9 @@ site tem que entrar la'.
   ja' passaram e devolve sempre 6 -- antes, da meia-noite ate' a leitura das 04:45 (ou com a leitura falhando)
   a grade guardada era de ontem e o ultimo dia do ciclo ficava vazio. No mapa.html o ciclo automatico pula dia
   sem dado (`malhaChuva.comDados`).
+  Enquanto a grade e' buscada, o Mapa mostra "Carregando previsão de chuva... XX%" (pedido do Alan, 13/11/2026):
+  `weather_forecast.progresso_grade` (lotes feitos / total + tempo dentro do lote, ~1 min cada), devolvido como `pct`
+  no 202 de `/chuva/grade`; o navegador pergunta a cada 5 s.
 - **Paises na chuva do Mapa** (pedido do Alan, 13/11/2026): `countries.paises_com_estacoes()` = pais com
   provedor de estacao integrado (nao `sem_estacoes`; Chile so' com credencial DMC), SEM consultar o catalogo
   na hora -- antes a Bolivia sumia da previsao de chuva quando o servidor do SENAMHI Bolivia caia (502; o

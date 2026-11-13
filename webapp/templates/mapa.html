@@ -585,7 +585,12 @@
                 sem_esperar: true,
             }),
         }).then(function (r) {
-            if (r.status === 202) return null;
+            if (r.status === 202) {
+                return r.json().catch(function () { return {}; }).then(function (j) {
+                    if (!malhaChuva) chuvaStatus.textContent = 'Carregando previsão de chuva... ' + ((j && j.pct) || 0) + '%';
+                    return null;
+                });
+            }
             return r.ok ? r.json() : [];
         });
     }
@@ -624,7 +629,7 @@
         if (buscandoChuva) return;
         buscandoChuva = true;
         if (!malhaChuva) {
-            chuvaStatus.textContent = 'Carregando previsao de chuva...';
+            chuvaStatus.textContent = 'Carregando previsão de chuva... 0%';
             chuvaStatus.classList.remove('d-none');
         }
         var cache = lerCacheChuva();
@@ -647,7 +652,7 @@
         }).then(pedirGradeChuva)
             .then(function (dados) {
                 buscandoChuva = false;
-                if (dados === null) { agendarNovoPedidoChuva(15000); return; }
+                if (dados === null) { agendarNovoPedidoChuva(5000); return; }
                 gradeChuva = dados;
                 if (!mostrarChuva()) throw new Error('grade de chuva vazia');
                 chuvaDoCache = false;

@@ -550,8 +550,39 @@ def _aguardar_cota_minuto(pontos):
         time.sleep(max(espera, 0.5))
 
 
-def _buscar_grade_em_lotes(lats, lons, campo_daily):
+# Progresso de cada grade sendo buscada (pedido do Alan, 13/11/2026: "Carregando... XX%").
+_grade_progresso = {}  # chave -> {"feitos", "total", "lote_desde"}
+
+
+def _chave_grade(tipo, lats, lons):
+    assinatura = json.dumps([[round(float(v), 3) for v in lats], [round(float(v), 3) for v in lons]])
+    return f"{tipo}:{hashlib.sha1(assinatura.encode()).hexdigest()}"
+
+
+def progresso_grade(tipo, lats, lons):
+    """Porcentagem (0-99) da busca em andamento da grade, ou None se nao ha'
+    busca. Cada lote leva ~1 min (limite da Open-Meteo), entao o tempo dentro
+    do lote tambem conta, ate' 95% dele."""
+    p = _grade_progresso.get(_chave_grade(tipo, lats, lons))
+    if not p or not p["total"]:
+        return None
+    dentro = min((time.monotonic() - p["lote_desde"]) / 60.0, 0.95)
+    return min(99, int((p["feitos"] + dentro) / p["total"] * 100))
+
+
+def _buscar_grade_em_lotes(lats, lons, campo_daily, chave=None):
     resultados = []
+    total = -(-len(lats) // GRADE_LOTE_PONTOS)
+    if chave:
+        _grade_progresso[chave] = {"feitos": 0, "total": total, "lote_desde": time.monotonic()}
+    try:
+        return _buscar_lotes(lats, lons, campo_daily, chave, resultados)
+    finally:
+        if chave:
+            _grade_progresso.pop(chave, None)
+
+
+def _buscar_lotes(lats, lons, campo_daily, chave, resultados):
     for i in range(0, len(lats), GRADE_LOTE_PONTOS):
         lote_lats, lote_lons = lats[i:i + GRADE_LOTE_PONTOS], lons[i:i + GRADE_LOTE_PONTOS]
         params = {
@@ -575,6 +606,8 @@ def _buscar_grade_em_lotes(lats, lons, campo_daily):
                     raise
                 time.sleep(65)
         resultados.extend(lote if isinstance(lote, list) else [lote])
+        if chave in _grade_progresso:
+            _grade_progresso[chave].update(feitos=i // GRADE_LOTE_PONTOS + 1, lote_desde=time.monotonic())
     return resultados
 
 
@@ -603,8 +636,7 @@ def _grade_diaria(tipo, lats, lons, campo_daily, campo_saida, salvar=True, pela_
     busca de novo sozinha (`atualizar_todos`) -- quem abre o mapa nao
     espera pela Open-Meteo. Em falha, devolve a ultima grade boa, sem
     aviso na tela (pedido do usuario, 16/10/2026)."""
-    assinatura = json.dumps([[round(float(v), 3) for v in lats], [round(float(v), 3) for v in lons]])
-    chave = f"{tipo}:{hashlib.sha1(assinatura.encode()).hexdigest()}"
+    chave = _chave_grade(tipo, lats, lons)
     dia = janela_de_leitura()
     hoje = _agora_cuiaba().date().isoformat()
     with _lock:
@@ -642,7 +674,7 @@ def _buscar_e_guardar_grade(chave, registro, tipo, lats, lons, campo_daily, camp
         "pedida_em": (registro or {}).get("pedida_em", hoje) if pela_rodada else hoje,
     }
     try:
-        resultados = _buscar_grade_em_lotes(list(lats), list(lons), campo_daily)
+        resultados = _buscar_grade_em_lotes(list(lats), list(lons), campo_daily, chave)
     except Exception:
         with _lock:
             registro = {**(registro or {}), **base, "falha_janela": dia, "falha_em": time.time()}
