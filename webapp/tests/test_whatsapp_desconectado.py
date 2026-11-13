@@ -170,3 +170,117 @@ class ApiOficialMetaTest(unittest.TestCase):
         self.assertIn("WHATSAPP_CLOUD_PHONE_NUMBER_ID", html)
         self.assertIn("/webhooks/whatsapp", html)
         self.assertNotIn("zzz-segredo-nao-mostrar", html)
+
+
+class UmblerTalkTest(unittest.TestCase):
+    """Envio pela Umbler Talk (pedido do Alan, 13/11/2026): rotas simplificadas, modelos e webhook."""
+
+    @classmethod
+    def setUpClass(cls):
+        import whatsapp_umbler
+        cls.u = whatsapp_umbler
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+
+    def _config(self, **extra):
+        valores = {"TOKEN": "tok", "ORGANIZATION_ID": "org1", "FROM_PHONE": "+5543900000000"}
+        valores.update(extra)
+        return [mock.patch.object(self.u, k, v) for k, v in valores.items()]
+
+    def _rodar(self, funcao, *args, **extra):
+        pedidos = []
+
+        class Resp:
+            def __init__(self, corpo):
+                self.corpo = corpo
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+            def read(self, *a):
+                return self.corpo
+
+        def falso(req, timeout=None):
+            pedidos.append(req)
+            return Resp(b'{"id": "msgZZZ", "contactId": "c1"}')
+
+        patches = self._config(**extra) + [mock.patch.object(self.u.urllib.request, "urlopen", falso)]
+        for p in patches:
+            p.start()
+        try:
+            return funcao(*args), pedidos
+        finally:
+            for p in patches:
+                p.stop()
+
+    def test_texto_e_documento(self):
+        res, pedidos = self._rodar(self.u.send_whatsapp, "55 (43) 99999-0001", "Zzz oi")
+        self.assertEqual(res, (True, "enviado [msgZZZ]"))
+        req = pedidos[0]
+        self.assertTrue(req.full_url.endswith("/messages/simplified/"))
+        self.assertEqual(req.get_header("Authorization"), "Bearer tok")
+        corpo = req.data.decode()
+        for trecho in ("+5543999990001", "+5543900000000", "org1", "Zzz oi"):
+            self.assertIn(trecho, corpo)
+        res, pedidos = self._rodar(self.u.send_whatsapp_document, "5543999990001", b"%PDF-zzz", "r.pdf", "Leg")
+        self.assertTrue(res[0])
+        corpo = pedidos[0].data
+        self.assertIn(b'name="File"; filename="r.pdf"', corpo)
+        self.assertIn(b"%PDF-zzz", corpo)
+
+    def test_modelos(self):
+        self.assertFalse(self._rodar(self.u.usa_modelos)[0])
+        res, pedidos = self._rodar(self.u.send_relatorio_modelo, "5543999990001", b"%PDF", "r.pdf",
+                                   ["Zzz", "Faz\nTeste", "13/11", "Ferrugem"],
+                                   TEMPLATE_RELATORIO_ID="tplA", TEMPLATE_TEXTO_ID="tplB")
+        self.assertTrue(res[0])
+        corpo = pedidos[0].data.decode("latin-1")
+        self.assertTrue(pedidos[0].full_url.endswith("/template-messages/simplified/"))
+        self.assertIn("tplA", corpo)
+        self.assertIn("Faz - Teste", corpo)
+        self.assertEqual(corpo.count('name="Params"'), 4)
+        # NDVI sem modelo = imagem com legenda
+        res, pedidos = self._rodar(self.u.send_ndvi_modelo, "5543999990001", b"PNG", ["Zzz", "Faz", "13/11"])
+        self.assertTrue(pedidos[0].full_url.endswith("/messages/simplified/"))
+        # sem configuracao nao envia
+        with mock.patch.object(self.u, "TOKEN", ""):
+            ok, msg = self.u.send_whatsapp("5543999990001", "x")
+        self.assertFalse(ok)
+        self.assertIn("UMBLER_TALK_TOKEN", msg)
+
+    def test_provedor_umbler_no_whatsapp(self):
+        import whatsapp
+        with mock.patch.object(whatsapp, "WHATSAPP_PROVIDER", "umbler"), \
+                mock.patch.object(self.u, "send_whatsapp", return_value=(True, "enviado [x]")) as env, \
+                mock.patch.object(whatsapp, "_qap_permitidos", return_value=None, create=True):
+            self.assertFalse(whatsapp.usa_modelo_oficial())
+            with mock.patch.object(self.u, "TEMPLATE_RELATORIO_ID", "a"), mock.patch.object(self.u, "TEMPLATE_TEXTO_ID", "b"):
+                self.assertTrue(whatsapp.usa_modelo_oficial())
+            self.assertFalse(whatsapp.request_pairing_code("5543")[0])
+
+    def test_webhook(self):
+        import json
+        c = webapp.app.test_client()
+        with mock.patch.object(self.u, "WEBHOOK_TOKEN", "zzz-umbler"):
+            models.log_whatsapp_envio("Zzz Fazenda Umbler", "Zzz Pessoa", "5543999990002", True, "enviado [umbZZZ1]")
+            evento = {"Type": "Message", "Payload": {"Content": {
+                "Contact": {"PhoneNumber": "+5543999990002", "Name": "Zzz Pessoa"},
+                "LastMessage": {"Id": "umbZZZ1", "MessageState": "Read", "Source": "Member"}}}}
+            self.assertEqual(c.post("/webhooks/umbler?token=errado", json=evento).status_code, 403)
+            self.assertEqual(c.post("/webhooks/umbler?token=zzz-umbler", json=evento).status_code, 200)
+            evento2 = {"Type": "Message", "Payload": {"Content": {
+                "Contact": {"PhoneNumber": "+5543999990002", "Name": "Zzz Pessoa"},
+                "LastMessage": {"Id": "umbZZZ2", "Content": "Zzz recebi", "Source": "Contact"}}}}
+            self.assertEqual(c.post("/webhooks/umbler?token=zzz-umbler", data=json.dumps(evento2),
+                                    content_type="application/json").status_code, 200)
+        with mock.patch.object(self.u, "WEBHOOK_TOKEN", ""):
+            self.assertEqual(c.post("/webhooks/umbler?token=", json=evento).status_code, 403)
+        conn = models.get_db()
+        st = conn.execute("SELECT status_meta FROM whatsapp_envio_log WHERE mensagem LIKE '%[umbZZZ1]%'").fetchone()[0]
+        conn.execute("DELETE FROM whatsapp_envio_log WHERE site_name = 'Zzz Fazenda Umbler'")
+        rec = conn.execute("SELECT texto FROM whatsapp_recebidas WHERE texto = 'Zzz recebi'").fetchone()
+        conn.execute("DELETE FROM whatsapp_recebidas WHERE texto = 'Zzz recebi'")
+        conn.commit()
+        conn.close()
+        self.assertEqual(st, "lido")
+        self.assertIsNotNone(rec)

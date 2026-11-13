@@ -92,6 +92,46 @@
 
 {# API oficial da Meta (pedido do Alan, 13/11/2026): o que ja' esta' preenchido no Railway,
    os modelos a aprovar e o endereco do webhook -- nunca mostra o valor de nenhuma variavel. #}
+<div class="card shadow-sm mt-4" id="umbler-talk">
+    <div class="card-body">
+        <h6 class="mb-2">Umbler Talk {% if provedor == 'umbler' %}<span class="badge bg-success">em uso</span>{% endif %}</h6>
+        <div class="small text-muted mb-2">Variáveis do serviço no Railway:</div>
+        <ul class="list-unstyled small mb-3">
+            {% for nome, descricao, ok in parametros_umbler %}
+            <li class="mb-1">{{ '✅' if ok else '⬜' }} <code>{{ nome }}</code> -- {{ descricao }}</li>
+            {% endfor %}
+        </ul>
+        <div class="small text-muted mb-1">Modelos (opcionais; criar em Modelos de mensagem na Umbler e copiar o ID de cada um):</div>
+        <ul class="small mb-3">
+            <li>Relatório com PDF -- cabeçalho Documento + corpo com {{ '{{1}}' }} nome, {{ '{{2}}' }} fazenda, {{ '{{3}}' }} data, {{ '{{4}}' }} doenças em alerta</li>
+            <li>Relatório só texto -- sem cabeçalho, as mesmas 4 variáveis</li>
+            <li>NDVI -- cabeçalho Imagem + {{ '{{1}}' }} nome, {{ '{{2}}' }} fazenda, {{ '{{3}}' }} data</li>
+        </ul>
+        <div class="small text-muted mb-1">Sem os IDs dos dois modelos do relatório, ele sai como hoje (texto completo + PDF).</div>
+        <div class="small text-muted mb-1">Webhook (painel da Umbler > Webhooks, evento Mensagem; troque SUA_SENHA pelo <code>UMBLER_TALK_WEBHOOK_TOKEN</code>):</div>
+        <div class="input-group input-group-sm" style="max-width: 40rem;">
+            <input class="form-control" readonly value="{{ webhook_umbler_url }}" id="webhook-umbler-url">
+            <button type="button" class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('webhook-umbler-url').value)">Copiar</button>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mt-4" id="recebidas">
+    <div class="card-body">
+        <div class="small text-muted mb-1">Últimas mensagens recebidas dos clientes (Umbler ou Meta):</div>
+        {% if recebidas %}
+        <ul class="list-unstyled small mb-0">
+            {% for m in recebidas %}
+            <li class="border-top py-1"><span class="text-muted">{{ m.criado_em[:16] | replace('T', ' ') }}</span> ·
+                <b>{{ m.nome or '-' }}</b> ({{ m.telefone | telefone_br if m.telefone else '-' }}): {{ m.texto }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="small text-muted">Nenhuma ainda.</div>
+        {% endif %}
+    </div>
+</div>
+
 <div class="card shadow-sm mt-4" id="api-meta">
     <div class="card-body">
         <h6 class="mb-2">API oficial da Meta (WhatsApp Business)</h6>
@@ -108,21 +148,10 @@
             <li><code>{{ modelos_meta[2] }}</code> -- cabeçalho Imagem (NDVI) + corpo com {{ '{{1}}' }} nome, {{ '{{2}}' }} fazenda, {{ '{{3}}' }} data</li>
         </ul>
         <div class="small text-muted mb-1">Webhook (Configuração do app na Meta > WhatsApp > Webhook; assinar o campo <code>messages</code>):</div>
-        <div class="input-group input-group-sm mb-3" style="max-width: 40rem;">
+        <div class="input-group input-group-sm" style="max-width: 40rem;">
             <input class="form-control" readonly value="{{ webhook_url }}" id="webhook-url">
             <button type="button" class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('webhook-url').value)">Copiar</button>
         </div>
-        <div class="small text-muted mb-1">Últimas mensagens recebidas dos clientes:</div>
-        {% if recebidas %}
-        <ul class="list-unstyled small mb-0">
-            {% for m in recebidas %}
-            <li class="border-top py-1"><span class="text-muted">{{ m.criado_em[:16] | replace('T', ' ') }}</span> ·
-                <b>{{ m.nome or '-' }}</b> ({{ m.telefone | telefone_br if m.telefone else '-' }}): {{ m.texto }}</li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <div class="small text-muted">Nenhuma ainda.</div>
-        {% endif %}
     </div>
 </div>
 

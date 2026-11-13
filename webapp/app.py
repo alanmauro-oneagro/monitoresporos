@@ -48,6 +48,7 @@ import export_excel
 import export_pdf
 import whatsapp
 import whatsapp_cloud_api
+import whatsapp_umbler
 import weather_forecast
 import inmet_stations
 import virtual_farms
@@ -7062,6 +7063,10 @@ def admin_whatsapp():
         recebidas=models.whatsapp_recebidas(),
         modelos_meta=[whatsapp_cloud_api.TEMPLATE_RELATORIO, whatsapp_cloud_api.TEMPLATE_RELATORIO_TEXTO,
                       whatsapp_cloud_api.TEMPLATE_NDVI],
+        provedor=whatsapp.WHATSAPP_PROVIDER, parametros_umbler=whatsapp_umbler.parametros(),
+        webhook_umbler_url=url_for("umbler_webhook", _external=True, _scheme="http"
+                                   if request.host.split(":")[0] in ("127.0.0.1", "localhost") else "https")
+        + "?token=SUA_SENHA",
     )
 
 
@@ -7093,6 +7098,23 @@ def whatsapp_webhook():
                 texto = ((msg.get("text") or {}).get("body") or (msg.get("button") or {}).get("text")
                          or f"[{msg.get('type', 'mensagem')}]")
                 models.registrar_whatsapp_recebida(msg.get("from"), nomes.get(msg.get("from"), ""), texto[:1000])
+    return jsonify(ok=True)
+
+
+@app.route("/webhooks/umbler", methods=["POST"])
+def umbler_webhook():
+    """Webhook da Umbler Talk (pedido do Alan, 13/11/2026; cadastrado no painel da Umbler, evento
+    Mensagem). A Umbler nao assina o aviso: a URL leva ?token=UMBLER_TALK_WEBHOOK_TOKEN. Estado de cada
+    mensagem enviada (entregue/lido/falhou) marca a linha do historico de envios; mensagem do contato
+    vai pra lista da tela Gerenciar WhatsApp."""
+    token = whatsapp_umbler.WEBHOOK_TOKEN
+    if not token or not secrets.compare_digest(request.args.get("token", ""), token):
+        abort(403)
+    atualizacoes, recebidas = whatsapp_umbler.ler_evento(request.get_json(silent=True) or {})
+    for mid, estado, erro in atualizacoes:
+        models.atualizar_status_meta(mid, estado, erro)
+    for telefone, nome, texto in recebidas:
+        models.registrar_whatsapp_recebida(telefone, nome, texto)
     return jsonify(ok=True)
 
 

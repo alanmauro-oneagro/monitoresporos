@@ -1184,6 +1184,17 @@ pra producao sozinha; testar tudo primeiro no QAP (ambiente de teste).
   texto; aparece no Historico de envios) e mensagens recebidas pra tabela `whatsapp_recebidas`. Gerenciar WhatsApp
   tem o quadro "API oficial da Meta" (variaveis preenchidas ✅/⬜ sem mostrar valor, modelos, URL do webhook,
   ultimas mensagens recebidas). Testes `ApiOficialMetaTest` e o envio por plano em `test_fazenda_estimada`.
+- **Umbler Talk** (pedido do Alan, 13/11/2026 -- escolhida no lugar da Meta direta): `WHATSAPP_PROVIDER=umbler`,
+  `webapp/whatsapp_umbler.py` (API https://app-utalk.umbler.com/api/v1, Bearer). Variaveis: `UMBLER_TALK_TOKEN`,
+  `UMBLER_TALK_ORGANIZATION_ID`, `UMBLER_TALK_FROM_PHONE` (+55..., canal que envia), opcionais
+  `UMBLER_TALK_TEMPLATE_RELATORIO_ID` / `_TEXTO_ID` / `_NDVI_ID` (ids dos modelos aprovados no painel da Umbler) e
+  `UMBLER_TALK_WEBHOOK_TOKEN`. Texto/PDF/imagem por POST `/messages/simplified/` (multipart, campo `File`); modelos
+  por `/template-messages/simplified/` (`TemplateId` + `Params`). Sem os 2 ids do relatorio, `usa_modelo_oficial()` e'
+  falso e o relatorio sai como no bridge (texto completo + PDF); NDVI sem id = imagem com legenda. Status pelo GET
+  `/members/me/`. Webhook `/webhooks/umbler?token=<UMBLER_TALK_WEBHOOK_TOKEN>` (a Umbler nao assina): estado
+  Sent/Received/Read/Failed vira enviado/entregue/lido/falhou no Historico (`atualizar_status_meta`, pelo
+  "enviado [id]") e mensagem do contato vai pra `whatsapp_recebidas`. Gerenciar WhatsApp: quadro "Umbler Talk"
+  (variaveis ✅/⬜, URL do webhook), quadro das mensagens recebidas e o da Meta. Teste `UmblerTalkTest`.
 - **Fase 5 -- WhatsApp em volume**: `WHATSAPP_PROVIDER=cloud_api`
   (`whatsapp_cloud_api.py`), exige verificacao da empresa na Meta e
   modelos aprovados, custo por conversa; fila com novas tentativas;
