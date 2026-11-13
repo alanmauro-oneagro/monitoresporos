@@ -711,6 +711,10 @@ site tem que entrar la'.
   (`MAX_CENAS_TENTADAS` = 6, quadro ate' `NUVEM_MAXIMA_DO_QUADRO` 90%) e fica com o 1o com a fazenda dentro do
   limite (erro lista o % de cada dia tentado). Pre-visualizacao: URL com `?v=` + `no-store` (o navegador mostrava a
   imagem anterior) e tocar na imagem abre grande.
+  **Cartoes recolhidos como Manejos** (pedido do Alan, 13/11/2026): "▶ <nome>" (`.farm-toggle`) abre/fecha, com
+  selos "📎 N CAR" e "🛰️ N" ao lado; abertos lembrados no navegador (`ndvi.abertas`), com pre-visualizacao pendente
+  ja' abre. Coordenadas em destaque abaixo do nome (`.coords-fazenda`, pilula verde, link pro Google Maps). Anexar
+  CAR salva sozinho (escolher o arquivo ou sair do campo do KML; sem botao).
 - **Manejos -- TS/Sulco/Folha em boxes** (pedido do Alan, 12/11/2026): cada secao recolhida
   (▶, `.secao-toggle`, numero de boxes preenchidas ao lado) com boxes iguais a Aplicacoes: Data
   aplicacao, Talhao, Fungicidas quimicos, Fungicidas biologicos (campos `cx_*_<momento>`); 1 box

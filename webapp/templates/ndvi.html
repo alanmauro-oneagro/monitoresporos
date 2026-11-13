@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Mapas de NDVI - OneAgro App{% endblock %}
+{% block extra_head %}
+<style>
+.coords-fazenda { display: inline-block; margin-top: .35rem; padding: .2rem .6rem; border-radius: 999px;
+    background: #e7f5ea; color: #1b5e20; font-weight: 600; font-size: .9rem; text-decoration: none; font-variant-numeric: tabular-nums; }
+.coords-fazenda:hover { background: #d3eed9; color: #1b5e20; }
+</style>
+{% endblock %}
 {% block content %}
 <h4 class="mb-2">Mapas de NDVI <span class="fs-6 text-muted fw-normal">(Sentinel-2)</span></h4>
 {% include "_aviso_whatsapp.html" %}
@@ -25,12 +32,18 @@
 {% set site_idx = loop.index0 %}
 <div class="card shadow-sm mb-3" data-site="{{ site_group.site }}">
     <div class="card-body">
-        <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
-            <div class="fw-bold flex-grow-1">
-                {{ site_group.nome_exibicao }}
-                {% if site_group.coords %}- <span class="text-muted fw-normal small">{{ "%.5f"|format(site_group.coords[0]) }}, {{ "%.5f"|format(site_group.coords[1]) }}</span>{% endif %}
-            </div>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold farm-toggle" data-target="ndvi-body-{{ site_idx }}">
+                <span class="toggle-icon">▶</span> {{ site_group.nome_exibicao }}
+            </button>
+            {% if site_group.cars %}<span class="badge text-bg-light border">📎 {{ site_group.cars|length }} CAR</span>{% endif %}
+            {% if site_group.historico %}<span class="badge text-bg-light border">🛰️ {{ site_group.historico|length }}</span>{% endif %}
         </div>
+        {% if site_group.coords %}
+        <a class="coords-fazenda" href="https://www.google.com/maps?q={{ '%.5f'|format(site_group.coords[0]) }},{{ '%.5f'|format(site_group.coords[1]) }}"
+           target="_blank" rel="noopener" title="Abrir no mapa">📍 {{ "%.5f"|format(site_group.coords[0]) }}, {{ "%.5f"|format(site_group.coords[1]) }}</a>
+        {% endif %}
+        <div class="{{ '' if site_group.preview else 'd-none ' }}mt-3 ndvi-body" id="ndvi-body-{{ site_idx }}">
         <div class="row g-3">
             <div class="col-12 col-lg-6">
                 {% if site_group.cars %}
@@ -51,7 +64,7 @@
                 {# Formulario recolhido (antes repetia o texto inteiro em toda fazenda -- revisao de redundancias, 12/11/2026). #}
                 <details class="mb-2">
                 <summary class="small fw-semibold">📎 {{ 'Anexar mais um CAR' if site_group.cars else 'Anexar CAR' }}</summary>
-                <form method="post" action="{{ url_for('save_ndvi_car') }}" enctype="multipart/form-data" class="mt-2">
+                <form method="post" action="{{ url_for('save_ndvi_car') }}" enctype="multipart/form-data" class="mt-2 form-car">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <a href="https://consulta.car.gov.br/" target="_blank" rel="noopener" class="small d-inline-block mb-2">Buscar contorno da fazenda no SICAR &raquo;</a>
                     <label class="small text-muted mb-1 d-block" for="nome_car_{{ site_idx }}">Nome do CAR (opcional -- ex.: nome do talhao/propriedade)</label>
@@ -60,7 +73,7 @@
                     <input type="file" class="form-control form-control-sm mb-2" id="kml_file_{{ site_idx }}" name="kml_file" accept=".kml,.zip">
                     <label class="small text-muted mb-1" for="kml_texto_{{ site_idx }}">...ou cole o conteudo do KML aqui</label>
                     <textarea class="form-control form-control-sm mb-2" id="kml_texto_{{ site_idx }}" name="kml_texto" rows="4" placeholder="&lt;kml&gt;...&lt;/kml&gt;"></textarea>
-                    <button type="submit" class="btn btn-sm btn-success">{{ 'Anexar mais um CAR' if site_group.cars else 'Anexar CAR' }}</button>
+                    <div class="small text-muted status-car">Anexa sozinho ao escolher o arquivo ou ao sair do campo do KML.</div>
                 </form>
                 </details>
             </div>
@@ -144,7 +157,7 @@
                 </div>
                 <button type="submit" form="ndvi_whats_{{ site_idx }}" class="btn btn-sm btn-outline-success mt-2"
                         {% if not site_group.ndvi_destinatarios or not whatsapp_conectado() %}disabled{% endif %}
-                        title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp{% elif site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguem marcado pra receber o NDVI dessa fazenda (aba Programação de Envios){% endif %}">
+                        title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp{% elif site_group.ndvi_destinatarios %}Enviar as imagens marcadas pra quem recebe o NDVI{% else %}Ninguém marcado pra receber o NDVI dessa fazenda (aba Programação de Envios){% endif %}">
                     📲 Enviar selecionadas por WhatsApp
                 </button>
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-2 copiar-ndvi" data-form="ndvi_whats_{{ site_idx }}"
@@ -166,12 +179,47 @@
             -- muda em <a href="{{ url_for('whatsapp_gerenciamento') }}">Programação de Envios</a>.
         </div>
         {% endif %}
+        </div>
     </div>
 </div>
 {% endfor %}
 {% endif %}
 
 <script>
+(function () {
+    var CHAVE = 'ndvi.abertas';
+    var abertas = [];
+    try { abertas = JSON.parse(localStorage.getItem(CHAVE) || '[]'); } catch (e) {}
+    function guardar() { try { localStorage.setItem(CHAVE, JSON.stringify(abertas)); } catch (e) {} }
+    document.querySelectorAll('.farm-toggle').forEach(function (btn) {
+        var card = btn.closest('[data-site]');
+        var site = card.dataset.site;
+        var body = document.getElementById(btn.dataset.target);
+        var icon = btn.querySelector('.toggle-icon');
+        if (abertas.indexOf(site) !== -1) { body.classList.remove('d-none'); }
+        icon.textContent = body.classList.contains('d-none') ? '▶' : '▼';
+        btn.addEventListener('click', function () {
+            body.classList.toggle('d-none');
+            var aberto = !body.classList.contains('d-none');
+            icon.textContent = aberto ? '▼' : '▶';
+            abertas = abertas.filter(function (s) { return s !== site; });
+            if (aberto) { abertas.push(site); }
+            guardar();
+        });
+    });
+})();
+document.querySelectorAll('.form-car').forEach(function (form) {
+    var enviando = false;
+    function enviar() {
+        if (enviando) return;
+        enviando = true;
+        var st = form.querySelector('.status-car');
+        if (st) st.textContent = '⏳ Anexando...';
+        form.submit();
+    }
+    form.querySelector('input[type="file"]').addEventListener('change', function (e) { if (e.target.files.length) enviar(); });
+    form.querySelector('textarea').addEventListener('change', function (e) { if (e.target.value.trim()) enviar(); });
+});
 document.querySelectorAll('.copiar-ndvi').forEach(function (botao) {
     botao.addEventListener('click', function () {
         var marcadas = document.querySelectorAll('input[name="historico_ids"][form="' + botao.dataset.form + '"]:checked');
