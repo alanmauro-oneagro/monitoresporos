@@ -1086,6 +1086,11 @@ site tem que entrar la'.
 (cliente do app NAO ve o aviso -- pedido do Alan, 08/11/2026). As
   rotas tambem recusam (`_whatsapp_desconectado`, flash e volta). Envios
   (so' configuracao) e Gerenciar WhatsApp (ex-"Conexao WhatsApp") nao mudam.
+- **Envio manual pra outros usuarios** (pedido do Alan, 13/11/2026): no painel "📲 Enviar por WhatsApp" de
+  Recomendações (fazenda e grupo), alem dos cadastrados da fazenda e do "Outro telefone", "+ Outros usuários"
+  (so' Administrador/Master) lista usuarios e subordinados com celular (`models.contatos_para_envio`, chave
+  "u:<id>"/"s:<id>", busca por nome; lista unica em `<template id="tpl-outros-usuarios">` copiada ao abrir).
+  O servidor pega o telefone do banco (`_outros_usuarios_do_form`), nunca do formulario; nada fica salvo.
 - **Intervalo entre envios de WhatsApp** (decisao do Alan, 16/10/2026 --
   substitui o escalonamento de 1h validado em set/2026, ver
   `.claude\memory\oneagro_whatsapp_stagger_validado.md`): nunca dois

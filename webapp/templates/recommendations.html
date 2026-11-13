@@ -140,6 +140,13 @@
                         {% else %}
                         <div class="small text-muted mb-1">Nenhum número cadastrado nas fazendas do grupo.</div>
                         {% endfor %}
+                        {% if contatos_whatsapp %}
+                        <details class="mt-2 outros-usuarios">
+                            <summary class="small text-primary">+ Outros usuários</summary>
+                            <input type="search" class="form-control form-control-sm my-1 busca-outros" placeholder="Buscar nome...">
+                            <div class="lista-outros" style="max-height: 12rem; overflow-y: auto;"></div>
+                        </details>
+                        {% endif %}
                         <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + número, sem espaços -- não fica salvo)</label>
                         <div class="d-flex gap-2">
                             <input type="text" name="codigo_pais" value="55" inputmode="numeric" class="form-control form-control-sm" style="max-width: 5.5rem;" aria-label="Codigo do pais">
@@ -210,6 +217,13 @@
                         {% else %}
                         <div class="small text-muted mb-1">Nenhum número cadastrado para essa fazenda.</div>
                         {% endfor %}
+                        {% if contatos_whatsapp %}
+                        <details class="mt-2 outros-usuarios">
+                            <summary class="small text-primary">+ Outros usuários</summary>
+                            <input type="search" class="form-control form-control-sm my-1 busca-outros" placeholder="Buscar nome...">
+                            <div class="lista-outros" style="max-height: 12rem; overflow-y: auto;"></div>
+                        </details>
+                        {% endif %}
                         <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + número, sem espaços -- não fica salvo)</label>
                         <div class="d-flex gap-2">
                             <input type="text" name="codigo_pais" value="55" inputmode="numeric" class="form-control form-control-sm" style="max-width: 5.5rem;" aria-label="Codigo do pais">
@@ -637,4 +651,29 @@ var SAFRA_ATUAL = {{ safra | tojson }};
 </script>
 {% endif %}
 
+{% if contatos_whatsapp %}
+<template id="tpl-outros-usuarios">
+    {% for c in contatos_whatsapp %}
+    <label class="form-check small d-block outro-usuario" data-nome="{{ c.nome | lower }}">
+        <input class="form-check-input" type="checkbox" name="usuario_extra" value="{{ c.chave }}">
+        {{ c.nome }} <span class="text-muted">(…{{ c.telefone[-4:] }})</span>
+    </label>
+    {% endfor %}
+</template>
+<script>
+// "+ Outros usuários" no envio manual: a lista e' montada so' quando a caixa abre (uma copia por painel).
+document.querySelectorAll('.outros-usuarios').forEach(function (box) {
+    box.addEventListener('toggle', function () {
+        var lista = box.querySelector('.lista-outros');
+        if (box.open && !lista.childElementCount) {
+            lista.appendChild(document.getElementById('tpl-outros-usuarios').content.cloneNode(true));
+        }
+    });
+    box.querySelector('.busca-outros').addEventListener('input', function (e) {
+        var termo = e.target.value.trim().toLowerCase();
+        box.querySelectorAll('.outro-usuario').forEach(function (l) { l.style.display = l.dataset.nome.indexOf(termo) !== -1 ? '' : 'none'; });
+    });
+});
+</script>
+{% endif %}
 {% endblock %}
