@@ -452,8 +452,13 @@ no cartao, form `#form-atendimento` (salva sozinho, rota `admin_planos_atendimen
 estado (Brasil)" (caixa + km por UF de `UFS_BR`, digitar o km ja' marca; setting `atendimento_raio_uf` {UF: km};
 `_atendimento_config`). O mapa so' mostra estacoes dos paises marcados (pais da fazenda ou pela coordenada,
 `_estacoes_atendimento`) e usa o raio do estado da estacao quando marcado (UF pelo contorno dos estados do IBGE,
-`intrarregiao=UF`, `codarea` -> sigla, `turf.booleanPointInPolygon`), senao o do plano. So' mapa/planejamento: nao
-muda o raio das fazendas estimadas. "Países atendidos" tambem recolhido (`<details>`, resumo "-- todos" / lista dos marcados,
+`intrarregiao=UF`, `codarea` -> sigla, `turf.booleanPointInPolygon`), senao o do plano. **Vale tambem nas fazendas
+estimadas do app** (pedido do Alan, 13/11/2026): `_raio_cliente(uf, plano)` = raio do estado da fazenda
+(`cliente_pontos.uf`) ou o do plano -- na criacao (`_criar_fazenda_estimada_da_lavoura`, `models.uf_do_cliente_ponto`)
+e nos esporos do app (`_cards_ponto_cliente`); salvar o raio por estado leva o valor pras que ja' existem
+(`_aplicar_raio_estados`: estado com raio -> esse raio; estado que perdeu -> raio do plano do cliente;
+`models.fazendas_estimadas_de_clientes`/`set_virtual_farm_raio`; fazenda ligada e ponto do Mapas de Estudo ficam
+como estao). Editar o estado de uma fazenda no app nao muda o raio dela ate' o proximo salvar do raio por estado. "Países atendidos" tambem recolhido (`<details>`, resumo "-- todos" / lista dos marcados,
 `#resumo-paises`) e Plano + Raio numa linha so' no celular (rotulo "Plano:" so' a partir de `sm`; resumo das
 estacoes na linha de baixo; pedido do Alan, 13/11/2026).
 **Linhas fora da tela** (pedido do

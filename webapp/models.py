@@ -4479,6 +4479,32 @@ def get_all_clientes():
     return [dict(r) for r in rows]
 
 
+def fazendas_estimadas_de_clientes():
+    """Fazendas estimadas do app (nao as ligadas): [{site_name, uf, user_id, raio_km}] -- usado pra
+    aplicar o raio por estado (pedido do Alan, 13/11/2026)."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT p.site_name, p.uf, p.user_id, v.raio_km FROM cliente_pontos p JOIN virtual_farms v ON v.site_name = p.site_name"
+        " WHERE p.site_name IS NOT NULL AND COALESCE(p.vinculada, 0) = 0"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def set_virtual_farm_raio(site_name, raio_km):
+    conn = get_db()
+    conn.execute("UPDATE virtual_farms SET raio_km = ? WHERE site_name = ?", (raio_km, site_name))
+    conn.commit()
+    conn.close()
+
+
+def uf_do_cliente_ponto(ponto_id):
+    conn = get_db()
+    row = conn.execute("SELECT uf FROM cliente_pontos WHERE id = ?", (ponto_id,)).fetchone()
+    conn.close()
+    return (row["uf"] or "").strip().upper() if row else ""
+
+
 def get_cliente_pontos(user_id):
     conn = get_db()
     rows = conn.execute("SELECT * FROM cliente_pontos WHERE user_id = ? ORDER BY id", (user_id,)).fetchall()

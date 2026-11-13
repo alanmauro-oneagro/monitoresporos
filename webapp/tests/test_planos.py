@@ -1061,3 +1061,39 @@ class AtendimentoPaisesEstadosTest(unittest.TestCase):
         self.assertEqual(cfg["raio_uf"], {"MT": 80.0})
         models.set_setting("atendimento_paises", "null")
         models.set_setting("atendimento_raio_uf", "{}")
+
+
+class RaioPorEstadoEstimadasTest(unittest.TestCase):
+    """Raio por estado vale tambem nas fazendas estimadas do app (pedido do Alan, 13/11/2026)."""
+
+    def test_criacao_e_atualizacao(self):
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master RaioUF"):
+            models.create_user("Zzz Master RaioUF", "x", is_master=True)
+        if not models.get_user_by_username("Zzz Cliente RaioUF"):
+            models.criar_cliente("Zzz Cliente RaioUF", "x", "", "5543999990555", "", None)
+        uid = models.get_user_by_username("Zzz Cliente RaioUF")["id"]
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master RaioUF")["id"])
+            s["_fresh"] = True
+        c.post("/admin/planos/atendimento", headers={"X-Autosave": "1"},
+               data={"pais_atendido": ["BR"], "uf_on__MT": "on", "uf_raio__MT": "120"})
+        plano = {"raio_km": 50}
+        with webapp.app.test_request_context():
+            pmt = models.criar_cliente_ponto(uid, "Zzz Faz MT", -12.5, -55.7)
+            models.set_culturas_do_ponto(pmt, "Soja (100 ha)", 100, "Sorriso", "MT")
+            site_mt = webapp._criar_fazenda_estimada_da_lavoura(uid, pmt, "Zzz Faz MT", -12.5, -55.7, plano, username="Zzz Cliente RaioUF")
+            ppr = models.criar_cliente_ponto(uid, "Zzz Faz PR", -24.0, -52.4)
+            models.set_culturas_do_ponto(ppr, "Soja (100 ha)", 100, "Campo Mourão", "PR")
+            site_pr = webapp._criar_fazenda_estimada_da_lavoura(uid, ppr, "Zzz Faz PR", -24.0, -52.4, plano, username="Zzz Cliente RaioUF")
+        self.assertEqual(models.get_virtual_farm(site_mt)["raio_km"], 120)
+        self.assertEqual(models.get_virtual_farm(site_pr)["raio_km"], 50)
+        # PR ganha raio proprio, MT perde (volta pro plano do cliente; sem plano = 50)
+        r = c.post("/admin/planos/atendimento", headers={"X-Autosave": "1"},
+                   data={"pais_atendido": ["BR"], "uf_on__PR": "on", "uf_raio__PR": "30"})
+        self.assertIn("fazenda(s) estimada(s)", r.get_json()["message"])
+        self.assertEqual(models.get_virtual_farm(site_pr)["raio_km"], 30)
+        self.assertEqual(models.get_virtual_farm(site_mt)["raio_km"], 50)
+        models.set_setting("atendimento_raio_uf", "{}")
+        models.delete_user(uid)
