@@ -3995,6 +3995,21 @@ def adicionar_ponto_virtual():
     return redirect(url_for("mapa_interpolado"))
 
 
+def _resposta_ponto(mensagem, ok, url, site_name=None):
+    """Resposta do Editar ponto: salvando sozinho (X-Autosave) volta JSON e a tela NAO recarrega (pedido do
+    Alan, 13/11/2026) -- so' recarrega quando o tipo mudou (o cartao troca de grupo); renomear devolve o
+    site_name novo pros campos da pagina. Sem JS: flash + redirect como antes."""
+    if request.headers.get("X-Autosave") == "1":
+        resposta = {"ok": ok, "message": mensagem}
+        if ok and "#pontos-criados" in url:
+            resposta["reload"] = True
+        if site_name:
+            resposta["site_name"] = site_name
+        return resposta
+    flash(mensagem, "success" if ok else "error")
+    return redirect(url)
+
+
 @app.route("/mapa-interpolado/editar", methods=["POST"])
 @aba_required("mapa_interpolado")
 def editar_ponto_virtual():
@@ -4008,11 +4023,9 @@ def editar_ponto_virtual():
         lon = float(request.form.get("lon", ""))
         raio_km = float(request.form.get("raio_km", ""))
     except ValueError:
-        flash("Preencha nome, coordenadas e raio (números válidos) para editar o ponto estimado.", "error")
-        return redirect(url_for("mapa_interpolado"))
+        return _resposta_ponto("Preencha nome, coordenadas e raio (números válidos) para editar o ponto estimado.", False, url_for("mapa_interpolado"))
     if not nome or raio_km <= 0:
-        flash("Nome obrigatório e o raio precisa ser maior que zero.", "error")
-        return redirect(url_for("mapa_interpolado"))
+        return _resposta_ponto("Nome obrigatório e o raio precisa ser maior que zero.", False, url_for("mapa_interpolado"))
     country_code = request.form.get("country_code", "BR")
     if country_code not in countries.COUNTRIES:
         country_code = countries.DEFAULT_COUNTRY
@@ -4026,8 +4039,7 @@ def editar_ponto_virtual():
         tipo = "doenca"
     if estudo and tipo == "estudo":
         models.atualizar_ponto_estudo(estudo["id"], nome, lat, lon, raio_km, country_code, grupo)
-        flash(f"Estudo de viabilidade '{nome}' atualizado.", "success")
-        return redirect(url_for("mapa_interpolado"))
+        return _resposta_ponto(f"Estudo de viabilidade '{nome}' atualizado.", True, url_for("mapa_interpolado"))
     if estudo:
         # Estudo virando ponto de doenca/clima (pedido do Alan, 12/11/2026).
         try:
@@ -4035,31 +4047,26 @@ def editar_ponto_virtual():
                 nome, lat, lon, raio_km, criado_por=current_user.username, country_code=country_code, tipo=tipo
             )
         except sqlite3.IntegrityError:
-            flash(f"Já existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
-            return redirect(url_for("mapa_interpolado"))
+            return _resposta_ponto(f"Já existe um ponto estimado chamado '{nome}' -- escolha outro nome.", False, url_for("mapa_interpolado"))
         models.excluir_ponto_estudo(estudo["id"])
         novo = next((v["site_name"] for v in models.get_all_virtual_farms() if v["nome"] == nome), None)
         if novo and grupo:
             models.salvar_grupo_fazenda_dados(novo, grupo)
-        flash(f"'{nome}' virou ponto de {'só clima' if tipo == 'clima' else 'monitoramento de doenças'}.", "success")
-        return redirect(url_for("mapa_interpolado") + "#pontos-criados")
+        return _resposta_ponto(f"'{nome}' virou ponto de {'só clima' if tipo == 'clima' else 'monitoramento de doenças'}.", True, url_for("mapa_interpolado") + "#pontos-criados")
     if tipo == "estudo":
         # Ponto de doenca/clima virando estudo: deixa de ser fazenda (sai de
         # todas as telas, envios e permissoes). Fazenda de cliente nao pode.
         if site_name in models.clientes_por_site():
-            flash("Essa fazenda pertence a um cliente -- desligue em Gerenciar Clientes antes de virar estudo.", "error")
-            return redirect(url_for("mapa_interpolado"))
+            return _resposta_ponto("Essa fazenda pertence a um cliente -- desligue em Gerenciar Clientes antes de virar estudo.", False, url_for("mapa_interpolado"))
         models.criar_ponto_estudo(nome, lat, lon, raio_km, country_code, criado_por=current_user.username,
                                   grupo_economico=grupo)
         models.delete_virtual_farm(site_name)
         _weather_cache.pop(site_name, None)
-        flash(f"'{nome}' virou estudo de viabilidade.", "success")
-        return redirect(url_for("mapa_interpolado") + "#pontos-criados")
+        return _resposta_ponto(f"'{nome}' virou estudo de viabilidade.", True, url_for("mapa_interpolado") + "#pontos-criados")
     try:
         models.update_virtual_farm(site_name, nome, lat, lon, raio_km, country_code=country_code, tipo=tipo)
     except sqlite3.IntegrityError:
-        flash(f"Já existe um ponto estimado chamado '{nome}' -- escolha outro nome.", "error")
-        return redirect(url_for("mapa_interpolado"))
+        return _resposta_ponto(f"Já existe um ponto estimado chamado '{nome}' -- escolha outro nome.", False, url_for("mapa_interpolado"))
     # Mesmo motivo do pop em `save_weather_station_override` -- sem isso,
     # `_weather_cache` continuava servindo o clima da coordenada ANTIGA
     # por ate' `WEATHER_CACHE_TTL_SECONDS` (30min) depois de mover o ponto.
@@ -4071,8 +4078,8 @@ def editar_ponto_virtual():
             models.atualizar_dados_cadastro(ponto_cad["user_id"], grupo_economico=grupo)
         else:
             models.salvar_grupo_fazenda_dados(novo_site, grupo)
-    flash(f"Ponto estimado '{nome}' atualizado.", "success")
-    return redirect(url_for("mapa_interpolado"))
+    novo_site = next((v["site_name"] for v in models.get_all_virtual_farms() if v["nome"] == nome), site_name)
+    return _resposta_ponto(f"Ponto estimado '{nome}' atualizado.", True, url_for("mapa_interpolado"), site_name=novo_site)
 
 
 @app.route("/mapa-interpolado/remover", methods=["POST"])
@@ -4474,13 +4481,13 @@ def _safra_or_default(form):
     return safra if safra in SAFRA_LABELS else "safra1"
 
 
-def _save_response(message, endpoint=None, ok=True, **redirect_kwargs):
+def _save_response(message, endpoint=None, ok=True, extra=None, **redirect_kwargs):
     """Resposta padrao de toda rota de salvar: se veio do salvamento
     automatico (header X-Autosave, ver base.html), devolve JSON pro
     JS mostrar o status sem recarregar a pagina; senao (JS desabilitado,
     ou chamada direta) cai no flash + redirect classico de sempre."""
     if request.headers.get("X-Autosave") == "1":
-        return {"ok": ok, "message": message}
+        return {"ok": ok, "message": message, **(extra or {})}
     flash(message, "success" if ok else "error")
     return redirect(url_for(endpoint, **redirect_kwargs)) if endpoint else redirect(request.referrer or url_for("mapa"))
 
@@ -5514,7 +5521,8 @@ def save_site_display_name():
         # `_weather_cache` continuava servindo o clima da coordenada
         # antiga pelo site_name ANTIGO (que muda junto do nome).
         _weather_cache.pop(site_name, None)
-        return _save_response(f"Nome de '{nome}' salvo.", "fazendas")
+        novo_site = next((v["site_name"] for v in models.get_all_virtual_farms() if v["nome"] == nome), site_name)
+        return _save_response(f"Nome de '{nome}' salvo.", "fazendas", extra={"site_name": novo_site})
     nome_padrao = site_name.split(" - ", 1)[1] if " - " in site_name else site_name
     if nome_exibicao.strip() == nome_padrao:
         nome_exibicao = ""  # igual ao nome padrao -- nao guarda escolha manual a toa

@@ -46,7 +46,7 @@
             </form>
 
             <div class="mt-3 pt-3 border-top">
-                <form method="post" action="{{ url_for('save_site_display_name') }}" class="d-flex align-items-center gap-2" data-autosave data-autosave-reload>
+                <form method="post" action="{{ url_for('save_site_display_name') }}" class="d-flex align-items-center gap-2" data-autosave>
                     <input type="hidden" name="site_name" value="{{ fz.site }}">
                     <label class="form-label small text-muted mb-0" for="nome_{{ fz.idx }}">Nome de exibição:</label>
                     <input type="text" name="nome_exibicao" id="nome_{{ fz.idx }}" class="form-control form-control-sm"

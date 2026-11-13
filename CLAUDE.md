@@ -726,6 +726,14 @@ site tem que entrar la'.
   (confirma e envia ao escolher). Agrofit manual e CAR do NDVI enviam ao escolher o arquivo. Continuam com botao
   so' ACOES: login/cadastro/assinatura, enviar WhatsApp, Pré-visualizar/Pôr na galeria (NDVI), Redefinir senha,
   Excluir/Remover/Ocultar/Reativar, e os que dependem de clique no mapa ("➕ Criar ponto", "➕ Adicionar fazenda").
+- **Salvar sem recarregar a pagina** (pedido do Alan, 13/11/2026): nenhum formulario usa mais
+  `data-autosave-reload` (Cortesia em Gerenciar Clientes, nomes das Culturas, Editar ponto do Mapas de Estudo e
+  Nome de exibicao em "Dados da fazenda"). Renomear fazenda estimada muda o site_name: a rota devolve
+  `site_name` no JSON (`_save_response(..., extra=)`, `_resposta_ponto`) e o base.html troca os
+  `input[name=site_name]`/`data-site` antigos da pagina; todo autosave bem-sucedido dispara o evento
+  `autosave:ok` no form (Doenças/Culturas usa pra renomear/criar/tirar as caixas "Culturas que a doença ataca").
+  So' recarrega quando o tipo do ponto muda (o cartao troca de grupo) e ao criar plano novo (`reload: true`).
+  Formularios de CRIAR (`data-autocriar`) ainda enviam a pagina pra mostrar o item novo.
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR
   recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e

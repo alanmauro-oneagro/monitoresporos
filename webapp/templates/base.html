@@ -333,6 +333,17 @@
             // "✓ Salvo" aparece mas a lista renderizada continua a mesma
             // de antes do save, dando a impressao de que nao mudou nada.
             if (data.ok && data.reload) { location.reload(); return; }  // ex.: plano novo criado
+            // Renomear fazenda estimada muda o site_name: troca nos campos da pagina, sem recarregar
+            // (pedido do Alan, 13/11/2026).
+            if (data.ok && data.site_name) {
+                var campoSite = form.querySelector('[name="site_name"]');
+                var antigo = campoSite && campoSite.value;
+                if (antigo && antigo !== data.site_name) {
+                    document.querySelectorAll('input[name="site_name"]').forEach(function (i) { if (i.value === antigo) i.value = data.site_name; });
+                    document.querySelectorAll('[data-site]').forEach(function (el) { if (el.dataset.site === antigo) el.dataset.site = data.site_name; });
+                }
+            }
+            if (data.ok) form.dispatchEvent(new CustomEvent('autosave:ok', { detail: data, bubbles: true }));
             if (data.ok && form.hasAttribute('data-autosave-reload')) {
                 // Reabre na mesma fazenda apos o reload (?site=...), se o
                 // form tiver esse campo -- senao a pagina recarrega

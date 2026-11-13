@@ -94,8 +94,8 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
         </div>
 
         <div class="small fw-bold text-muted mt-3 mb-1">Culturas que a doença ataca</div>
-        <div class="d-flex flex-wrap column-gap-3 row-gap-1 doenca-culturas">
-            {% set card_idx = loop.index0 %}
+        {% set card_idx = loop.index0 %}
+        <div class="d-flex flex-wrap column-gap-3 row-gap-1 doenca-culturas" data-card-idx="{{ card_idx }}">
             {% for c in culturas_ativas %}
             <div class="form-check mb-0">
                 <input class="form-check-input" type="checkbox" name="culturas_card__{{ card_idx }}" value="{{ c }}" id="cult-{{ card_idx }}-{{ loop.index0 }}" {% if c in d.culturas %}checked{% endif %}>
@@ -163,7 +163,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 {% endif %}
 
 <h6 class="mb-2 mt-4">Culturas</h6>
-<form method="post" data-autosave data-autosave-reload class="card shadow-sm mb-2">
+<form method="post" data-autosave class="card shadow-sm mb-2" id="form-culturas">
     <input type="hidden" name="form_id" value="matriz_culturas">
     <div class="card-body">
         <div class="row g-2 row-cols-1 row-cols-sm-2 row-cols-lg-4">
@@ -173,10 +173,10 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
                    "Tipo de cultura" do cadastro (Cereais/HF/Outros). #}
                 <div class="input-group input-group-sm">
                     <input type="text" name="cultura_nome__{{ slot }}" class="form-control form-control-sm"
-                           value="{{ culturas[slot] }}" placeholder="(livre)" aria-label="Cultura {{ slot + 1 }}">
+                           value="{{ culturas[slot] }}" data-anterior="{{ culturas[slot] }}" placeholder="(livre)" aria-label="Cultura {{ slot + 1 }}">
                     <select name="cultura_grupo__{{ slot }}" class="form-select form-select-sm flex-grow-0" style="width: 7.2rem;"
                             aria-label="Tipo da cultura {{ slot + 1 }}" {% if not culturas[slot] %}disabled{% endif %}>
-                        {% if not culturas[slot] %}<option value="">—</option>{% endif %}
+                        <option value="" {% if culturas[slot] %}hidden{% endif %}>—</option>
                         {% for chave, rotulo in grupos_cultura.items() %}<option value="{{ chave }}" {% if tipo_cultura[slot] == chave %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
                     </select>
                 </div>
@@ -364,5 +364,51 @@ document.querySelectorAll('.doenca-culturas').forEach(function (bloco) {
         aviso.classList.toggle('d-none', !!bloco.querySelector('input:checked'));
     });
 });
+</script>
+<script>
+// Nomes das culturas salvam sem recarregar (pedido do Alan, 13/11/2026): o servidor ja' migra as marcacoes
+// num renomeio; aqui so' acertamos as caixas "Culturas que a doença ataca" de cada cartao.
+(function () {
+    var form = document.getElementById('form-culturas');
+    if (!form) return;
+    var seq = 0;
+    form.addEventListener('input', function (e) {
+        if (!e.target.name || e.target.name.indexOf('cultura_nome__') !== 0) return;
+        var sel = e.target.parentNode.querySelector('select');
+        if (!sel) return;
+        sel.disabled = !e.target.value.trim();
+        if (!sel.disabled && !sel.value && sel.options.length > 1) sel.selectedIndex = 1;
+    });
+    form.addEventListener('autosave:ok', function () {
+        form.querySelectorAll('input[name^="cultura_nome__"]').forEach(function (inp) {
+            var antes = inp.dataset.anterior || '', agora = inp.value.trim();
+            if (antes === agora) return;
+            if (antes) {
+                document.querySelectorAll('.doenca-culturas input[type="checkbox"][value="' + CSS.escape(antes) + '"]').forEach(function (cb) {
+                    if (agora) { cb.value = agora; cb.nextElementSibling.textContent = agora; }
+                    else cb.closest('.form-check').remove();
+                });
+            } else if (agora) {
+                document.querySelectorAll('.doenca-culturas').forEach(function (box) {
+                    var id = 'cult-novo-' + (seq++);
+                    var div = document.createElement('div');
+                    div.className = 'form-check mb-0';
+                    div.innerHTML = '<input class="form-check-input" type="checkbox"><label class="form-check-label small"></label>';
+                    var cb = div.firstChild, lb = div.lastChild;
+                    cb.name = 'culturas_card__' + box.dataset.cardIdx; cb.value = agora; cb.id = id;
+                    lb.htmlFor = id; lb.textContent = agora;
+                    box.appendChild(div);
+                });
+            }
+            var sel = inp.parentNode.querySelector('select');
+            if (sel) {
+                var vazio = sel.querySelector('option[value=""]');
+                if (vazio) vazio.hidden = !!agora;
+                if (agora && !sel.value && sel.options.length > 1) sel.selectedIndex = 1;
+            }
+            inp.dataset.anterior = agora;
+        });
+    });
+})();
 </script>
 {% endblock %}

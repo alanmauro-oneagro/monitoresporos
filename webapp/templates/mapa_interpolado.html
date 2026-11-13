@@ -166,7 +166,7 @@
 
     <div class="d-none border rounded p-2 mt-2" id="editar-ponto-{{ idx }}" style="background:#fff;">
         {# Salva sozinho e recarrega (pedido do Alan, 12/11/2026); virar estudo pede confirmacao. #}
-        <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end form-editar-ponto" data-autosave data-autosave-reload
+        <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end form-editar-ponto" data-autosave
               data-tipo-original="{{ ponto.tipo }}" data-msg-estudo="Transformar '{{ ponto.nome }}' em estudo de viabilidade? Ele deixa de ser fazenda: sai de todas as telas e apaga permissões, agenda de WhatsApp e anotações ligadas a ele.">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
             <div class="col-12 col-md-3">
