@@ -11,7 +11,7 @@
                 <input type="email" name="email" class="form-control" value="{{ email }}" required>
             </div>
             <div class="mb-3">
-                <label class="form-label">Telefone (DDD + numero, sem espacos)</label>
+                <label class="form-label">Telefone (DDD + número, sem espaços)</label>
                 <div class="d-flex gap-2">
                     <input type="text" name="codigo_pais" class="form-control" value="{{ codigo_pais }}" style="max-width: 5.5rem;" aria-label="Codigo do pais">
                     <input type="text" name="numero_telefone" class="form-control" value="{{ numero_telefone }}" placeholder="11999999999" required>
@@ -22,8 +22,8 @@
                 {% set pode_master = current_user.username == 'Alan Mauro' %}
                 {% set travado = user.username == 'Alan Mauro' or (nivel == 'master' and not pode_master) or user.id|string == current_user.id %}
                 <select name="nivel" id="edit_nivel" class="form-select" {% if travado %}disabled{% endif %}>
-                    <option value="usuario" {% if nivel == 'usuario' %}selected{% endif %}>Usuário -- so as fazendas liberadas</option>
-                    <option value="admin" {% if nivel == 'admin' %}selected{% endif %}>Administrador -- todas as fazendas e a aba Configuracoes</option>
+                    <option value="usuario" {% if nivel == 'usuario' %}selected{% endif %}>Usuário -- só as fazendas liberadas</option>
+                    <option value="admin" {% if nivel == 'admin' %}selected{% endif %}>Administrador -- todas as fazendas e a aba Configurações</option>
                     {% if pode_master or nivel == 'master' %}
                     <option value="master" {% if nivel == 'master' %}selected{% endif %}>Master -- tudo, inclusive configuracoes gerais</option>
                     {% endif %}

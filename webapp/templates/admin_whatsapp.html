@@ -39,14 +39,14 @@
 
         <div class="card shadow-sm mt-3">
             <div class="card-body">
-                <h6 class="mb-2">Ou gerar codigo de pareamento</h6>
+                <h6 class="mb-2">Ou gerar código de pareamento</h6>
                 <form id="pair-code-form">
-                    <label class="form-label small mb-1">Telefone (DDD + numero, sem espacos)</label>
+                    <label class="form-label small mb-1">Telefone (DDD + número, sem espaços)</label>
                     <div class="d-flex gap-2">
                         <input type="text" id="pair-ddi" class="form-control form-control-sm" style="max-width: 5.5rem;" value="55" inputmode="numeric" aria-label="Codigo do pais">
                         <input type="text" id="pair-phone" class="form-control form-control-sm" placeholder="11999999999" inputmode="tel" required>
                     </div>
-                    <button type="submit" class="btn btn-sm btn-outline-primary mt-2">Gerar codigo</button>
+                    <button type="submit" class="btn btn-sm btn-outline-primary mt-2">Gerar código</button>
                 </form>
                 <div id="pair-code-result" class="mt-2 small"></div>
                 <p class="text-muted small mt-2 mb-0">
@@ -62,7 +62,7 @@
             <div class="card-body">
                 <h6 class="mb-2">Enviar mensagem de teste</h6>
                 <form method="post" action="{{ url_for('admin_whatsapp_test') }}">
-                    <label class="form-label small mb-1">Telefone (DDD + numero, sem espacos)</label>
+                    <label class="form-label small mb-1">Telefone (DDD + número, sem espaços)</label>
                     <div class="d-flex gap-2">
                         <input type="text" name="codigo_pais" class="form-control form-control-sm" style="max-width: 5.5rem;" value="55" inputmode="numeric" aria-label="Codigo do pais">
                         <input type="text" name="numero_telefone" class="form-control form-control-sm" placeholder="11999999999" inputmode="tel" required>
@@ -70,7 +70,7 @@
                     <button type="submit" class="btn btn-sm btn-outline-success mt-2" {% if not status.connected %}disabled{% endif %}>Enviar teste</button>
                 </form>
                 {% if not status.connected %}
-                <p class="text-muted small mt-2 mb-0">Conecte um numero primeiro pra poder testar.</p>
+                <p class="text-muted small mt-2 mb-0">Conecte um número primeiro para poder testar.</p>
                 {% endif %}
             </div>
         </div>
@@ -79,10 +79,10 @@
         {% if status.connected %}
         <div class="card shadow-sm mt-3">
             <div class="card-body">
-                <h6 class="mb-2">Trocar numero</h6>
+                <h6 class="mb-2">Trocar número</h6>
                 <form method="post" action="{{ url_for('admin_whatsapp_reset') }}"
                       onsubmit="return confirm('Desconectar o WhatsApp atual? Os envios de todas as fazendas ficam parados ate conectar outro numero.');">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">🔌 Desconectar / Trocar numero</button>
+                    <button type="submit" class="btn btn-sm btn-outline-danger">🔌 Desconectar / Trocar número</button>
                 </form>
             </div>
         </div>

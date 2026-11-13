@@ -908,7 +908,7 @@ class AppClienteCulturasSiteTest(unittest.TestCase):
         self.assertIn('<nav class="abas">', html)  # barra de baixo tambem no Site
         self.assertIn("position: fixed; bottom: 0", html)
         home = c.get("/app").get_data(as_text=True)
-        self.assertIn("Minha conta", home)
+        self.assertIn(">Conta</h1>", home)
         self.assertIn('<span>Soja</span><span>1.200 ha</span>', home)
         # total em nome do dono da conta, nao da 1a fazenda (pedido do Alan, 08/11/2026)
         self.assertIn('<span>Área total · Zzz Cli Site</span>', home)

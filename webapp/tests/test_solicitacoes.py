@@ -594,7 +594,12 @@ class CadastroTest(unittest.TestCase):
         import json
         import cotacao
         premium = next(p for p in models.get_planos() if p["nome"] == "Avançado")
-        self.assertTrue(premium["preco_por_area"])  # ja' nasce ligado no Premium
+        # Outro teste pode ter mexido no Avançado antes (depende da ordem): liga o preco pela area aqui.
+        conn = models.get_db()
+        conn.execute("UPDATE planos SET preco_por_area = 1 WHERE id = ?", (premium["id"],))
+        conn.commit()
+        conn.close()
+        premium = next(p for p in models.get_planos() if p["nome"] == "Avançado")
         models.set_setting("tabela_precificacao", json.dumps([{"ate_ha": 1000, "usd_ha": 1.2}]))
         try:
             with mock.patch.object(cotacao, "dolar", return_value={"valor": 5.0, "data": "2026-11-06"}):

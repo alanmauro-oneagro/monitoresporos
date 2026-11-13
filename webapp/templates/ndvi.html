@@ -17,7 +17,7 @@
 {% endif %}
 
 {% if no_access %}
-<div class="alert alert-warning">Seu usuario ainda nao tem fazendas liberadas.</div>
+<div class="alert alert-warning">Seu usuário ainda não tem fazendas liberadas.</div>
 {% elif not sites_data %}
 <div class="alert alert-info">Nenhuma fazenda cadastrada ainda.</div>
 {% else %}
@@ -72,7 +72,7 @@
                     <input type="date" class="form-control form-control-sm" style="width: auto;" id="data_alvo_{{ site_idx }}" name="data_alvo" max="{{ hoje }}" min="2015-06-23">
                     <button type="submit" class="btn btn-sm btn-primary" {% if not credenciais_ok %}disabled{% endif %}>Pre-visualizar</button>
                 </form>
-                <div class="text-muted small mb-2">Deixe a data em branco pra buscar a imagem mais recente disponivel.</div>
+                <div class="text-muted small mb-2">Deixe a data em branco para buscar a imagem mais recente disponível.</div>
                 {% if site_group.preview %}
                 <div class="card bg-light mb-3">
                     <div class="card-body py-2">

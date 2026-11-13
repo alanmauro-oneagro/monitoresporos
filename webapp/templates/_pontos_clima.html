@@ -36,7 +36,7 @@
             </div>
             {% endif %}
             {% else %}
-            <div class="small text-muted">Clima indisponivel no momento.</div>
+            <div class="small text-muted">Clima indisponível no momento.</div>
             {% endif %}
             </div>
             {% if ponto.vento_dia %}
@@ -50,14 +50,14 @@
             <div class="mb-2">
                 <form method="post" action="{{ url_for('save_weather_station_override') }}" data-autosave>
                     <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
-                    <label class="form-label small text-muted d-block mb-1">Estacao meteorologica de referencia para a previsao (clima do ponto vem da Open-Meteo, na coordenada escolhida aqui):</label>
+                    <label class="form-label small text-muted d-block mb-1">Estação meteorológica de referência para a previsão (o clima do ponto vem da Open-Meteo, na coordenada escolhida aqui):</label>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="estacao_codigo" value=""
                             id="ac_est_{{ ponto_idx }}_ponto" {% if not ponto.estacao_selecionada %}checked{% endif %}>
                         <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_ponto">Coordenada do próprio ponto (só se tiver estação meteorológica própria)</label>
                     </div>
                     {% if not ponto.estacoes_proximas %}
-                    <div class="small text-muted mt-1">Nenhuma estacao oficial perto o suficiente encontrada -- usando a coordenada do proprio ponto.</div>
+                    <div class="small text-muted mt-1">Nenhuma estação oficial perto o suficiente -- usando a coordenada do próprio ponto.</div>
                     {% endif %}
                     {% for estacao in ponto.estacoes_proximas %}
                     <div class="form-check">
@@ -76,7 +76,7 @@
                                     id="ac_est_{{ ponto_idx }}_salva" checked>
                                 <label class="form-check-label small" for="ac_est_{{ ponto_idx }}_salva">
                                     {% if ponto.estacao_selecionada == '__interp3__' %}🔀 Interpolacao das 3 estacoes (escolha salva){% else %}📡 Estacao salva ({{ ponto.estacao_selecionada }}){% endif %}
-                                    <span class="text-muted">-- fora da lista agora (catalogo de estacoes indisponivel no momento); continua valendo</span>
+                                    <span class="text-muted">-- fora da lista agora (catálogo de estações indisponível no momento); continua valendo</span>
                                 </label>
                             </div>
                             {% endif %}

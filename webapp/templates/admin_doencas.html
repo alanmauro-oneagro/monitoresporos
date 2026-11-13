@@ -32,7 +32,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 
 <form method="post" action="{{ url_for('adicionar_doenca_manual') }}" class="card shadow-sm mb-3">
     <div class="card-body">
-        <div class="small fw-bold mb-1">Adicionar doenca manualmente</div>
+        <div class="small fw-bold mb-1">Adicionar doença manualmente</div>
         <div class="d-flex flex-wrap gap-2">
             <input type="text" name="nome_pt" class="form-control form-control-sm" style="max-width: 320px;" placeholder="Nome. Ex.: Mancha-alvo" required>
             <input type="text" name="nome_cientifico" class="form-control form-control-sm fst-italic" style="max-width: 320px;" placeholder="Nome cientifico. Ex.: Corynespora cassiicola">
@@ -42,7 +42,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 </form>
 
 {% if not doencas %}
-<div class="alert alert-info">Nenhuma doenca encontrada nos dados ainda.</div>
+<div class="alert alert-info">Nenhuma doença encontrada nos dados ainda.</div>
 {% else %}
 <form method="post" data-autosave>
 {% for d in doencas %}
@@ -62,7 +62,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
         <div class="d-none mt-1 mb-2" id="doenca-body-{{ loop.index0 }}">
         <div class="d-flex justify-content-between align-items-center mb-2">
             {% if d.manual %}
-            <span class="text-muted small">Sem leitura BioScout -- entra so' no risco de infeccao pelo clima</span>
+            <span class="text-muted small">Sem leitura BioScout -- entra só no risco de infecção pelo clima</span>
             {% else %}
             <span class="text-muted small fw-bold text-uppercase">{{ d.en }}</span>
             {% endif %}
@@ -93,7 +93,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
             </div>
         </div>
 
-        <div class="small fw-bold text-muted mt-3 mb-1">Culturas que a doenca ataca</div>
+        <div class="small fw-bold text-muted mt-3 mb-1">Culturas que a doença ataca</div>
         <div class="d-flex flex-wrap column-gap-3 row-gap-1 doenca-culturas">
             {% set card_idx = loop.index0 %}
             {% for c in culturas_ativas %}
@@ -103,11 +103,11 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
             </div>
             {% endfor %}
         </div>
-        <div class="small text-warning-emphasis mt-1 sem-cultura-aviso{% if d.culturas %} d-none{% endif %}">Nenhuma cultura marcada -- a doenca aparece em todas.</div>
+        <div class="small text-warning-emphasis mt-1 sem-cultura-aviso{% if d.culturas %} d-none{% endif %}">Nenhuma cultura marcada -- a doença aparece em todas.</div>
 
         <hr class="my-3">
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <div class="small fw-bold text-muted">Condicoes para germinacao de esporos</div>
+            <div class="small fw-bold text-muted">Condições para germinação de esporos</div>
             <button type="button" class="btn btn-sm btn-outline-primary buscar-germinacao-btn" data-en="{{ d.en }}"
                     title="Preenche so' esta doenca com a pesquisa de literatura, pelo nome cientifico (genero e especie, ou so' o genero); sem cultura marcada, marca as culturas pelo Agrofit">
                 🔎 Buscar pelo nome cientifico

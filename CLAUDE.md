@@ -995,6 +995,13 @@ site tem que entrar la'.
   `OneAgro_Relatorios_...txt` (hora de Cuiaba). **Gerenciar Exportações** em 3 cartoes:
   Planilha Excel (lista as abas), Backup do banco e Historico de envios por WhatsApp (filtros
   dentro do cartao).
+- **Revisao geral de 13/11/2026** (pedido do Alan: vinculos, estrutura, fontes, acessos e hierarquias): crawler
+  com os 4 niveis seguindo todo link/formulario interno (nenhum destino quebrado; 404 so' nas telas do QAP), as 10 rotas
+  sem login sao as publicas de proposito (login, cadastro, /planos, webhook Asaas...), as so' `@login_required` filtram
+  pelas fazendas liberadas, e a hierarquia (Admin nao mexe em Master, Master comum nao mexe no Alan, Usuario/Cliente
+  barrados nas telas da equipe) testada na pratica. Corrigido: textos visiveis e mensagens de aviso (`flash`) sem
+  acento, "Minha conta" -> "Conta" (igual a aba), h5 fora do padrao (Usuários e /planos) e o teste do Avançado que
+  dependia da ordem dos arquivos de teste.
 - **Botao "Atualizar" com progresso** (pedido do Alan, 11/11/2026): Alertas ("🔄 Atualizar",
   busca do BioScout), Fungicidas ("Atualizar agora" da base Agrofit) e Mapas de Estudo
   ("Baixar agora" da Anatel) usam a macro `_botao_atualizar.html` (`botao_atualizar(qual,
