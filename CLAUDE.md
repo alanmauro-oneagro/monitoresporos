@@ -460,7 +460,8 @@ e nos esporos do app (`_cards_ponto_cliente`); salvar o raio por estado leva o v
 `models.fazendas_estimadas_de_clientes`/`set_virtual_farm_raio`; fazenda ligada e ponto do Mapas de Estudo ficam
 como estao). Editar o estado de uma fazenda no app nao muda o raio dela ate' o proximo salvar do raio por estado. "Países atendidos" tambem recolhido (`<details>`, resumo "-- todos" / lista dos marcados,
 `#resumo-paises`) e Plano + Raio numa linha so' no celular (rotulo "Plano:" so' a partir de `sm`; resumo das
-estacoes na linha de baixo; pedido do Alan, 13/11/2026).
+estacoes na linha de baixo; pedido do Alan, 13/11/2026). Estados em ordem alfabetica descendo pelas colunas
+(`.estados-colunas`, CSS `column-width`) e o seletor do mapa ja' abre no plano Avançado (ex-Premium; mesmo dia).
 **Linhas fora da tela** (pedido do
 Alan, 07/11/2026): Lavouras e as abas fazenda_estimada/esporos/
 risco/fungicidas/regiao (`app.RECURSOS_FORA_DA_TELA`) nao aparecem na
