@@ -842,6 +842,72 @@ def doencas_sem_traducao():
                   if not models.is_manual_disease(en) and en not in editadas and (d.get("nome_pt") or en) == en)
 
 
+# Oidio e Alternaria: doencas secundarias de importancia so' nesses estados (pedido do Alan, 14/11/2026).
+ESTADOS_DOENCA_SECUNDARIA = ["MS", "PR", "RS", "SC", "SP"]
+_DOENCAS_SECUNDARIAS = ("oidio", "alternaria", "erysiphe", "microsphaera")
+
+
+def _estados_por_doenca():
+    """{doenca_en: [UF]} das doencas que so' aparecem em Alertas/Recomendações/relatorios em alguns estados.
+    Escolha gravada em Doenças/Culturas vale; sem escolha, Oidio e Alternaria = ESTADOS_DOENCA_SECUNDARIA."""
+    cache = getattr(g, "_estados_por_doenca", None)
+    if cache is None:
+        gravados = models.get_doenca_estados()
+        cache = {}
+        for en, info in _disease_info_cached().items():
+            if en in gravados:
+                ufs = gravados[en]
+            else:
+                texto = _chave_alfabetica(f"{en} {info.get('nome_pt') or ''} {info.get('nome_cientifico') or ''}")
+                ufs = ESTADOS_DOENCA_SECUNDARIA if any(n in texto for n in _DOENCAS_SECUNDARIAS) else []
+            if ufs:
+                cache[en] = set(ufs)
+        g._estados_por_doenca = cache
+    return cache
+
+
+def _uf_da_fazenda(site):
+    """UF da fazenda no Brasil: a digitada (cadastro/Dados da fazenda), senao a da estacao INMET mais proxima.
+    Fora do Brasil ou sem como saber = None."""
+    cache = getattr(g, "_uf_da_fazenda", None)
+    if cache is None:
+        cache = g._uf_da_fazenda = {}
+    if site in cache:
+        return cache[site]
+    uf = None
+    # "cliente-ponto:<id>" = esporos estimados do app, que alimentam o quadro de favorabilidade: fica tudo.
+    if not site.startswith("cliente-ponto:") and models.get_all_site_countries().get(site, countries.DEFAULT_COUNTRY) == "BR":
+        ponto = _ponto_da_fazenda(site)
+        uf = ((ponto or models.get_fazendas_dados().get(site) or {}).get("uf") or "").strip().upper() or None
+        if not uf:
+            por_site = getattr(g, "_uf_por_site_cache", None)
+            if por_site is None:
+                try:
+                    por_site = _uf_por_site()
+                except Exception:
+                    por_site = {}
+                g._uf_por_site_cache = por_site
+            uf = por_site.get(site)
+    cache[site] = uf if uf in UFS_BR else None
+    return cache[site]
+
+
+def _filtrar_por_estado(cards_by_site):
+    """Tira as doencas que nao valem no estado da fazenda (ex.: Oidio fora de SP/MS/PR/SC/RS). Nao mexe no
+    quadro de favorabilidade do app. Fazenda sem estado conhecido mostra tudo."""
+    restritas = _estados_por_doenca()
+    if not restritas:
+        return cards_by_site
+    resultado = {}
+    for site, cards in cards_by_site.items():
+        if any(c["doenca_en"] in restritas for c in cards):
+            uf = _uf_da_fazenda(site)
+            if uf:
+                cards = [c for c in cards if c["doenca_en"] not in restritas or uf in restritas[c["doenca_en"]]]
+        resultado[site] = cards
+    return resultado
+
+
 def _filter_cards_by_cultura(cards_by_site, culturas_by_site, doenca_culturas, safra=None):
     """Se a fazenda tiver uma cultura atual definida numa safra (aba
     Fazendas/Recomendacoes), mostra so os cartoes de doencas marcadas para
@@ -879,7 +945,7 @@ def _filter_cards_by_cultura(cards_by_site, culturas_by_site, doenca_culturas, s
             c for c in cards
             if not doenca_culturas.get(c["doenca_en"]) or doenca_culturas[c["doenca_en"]] & culturas_ativas
         ]
-    return filtered
+    return _filtrar_por_estado(filtered)
 
 
 def _anotacoes_da_fazenda(site, culturas, translations, doenca_culturas, notes, notas_padrao):
@@ -1355,7 +1421,7 @@ def _riscos_climaticos_relevantes(cards, weather, site=None, safra=None):
     em algum dia da previsao dos proximos 5 dias -- risco baixo o tempo
     todo nao e' acionavel, so' vira ruido no relatorio."""
     if site:
-        cards = list(cards) + _doencas_manuais_do_site(site, safra)
+        cards = _filtrar_por_estado({site: list(cards)})[site] + _doencas_manuais_do_site(site, safra)
     riscos = _build_riscos_climaticos_sem_leitura(cards)
     for d in riscos:
         d["risco"] = _calc_risco_germinacao(d, weather)
@@ -3013,7 +3079,9 @@ def dashboard():
         permitted = set(models.get_user_permitted_site_names(int(current_user.id)))
         if not permitted:
             return render_template("dashboard.html", cards_by_site={}, no_access=True)
-    cards_by_site = _cards_by_site_all(permitted, _load_translations())
+    # Doenca que so' vale em alguns estados (Oidio/Alternaria) sai daqui tambem (pedido do Alan, 14/11/2026).
+    cards_lidos = _cards_by_site_all(permitted, _load_translations())
+    cards_by_site = _filtrar_por_estado(cards_lidos)
     # Painel mostra TODAS as caixas de doenca sempre -- o filtro de cultura
     # so se aplica nas abas Recomendacoes (Safra / 2 Safra), nao aqui.
     # Umidade/chuva vem SEMPRE da Open-Meteo (mesma fonte usada em
@@ -3028,9 +3096,10 @@ def dashboard():
     dados_status_by_site = {}
     nomes_virtuais = {vf["site_name"]: vf["nome"] for vf in models.get_all_virtual_farms()}
     coords = _weather_coords_all()
-    mais_recente_by_site = {site: max(cards, key=lambda c: c["data"]) for site, cards in cards_by_site.items()}
+    mais_recente_by_site = {site: max(cards, key=lambda c: c["data"]) for site, cards in cards_lidos.items() if cards}
     _prefetch_weather(list(cards_by_site.keys()), coords)
-    for site, cards in cards_by_site.items():
+    for site in cards_by_site:
+        cards = cards_lidos[site]  # data/dias sem leitura pelas leituras todas, mesmo as que nao aparecem
         mais_recente = mais_recente_by_site[site]
         weather = _get_weather_for_site(site, coords)
         weather_by_site[site] = {
@@ -5860,6 +5929,8 @@ def admin_doencas():
             models.set_doenca_culturas(
                 display_name_en, [c for c in request.form.getlist(f"culturas_card__{idx}") if c in culturas_ativas],
             )
+            if request.form.get(f"estados_presente__{idx}"):
+                models.set_doenca_estados(display_name_en, [u for u in request.form.getlist(f"estados_card__{idx}") if u in UFS_BR])
             # germ_agua_livre_inibe (chuva atrapalha, caso do oidio) nao tem
             # mais campo no formulario -- e' propriedade fixa do fungo, nao
             # algo pra editar aqui; preserva o valor ja salvo (aplicado pelo
@@ -5898,6 +5969,7 @@ def admin_doencas():
         {
             "en": en, "pt": data["nome_pt"], "cientifico": data["nome_cientifico"],
             "culturas": doenca_culturas.get(en, set()),
+            "estados": _estados_por_doenca().get(en, set()),
             "germinacao": _formatar_condicoes_germinacao(data),
             "temp_min": data["germ_temp_min"], "temp_max": data["germ_temp_max"],
             "ur_min": data["germ_ur_min"], "molhamento_horas": data["germ_molhamento_horas"],
@@ -5924,7 +5996,7 @@ def admin_doencas():
         for d in doencas
     ]
     return render_template(
-        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, culturas=culturas,
+        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, ufs_br=UFS_BR, culturas=culturas,
         grupos_cultura=GRUPOS_CULTURA,
         tipo_cultura=[_grupo_da_cultura(c) if c else "" for c in culturas],
         paises=paises, matriz_paises=matriz_paises, fusoes=models.get_fusoes_doencas(),

@@ -3056,6 +3056,22 @@ def set_doenca_paises(doenca_en, paises):
     conn.close()
 
 
+def get_doenca_estados():
+    """Estados (UF) onde a doenca aparece em Alertas, Recomendações e relatorios (pedido do Alan, 14/11/2026):
+    {doenca_en: [UF]} so' das doencas com escolha gravada ([] = todos os estados)."""
+    try:
+        valor = json.loads(get_setting("doenca_estados") or "{}")
+    except (TypeError, ValueError):
+        valor = {}
+    return {en: [u for u in ufs if isinstance(u, str)] for en, ufs in valor.items() if isinstance(ufs, list)}
+
+
+def set_doenca_estados(doenca_en, ufs):
+    atual = get_doenca_estados()
+    atual[doenca_en] = sorted(set(ufs))
+    set_setting("doenca_estados", json.dumps(atual))
+
+
 def get_paises_doenca_slots():
     """Lista de 12 nomes de pais na ordem dos slots (com "" nos ainda nao
     preenchidos) -- editavel direto no cabecalho da matriz Doencas x Pais

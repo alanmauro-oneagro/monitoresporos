@@ -901,6 +901,16 @@ site tem que entrar la'.
   `_sincronizar_apelidos`) e a juncao mantem o nome digitado. Cada cartao tem o proprio
   "✓ Salvo" ao lado do nome (`data-autosave-group` + `.autosave-status`); o aviso de salvo de
   todo o site fica 5 s na tela.
+- **Doenca so' em alguns estados** (pedido do Alan, 14/11/2026): Oidio e Alternaria (doencas secundarias) so'
+  aparecem em Alertas, Recomendações e relatorios (texto/PDF/WhatsApp/aba Relatórios do app) em fazendas de SP, MS,
+  PR, SC e RS (`app.ESTADOS_DOENCA_SECUNDARIA`); nos outros estados ficam SO' no quadro de favorabilidade do app
+  (`_favorabilidade_ponto` e os cards "cliente-ponto:" nao sao filtrados). `_filtrar_por_estado` roda no fim do
+  `_filter_cards_by_cultura`, no `dashboard` e no `_riscos_climaticos_relevantes`. Estados de cada doenca: cartao em
+  Doenças/Culturas, "📍 Estados onde aparece (Brasil)" (`estados_card__<idx>`, setting `doenca_estados` {en: [UF]},
+  `models.get/set_doenca_estados`; nenhum marcado = todos); sem escolha gravada, Oidio/Alternaria (nome, en ou
+  cientifico com oidio/alternaria/erysiphe/microsphaera) usam o padrao (`_estados_por_doenca`). UF da fazenda
+  (`_uf_da_fazenda`): a digitada (cliente_pontos/fazendas_dados), senao a da estacao INMET mais proxima
+  (`_uf_por_site`); fora do Brasil ou sem UF = mostra tudo.
 - **Germinacao de fungos comuns** (pedido do Alan, 12/11/2026): `_PESQUISA_GERMINACAO` ganhou
   Rhizoctonia/Thanatephorus (mela/rizoctoniose), Waitea (R. zeae, mancha salmao), Sclerotium/Athelia rolfsii, Ascochyta, Phoma,
   Pyrenophora, Blumeria, Fusarium graminearum/Gibberella (giberela, 48 h), Venturia, Monilinia,
