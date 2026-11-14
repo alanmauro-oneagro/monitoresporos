@@ -910,7 +910,12 @@ site tem que entrar la'.
   `models.get/set_doenca_estados`; nenhum marcado = todos); sem escolha gravada, Oidio/Alternaria (nome, en ou
   cientifico com oidio/alternaria/erysiphe/microsphaera) usam o padrao (`_estados_por_doenca`). UF da fazenda
   (`_uf_da_fazenda`): a digitada (cliente_pontos/fazendas_dados), senao a da estacao INMET mais proxima
-  (`_uf_por_site`); fora do Brasil ou sem UF = mostra tudo.
+  (`_uf_por_site`); fora do Brasil ou sem UF = mostra tudo. Digitada invalida/vazia -> estado no fim do nome
+  ("3 Irmaos - MT", `_UF_NO_NOME`, 14/11/2026) antes do INMET.
+- **BioScout 403 na contagem de esporos** (pedido do Alan, 14/11/2026): uma fazenda sem permissao na conta derrubava a
+  busca de TODAS (uma chamada so' com todos os `SiteIds`). Agora `bioscout_fetch._contagens` levanta `_SemPermissao`
+  (401/403 com 2+ fazendas) e `fetch_recent` busca fazenda por fazenda; as recusadas aparecem no aviso do Alertas
+  ("sem permissão no BioScout para: <fazendas>") e as outras atualizam normalmente.
 - **Germinacao de fungos comuns** (pedido do Alan, 12/11/2026): `_PESQUISA_GERMINACAO` ganhou
   Rhizoctonia/Thanatephorus (mela/rizoctoniose), Waitea (R. zeae, mancha salmao), Sclerotium/Athelia rolfsii, Ascochyta, Phoma,
   Pyrenophora, Blumeria, Fusarium graminearum/Gibberella (giberela, 48 h), Venturia, Monilinia,
