@@ -105,6 +105,23 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
         </div>
         <div class="small text-warning-emphasis mt-1 sem-cultura-aviso{% if d.culturas %} d-none{% endif %}">Nenhuma cultura marcada -- a doença aparece em todas.</div>
 
+        {# Doenca secundaria so' em alguns estados (pedido do Alan, 14/11/2026): fora deles some de Alertas,
+           Recomendações e relatórios; o quadro de favorabilidade do app continua com ela. #}
+        <details class="mt-2 doenca-estados">
+            <summary class="small fw-bold text-muted" style="cursor: pointer;">📍 Estados onde aparece (Brasil):
+                <span class="resumo-estados fw-normal">{{ d.estados | sort | join(', ') if d.estados else 'todos' }}</span></summary>
+            <input type="hidden" name="estados_presente__{{ card_idx }}" value="1">
+            <div class="small text-muted mb-1">Fora dos marcados, a doença some de Alertas, Recomendações e relatórios (fica só no quadro de favorabilidade). Nenhum marcado = todos.</div>
+            <div class="d-flex flex-wrap column-gap-3 row-gap-1">
+                {% for uf in ufs_br %}
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" name="estados_card__{{ card_idx }}" value="{{ uf }}" id="uf-{{ card_idx }}-{{ uf }}" {% if uf in d.estados %}checked{% endif %}>
+                    <label class="form-check-label small" for="uf-{{ card_idx }}-{{ uf }}">{{ uf }}</label>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+
         <hr class="my-3">
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
             <div class="small fw-bold text-muted">Condições para germinação de esporos</div>
@@ -362,6 +379,13 @@ document.querySelectorAll('.doenca-culturas').forEach(function (bloco) {
     var aviso = bloco.parentNode.querySelector('.sem-cultura-aviso');
     bloco.addEventListener('change', function () {
         aviso.classList.toggle('d-none', !!bloco.querySelector('input:checked'));
+    });
+});
+// Resumo dos estados onde a doenca aparece.
+document.querySelectorAll('.doenca-estados').forEach(function (box) {
+    box.addEventListener('change', function () {
+        var ufs = Array.prototype.map.call(box.querySelectorAll('input[type=checkbox]:checked'), function (c) { return c.value; });
+        box.querySelector('.resumo-estados').textContent = ufs.length ? ufs.join(', ') : 'todos';
     });
 });
 </script>

@@ -1097,3 +1097,43 @@ class RaioPorEstadoEstimadasTest(unittest.TestCase):
         self.assertEqual(models.get_virtual_farm(site_mt)["raio_km"], 50)
         models.set_setting("atendimento_raio_uf", "{}")
         models.delete_user(uid)
+
+
+class DoencaPorEstadoTest(unittest.TestCase):
+    """Oidio e Alternaria so' em SP/MS/PR/SC/RS nas Recomendações/Alertas/relatorios; o quadro de
+    favorabilidade nao muda (pedido do Alan, 14/11/2026)."""
+
+    def test_oidio_so_nos_estados_do_sul(self):
+        models.salvar_fazenda_dados("Zzz Estado PR", "Londrina", "PR", "", None)
+        models.salvar_fazenda_dados("Zzz Estado MT", "Sinop", "MT", "", None)
+        info = {"Zzz Powdery": {"nome_pt": "Oídio Zzz", "nome_cientifico": "Erysiphe diffusa"},
+                "Zzz Rust": {"nome_pt": "Ferrugem Zzz", "nome_cientifico": "Phakopsora"}}
+        cards = [{"doenca_en": "Zzz Powdery", "doenca": "Oídio Zzz"}, {"doenca_en": "Zzz Rust", "doenca": "Ferrugem Zzz"}]
+        with webapp.app.test_request_context(), mock.patch.object(webapp, "_disease_info_cached", return_value=info):
+            self.assertEqual(webapp._estados_por_doenca(), {"Zzz Powdery": set(webapp.ESTADOS_DOENCA_SECUNDARIA)})
+            r = webapp._filtrar_por_estado({"Zzz Estado PR": cards, "Zzz Estado MT": cards})
+            self.assertEqual([c["doenca_en"] for c in r["Zzz Estado PR"]], ["Zzz Powdery", "Zzz Rust"])
+            self.assertEqual([c["doenca_en"] for c in r["Zzz Estado MT"]], ["Zzz Rust"])
+            # quadro de favorabilidade do app (cliente-ponto) fica com tudo
+            self.assertEqual(len(webapp._filtrar_por_estado({"cliente-ponto:1": cards})["cliente-ponto:1"]), 2)
+        # escolha gravada em Doenças/Culturas vale no lugar do padrao ([] = todos)
+        models.set_doenca_estados("Zzz Powdery", [])
+        models.set_doenca_estados("Zzz Rust", ["MT"])
+        with webapp.app.test_request_context(), mock.patch.object(webapp, "_disease_info_cached", return_value=info):
+            r = webapp._filtrar_por_estado({"Zzz Estado PR": cards})
+            self.assertEqual([c["doenca_en"] for c in r["Zzz Estado PR"]], ["Zzz Powdery"])
+        models.set_setting("doenca_estados", "{}")
+
+    def test_tela_doencas_tem_estados(self):
+        models.add_manual_disease("Oídio Zzz Tela")
+        master = models.get_user_by_username("Zzz Master Estados")
+        if not master:
+            models.create_user("Zzz Master Estados", "x", is_master=True)
+            master = models.get_user_by_username("Zzz Master Estados")
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(master["id"])
+            s["_fresh"] = True
+        html = c.get("/admin/doencas").get_data(as_text=True)
+        self.assertIn("Estados onde aparece", html)
+        self.assertIn("MS, PR, RS, SC, SP", html)
