@@ -275,25 +275,14 @@ class FazendaAdicionalTest(unittest.TestCase):
         self.assertEqual(todos.count("*RELATÓRIO DE MONITORAMENTO*"), 1)
         self.assertEqual(todos.count("Clima ok"), 2)
         self.assertIn("Todas as fazendas (uma mensagem só)", tela)
-        # Free: sem Clima agora, Ultima leitura e Produtos
+        # Mesmo relatorio pra todo cliente, Free ou pago (pedido do Alan, 14/11/2026)
         weather = {"temperatura_atual": 25, "umidade_atual": 80, "previsao_5_dias": [{"data": "2026-11-09", "chuva_mm": 3}]}
         args = dict(weather=weather, produtos={}, leitura_bioscout="07/11/26")
         with webapp.app.test_request_context():
             cheio = webapp._format_whatsapp_message(pontos[0]["site_name"], [], **args)
-            enxuto = webapp._format_whatsapp_message(pontos[0]["site_name"], [], simples=True, **args)
         self.assertIn("Clima agora", cheio)
-        self.assertNotIn("Clima agora", enxuto)
-        self.assertNotIn("Última leitura BioScout", enxuto)
         self.assertNotIn("Última leitura BioScout", cheio)  # saiu de todo texto (10/11/2026)
-        self.assertIn("Previsão de chuva", enxuto)
-        with webapp.app.test_request_context():
-            self.assertFalse(webapp._relatorio_simples(pontos[0]["site_name"]))  # Basico
-        free = models.criar_cliente("Zzz Adic Free2", "segredo1", "", "5565999991401", "", models.plano_free()["id"])
-        models.atualizar_assinatura(free, status="ativa", cortesia_ate="2099-01-01")
-        with mock.patch.object(webapp.asaas, "configurado", return_value=False):
-            self._nova(self._logado(free), nome="Faz Free")
-        with webapp.app.test_request_context():
-            self.assertTrue(webapp._relatorio_simples(models.get_cliente_pontos(free)[0]["site_name"]))
+        self.assertFalse(hasattr(webapp, "_relatorio_simples"))
 
     def test_grupo_economico_em_recomendacoes(self):
         """Fazendas do mesmo grupo economico numa caixa so' em Recomendacoes,

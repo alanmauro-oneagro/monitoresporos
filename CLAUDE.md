@@ -426,17 +426,11 @@ ja' entra na Programacao de Envios (agenda padrao do `create_virtual_farm`)
 com o proprio cliente recebendo (`models.receber_relatorio_da_fazenda`). Lavouras de antes dessa regra: `_criar_fazendas_das_lavouras_antigas`
 roda na subida do site (`_bootstrap_once`), cria a fazenda das que nao tem
 e garante liberacao + destinatario das que ja' tinham (idempotente).
-**Relatorio do Free enxuto** (pedido do Alan, 08/11/2026): fazenda de
-cliente cujo plano que vale hoje e' o Free (`_relatorio_simples`,
-`models.dono_da_fazenda_cliente`) sai sem "Clima agora", sem "Última leitura
-BioScout" e sem "Produtos disponíveis na fazenda" (`_format_whatsapp_message(...,
-simples=True)`; previsao de chuva e doencas ficam) -- no WhatsApp e na aba
-Relatorios. **Relatorio por WhatsApp pelo plano**: recursos `whatsapp_texto` e
-`whatsapp_pdf` (linhas na tabela de Planos e Valores; padrao: texto em
-todos, PDF so' no Premium e Premium + Estacao -- migrado 1x, setting
-`recursos_whatsapp_migrados`). `_send_site_whatsapp` manda a cada cliente
-so' o formato do plano que vale agora (`_formatos_whatsapp_clientes` /
-`_acesso_do_cliente`, que funciona sem requisicao); cliente sem acesso
+**Relatorio IGUAL pra todo cliente** (pedido do Alan, 14/11/2026 -- substitui o "Free enxuto" e o formato
+pelo plano de 08/11): todo cliente com acesso (do app, do site ou cadastro manual) recebe texto E PDF com o mesmo
+conteudo (`_formatos_whatsapp_clientes` = (liberada, liberada); `_format_whatsapp_message` nao tem mais `simples`).
+Os recursos `whatsapp_texto`/`whatsapp_pdf` sairam da tabela de Planos e Valores (`RECURSOS_FORA_DA_TELA`, sem
+efeito); Gerenciar Clientes mostra "texto + PDF". Mudanca no relatorio vale pra todos. Cliente sem acesso
 nao recebe nada. Cada lavoura nova vira uma
 fazenda ESTIMADA (mesmo processo do Mapa Interpolado, raio do plano, nome
 "<lavoura> (<usuario>)", `_criar_fazenda_estimada_da_lavoura`) liberada so'

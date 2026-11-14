@@ -1543,7 +1543,7 @@ def _format_whatsapp_message(
     site, diseases, weather=None, produtos=None, is_virtual=False, cultura=None,
     safra_label=None, plantio_linhas=None, aplicacoes_linhas=None, leitura_bioscout=None,
     mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
-    vento_dia=None, ponto_clima=False, simples=False,
+    vento_dia=None, ponto_clima=False,
 ):
     """Monta o relatorio inteiro de uma fazenda numa unica mensagem de
     texto -- MESMO conteudo e ordem do PDF (`export_pdf.build_recommendation_pdf`),
@@ -1607,14 +1607,8 @@ def _format_whatsapp_message(
         -- tambem usado no caminho curto (sem doenca em Atencao/Perigo,
         sempre o caso dos pontos "so clima" da aba Alertas Clima)."""
         linhas = []
-        # `simples` (cliente do plano Free, pedido do Alan, 08/11/2026): sem
-        # "Clima agora", sem "Ultima leitura BioScout" e sem "Produtos
-        # disponiveis na fazenda" -- fica a previsao de chuva e as doencas.
-        if weather and simples:
-            if weather.get("previsao_5_dias"):
-                linhas.append("🌧️ *Previsão de chuvas:*")
-                linhas.extend(_linhas_previsao_chuva(weather["previsao_5_dias"]))
-        elif weather:
+        # Mesmo conteudo pra todo cliente (pedido do Alan, 14/11/2026 -- o texto enxuto do Free saiu).
+        if weather:
             partes = []
             if weather.get("temperatura_atual") is not None:
                 partes.append(f"🌡️ {weather['temperatura_atual']} °C")
@@ -1698,9 +1692,8 @@ def _format_whatsapp_message(
         ]
         if nomes:
             linhas_produtos.append(f"{emoji} {titulo}: {', '.join(nomes)}")
-    if not simples:
-        lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DISPONÍVEIS NA FAZENDA*"]
-        lines += linhas_produtos or ["Nenhum produto cadastrado."]
+    lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DISPONÍVEIS NA FAZENDA*"]
+    lines += linhas_produtos or ["Nenhum produto cadastrado."]
 
     lines += ["", f"_{_AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
     return "\n".join(lines).strip()
@@ -2000,18 +1993,8 @@ def _texto_relatorio(site, safra=None, ctx=None):
         aplicacoes_linhas=aplicacoes_linhas, leitura_bioscout=ctx["leitura_bioscout"],
         mostrar_secao_doencas=ctx["mostrar_secao_doencas"], riscos_climaticos=ctx["riscos_climaticos"],
         vento_dia=_rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]) if ctx["is_clima_point"] else None,
-        ponto_clima=ctx["is_clima_point"], simples=_relatorio_simples(site),
+        ponto_clima=ctx["is_clima_point"],
     )
-
-
-def _relatorio_simples(site):
-    """Fazenda de cliente no plano Free (o plano que vale hoje): relatorio
-    enxuto (pedido do Alan, 08/11/2026)."""
-    dono = models.dono_da_fazenda_cliente(site)
-    if not dono:
-        return False
-    plano, _liberada, _ = _acesso_do_cliente(dono)
-    return bool(plano) and plano["valor"] <= 0 and not plano.get("preco_por_area")
 
 
 def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, destinos_override=None):
@@ -7581,14 +7564,13 @@ def _acesso_cliente():
 
 
 def _formatos_whatsapp_clientes():
-    """{telefone: (texto, pdf)} dos clientes do app, pelo plano que vale
-    agora (`whatsapp_texto`/`whatsapp_pdf` em RECURSOS_PLANO). Cliente sem
-    acesso liberado nao recebe nada."""
+    """{telefone: (texto, pdf)} dos clientes do app. Todo cliente com acesso recebe texto E PDF, com o mesmo
+    conteudo, venha do app, do site ou do cadastro manual (pedido do Alan, 14/11/2026 -- antes o formato e o
+    texto enxuto do Free dependiam do plano). Cliente sem acesso liberado nao recebe nada."""
     formatos = {}
     for c in models.get_all_clientes():
-        plano, liberada, _ = _acesso_do_cliente(c["id"])
-        recursos = (plano or {}).get("recursos", []) if liberada else []
-        formato = ("whatsapp_texto" in recursos, "whatsapp_pdf" in recursos)
+        _plano, liberada, _ = _acesso_do_cliente(c["id"])
+        formato = (bool(liberada), bool(liberada))
         if c.get("telefone"):
             formatos[c["telefone"]] = formato
         # Pessoas que o cliente indicou pra receber o relatorio: mesmo formato do plano dele.
@@ -9267,8 +9249,7 @@ def _situacao_cliente(cl):
     else:
         fim = models.acesso_ate(cl)
         chave, texto = "bloqueado", f"Bloqueado{' desde ' + models.fmt_data_br(fim) if fim else ''} -- sem pagamento"
-    recursos = (plano or {}).get("recursos", []) if liberada else []
-    formato = " + ".join(r for c, r in (("whatsapp_texto", "texto"), ("whatsapp_pdf", "PDF")) if c in recursos) or "nenhum"
+    formato = "texto + PDF" if liberada else "nenhum"  # igual pra todo cliente (14/11/2026)
     return {"chave": chave, "texto": texto, "formato": formato}
 
 
@@ -9611,7 +9592,7 @@ def _inject_cadastros_novos():
 
 # Linhas tiradas da tabela de planos (pedido do Alan, 07/11/2026): o plano
 # continua com o valor que ja' tinha (campos escondidos no formulario).
-RECURSOS_FORA_DA_TELA = {"fazenda_estimada", "esporos", "risco", "fungicidas", "regiao"}
+RECURSOS_FORA_DA_TELA = {"fazenda_estimada", "esporos", "risco", "fungicidas", "regiao", "whatsapp_texto", "whatsapp_pdf"}
 
 
 @app.route("/admin/planos")
@@ -9937,7 +9918,7 @@ def admin_planos_salvar():
         if moeda not in models.MOEDAS:
             moeda = "BRL"
         planos.append((None if k == "novo" else int(k), nome, form.get(f"descricao__{k}", "").strip(), valor, ciclo,
-                       max_pontos, raio_km, form.getlist(f"recursos__{k}"), bool(form.get(f"ativo__{k}")), ordem, moeda,
+                       max_pontos, raio_km, [r for r, _ in models.RECURSOS_PLANO if r in form.getlist(f"recursos__{k}")], bool(form.get(f"ativo__{k}")), ordem, moeda,
                        bool(form.get(f"preco_area__{k}"))))
     for dados in planos:
         models.salvar_plano(*dados)

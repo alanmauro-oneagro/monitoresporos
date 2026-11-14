@@ -162,9 +162,9 @@ class EnvioPorPlanoTest(unittest.TestCase):
                 mock.patch.object(whatsapp, "send_whatsapp_document",
                                   side_effect=lambda tel, b, n, caption=None: docs.append(tel) or (True, "ok")):
             webapp._send_site_whatsapp(site, enviar_texto=True, enviar_pdf=True)
-        self.assertIn("5565999990141", textos)          # Free: so' texto
-        self.assertNotIn("5565999990141", docs)
-        self.assertIn("5565999990142", docs)            # Premium: PDF (com o texto junto ou separado)
+        # Todo cliente com acesso recebe texto E PDF, seja qual for o plano (pedido do Alan, 14/11/2026)
+        self.assertIn("5565999990141", docs)  # PDF (o texto vai junto ou separado)
+        self.assertIn("5565999990142", docs)
         self.assertNotIn("5565999990143", textos + docs)  # sem acesso (Free vencido): nada
         # API oficial da Meta (13/11/2026): plano so' texto vai pelo modelo sem PDF; com PDF, modelo com documento.
         modelo_texto, modelo_pdf = [], []
@@ -177,7 +177,7 @@ class EnvioPorPlanoTest(unittest.TestCase):
                                   side_effect=lambda tel, b, n, v: modelo_pdf.append(tel) or (True, "ok")), \
                 mock.patch.object(whatsapp, "send_whatsapp", side_effect=AssertionError("texto livre na API oficial")):
             webapp._send_site_whatsapp(site, enviar_texto=True, enviar_pdf=True)
-        self.assertIn("5565999990141", modelo_texto)
+        self.assertIn("5565999990141", modelo_pdf)
         self.assertIn("5565999990142", modelo_pdf)
         self.assertNotIn("5565999990143", modelo_texto + modelo_pdf)
 
