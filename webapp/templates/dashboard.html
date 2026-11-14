@@ -7,6 +7,12 @@
     {{ atualizar.botao_atualizar("bioscout", url_for('dashboard_atualizar')) }}
 </div>
 
+{% if fetch_sem_permissao %}
+<div class="alert alert-info small py-2" id="aviso-sem-permissao">
+    ℹ️ O BioScout não libera a contagem de esporos de: <strong>{{ fetch_sem_permissao | join(', ') }}</strong>.
+    As outras fazendas foram atualizadas. Para liberar, fale com a BioScout; se a fazenda não é mais acompanhada, use "🙈 Ocultar" em Gerenciar Clientes e este aviso some.
+</div>
+{% endif %}
 {% if fetch_last_error %}
 <div class="alert alert-warning small">
     ⚠ A ultima busca de dados do BioScout falhou (so' admin ve este aviso): <code>{{ fetch_last_error }}</code>

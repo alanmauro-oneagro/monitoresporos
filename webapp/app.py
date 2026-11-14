@@ -730,7 +730,7 @@ BIOSCOUT_USERNAME = os.environ.get("BIOSCOUT_USERNAME")
 BIOSCOUT_PASSWORD = os.environ.get("BIOSCOUT_PASSWORD")
 
 _fetch_lock = threading.Lock()
-_fetch_state = {"running": False, "last_error": None, "pct": None}
+_fetch_state = {"running": False, "last_error": None, "pct": None, "sem_permissao": []}
 
 
 def _fetch_configured():
@@ -743,10 +743,11 @@ def _fetch_configured():
 
 def _run_fetch_in_background():
     try:
+        sem_permissao = []
         if BIOSCOUT_USERNAME and BIOSCOUT_PASSWORD:
             erros = bioscout_fetch.fetch_recent(
                 data_reader.DATA_DIR, BIOSCOUT_USERNAME, BIOSCOUT_PASSWORD, log=lambda msg: None,
-                progresso=lambda pct: _fetch_state.update(pct=pct),
+                progresso=lambda pct: _fetch_state.update(pct=pct), sem_permissao=sem_permissao,
             )
             error = "; ".join(erros)[:300] if erros else None
         else:
@@ -757,6 +758,7 @@ def _run_fetch_in_background():
             error = None if result.returncode == 0 else (result.stderr[-300:] or result.stdout[-300:])
         with _fetch_lock:
             _fetch_state["last_error"] = error
+            _fetch_state["sem_permissao"] = sem_permissao
     except Exception as exc:  # nunca deixa a thread morrer silenciosamente
         with _fetch_lock:
             _fetch_state["last_error"] = str(exc)
@@ -3129,6 +3131,9 @@ def dashboard():
         "dashboard.html", cards_by_site=cards_by_site, no_access=False,
         weather_by_site=weather_by_site, dados_status_by_site=dados_status_by_site,
         fetch_last_error=_fetch_state["last_error"] if current_user.is_admin else None,
+        # Fazenda que o BioScout nao libera (403): aviso a parte; oculta = nao avisa (pedido do Alan, 14/11/2026).
+        fetch_sem_permissao=[_nome_exibicao(n) for n in _fetch_state.get("sem_permissao") or []
+                             if n not in models.get_deactivated_site_names()] if current_user.is_admin else [],
     )
 
 
