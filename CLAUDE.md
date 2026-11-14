@@ -1147,6 +1147,9 @@ site tem que entrar la'.
   provedor de estacao integrado (nao `sem_estacoes`; Chile so' com credencial DMC), SEM consultar o catalogo
   na hora -- antes a Bolivia sumia da previsao de chuva quando o servidor do SENAMHI Bolivia caia (502; o
   catalogo dela e o do Peru nao ficam no repo e se perdiam a cada deploy).
+- **Abrir pelo icone retoma a janela** (pedido do Alan, 14/11/2026): `static/site.webmanifest` com `id`/`scope` "/" e
+  `launch_handler.client_mode` = focus-existing (navigate-existing, auto de reserva) -- vale pro app INSTALADO (Chrome ⋮ ->
+  "Instalar app"); atalho comum da tela inicial abre aba nova no navegador de qualquer jeito.
 - **Telefone com DDI 55** (pedido do Alan, 08/11/2026): em todo o site
   "(66)99631-9500" (fixo "(66)3322-1100") -- `models.fmt_telefone_br`
   (filtro `telefone_br`, Excel, aviso no WhatsApp); outro DDI fica no

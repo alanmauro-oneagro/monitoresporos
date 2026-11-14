@@ -1201,3 +1201,15 @@ class BioscoutSemPermissaoTest(unittest.TestCase):
                 mock.patch.object(webapp, "_nome_exibicao", return_value="Zzz 3 Irmaos - MT"), \
                 mock.patch.object(webapp, "_uf_por_site", return_value={}):
             self.assertEqual(webapp._uf_da_fazenda("Zzz Sem Dados Nome"), "MT")
+
+
+class ManifestRetomaJanelaTest(unittest.TestCase):
+    """Abrir pelo icone retoma a janela ja' aberta (pedido do Alan, 14/11/2026)."""
+
+    def test_launch_handler(self):
+        import json
+        r = webapp.app.test_client().get("/static/site.webmanifest")
+        d = json.loads(r.get_data(as_text=True))
+        self.assertEqual(d["launch_handler"]["client_mode"][0], "focus-existing")
+        self.assertEqual((d["id"], d["scope"], d["display"]), ("/", "/", "standalone"))
+        r.close()

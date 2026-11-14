@@ -1,8 +1,17 @@
 {
+  "id": "/",
   "name": "OneAgro App",
   "short_name": "OneAgro App",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "launch_handler": {
+    "client_mode": [
+      "focus-existing",
+      "navigate-existing",
+      "auto"
+    ]
+  },
   "background_color": "#f4f6f4",
   "theme_color": "#63b445",
   "icons": [
