@@ -494,7 +494,7 @@ class CadastroTest(unittest.TestCase):
         self.assertIn('data-situacao="free"', html)
         self.assertIn('data-situacao="bloqueado"', html)
         self.assertIn('data-filtro="free"', html)
-        self.assertIn("Relatório por WhatsApp:</span> texto", html)  # no Free: so' texto
+        self.assertIn("Relatório por WhatsApp:</span> texto + PDF", html)  # igual pra todo cliente (14/11/2026)
         self.assertIn('<span class="fw-semibold">Zzz Area Ger</span>', html)  # modelo unico (09/11/2026)
         self.assertIn("✏️ Dados da fazenda", html)
         self.assertNotIn(" lavoura", html.split("Gerenciar Clientes</h4>", 1)[1])
