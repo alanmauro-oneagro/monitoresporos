@@ -832,7 +832,10 @@ site tem que entrar la'.
   por safra, TS/Sulco/Folha, plantio, aplicacoes e "Anotações por doença"
   -- `_anotacoes_da_fazenda`, mesmas rotas `save_farm_cultura`/
   `save_recommendations`); Recomendações so' mostra e envia. Pontos "so'
-  clima" tem o mesmo bloco de clima agora/previsao/vento das fazendas.
+  clima" tem o mesmo bloco de clima agora/previsao/vento das fazendas. **Cartoes dos pontos so' clima = cartoes das fazendas** (pedido do Alan,
+  14/11/2026): caixa "☁️ Pontos só clima" no modelo da caixa do grupo economico (`.grupo-toggle`, selo "N pontos") e cada
+  ponto recolhido "▶ nome" (`.farm-toggle`, o mesmo JS das fazendas, abertos lembrados) com Copiar/Enviar por WhatsApp na
+  linha do nome (`_pontos_clima.html`).
 - **Gerenciar Fazendas Ocultas** (ex-"Fazendas ocultas"; Configuracoes -> Gerenciar Fazendas Ocultas, so' "Alan Mauro",
   rota `fazendas_ocultas`): lista as desativadas e as sem leitura ha mais
   de `DADOS_BLOQUEIO_DIAS`, com botao Reativar. Reativar uma sem leitura
