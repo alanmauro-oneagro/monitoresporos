@@ -4204,7 +4204,7 @@ def _pontos_clima():
             **vf,
             "country_code": _pais_code_clima,
             "pais_nome": countries.get_country(_pais_code_clima)["nome"],
-            "estacoes_proximas": countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], _pais_code_clima, n=2),
+            "estacoes_proximas": countries.estacoes_mais_proximas_global(vf["lat"], vf["lon"], _pais_code_clima, n=3),
             "estacao_selecionada": escolha["codigo"] if escolha else "",
             "estacao_pais": escolha["country_code"] if escolha else "",
             "whatsapp_destinos": len(whatsapp_destinos_by_site.get(site, [])),
@@ -4760,7 +4760,7 @@ def fazendas():
     # `countries.estacoes_mais_proximas_global_lote`).
     sites_com_coords = [s for s in sites if coords.get(s)]
     pontos = [(*coords[s], site_countries.get(s, countries.DEFAULT_COUNTRY)) for s in sites_com_coords]
-    resultados_lote = countries.estacoes_mais_proximas_global_lote(pontos, n=2) if pontos else []
+    resultados_lote = countries.estacoes_mais_proximas_global_lote(pontos, n=3) if pontos else []
     estacoes_proximas_por_site = dict(zip(sites_com_coords, resultados_lote))
 
     sites_data = []
@@ -10018,7 +10018,7 @@ def _dados_da_fazenda(site, idx="0", completo=False):
               grupo_de={c: _grupo_da_cultura(c) for c in lista})
     if completo:
         escolha = models.get_all_weather_station_overrides().get(site)
-        fz["estacoes_proximas"] = countries.estacoes_mais_proximas_global(lat, lon, pais, n=2) if lat is not None else []
+        fz["estacoes_proximas"] = countries.estacoes_mais_proximas_global(lat, lon, pais, n=3) if lat is not None else []
         fz["estacao_selecionada"] = escolha["codigo"] if escolha else ""
         fz["estacao_pais"] = escolha["country_code"] if escolha else ""
     return fz

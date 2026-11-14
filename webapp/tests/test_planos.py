@@ -1213,3 +1213,16 @@ class ManifestRetomaJanelaTest(unittest.TestCase):
         self.assertEqual(d["launch_handler"]["client_mode"][0], "focus-existing")
         self.assertEqual((d["id"], d["scope"], d["display"]), ("/", "/", "standalone"))
         r.close()
+
+
+class TresEstacoesProximasTest(unittest.TestCase):
+    """Dados da fazenda / pontos so' clima listam as 3 estacoes oficiais mais proximas (pedido do Alan, 14/11/2026)."""
+
+    def test_tres_estacoes(self):
+        with webapp.app.test_request_context():
+            site = models.create_virtual_farm("Zzz Tres Estacoes", -11.0, -57.4, 20)
+            fz = webapp._dados_da_fazenda(site, completo=True)
+            models.delete_virtual_farm(site)
+        self.assertEqual(len(fz["estacoes_proximas"]), 3)
+        distancias = [e["distancia_km"] for e in fz["estacoes_proximas"]]
+        self.assertEqual(distancias, sorted(distancias))
