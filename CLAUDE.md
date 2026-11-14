@@ -915,7 +915,9 @@ site tem que entrar la'.
 - **BioScout 403 na contagem de esporos** (pedido do Alan, 14/11/2026): uma fazenda sem permissao na conta derrubava a
   busca de TODAS (uma chamada so' com todos os `SiteIds`). Agora `bioscout_fetch._contagens` levanta `_SemPermissao`
   (401/403 com 2+ fazendas) e `fetch_recent` busca fazenda por fazenda; as recusadas aparecem no aviso do Alertas
-  ("sem permissão no BioScout para: <fazendas>") e as outras atualizam normalmente.
+  e as outras atualizam normalmente. A recusa NAO e' "busca falhou": vai em `_fetch_state["sem_permissao"]`
+  (parametro `sem_permissao` do `fetch_recent`) e o Alertas mostra um aviso azul `#aviso-sem-permissao` ("O BioScout
+  nao libera a contagem de esporos de: X"); fazenda oculta (Ocultar em Gerenciar Clientes) nao entra no aviso.
 - **Germinacao de fungos comuns** (pedido do Alan, 12/11/2026): `_PESQUISA_GERMINACAO` ganhou
   Rhizoctonia/Thanatephorus (mela/rizoctoniose), Waitea (R. zeae, mancha salmao), Sclerotium/Athelia rolfsii, Ascochyta, Phoma,
   Pyrenophora, Blumeria, Fusarium graminearum/Gibberella (giberela, 48 h), Venturia, Monilinia,

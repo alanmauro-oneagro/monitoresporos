@@ -1164,6 +1164,38 @@ class BioscoutSemPermissaoTest(unittest.TestCase):
         with open(os.path.join(pasta, "spore_counts.csv"), encoding="utf-8") as f:
             self.assertIn("t1", f.read())
 
+    def test_recusada_vira_aviso_e_some_se_oculta(self):
+        import urllib.error
+        import bioscout_fetch
+        pasta = tempfile.mkdtemp()
+
+        def falso(url, headers=None, method="GET", body=None):
+            if "Auth/login" in url:
+                return {"token": "a.b.c"}
+            if "Site/get" in url:
+                return [{"siteId": 1, "siteName": "Zzz Boa"}, {"siteId": 2, "siteName": "Zzz Bloqueada"}]
+            if "SiteIds=1&SiteIds=2" in url or url.endswith("SiteIds=2"):
+                raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+            return []
+
+        lista = []
+        with mock.patch.object(bioscout_fetch, "_http_json", side_effect=falso):
+            erros = bioscout_fetch.fetch_recent(pasta, "u", "s", log=lambda *_: None, sem_permissao=lista)
+        self.assertEqual((erros, lista), ([], ["Zzz Bloqueada"]))
+        if not models.get_user_by_username("Zzz Master Aviso"):
+            models.create_user("Zzz Master Aviso", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Aviso")["id"])
+            s["_fresh"] = True
+        with mock.patch.dict(webapp._fetch_state, {"sem_permissao": ["Zzz Bloqueada"], "last_error": None}), \
+                mock.patch.object(webapp, "_maybe_auto_refresh"):
+            html = c.get("/dashboard").get_data(as_text=True)
+            self.assertIn("aviso-sem-permissao", html)
+            self.assertNotIn("falhou", html)
+            with mock.patch.object(models, "get_deactivated_site_names", return_value={"Zzz Bloqueada"}):
+                self.assertNotIn("aviso-sem-permissao", c.get("/dashboard").get_data(as_text=True))
+
     def test_uf_pelo_fim_do_nome(self):
         with webapp.app.test_request_context(), \
                 mock.patch.object(webapp, "_nome_exibicao", return_value="Zzz 3 Irmaos - MT"), \

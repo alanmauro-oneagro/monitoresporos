@@ -179,7 +179,7 @@ def _earliest_reading_by_site(spore_counts_path):
     return earliest
 
 
-def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=print, progresso=None):
+def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=print, progresso=None, sem_permissao=None):
     """Busca sites + spore_counts + weather. Fazenda com historico
     completo desde `FULL_HISTORY_SINCE` ja salvo so' busca a janela
     recente (`lookback_days`) -- rapido, e o merge por chave preserva
@@ -290,8 +290,12 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
             log(f"  contagem de esporos fazenda a fazenda ({exc}): {len(counts)} registros, {len(recusadas)} recusada(s)")
             if recusadas:
                 nomes = {str(s.get("siteId")): s.get("siteName") or str(s.get("siteId")) for s in sites}
-                lista = ", ".join(f"{nomes.get(sid, sid)}" for sid, _e in recusadas)
-                erros.append(f"contagem de esporos sem permissão no BioScout para: {lista} ({recusadas[0][1]})")
+                if sem_permissao is not None:
+                    # Recusa do BioScout nao e' falha da busca: vai a parte, como aviso (14/11/2026).
+                    sem_permissao.extend(nomes.get(sid, sid) for sid, _e in recusadas)
+                else:
+                    lista = ", ".join(f"{nomes.get(sid, sid)}" for sid, _e in recusadas)
+                    erros.append(f"contagem de esporos sem permissão no BioScout para: {lista} ({recusadas[0][1]})")
         except Exception as exc:
             log(f"  erro contagem de esporos: {exc}")
             erros.append(f"contagem de esporos: {exc}")
