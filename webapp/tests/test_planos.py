@@ -1137,3 +1137,35 @@ class DoencaPorEstadoTest(unittest.TestCase):
         html = c.get("/admin/doencas").get_data(as_text=True)
         self.assertIn("Estados onde aparece", html)
         self.assertIn("MS, PR, RS, SC, SP", html)
+
+
+class BioscoutSemPermissaoTest(unittest.TestCase):
+    """403 na contagem de esporos: busca fazenda por fazenda e so' deixa de fora a recusada (pedido do Alan, 14/11/2026)."""
+
+    def test_403_busca_fazenda_por_fazenda(self):
+        import urllib.error
+        import bioscout_fetch
+        pasta = tempfile.mkdtemp()
+
+        def falso(url, headers=None, method="GET", body=None):
+            if "Auth/login" in url:
+                return {"token": "a.b.c"}
+            if "Site/get" in url:
+                return [{"siteId": 1, "siteName": "Zzz Boa"}, {"siteId": 2, "siteName": "Zzz Bloqueada"}]
+            if "SiteIds=1&SiteIds=2" in url or url.endswith("SiteIds=2"):
+                raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+            return [{"tapeScanId": "t1", "particulateId": "p1", "siteId": 1, "count": 3}]
+
+        with mock.patch.object(bioscout_fetch, "_http_json", side_effect=falso):
+            erros = bioscout_fetch.fetch_recent(pasta, "u", "s", log=lambda *_: None)
+        self.assertEqual(len(erros), 1)
+        self.assertIn("Zzz Bloqueada", erros[0])
+        self.assertNotIn("Zzz Boa", erros[0])
+        with open(os.path.join(pasta, "spore_counts.csv"), encoding="utf-8") as f:
+            self.assertIn("t1", f.read())
+
+    def test_uf_pelo_fim_do_nome(self):
+        with webapp.app.test_request_context(), \
+                mock.patch.object(webapp, "_nome_exibicao", return_value="Zzz 3 Irmaos - MT"), \
+                mock.patch.object(webapp, "_uf_por_site", return_value={}):
+            self.assertEqual(webapp._uf_da_fazenda("Zzz Sem Dados Nome"), "MT")

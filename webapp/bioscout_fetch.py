@@ -23,6 +23,7 @@ So usa `urllib` (biblioteca padrao), sem dependencia nova."""
 import csv
 import io
 import json
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -49,6 +50,21 @@ def _http_json(url, headers=None, method="GET", body=None):
         req.add_header(key, value)
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+class _SemPermissao(Exception):
+    pass
+
+
+def _contagens(from_iso, to_iso, ids, headers):
+    qs = "&".join(f"SiteIds={sid}" for sid in ids)
+    url = f"{API_BASE}/api/service-subscriptions/counts?From={from_iso}&To={to_iso}&{qs}"
+    try:
+        return _http_json(url, headers=headers)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403) and len(ids) > 1:
+            raise _SemPermissao(f"HTTP {exc.code}") from exc
+        raise
 
 
 def _find_jwt(obj):
@@ -258,11 +274,24 @@ def fetch_recent(data_dir, username, password, lookback_days=LOOKBACK_DAYS, log=
         from_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
         to_iso = window_end.strftime("%Y-%m-%dT%H:%M:%SZ")
         try:
-            qs = "&".join(f"SiteIds={sid}" for sid in ids)
-            url = f"{API_BASE}/api/service-subscriptions/counts?From={from_iso}&To={to_iso}&{qs}"
-            counts = _http_json(url, headers=headers)
+            counts = _contagens(from_iso, to_iso, ids, headers)
             _merge_csv(counts, spore_counts_path, ["tapeScanId", "particulateId"])
             log(f"  contagem de esporos ({from_iso[:10]} -> {to_iso[:10]}): {len(counts)} registros")
+        except _SemPermissao as exc:
+            # Uma fazenda sem permissao derrubava a busca de todas (HTTP 403, pedido do Alan, 14/11/2026):
+            # busca fazenda por fazenda e so' deixa de fora as recusadas.
+            counts, recusadas = [], []
+            for sid in ids:
+                try:
+                    counts.extend(_contagens(from_iso, to_iso, [sid], headers))
+                except Exception as exc_site:
+                    recusadas.append((sid, exc_site))
+            _merge_csv(counts, spore_counts_path, ["tapeScanId", "particulateId"])
+            log(f"  contagem de esporos fazenda a fazenda ({exc}): {len(counts)} registros, {len(recusadas)} recusada(s)")
+            if recusadas:
+                nomes = {str(s.get("siteId")): s.get("siteName") or str(s.get("siteId")) for s in sites}
+                lista = ", ".join(f"{nomes.get(sid, sid)}" for sid, _e in recusadas)
+                erros.append(f"contagem de esporos sem permissão no BioScout para: {lista} ({recusadas[0][1]})")
         except Exception as exc:
             log(f"  erro contagem de esporos: {exc}")
             erros.append(f"contagem de esporos: {exc}")

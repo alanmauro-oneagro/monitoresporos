@@ -879,6 +879,10 @@ def _uf_da_fazenda(site):
     if not site.startswith("cliente-ponto:") and models.get_all_site_countries().get(site, countries.DEFAULT_COUNTRY) == "BR":
         ponto = _ponto_da_fazenda(site)
         uf = ((ponto or models.get_fazendas_dados().get(site) or {}).get("uf") or "").strip().upper() or None
+        if uf not in UFS_BR:
+            # "3 Irmaos - MT": estado no fim do nome (mesma regra do preenchimento automatico).
+            uf = next((m.group(1).upper() for nome in (_nome_exibicao(site), site)
+                       if (m := _UF_NO_NOME.search(nome or "")) and m.group(1).upper() in UFS_BR), None)
         if not uf:
             por_site = getattr(g, "_uf_por_site_cache", None)
             if por_site is None:
