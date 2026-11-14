@@ -153,6 +153,8 @@ _ESTILO_TITULO_CLIMA = ParagraphStyle(
     "TituloClima", parent=_styles["Normal"], fontSize=8.5, leading=11, textColor=AZUL_MARCA, fontName="Helvetica-Bold",
 )
 _ESTILO_PREV_DATA = ParagraphStyle("PrevData", parent=_ESTILO_ROTULO_CLIMA, alignment=1)
+_ESTILO_ROTULO_CLIMA_C = ParagraphStyle("RotuloClimaC", parent=_ESTILO_ROTULO_CLIMA, alignment=1)
+_ESTILO_VALOR_CLIMA_C = ParagraphStyle("ValorClimaC", parent=_ESTILO_VALOR_CLIMA, alignment=1)
 _ESTILO_PREV_MM = ParagraphStyle("PrevMm", parent=_ESTILO_VALOR_CLIMA, fontSize=10, leading=12, alignment=1)
 _ESTILO_LEGENDA_ROSA = ParagraphStyle(
     "LegendaRosa", parent=_ESTILO_ROTULO_CLIMA, alignment=1, textColor=AZUL_MARCA,
@@ -174,27 +176,32 @@ def _cabecalho_clima(weather, leitura_bioscout):
     ]
     esquerda = []
 
-    indicadores = []
-    for rotulo, chave, unidade in (
-        ("Temperatura", "temperatura_atual", " °C"), ("Umidade", "umidade_atual", "%"),
-        ("Chuva hoje (prevista)", "chuva_hoje_mm", " mm"), ("Chuva 24h", "chuva_24h_mm", " mm"),
+    # Rotulos numa linha e valores na de baixo, centralizados, coluna da chuva de hoje mais larga (pedido do Alan,
+    # 14/11/2026 -- "Chuva hoje (prevista)" quebrava e desalinhava a caixa).
+    rotulos, valores, pesos = [], [], []
+    for rotulo, chave, unidade, peso in (
+        ("Temperatura", "temperatura_atual", " °C", 1), ("Umidade", "umidade_atual", "%", 0.85),
+        ("Chuva hoje (prevista)", "chuva_hoje_mm", " mm", 1.45), ("Chuva 24h", "chuva_24h_mm", " mm", 0.95),
     ):
         if weather.get(chave) is not None:
+            texto = f"{weather[chave]}{unidade}"
             if chave == "chuva_hoje_mm" and isinstance(weather.get("chuva_hoje_prob"), (int, float)):
-                unidade = f" mm ({weather['chuva_hoje_prob']:.0f}%)"
-            indicadores.append([
-                Paragraph(rotulo, _ESTILO_ROTULO_CLIMA), Paragraph(f"{weather[chave]}{unidade}", _ESTILO_VALOR_CLIMA),
-            ])
-    if indicadores:
+                texto += f' <font size="8.5">({weather["chuva_hoje_prob"]:.0f}%)</font>'
+            rotulos.append(Paragraph(rotulo, _ESTILO_ROTULO_CLIMA_C))
+            valores.append(Paragraph(texto, _ESTILO_VALOR_CLIMA_C))
+            pesos.append(peso)
+    if rotulos:
         esquerda.append(Paragraph("Clima agora", _ESTILO_TITULO_CLIMA))
         esquerda.append(Spacer(1, 2))
-        largura_ind = largura_esq / len(indicadores)
-        tabela = Table([indicadores], colWidths=[largura_ind] * len(indicadores), hAlign="LEFT")
+        larguras = [largura_esq * p / sum(pesos) for p in pesos]
+        tabela = Table([rotulos, valores], colWidths=larguras, hAlign="LEFT")
         tabela.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), CINZA_CLARO),
             ("LINEAFTER", (0, 0), (-2, -1), 0.6, colors.white),
-            ("LEFTPADDING", (0, 0), (-1, -1), 7), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, 0), 5), ("BOTTOMPADDING", (0, 0), (-1, 0), 0),
+            ("TOPPADDING", (0, 1), (-1, 1), 1), ("BOTTOMPADDING", (0, 1), (-1, 1), 6),
             ("ROUNDEDCORNERS", [4, 4, 4, 4]),
         ]))
         esquerda.append(tabela)

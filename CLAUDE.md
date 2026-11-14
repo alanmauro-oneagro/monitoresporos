@@ -393,7 +393,8 @@ manejo da(s) cultura(s) de: SOJA / MILHO*" / ━━
 toda fazenda, pedido do Alan, 08/11/2026; grupo economico do cliente fica
 como digitado, resto em maiusculas; ponto so' clima/fazenda sem cultura =
 sem a linha "Informações"; o PDF tem o mesmo cabecalho, tudo em negrito
-entre duas linhas -- `export_pdf.build_recommendation_pdf(titulo_fazenda=,
+entre duas linhas; caixa "Clima agora" do PDF com rotulos numa linha e valores na de baixo, centralizados, coluna da chuva
+de hoje mais larga -- `export_pdf._cabecalho_clima`, pedido do Alan, 14/11/2026 -- `export_pdf.build_recommendation_pdf(titulo_fazenda=,
 data_relatorio=)`). **Rodape** (texto e PDF, pedido do Alan, 09/11/2026):
 "Este relatório é uma ferramenta de monitoramento e não substitui a
 avaliação de um agrônomo responsável." + "Quer ter essa ferramenta para sua
