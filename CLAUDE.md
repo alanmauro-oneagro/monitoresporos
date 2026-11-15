@@ -790,6 +790,12 @@ site tem que entrar la'.
   `nome`, que muda o proprio `site_name` (cascata em varias tabelas).
   Acessivel tanto por Mapa Interpolado quanto pela aba Manejos (campo "Nome
   de exibicao").
+- **Arquivo gerado nunca fica em cache** (pedido do Alan, 15/11/2026: o guia de manejo baixava sempre o PDF antigo):
+  `SEND_FILE_MAX_AGE_DEFAULT` (12 h, pensado pros estaticos) fazia o `send_file` mandar "public, max-age=43200" tambem
+  no PDF do relatorio, guia de manejo, Excel, backup e imagem NDVI atual -- o navegador reabria a copia velha por 12 h
+  (limpar cookies nao resolve). `_no_cache` agora troca esse padrao por no-store em toda rota que nao e' `static`; so'
+  fica o Cache-Control que a propria rota escolheu (NDVI historico, imutavel). Os links do guia e do PDF da fazenda tem
+  `?v=versao_estaticos` (o endereco muda a cada deploy). Guia baixa como `OneAgro_Guia_Manejo_<data>_<HHhMM>.pdf`.
 - **Datas no Excel**: sempre escrever objetos `date`/`datetime` reais nas
   celulas (nunca string pre-formatada), usando
   `cell.number_format = "DD/MM/YYYY"` para exibicao — senao o Excel trata

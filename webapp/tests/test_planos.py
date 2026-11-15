@@ -1345,6 +1345,7 @@ class ManejoFungicidasTest(unittest.TestCase):
             pdf = c.get("/admin/fungicidas/guia-manejo.pdf")
             self.assertEqual(pdf.mimetype, "application/pdf")
             self.assertTrue(pdf.data.startswith(b"%PDF"))
+            self.assertIn("no-store", pdf.headers["Cache-Control"])  # o navegador reabria o PDF antigo por 12 h
             secoes = {}
             original = webapp.export_pdf.build_guia_manejo_pdf
             webapp.export_pdf.build_guia_manejo_pdf = lambda sec, *a, **k: secoes.update(sec) or b"%PDF"
