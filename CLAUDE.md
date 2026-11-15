@@ -956,12 +956,16 @@ site tem que entrar la'.
   portugues. Doenca que entrou ha' menos de `app.DIAS_DOENCA_NOVA` (3) dias (coluna
   `disease_translations.criado_em`, gravada ao entrar do BioScout ou a mao; as antigas ficam sem
   data) fica em azul escuro (`.doenca-nova`, faixa e fundo azul + selo "Nova"), depois volta ao normal.
-- **Manejo -- o que examinar no campo** (pedido do Alan, 15/11/2026; aba Manejo e Fungicidas): campo "🔎 Manejo —
-  o que examinar no campo" em cada doenca (tabela `fungicida_monitoramento`, `models.get_all/set_fungicida_monitoramento`,
-  salva sozinho com o resto da aba; entra nas cascatas de fusao/juncao/exclusao da doenca). Textos do Alan de Ramulose e
-  Mancha Salmao em `app.MONITORAMENTO_PADRAO`, gravados UMA vez na doenca de mesmo nome (`_semear_monitoramento`,
-  setting `monitoramento_semeado`; apagar nao volta). Botao "📄 Guia de manejo (PDF)" no topo (`guia_manejo_pdf`,
-  `export_pdf.build_guia_manejo_pdf`: um quadro por doenca com texto, cada frase vira um item). Ainda NAO aparece
+- **Manejo -- protocolo de verificacao em campo** (pedido do Alan, 15/11/2026; aba Manejo e Fungicidas): em cada doenca
+  "🔎 O que verificar em campo" + "🎯 Objetivo da verificação" (tabela `fungicida_monitoramento`, colunas `texto`/`objetivo`,
+  `models.get_all/set_fungicida_monitoramento`, salva sozinho com o resto da aba; entra nas cascatas de fusao/juncao/exclusao).
+  O documento do Alan ("Protocolo de verificação em campo", 20 doencas de soja/milho/algodao + a ficha de inspecao) fica em
+  `protocolo_manejo.py` (`PROTOCOLO` com outros nomes de cada doenca, `REGISTRO_INSPECAO`) e e' gravado UMA vez na doenca do
+  site de mesmo nome (`_semear_monitoramento`, nome sem acento/hifen -- `_chave_doenca`; setting `protocolo_manejo_semeado`;
+  apagar nao volta; o texto da 1a versao de Ramulose/Mancha Salmao e' trocado). Botao "📄 Guia de manejo (PDF)"
+  (`guia_manejo_pdf`, `export_pdf.build_guia_manejo_pdf`): faixa por cultura (1a cultura marcada da doenca em
+  Doenças/Culturas, na ordem das culturas do site; sem cultura = "Outras culturas"), quadro por doenca com o que verificar
+  (uma frase por item) e o objetivo, e no fim a "Ficha de inspeção -- o que registrar em cada visita". Ainda NAO aparece
   nas Recomendações/relatorios.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda

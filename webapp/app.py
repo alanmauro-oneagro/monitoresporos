@@ -46,6 +46,7 @@ import data_reader
 import bioscout_fetch
 import export_excel
 import export_pdf
+import protocolo_manejo
 import whatsapp
 import whatsapp_cloud_api
 import whatsapp_umbler
@@ -6083,49 +6084,71 @@ def admin_doencas():
     )
 
 
-# O que examinar no campo, por doenca (pedido do Alan, 15/11/2026): textos que o Alan
-# mandou, gravados 1x na doenca de mesmo nome (setting `monitoramento_semeado`); depois
-# disso o Master edita (ou apaga) na aba Manejo e Fungicidas e nada volta sozinho.
-MONITORAMENTO_PADRAO = {
-    "ramulose": "Examinar ponteiros, folhas novas e ramos. Procurar lesões necróticas de aspecto estrelado, "
-                "encurtamento dos entrenós, superbrotamento e deformação dos ponteiros. Identificar infecções "
-                "iniciais e avaliar o comprometimento do crescimento vegetativo e da arquitetura das plantas.",
-    "mancha salmao": "Inspecionar folhas, pecíolos, hastes e estruturas reprodutivas, procurando lesões com coloração "
-                     "salmão ou alaranjada, quando compatíveis com a doença cadastrada. Registrar distribuição e "
-                     "evolução. Identificar sintomas suspeitos e avaliar a necessidade de confirmação da identidade "
-                     "do patógeno antes de definir o manejo.",
+# O que verificar em campo + objetivo, por doenca (pedido do Alan, 15/11/2026): protocolo do
+# documento do Alan (`protocolo_manejo.PROTOCOLO`), gravado 1x na doenca do site de mesmo nome
+# (ou um dos outros nomes; setting `protocolo_manejo_semeado`). Depois disso o Master edita (ou
+# apaga) na aba Manejo e Fungicidas e nada volta sozinho.
+_TEXTOS_ANTIGOS_MONITORAMENTO = {  # 1a versao (so' um campo, com o objetivo junto) -- trocada pelo protocolo
+    "Examinar ponteiros, folhas novas e ramos. Procurar lesões necróticas de aspecto estrelado, encurtamento dos "
+    "entrenós, superbrotamento e deformação dos ponteiros. Identificar infecções iniciais e avaliar o comprometimento "
+    "do crescimento vegetativo e da arquitetura das plantas.",
+    "Inspecionar folhas, pecíolos, hastes e estruturas reprodutivas, procurando lesões com coloração salmão ou "
+    "alaranjada, quando compatíveis com a doença cadastrada. Registrar distribuição e evolução. Identificar sintomas "
+    "suspeitos e avaliar a necessidade de confirmação da identidade do patógeno antes de definir o manejo.",
 }
 
 
+def _chave_doenca(nome):
+    return " ".join(re.sub(r"[-/()]", " ", _chave_alfabetica(nome)).split())
+
+
 def _semear_monitoramento(translations):
-    feitos = set(json.loads(models.get_setting("monitoramento_semeado") or "[]"))
-    faltam = [k for k in MONITORAMENTO_PADRAO if k not in feitos]
+    feitos = set(json.loads(models.get_setting("protocolo_manejo_semeado") or "[]"))
+    faltam = [p for p in protocolo_manejo.PROTOCOLO if p[0] not in feitos]
     if not faltam:
         return
     existentes = models.get_all_fungicida_monitoramento()
+    por_chave = {}
     for doenca_en, info in translations.items():
-        chave = _chave_alfabetica(info.get("nome_pt") or "")
-        if chave in faltam:
-            if not existentes.get(doenca_en):
-                models.set_fungicida_monitoramento(doenca_en, MONITORAMENTO_PADRAO[chave])
-            feitos.add(chave)
-    models.set_setting("monitoramento_semeado", json.dumps(sorted(feitos)))
+        por_chave.setdefault(_chave_doenca(info.get("nome_pt") or ""), []).append(doenca_en)
+    for nome, outros, verificar, objetivo in faltam:
+        achadas = [d for n in [nome] + outros for d in por_chave.get(_chave_doenca(n), [])]
+        for doenca_en in achadas:
+            atual = existentes.get(doenca_en) or {}
+            if not atual.get("texto") or atual["texto"] in _TEXTOS_ANTIGOS_MONITORAMENTO:
+                models.set_fungicida_monitoramento(doenca_en, verificar, objetivo)
+            elif not atual.get("objetivo"):
+                models.set_fungicida_monitoramento(doenca_en, atual["texto"], objetivo)
+        if achadas:
+            feitos.add(nome)
+    models.set_setting("protocolo_manejo_semeado", json.dumps(sorted(feitos)))
 
 
 @app.route("/admin/fungicidas/guia-manejo.pdf")
 @aba_required("fungicidas")
 def guia_manejo_pdf():
-    """PDF "O que examinar no campo" com as doencas que tem o texto preenchido."""
+    """Guia de manejo em PDF: doencas com o protocolo preenchido, agrupadas pela 1a cultura
+    marcada em Doenças/Culturas (na ordem das culturas do site)."""
     translations = _load_translations()
     _semear_monitoramento(translations)
     textos = models.get_all_fungicida_monitoramento()
-    itens = sorted(
-        ({"nome": translations[d]["nome_pt"], "cientifico": translations[d].get("nome_cientifico") or "", "texto": t}
-         for d, t in textos.items() if d in translations and t.strip()),
-        key=lambda i: _chave_alfabetica(i["nome"]),
-    )
+    culturas_site = models.get_culturas_ativas()
+    doenca_culturas = models.get_doenca_culturas()
+    grupos = {}
+    for d, t in textos.items():
+        if d not in translations or not (t["texto"].strip() or t["objetivo"].strip()):
+            continue
+        culturas = [c for c in culturas_site if c in doenca_culturas.get(d, set())]
+        grupo = culturas[0] if culturas else "Outras culturas"
+        grupos.setdefault(grupo, []).append({
+            "nome": translations[d]["nome_pt"], "cientifico": translations[d].get("nome_cientifico") or "",
+            "texto": t["texto"], "objetivo": t["objetivo"], "outras_culturas": culturas[1:],
+        })
+    ordem = culturas_site + ["Outras culturas"]
+    secoes = [(g, sorted(grupos[g], key=lambda i: _chave_alfabetica(i["nome"]))) for g in ordem if g in grupos]
     agora = weather_forecast._agora_cuiaba()
-    pdf = export_pdf.build_guia_manejo_pdf(itens, agora.strftime("Extraído em %d/%m/%Y %H:%M"))
+    pdf = export_pdf.build_guia_manejo_pdf(secoes, protocolo_manejo.REGISTRO_INSPECAO,
+                                           agora.strftime("Extraído em %d/%m/%Y %H:%M"))
     return send_file(io.BytesIO(pdf), mimetype="application/pdf", as_attachment=True,
                      download_name=_nome_arquivo("Guia_Manejo", "pdf"))
 
@@ -6178,8 +6201,10 @@ def admin_fungicidas():
                 models.set_fungicida_registro_bloqueado(doenca, tipo, idx, bloqueadas)
         for doenca, nota in zip(request.form.getlist("nota_doenca_key"), request.form.getlist("nota_doenca")):
             models.set_fungicida_nota(doenca, nota.strip())
-        for doenca, texto in zip(request.form.getlist("monitoramento_key"), request.form.getlist("monitoramento")):
-            models.set_fungicida_monitoramento(doenca, texto.strip())
+        objetivos = request.form.getlist("monitoramento_objetivo")
+        for k, (doenca, texto) in enumerate(zip(request.form.getlist("monitoramento_key"), request.form.getlist("monitoramento"))):
+            objetivo = objetivos[k].strip() if k < len(objetivos) else None
+            models.set_fungicida_monitoramento(doenca, texto.strip(), objetivo)
         translations = _load_translations()
         for doenca, cientifico in zip(request.form.getlist("cientifico_key"), request.form.getlist("cientifico")):
             info = translations.get(doenca)
@@ -6224,7 +6249,8 @@ def admin_fungicidas():
                 "doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True, "paises": paises_doenca,
                 "pais": _pais_da_doenca(doenca_en),
                 "bandeiras": bandeiras,
-                "nota": notas.get(doenca_en, ""), "monitoramento": monitoramento.get(doenca_en, ""),
+                "nota": notas.get(doenca_en, ""), "monitoramento": monitoramento.get(doenca_en, {}).get("texto", ""),
+                "monitoramento_objetivo": monitoramento.get(doenca_en, {}).get("objetivo", ""),
                 "cientifico": info.get("nome_cientifico") or "",
                 "pesquisa_fora_brasil": bool(paises_doenca) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises_doenca),
             })
@@ -6266,7 +6292,8 @@ def admin_fungicidas():
             "doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False, "paises": paises_doenca,
             "pais": _pais_da_doenca(doenca_en),
             "bandeiras": bandeiras,
-            "nota": notas.get(doenca_en, ""), "monitoramento": monitoramento.get(doenca_en, ""),
+            "nota": notas.get(doenca_en, ""), "monitoramento": monitoramento.get(doenca_en, {}).get("texto", ""),
+                "monitoramento_objetivo": monitoramento.get(doenca_en, {}).get("objetivo", ""),
             "cientifico": info.get("nome_cientifico") or "",
             # Agrofit/MAPA e' o registro do Brasil -- doenca marcada so' pra
             # outro pais fica de fora (ver `aplicar_pesquisa_registro`).
