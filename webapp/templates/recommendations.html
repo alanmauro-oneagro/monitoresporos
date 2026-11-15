@@ -365,6 +365,7 @@
                     <tr>
                         <th>Doença</th>
                         {% for dt in ns.datas %}<th class="text-center">{{ dt }}</th>{% else %}<th class="text-center">Agora</th>{% endfor %}
+                        <th class="text-center">Ação</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -383,12 +384,13 @@
                         {% else %}
                             <td class="text-center text-muted" colspan="{{ ncols }}">Sem clima disponível</td>
                         {% endif %}
+                        <td class="text-center text-nowrap" {% if row.acao %}title="{{ row.acao.texto }}"{% endif %}>{% if row.acao %}{{ row.acao.emoji }}<span class="d-none d-sm-inline"> {{ row.acao.rotulo }}</span>{% endif %}</td>
                     </tr>
                 {% endfor %}
                 {% for nome in site_group.manuais_sem_germinacao %}
                     <tr>
                         <td class="risco-doenca"><span class="fw-bold text-uppercase">{{ nome }} *</span></td>
-                        <td class="text-warning-emphasis risco-aviso" colspan="{{ ncols }}">⚠ Sem condições de germinação -- preencha na aba Doenças</td>
+                        <td class="text-warning-emphasis risco-aviso" colspan="{{ ncols + 1 }}">⚠ Sem condições de germinação -- preencha na aba Doenças</td>
                     </tr>
                 {% endfor %}
                 </tbody>

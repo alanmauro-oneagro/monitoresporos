@@ -921,6 +921,11 @@ site tem que entrar la'.
   (`#form-nivel-acao`, salva sozinho, rota `admin_nivel_acao_salvar`, setting `regras_nivel_acao`): dias de risco alto
   (1-5), o nivel de cada concentracao Alta/Media/Baixa com e sem esses dias, e o nome + orientacao de cada nivel.
   `_regras_nivel_acao` le (cache em `g`); vazio = o padrao acima.
+  **Linhas "(-)" pros fungos sem leitura** (pedido do Alan, 15/11/2026): a tabela de regras tem tambem "(-) Sem leitura"
+  (fungo da estacao sem leitura recente -- fazenda bloqueada; padrao = linha da Media) e "(-) Não monitorada *" (doenca
+  manual, nao monitorada pela estacao; padrao = linha da Baixa) (`CONCENTRACOES_ACAO`, chaves `SemLeitura`/`NaoMonitorada`).
+  `_acao_favorabilidade` poe o `acao` em cada linha do quadro de favorabilidade (risco climatico), que ganhou a coluna
+  "Ação" em Recomendações e no PDF.
 - **BioScout 403 na contagem de esporos** (pedido do Alan, 14/11/2026): uma fazenda sem permissao na conta derrubava a
   busca de TODAS (uma chamada so' com todos os `SiteIds`). Agora `bioscout_fetch._contagens` levanta `_SemPermissao`
   (401/403 com 2+ fazendas) e `fetch_recent` busca fazenda por fazenda; as recusadas aparecem no aviso do Alertas

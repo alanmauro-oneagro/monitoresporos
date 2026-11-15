@@ -1353,9 +1353,13 @@ NIVEIS_ACAO = {
 }
 
 
-CONCENTRACOES_ACAO = [("Perigo", "Alta"), ("Atencao", "Média"), ("Normal", "Baixa")]
+# "(-)" = fungos do quadro de favorabilidade sem leitura de esporos (pedido do Alan, 15/11/2026): o monitorado pela
+# estacao sem leitura recente comeca igual a Media; o nao monitorado (*) igual a Baixa.
+CONCENTRACOES_ACAO = [("Perigo", "Alta"), ("Atencao", "Média"), ("Normal", "Baixa"),
+                      ("SemLeitura", "(-) Sem leitura"), ("NaoMonitorada", "(-) Não monitorada *")]
 _MATRIZ_ACAO_PADRAO = {"Perigo": ["preparar", "acompanhar"], "Atencao": ["acompanhar", "monitorar"],
-                       "Normal": ["monitorar", "monitorar"]}
+                       "Normal": ["monitorar", "monitorar"], "SemLeitura": ["acompanhar", "monitorar"],
+                       "NaoMonitorada": ["monitorar", "monitorar"]}
 
 
 def _regras_nivel_acao():
@@ -1393,7 +1397,7 @@ def _nivel_acao(status, previsao_risco):
     o resto = monitorar)."""
     regras = _regras_nivel_acao()
     altos = sum(1 for p in (previsao_risco or [])[:5] if p.get("risco") == "vermelho")
-    linha = regras["matriz"].get(status if status in ("Perigo", "Atencao") else "Normal")
+    linha = regras["matriz"].get(status if status in regras["matriz"] else "Normal")
     chave = linha[0] if altos >= regras["dias"] else linha[1]
     return {"chave": chave, "dias_alto": altos, **regras["niveis"][chave]}
 
@@ -1472,6 +1476,15 @@ def _doencas_manuais_do_site(site, safra=None):
     return [c for c in cards if not doenca_paises.get(c["doenca_en"]) or pais in doenca_paises[c["doenca_en"]]]
 
 
+def _acao_favorabilidade(riscos, sem_leitura=False):
+    """Nivel de acao das linhas do quadro de favorabilidade: doenca manual = "(-) Não monitorada", estacao sem
+    leitura recente = "(-) Sem leitura", com leitura (concentracao baixa) = Baixa."""
+    for d in riscos or []:
+        status = "NaoMonitorada" if d["doenca_en"].startswith("manual:") else ("SemLeitura" if sem_leitura else "Normal")
+        d["acao"] = _nivel_acao(status, d.get("previsao_risco"))
+    return riscos
+
+
 def _com_doencas_manuais(site, safra, weather, riscos):
     """`riscos` (quadro "Risco de infeccao pelo clima") com TODAS as
     doencas cadastradas a mao que valem pra fazenda, inclusive risco
@@ -1482,10 +1495,11 @@ def _com_doencas_manuais(site, safra, weather, riscos):
     for d in manuais:
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    _acao_favorabilidade(manuais)
     return [d for d in (riscos or []) if not models.is_manual_disease(d["doenca_en"])] + manuais
 
 
-def _riscos_climaticos_relevantes(cards, weather, site=None, safra=None):
+def _riscos_climaticos_relevantes(cards, weather, site=None, safra=None, sem_leitura=False):
     """`_build_riscos_climaticos_sem_leitura` ja' com `risco`/`previsao_risco`
     calculados (mesma `_calc_risco_germinacao`/`_calc_previsao_risco_germinacao`
     de `diseases`), filtrado pra quem esta em risco medio/alto agora OU
@@ -1497,6 +1511,7 @@ def _riscos_climaticos_relevantes(cards, weather, site=None, safra=None):
     for d in riscos:
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    _acao_favorabilidade(riscos, sem_leitura)
     return [
         d for d in riscos
         if d["risco"] in ("amarelo", "vermelho")
@@ -2028,7 +2043,7 @@ def _preparar_relatorio(site, safra=None):
         # mas o risco CLIMATICO (so' clima x germinacao, nunca depende
         # do sensor) continua valido -- avisa mesmo sem confirmar a
         # doenca, pedido explicito do usuario.
-        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather, site, safra)
+        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather, site, safra, sem_leitura=True)
     else:
         cards_by_site = _filter_cards_by_cultura(
             {site: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
@@ -4395,7 +4410,9 @@ def recommendations(safra):
         # sensor) ainda entra, mesmo bloqueado -- ver
         # `_riscos_climaticos_relevantes`.
         riscos_sem_alerta = _riscos_climaticos_sem_alerta(cards, weather, diseases, site, safra)
-        riscos_climaticos = _riscos_climaticos_relevantes(cards, weather, site, safra) if nivel_dados == "bloqueado" else riscos_sem_alerta
+        if nivel_dados == "bloqueado":
+            _acao_favorabilidade(riscos_sem_alerta, sem_leitura=True)
+        riscos_climaticos = _riscos_climaticos_relevantes(cards, weather, site, safra, sem_leitura=True) if nivel_dados == "bloqueado" else riscos_sem_alerta
         whatsapp_text = _format_whatsapp_message(
             site, [] if nivel_dados == "bloqueado" else diseases, weather=weather,
             produtos=_farm_produtos_estoque(site, safra),
@@ -4712,7 +4729,7 @@ def recommendation_pdf(site_name):
     riscos_climaticos = []
     if bloqueado:
         diseases = []
-        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather, site_name, safra)
+        riscos_climaticos = _riscos_climaticos_relevantes(raw_cards, weather, site_name, safra, sem_leitura=True)
     else:
         cards_by_site = _filter_cards_by_cultura(
             {site_name: raw_cards}, culturas_by_site, models.get_doenca_culturas(), safra=safra
