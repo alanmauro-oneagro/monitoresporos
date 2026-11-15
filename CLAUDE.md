@@ -973,10 +973,10 @@ site tem que entrar la'.
   Doenças/Culturas, na ordem das culturas do site; sem cultura = "Outras culturas"; doenca do protocolo sem doenca
   do site com texto preenchido -- nao cadastrada ou com os campos vazios -- entra com o texto do documento, na cultura da
   doenca do site se houver, senao na do documento -- o guia traz sempre as 20), quadro por doenca com o que verificar
-  (uma frase por item) e o objetivo; depois as secoes fixas do documento (pedido do Alan: "tudo que mandei no Word"),
-  em `protocolo_manejo.py`: "Doenças com identificação dependente da cultura" (`PROVISORIOS`, quadros amarelos "protocolo
-  provisório" + aviso), "Ficha de inspeção (modelo)" (`FICHA_EXEMPLO`, ferrugem da soja), "Melhoria do banco de dados"
-  (`REVISAO_*`) e "Recomendação final"; secoes numeradas 1., 2., ... na faixa verde. Ainda NAO aparece
+  (uma frase por item) e o objetivo; secoes numeradas 1., 2., 3. na faixa verde e, no fim, o quadro "Fontes"
+  (`protocolo_manejo.FONTES`: Embrapa Soja/Milho e Sorgo/Algodao, IMA-MT, Fundacao Rio Verde). As secoes fixas do documento
+  (provisorios, modelo da ficha, revisao do cadastro, recomendacao final) SAIRAM do PDF (pedido do Alan, 15/11/2026: "deixar
+  so' os itens 1, 2 e 3 e colocar fontes"). Ainda NAO aparece
   nas Recomendações/relatorios.
   **Itens 1, 2, 3 editaveis na aba** (pedido do Alan, 15/11/2026): topo da aba Manejo e Fungicidas = "📘 Guia de manejo"
   (`#form-guia-manejo`, salva sozinho) com um bloco recolhivel por cultura ("1. Doenças da soja" ..., `.guia-bloco`, o

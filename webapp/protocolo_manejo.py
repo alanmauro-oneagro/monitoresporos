@@ -93,59 +93,11 @@ PROTOCOLO = [
      "Identificar sintomas suspeitos e avaliar a necessidade de confirmação da identidade do patógeno antes de definir o manejo."),
 ]
 
-TITULO = "Protocolo de verificação em campo"
-
-# Secao 4 do documento: protocolos provisorios (cultura e agente causal ainda a confirmar no cadastro).
-PROVISORIOS_INTRO = ("Algumas doenças do catálogo precisam ter sua cultura hospedeira e seu agente causal claramente "
-                     "vinculados no sistema. Isso evita que o consultor aplique um protocolo inadequado.")
-PROVISORIOS = [
-    ("Mancha de Mirotécio",
-     "Inspecionar folhas e tecidos afetados, procurando lesões necróticas e estruturas circulares do fungo, quando "
-     "presentes. Observar tamanho, quantidade e distribuição das lesões.",
-     "Diferenciar sintomas compatíveis com Myrothecium de outras manchas foliares e acompanhar a severidade."),
-    ("Mancha de Salmão",
-     "Avaliar o órgão afetado conforme a cultura cadastrada. Procurar lesões com tonalidade rosada ou salmão e "
-     "estruturas de esporulação.",
-     "Caracterizar o sintoma, delimitar focos e subsidiar a confirmação do agente causal."),
-]
-PROVISORIOS_IMPORTANTE = ("Importante: estes dois protocolos são provisórios enquanto não houver identificação do "
-                          "hospedeiro e do agente causal associado ao cadastro. Não liberar recomendações de manejo "
-                          "automáticas para esses nomes sem essa validação.")
-
-# Secao 5 do documento: ficha de inspecao fitossanitaria (modelo, com o exemplo da ferrugem da soja).
-FICHA_INTRO = "Cada doença deve ter uma ficha de inspeção com os seguintes campos:"
-FICHA_EXEMPLO = {
-    "doenca": "Ferrugem da soja",
-    "verificacao": ["Avaliar terço inferior da planta.", "Examinar face inferior das folhas.",
-                    "Procurar urédias e lesões.", "Avaliar distribuição dos sintomas.",
-                    "Verificar evolução da desfolha."],
-    "registro": ["Estádio fenológico: R1–R8", "Incidência: percentual de plantas afetadas",
-                 "Severidade: percentual de área foliar lesionada", "Terço da planta afetado", "Localização GPS",
-                 "Fotografias"],
-    "objetivo": "Identificar precocemente a doença, avaliar sua distribuição e acompanhar sua evolução na lavoura.",
-    "conclusao": "Observações técnicas e próximos passos da inspeção.",
-}
-
-# Secao 6 do documento: melhoria do banco de dados.
-REVISAO_INTRO = "Revisão do cadastro das doenças antes de disponibilizar todas as fichas:"
-REVISAO_ITENS = [
-    "Associar cada doença à cultura hospedeira.",
-    "Associar o agente causal (gênero e espécie, quando conhecido).",
-    "Diferenciar doenças monitoradas pela estação das que possuem apenas acompanhamento manual.",
-    "Cadastrar os sintomas de campo e os órgãos que devem ser inspecionados.",
-]
-REVISAO_TEXTOS = [
-    "Por exemplo, a mancha de Myrothecium pode ocorrer em soja e algodão, mas o protocolo deve considerar a cultura "
-    "e os órgãos afetados.",
-    "A lista também apresenta o nome Mancha Salmão, cuja associação com agente causal e cultura precisa ser confirmada "
-    "antes de fechar seu protocolo.",
-    "A Embrapa possui manuais específicos para identificação de doenças da soja e do milho, e o IMA-MT disponibiliza "
-    "referências para doenças do algodoeiro. São boas bases para validar e ampliar esse cadastro.",
-]
-RECOMENDACAO_FINAL = [
-    "Não transformar essas fichas em uma biblioteca de sintomas, e sim em um roteiro de inspeção que ajude o "
-    "consultor a sair da fazenda com informações objetivas, comparáveis entre visitas e que possam ser cruzadas com "
-    "os dados da estação OneAgro.",
-    "Esse é um passo importante para a OneAgro deixar de ser apenas uma ferramenta de monitoramento de esporos e se "
-    "tornar uma plataforma de inteligência fitossanitária.",
+# Fontes do guia (pedido do Alan, 15/11/2026: o PDF ficou so' com os itens 1, 2 e 3 + fontes).
+FONTES = [
+    "Embrapa Soja. Manual de identificação de doenças de soja. 6. ed. Londrina: Embrapa Soja, 2023 (Documentos 256).",
+    "Embrapa Milho e Sorgo. Sistema de produção do milho: doenças foliares; Manejo de doenças na lavoura de milho.",
+    "Embrapa Algodão. Comunicados e circulares técnicas sobre mancha de ramulária, ramulose e manchas foliares do algodoeiro.",
+    "IMA-MT (Instituto Mato-grossense do Algodão). Referências sobre doenças do algodoeiro.",
+    "Fundação Rio Verde (Lucas do Rio Verde/MT). Ensaios em rede de fungicidas e resultados de severidade de doenças da soja em MT.",
 ]
