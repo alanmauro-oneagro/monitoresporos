@@ -30,7 +30,8 @@ padrao: Administrador = Usuarios + Mapas de Estudo, Usuario = nenhuma).
 "Planos e Valores" (`admin_planos`), "Gerenciar Acessos" (`admin_acessos`)
 e "Programação de Envios" (`whatsapp_gerenciamento`, chave `envios`), "Mapas de Solo" (`solo`),
 "Gerenciar Exportações" (`admin_exportar`, ex-"Exportar"), "Doenças/Culturas"
-(`admin_doencas`, chave `doencas`, ex-"Doenças", 08/11/2026); onde
+(`admin_doencas`, chave `doencas`, ex-"Doenças", 08/11/2026), "Manejo e Fungicidas" (`admin_fungicidas`,
+chave `fungicidas`, ex-"Fungicidas", 15/11/2026); onde
 este arquivo diz NDVI/Planos/Acessos/Envios, sao essas abas.
 **Mapas de Estudo = ex-"Mapa Interpolado"** (renomeado pelo Alan,
 01/11/2026): rota `/mapa-interpolado`, endpoint/chave `mapa_interpolado`
@@ -955,6 +956,13 @@ site tem que entrar la'.
   portugues. Doenca que entrou ha' menos de `app.DIAS_DOENCA_NOVA` (3) dias (coluna
   `disease_translations.criado_em`, gravada ao entrar do BioScout ou a mao; as antigas ficam sem
   data) fica em azul escuro (`.doenca-nova`, faixa e fundo azul + selo "Nova"), depois volta ao normal.
+- **Manejo -- o que examinar no campo** (pedido do Alan, 15/11/2026; aba Manejo e Fungicidas): campo "🔎 Manejo —
+  o que examinar no campo" em cada doenca (tabela `fungicida_monitoramento`, `models.get_all/set_fungicida_monitoramento`,
+  salva sozinho com o resto da aba; entra nas cascatas de fusao/juncao/exclusao da doenca). Textos do Alan de Ramulose e
+  Mancha Salmao em `app.MONITORAMENTO_PADRAO`, gravados UMA vez na doenca de mesmo nome (`_semear_monitoramento`,
+  setting `monitoramento_semeado`; apagar nao volta). Botao "📄 Guia de manejo (PDF)" no topo (`guia_manejo_pdf`,
+  `export_pdf.build_guia_manejo_pdf`: um quadro por doenca com texto, cada frase vira um item). Ainda NAO aparece
+  nas Recomendações/relatorios.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);

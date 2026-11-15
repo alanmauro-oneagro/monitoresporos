@@ -391,6 +391,11 @@ def init_db():
             nota TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS fungicida_monitoramento (
+            doenca TEXT PRIMARY KEY,
+            texto TEXT NOT NULL
+        );
+
         DROP TABLE IF EXISTS fungicida_importado;
 
         CREATE TABLE IF NOT EXISTS fungicida_importado_item (
@@ -1736,7 +1741,7 @@ def merge_duplicate_disease_translations(canonico_por_atual):
             for tabela, coluna in (
                 ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
                 ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
-        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado_item", "doenca"),
+        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado_item", "doenca"), ("fungicida_monitoramento", "doenca"),
             ):
                 # OR IGNORE: se a canonica ja tiver uma linha com a mesma
                 # chave (tipo/idx/etc), mantem a dela -- o DELETE logo
@@ -1815,7 +1820,7 @@ def delete_disease_translation(display_name_en):
     for tabela, coluna in (
         ("doenca_cultura", "doenca_en"), ("doenca_pais", "doenca_en"), ("fungicida_overrides", "doenca"),
         ("fungicida_ordem", "doenca"), ("fungicida_registro_bloqueado", "doenca"),
-        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado_item", "doenca"),
+        ("fungicida_nota_doenca", "doenca"), ("fungicida_importado_item", "doenca"), ("fungicida_monitoramento", "doenca"),
     ):
         conn.execute(f"DELETE FROM {tabela} WHERE {coluna} = ?", (display_name_en,))
     conn.execute("DELETE FROM disease_translations WHERE display_name_en = ?", (display_name_en,))
@@ -2004,6 +2009,28 @@ def get_all_fungicida_notas():
     rows = conn.execute("SELECT doenca, nota FROM fungicida_nota_doenca").fetchall()
     conn.close()
     return {r["doenca"]: r["nota"] for r in rows}
+
+
+def get_all_fungicida_monitoramento():
+    """doenca_en -> o que examinar no campo (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026)."""
+    conn = get_db()
+    rows = conn.execute("SELECT doenca, texto FROM fungicida_monitoramento").fetchall()
+    conn.close()
+    return {r["doenca"]: r["texto"] for r in rows}
+
+
+def set_fungicida_monitoramento(doenca, texto):
+    conn = get_db()
+    if texto:
+        conn.execute(
+            "INSERT INTO fungicida_monitoramento (doenca, texto) VALUES (?, ?) "
+            "ON CONFLICT(doenca) DO UPDATE SET texto = excluded.texto",
+            (doenca, texto),
+        )
+    else:
+        conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca = ?", (doenca,))
+    conn.commit()
+    conn.close()
 
 
 def set_fungicida_nota(doenca, nota):
@@ -2920,7 +2947,7 @@ def set_doenca_culturas(doenca_en, culturas):
 _TABELAS_FUNGICIDA_DOENCA = (
     ("fungicida_overrides", "doenca"), ("fungicida_ordem", "doenca"),
     ("fungicida_registro_bloqueado", "doenca"), ("fungicida_nota_doenca", "doenca"),
-    ("fungicida_importado_item", "doenca"),
+    ("fungicida_importado_item", "doenca"), ("fungicida_monitoramento", "doenca"),
 )
 
 

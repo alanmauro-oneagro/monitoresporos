@@ -15,6 +15,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.lib.utils import ImageReader
 import math
+import re
 
 from reportlab.graphics.shapes import Circle, Drawing, Line, Path, Polygon, Rect, String, Wedge
 from reportlab.platypus import (
@@ -736,3 +737,46 @@ def build_recommendation_pdf(
         buffer = reserva or buffer
     buffer.seek(0)
     return buffer
+
+
+_ESTILO_GUIA_TITULO = ParagraphStyle("GuiaTitulo", parent=_styles["Normal"], fontName="Helvetica-Bold", fontSize=13,
+                                     leading=16, alignment=1, textColor=AZUL_MARCA)
+_ESTILO_GUIA_SUB = ParagraphStyle("GuiaSub", parent=_styles["Normal"], fontSize=9, leading=12, alignment=1,
+                                  textColor=colors.HexColor("#555555"))
+_ESTILO_GUIA_DOENCA = ParagraphStyle("GuiaDoenca", parent=_styles["Normal"], fontName="Helvetica-Bold", fontSize=10.5,
+                                     leading=13, textColor=AZUL_MARCA)
+_ESTILO_GUIA_ITEM = ParagraphStyle("GuiaItem", parent=_styles["Normal"], fontSize=9, leading=12.5, leftIndent=10,
+                                   bulletIndent=0, spaceBefore=1.5)
+
+
+def _frases(texto):
+    """Quebra o texto em frases (cada uma vira um item do guia)."""
+    partes = [p.strip() for p in re.split(r"(?<=[.!?])\s+|\n+", texto or "") if p.strip()]
+    return partes or [texto]
+
+
+def build_guia_manejo_pdf(itens, extraido_em=None):
+    """Guia "O que examinar no campo" (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026):
+    um quadro por doenca com o nome, o nome cientifico e cada frase do texto como item."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.8 * cm - 6, rightMargin=1.8 * cm - 6,
+                            topMargin=1.5 * cm, bottomMargin=1.8 * cm, title="Manejo e Fungicidas")
+    historia = [
+        HRFlowable(width="100%", thickness=1, color=AZUL_MARCA, spaceAfter=4),
+        Paragraph("MANEJO E FUNGICIDAS", _ESTILO_GUIA_TITULO),
+        Paragraph("<b>ONEAGRO</b> · O que examinar no campo, por doença", _ESTILO_GUIA_SUB),
+        HRFlowable(width="100%", thickness=1, color=AZUL_MARCA, spaceBefore=4, spaceAfter=10),
+    ]
+    if not itens:
+        historia.append(Paragraph("Nenhuma doença com o texto de manejo preenchido.", _ESTILO_NORMAL))
+    for item in itens:
+        titulo = escape(item["nome"].upper())
+        if item.get("cientifico"):
+            titulo += f' <font color="#777777" size="9"><i>({escape(item["cientifico"])})</i></font>'
+        conteudo = [Paragraph(titulo, _ESTILO_GUIA_DOENCA), Spacer(1, 3)]
+        conteudo += [Paragraph(escape(f), _ESTILO_GUIA_ITEM, bulletText="•") for f in _frases(item["texto"])]
+        historia += [KeepTogether([_caixa(conteudo, fundo=CINZA_CLARO)]), Spacer(1, 8)]
+    historia += [Spacer(1, 6), Paragraph(AVISO_AGRONOMO, _ESTILO_LEGENDA_RISCO), Paragraph(CONTATO_RELATORIO, _ESTILO_LEGENDA_RISCO)]
+    rodape = _rodape_pagina(extraido_em)
+    doc.build(historia, onFirstPage=rodape, onLaterPages=rodape)
+    return buf.getvalue()

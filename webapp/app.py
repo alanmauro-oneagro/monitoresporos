@@ -2753,7 +2753,7 @@ def master_required(view):
 ABAS_CONFIG = [
     ("usuarios", "Usuários", "admin_users"),
     ("doencas", "Doenças/Culturas", "admin_doencas"),
-    ("fungicidas", "Fungicidas", "admin_fungicidas"),
+    ("fungicidas", "Manejo e Fungicidas", "admin_fungicidas"),
     ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo"),
     ("ndvi", "Mapas de NDVI", "ndvi"),
@@ -6083,6 +6083,53 @@ def admin_doencas():
     )
 
 
+# O que examinar no campo, por doenca (pedido do Alan, 15/11/2026): textos que o Alan
+# mandou, gravados 1x na doenca de mesmo nome (setting `monitoramento_semeado`); depois
+# disso o Master edita (ou apaga) na aba Manejo e Fungicidas e nada volta sozinho.
+MONITORAMENTO_PADRAO = {
+    "ramulose": "Examinar ponteiros, folhas novas e ramos. Procurar lesões necróticas de aspecto estrelado, "
+                "encurtamento dos entrenós, superbrotamento e deformação dos ponteiros. Identificar infecções "
+                "iniciais e avaliar o comprometimento do crescimento vegetativo e da arquitetura das plantas.",
+    "mancha salmao": "Inspecionar folhas, pecíolos, hastes e estruturas reprodutivas, procurando lesões com coloração "
+                     "salmão ou alaranjada, quando compatíveis com a doença cadastrada. Registrar distribuição e "
+                     "evolução. Identificar sintomas suspeitos e avaliar a necessidade de confirmação da identidade "
+                     "do patógeno antes de definir o manejo.",
+}
+
+
+def _semear_monitoramento(translations):
+    feitos = set(json.loads(models.get_setting("monitoramento_semeado") or "[]"))
+    faltam = [k for k in MONITORAMENTO_PADRAO if k not in feitos]
+    if not faltam:
+        return
+    existentes = models.get_all_fungicida_monitoramento()
+    for doenca_en, info in translations.items():
+        chave = _chave_alfabetica(info.get("nome_pt") or "")
+        if chave in faltam:
+            if not existentes.get(doenca_en):
+                models.set_fungicida_monitoramento(doenca_en, MONITORAMENTO_PADRAO[chave])
+            feitos.add(chave)
+    models.set_setting("monitoramento_semeado", json.dumps(sorted(feitos)))
+
+
+@app.route("/admin/fungicidas/guia-manejo.pdf")
+@aba_required("fungicidas")
+def guia_manejo_pdf():
+    """PDF "O que examinar no campo" com as doencas que tem o texto preenchido."""
+    translations = _load_translations()
+    _semear_monitoramento(translations)
+    textos = models.get_all_fungicida_monitoramento()
+    itens = sorted(
+        ({"nome": translations[d]["nome_pt"], "cientifico": translations[d].get("nome_cientifico") or "", "texto": t}
+         for d, t in textos.items() if d in translations and t.strip()),
+        key=lambda i: _chave_alfabetica(i["nome"]),
+    )
+    agora = weather_forecast._agora_cuiaba()
+    pdf = export_pdf.build_guia_manejo_pdf(itens, agora.strftime("Extraído em %d/%m/%Y %H:%M"))
+    return send_file(io.BytesIO(pdf), mimetype="application/pdf", as_attachment=True,
+                     download_name=_nome_arquivo("Guia_Manejo", "pdf"))
+
+
 @app.route("/admin/fungicidas", methods=["GET", "POST"])
 @aba_required("fungicidas")
 def admin_fungicidas():
@@ -6131,6 +6178,8 @@ def admin_fungicidas():
                 models.set_fungicida_registro_bloqueado(doenca, tipo, idx, bloqueadas)
         for doenca, nota in zip(request.form.getlist("nota_doenca_key"), request.form.getlist("nota_doenca")):
             models.set_fungicida_nota(doenca, nota.strip())
+        for doenca, texto in zip(request.form.getlist("monitoramento_key"), request.form.getlist("monitoramento")):
+            models.set_fungicida_monitoramento(doenca, texto.strip())
         translations = _load_translations()
         for doenca, cientifico in zip(request.form.getlist("cientifico_key"), request.form.getlist("cientifico")):
             info = translations.get(doenca)
@@ -6144,6 +6193,8 @@ def admin_fungicidas():
     doenca_paises = models.get_doenca_paises()
     translations = _load_translations()
     notas = models.get_all_fungicida_notas()
+    _semear_monitoramento(translations)
+    monitoramento = models.get_all_fungicida_monitoramento()
     nome_brasil = countries.get_country("BR")["nome"]
     bandeira_por_nome = {
         _chave_alfabetica(info["nome"]): "".join(chr(0x1F1E6 + ord(letra) - ord("A")) for letra in codigo)
@@ -6173,7 +6224,7 @@ def admin_fungicidas():
                 "doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True, "paises": paises_doenca,
                 "pais": _pais_da_doenca(doenca_en),
                 "bandeiras": bandeiras,
-                "nota": notas.get(doenca_en, ""),
+                "nota": notas.get(doenca_en, ""), "monitoramento": monitoramento.get(doenca_en, ""),
                 "cientifico": info.get("nome_cientifico") or "",
                 "pesquisa_fora_brasil": bool(paises_doenca) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises_doenca),
             })
@@ -6215,7 +6266,7 @@ def admin_fungicidas():
             "doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False, "paises": paises_doenca,
             "pais": _pais_da_doenca(doenca_en),
             "bandeiras": bandeiras,
-            "nota": notas.get(doenca_en, ""),
+            "nota": notas.get(doenca_en, ""), "monitoramento": monitoramento.get(doenca_en, ""),
             "cientifico": info.get("nome_cientifico") or "",
             # Agrofit/MAPA e' o registro do Brasil -- doenca marcada so' pra
             # outro pais fica de fora (ver `aplicar_pesquisa_registro`).
@@ -9612,7 +9663,7 @@ def _faltando_no_cadastro(p):
 MENU_CONFIG = [
     ("usuarios", "Usuários", "admin_users", "usuarios"),
     ("doencas", "Doenças/Culturas", "admin_doencas", "doencas"),
-    ("fungicidas", "Fungicidas", "admin_fungicidas", "fungicidas"),
+    ("fungicidas", "Manejo e Fungicidas", "admin_fungicidas", "fungicidas"),
     ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo", "solo"),
     ("ndvi", "Mapas de NDVI", "ndvi", "ndvi"),

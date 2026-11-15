@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Fungicidas - OneAgro App{% endblock %}
+{% block title %}Manejo e Fungicidas - OneAgro App{% endblock %}
 {% block content %}
 <style>
 .fung-toggle { font-size: 1rem; width: 100%; padding: 0.4rem 0 !important; }
@@ -19,7 +19,10 @@
     .fungicida-mover-btn { padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
 }
 </style>
-<h4 class="mb-2">Fungicidas</h4>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+    <h4 class="mb-0">Manejo e Fungicidas</h4>
+    <a class="btn btn-sm btn-outline-success" href="{{ url_for('guia_manejo_pdf') }}" id="baixar-guia-manejo">📄 Guia de manejo (PDF)</a>
+</div>
 <p class="small text-muted mb-3">
     Base Agrofit/MAPA (<a href="https://dados.agricultura.gov.br/dataset/sistema-de-agrotoxicos-fitossanitarios-agrofit" target="_blank" rel="noopener">dados abertos</a>):
     {% if agrofit.baixando %}<span id="agrofitProgresso">baixando agora...</span>{% elif agrofit.baixado_em and agrofit.enviado %}arquivo enviado em {{ agrofit.baixado_em }} -- envie de novo uma vez por mes.{% elif agrofit.baixado_em %}atualizada em {{ agrofit.baixado_em }}, renova sozinha uma vez por mes.{% else %}ainda nao baixada -- baixa sozinha em instantes.{% endif %}
@@ -80,6 +83,12 @@
                         {% if d.pesquisa_fora_brasil %}disabled{% else %}title="{{ dica }}"{% endif %}>{{ rotulo }}</button>
                 {% endfor %}
             </div>
+        </div>
+        <div class="mb-3 manejo-campo">
+            <label class="form-label small fw-bold mb-1" for="monitoramento_{{ loop.index0 }}">🔎 Manejo — o que examinar no campo</label>
+            <input type="hidden" name="monitoramento_key" value="{{ d.doenca }}">
+            <textarea name="monitoramento" id="monitoramento_{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="4"
+                      placeholder="Partes da planta a examinar, sintomas a procurar e o que avaliar...">{{ d.monitoramento }}</textarea>
         </div>
         {% if d.sem_dados %}
         <p class="text-muted small mb-0">
