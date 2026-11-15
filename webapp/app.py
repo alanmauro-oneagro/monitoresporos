@@ -6104,14 +6104,14 @@ def _chave_doenca(nome):
 
 def _semear_monitoramento(translations):
     feitos = set(json.loads(models.get_setting("protocolo_manejo_semeado") or "[]"))
-    faltam = [p for p in protocolo_manejo.PROTOCOLO if p[0] not in feitos]
+    faltam = [p for p in protocolo_manejo.PROTOCOLO if p[1] not in feitos]
     if not faltam:
         return
     existentes = models.get_all_fungicida_monitoramento()
     por_chave = {}
     for doenca_en, info in translations.items():
         por_chave.setdefault(_chave_doenca(info.get("nome_pt") or ""), []).append(doenca_en)
-    for nome, outros, verificar, objetivo in faltam:
+    for _cultura, nome, outros, verificar, objetivo in faltam:
         achadas = [d for n in [nome] + outros for d in por_chave.get(_chave_doenca(n), [])]
         for doenca_en in achadas:
             atual = existentes.get(doenca_en) or {}
@@ -6144,7 +6144,16 @@ def guia_manejo_pdf():
             "nome": translations[d]["nome_pt"], "cientifico": translations[d].get("nome_cientifico") or "",
             "texto": t["texto"], "objetivo": t["objetivo"], "outras_culturas": culturas[1:],
         })
-    ordem = culturas_site + ["Outras culturas"]
+    # Doenca do protocolo que ainda nao existe no site (nenhuma doenca com esse nome ou um dos
+    # outros nomes) entra com o texto do documento, na cultura do documento -- o guia sempre
+    # traz o protocolo inteiro (pedido do Alan, 15/11/2026).
+    chaves_site = {_chave_doenca(info.get("nome_pt") or "") for info in translations.values()}
+    for cultura, nome, outros, verificar, objetivo in protocolo_manejo.PROTOCOLO:
+        if not any(_chave_doenca(n) in chaves_site for n in [nome] + outros):
+            grupos.setdefault(cultura, []).append(
+                {"nome": nome, "cientifico": "", "texto": verificar, "objetivo": objetivo, "outras_culturas": []})
+    ordem = culturas_site + [c for c in dict.fromkeys(p[0] for p in protocolo_manejo.PROTOCOLO) if c not in culturas_site]
+    ordem += ["Outras culturas"]
     secoes = [(g, sorted(grupos[g], key=lambda i: _chave_alfabetica(i["nome"]))) for g in ordem if g in grupos]
     agora = weather_forecast._agora_cuiaba()
     pdf = export_pdf.build_guia_manejo_pdf(secoes, protocolo_manejo.REGISTRO_INSPECAO,

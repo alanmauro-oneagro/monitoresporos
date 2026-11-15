@@ -1345,6 +1345,16 @@ class ManejoFungicidasTest(unittest.TestCase):
             pdf = c.get("/admin/fungicidas/guia-manejo.pdf")
             self.assertEqual(pdf.mimetype, "application/pdf")
             self.assertTrue(pdf.data.startswith(b"%PDF"))
+            secoes = {}
+            original = webapp.export_pdf.build_guia_manejo_pdf
+            webapp.export_pdf.build_guia_manejo_pdf = lambda sec, *a, **k: secoes.update(sec) or b"%PDF"
+            try:
+                c.get("/admin/fungicidas/guia-manejo.pdf")
+            finally:
+                webapp.export_pdf.build_guia_manejo_pdf = original
+            nomes = {i["nome"] for itens in secoes.values() for i in itens}
+            self.assertIn("Mancha de Diplodia", nomes)  # do documento, sem doenca no site
+            self.assertNotIn("Mancha-alvo", nomes)  # existe no site (Mancha Alvo) com o texto apagado
         finally:
             models.delete_disease_translation("Zzz Ramulose En")
             models.delete_disease_translation("Zzz Alvo En")

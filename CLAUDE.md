@@ -964,7 +964,8 @@ site tem que entrar la'.
   site de mesmo nome (`_semear_monitoramento`, nome sem acento/hifen -- `_chave_doenca`; setting `protocolo_manejo_semeado`;
   apagar nao volta; o texto da 1a versao de Ramulose/Mancha Salmao e' trocado). Botao "📄 Guia de manejo (PDF)"
   (`guia_manejo_pdf`, `export_pdf.build_guia_manejo_pdf`): faixa por cultura (1a cultura marcada da doenca em
-  Doenças/Culturas, na ordem das culturas do site; sem cultura = "Outras culturas"), quadro por doenca com o que verificar
+  Doenças/Culturas, na ordem das culturas do site; sem cultura = "Outras culturas"; doenca do protocolo que NAO
+  existe no site entra com o texto do documento na cultura do documento -- o guia traz sempre as 20), quadro por doenca com o que verificar
   (uma frase por item) e o objetivo, e no fim a "Ficha de inspeção -- o que registrar em cada visita". Ainda NAO aparece
   nas Recomendações/relatorios.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
