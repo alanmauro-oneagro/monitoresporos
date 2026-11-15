@@ -1312,53 +1312,77 @@ class RegrasNivelAcaoTelaTest(unittest.TestCase):
 
 
 class ManejoFungicidasTest(unittest.TestCase):
-    """Aba Manejo e Fungicidas: protocolo de verificacao em campo por doenca + guia em PDF (pedido do Alan, 15/11/2026)."""
+    """Aba Manejo e Fungicidas: itens 1, 2, 3 do guia de manejo em blocos editaveis + PDF (pedido do Alan, 15/11/2026)."""
 
-    def test_protocolo_semeado_editado_e_pdf(self):
+    def _cliente(self):
         if not models.get_user_by_username("Zzz Master Manejo"):
             models.create_user("Zzz Master Manejo", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Manejo")["id"])
+            s["_fresh"] = True
+        return c
+
+    def _secoes_pdf(self, c):
+        secoes = {}
+        original = webapp.export_pdf.build_guia_manejo_pdf
+        webapp.export_pdf.build_guia_manejo_pdf = lambda sec, *a, **k: secoes.update(sec) or b"%PDF"
+        try:
+            c.get("/admin/fungicidas/guia-manejo.pdf")
+        finally:
+            webapp.export_pdf.build_guia_manejo_pdf = original
+        return {i["nome"]: i for itens in secoes.values() for i in itens}
+
+    def test_blocos_editaveis_e_pdf(self):
+        c = self._cliente()
         models.save_disease_translation("Zzz Ramulose En", "Ramulose", "Colletotrichum gossypii")
-        models.save_disease_translation("Zzz Alvo En", "Mancha Alvo", "Corynespora cassiicola")
-        antigo = webapp._TEXTOS_ANTIGOS_MONITORAMENTO
-        models.set_fungicida_monitoramento("Zzz Ramulose En", sorted(antigo)[0], "")  # 1a versao (texto junto)
-        models.set_fungicida_monitoramento("Zzz Alvo En", "", "")
+        models.save_disease_translation("Zzz Rhizo En", "Rhizoctonia", "Rhizoctonia solani")
+        conn = models.get_db()
+        conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca IN ('Zzz Ramulose En', 'Zzz Rhizo En') "
+                     "OR doenca LIKE 'protocolo:%'")
+        conn.commit()
+        conn.close()
+        models.set_fungicida_monitoramento("Zzz Ramulose En", sorted(webapp._TEXTOS_ANTIGOS_MONITORAMENTO)[0], "")
         models.set_setting("protocolo_manejo_semeado_v2", "[]")
         try:
-            c = webapp.app.test_client()
-            with c.session_transaction() as s:
-                s["_user_id"] = str(models.get_user_by_username("Zzz Master Manejo")["id"])
-                s["_fresh"] = True
             html = c.get("/admin/fungicidas").get_data(as_text=True)
-            self.assertIn("Objetivo da verificação", html)
+            self.assertIn("form-guia-manejo", html)
+            self.assertIn("Doenças da soja", html)
+            self.assertIn('value="protocolo:Mancha de Diplodia"', html)  # do documento, sem cadastro: editavel
+            self.assertIn("estrangulamento do colo", html)  # doenca do site com o texto do documento
             dados = models.get_all_fungicida_monitoramento()
             self.assertTrue(dados["Zzz Ramulose En"]["texto"].startswith("Examinar ponteiros"))
-            self.assertTrue(dados["Zzz Ramulose En"]["objetivo"].startswith("Identificar infecções iniciais"))
-            self.assertIn("aspecto de alvo", dados["Zzz Alvo En"]["texto"])  # "Mancha-alvo" do documento
-            r = c.post("/admin/fungicidas", data={"monitoramento_key": "Zzz Ramulose En", "monitoramento": "Zzz olhar ponteiros.",
-                                                  "monitoramento_objetivo": "Zzz objetivo."}, headers={"X-Autosave": "1"})
+            r = c.post("/admin/fungicidas", headers={"X-Autosave": "1"}, data={
+                "monitoramento_key": ["Zzz Ramulose En", "protocolo:Mancha de Diplodia", "Zzz Rhizo En"],
+                "monitoramento": ["Zzz olhar ponteiros.", "Zzz olhar colmo.", ""],
+                "monitoramento_objetivo": ["Zzz objetivo.", "", ""]})
             self.assertTrue(r.get_json()["ok"])
             self.assertEqual(models.get_all_fungicida_monitoramento()["Zzz Ramulose En"],
                              {"texto": "Zzz olhar ponteiros.", "objetivo": "Zzz objetivo."})
-            models.set_fungicida_monitoramento("Zzz Alvo En", "", "")
-            c.get("/admin/fungicidas")
-            self.assertNotIn("Zzz Alvo En", models.get_all_fungicida_monitoramento())  # apagado nao volta
+            itens = self._secoes_pdf(c)
+            self.assertEqual(itens["Mancha de Diplodia"]["texto"], "Zzz olhar colmo.")
+            self.assertNotIn("Rhizoctonia", itens)  # apagada no bloco: sai do PDF e nao volta
+            self.assertEqual(models.get_all_fungicida_monitoramento()["Zzz Rhizo En"]["texto"], "")
             pdf = c.get("/admin/fungicidas/guia-manejo.pdf")
             self.assertEqual(pdf.mimetype, "application/pdf")
-            self.assertTrue(pdf.data.startswith(b"%PDF"))
             self.assertIn("no-store", pdf.headers["Cache-Control"])  # o navegador reabria o PDF antigo por 12 h
-            secoes = {}
-            original = webapp.export_pdf.build_guia_manejo_pdf
-            webapp.export_pdf.build_guia_manejo_pdf = lambda sec, *a, **k: secoes.update(sec) or b"%PDF"
-            try:
-                c.get("/admin/fungicidas/guia-manejo.pdf")
-            finally:
-                webapp.export_pdf.build_guia_manejo_pdf = original
-            nomes = {i["nome"] for itens in secoes.values() for i in itens}
-            self.assertIn("Mancha de Diplodia", nomes)  # do documento, sem doenca no site
-            self.assertIn("Mancha Alvo", nomes)  # cadastrada com os campos apagados: sai com o texto do documento
-            self.assertNotIn("Mancha-alvo", nomes)
-            self.assertGreaterEqual(len(nomes), len(webapp.protocolo_manejo.PROTOCOLO))
         finally:
             models.delete_disease_translation("Zzz Ramulose En")
-            models.delete_disease_translation("Zzz Alvo En")
+            models.delete_disease_translation("Zzz Rhizo En")
+            conn = models.get_db()
+            conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca LIKE 'protocolo:%'")
+            conn.commit()
+            conn.close()
         self.assertNotIn("Zzz Ramulose En", models.get_all_fungicida_monitoramento())
+
+    def test_incluir_doenca_no_guia(self):
+        c = self._cliente()
+        models.save_disease_translation("Zzz Fora En", "Zzz Doenca Fora", "")
+        try:
+            self.assertIn('value="Zzz Fora En"', c.get("/admin/fungicidas").get_data(as_text=True))
+            c.post("/admin/fungicidas", data={"monitoramento_key": "Zzz Fora En", "monitoramento": "",
+                                              "monitoramento_objetivo": ""})
+            html = c.get("/admin/fungicidas").get_data(as_text=True)
+            self.assertIn('data-chave="Zzz Fora En"', html)
+        finally:
+            models.delete_disease_translation("Zzz Fora En")
