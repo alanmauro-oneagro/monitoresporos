@@ -78,7 +78,8 @@
         <div class="fung-item guia-item mb-3" data-chave="{{ item.chave }}">
             <div class="fw-bold">{{ item.nome }}
                 {% if item.cientifico %}<span class="text-muted fw-normal fst-italic small">({{ item.cientifico }})</span>{% endif %}
-                {% if item.chave.startswith('protocolo:') %}<span class="badge bg-light text-secondary border fw-normal small" title="Doença do protocolo ainda não cadastrada no site">não cadastrada</span>{% endif %}
+                {% if item.chave.startswith('protocolo:') %}<span class="badge bg-light text-secondary border fw-normal small" title="Doença do guia ainda não cadastrada no site">não cadastrada</span>
+                {% if pode_aba('doencas') %}<a class="small link-cadastrar-doenca" href="{{ url_for('admin_doencas', nova=item.nome) }}">Cadastrar em Doenças e Culturas</a>{% endif %}{% endif %}
                 {% if item.outras_culturas %}<span class="text-muted small">· também em {{ item.outras_culturas | join(', ') }}</span>{% endif %}
             </div>
             <input type="hidden" name="monitoramento_key" value="{{ item.chave }}">
@@ -122,6 +123,7 @@
         <option value="">-</option>
         {% for chave, nome in fora_do_guia %}<option value="{{ chave }}">{{ nome }}</option>{% endfor %}
     </select>
+    {% if pode_aba('doencas') %}<a class="small" href="{{ url_for('admin_doencas') }}">Doença nova? Cadastre em Doenças e Culturas</a>{% endif %}
 </form>
 {% endif %}
 
@@ -137,9 +139,9 @@
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start fung-toggle" data-target="fung-body-{{ loop.index0 }}">
             <span class="toggle-icon">▶</span> {{ d.rotulo }}
                 {% if d.bandeiras %}
-                <span class="badge bg-light text-dark border fw-normal ms-1 fung-bandeiras" title="Pais marcado na matriz Doencas x Pais (aba Doencas): {{ d.paises | join(', ') }}">{% for bandeira, nome in d.bandeiras %}{% if bandeira %}<span aria-label="{{ nome }}">{{ bandeira }}</span>{% else %}<span class="small">{{ nome }}</span>{% endif %}{% endfor %}</span>
+                <span class="badge bg-light text-dark border fw-normal ms-1 fung-bandeiras" title="País marcado na aba Doenças e Culturas: {{ d.paises | join(', ') }}">{% for bandeira, nome in d.bandeiras %}{% if bandeira %}<span aria-label="{{ nome }}">{{ bandeira }}</span>{% else %}<span class="small">{{ nome }}</span>{% endif %}{% endfor %}</span>
                 {% else %}
-                <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum pais marcado na matriz Doencas x Pais -- se aplica a qualquer pais">🌎<span class="d-none d-sm-inline"> Todos os paises</span></span>
+                <span class="badge bg-light text-dark border fw-normal ms-1" title="Nenhum país marcado na aba Doenças e Culturas -- vale para qualquer país">🌎<span class="d-none d-sm-inline"> Todos os paises</span></span>
                 {% endif %}
         </button>
         <div class="d-none mt-1 mb-2" id="fung-body-{{ loop.index0 }}">
@@ -376,6 +378,9 @@ document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
     var CHAVE = 'fungicidas_abertas';
     var abertas;
     try { abertas = JSON.parse(sessionStorage.getItem(CHAVE) || '[]'); } catch (e) { abertas = []; }
+    // Vindo do "📘 Manejo e Fungicidas" de Doenças e Culturas: abre o cartao da doenca e vai ate' ele.
+    var alvo = new URLSearchParams(location.search).get('abrir');
+    if (alvo && abertas.indexOf(alvo) === -1) abertas.push(alvo);
     function crescer(t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
     document.addEventListener('input', function (e) {
         if (e.target.classList && e.target.classList.contains('auto-grow-textarea')) crescer(e.target);
@@ -397,6 +402,13 @@ document.querySelectorAll('.fungicida-pesquisa-btn').forEach(function (btn) {
             try { sessionStorage.setItem(CHAVE, JSON.stringify(abertas)); } catch (e) {}
         });
     });
+    if (alvo) {
+        var card = Array.prototype.find.call(document.querySelectorAll('.fung-card'), function (c) { return c.dataset.doenca === alvo; });
+        if (card) {
+            try { sessionStorage.removeItem('fungicidas_scroll'); } catch (e) {}
+            setTimeout(function () { card.scrollIntoView({block: 'start'}); }, 50);
+        }
+    }
 })();
 (function () {
     var saved = sessionStorage.getItem('fungicidas_scroll');

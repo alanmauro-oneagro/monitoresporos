@@ -2048,6 +2048,15 @@ def set_fungicida_monitoramento(doenca, texto, objetivo=None, fonte=None):
     conn.close()
 
 
+def mover_fungicida_monitoramento(origem, destino):
+    """Passa o texto do guia de manejo de `origem` pra `destino` (destino ja' gravado fica)."""
+    conn = get_db()
+    conn.execute("UPDATE OR IGNORE fungicida_monitoramento SET doenca = ? WHERE doenca = ?", (destino, origem))
+    conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca = ?", (origem,))
+    conn.commit()
+    conn.close()
+
+
 def set_fungicida_nota(doenca, nota):
     conn = get_db()
     if nota:

@@ -78,7 +78,7 @@
                     <input type="hidden" name="safra" value="{{ safra_group.safra }}">
                     <label class="fw-bold mb-0" for="cultura_{{ farm_idx }}_{{ safra_group.safra }}">Cultura:</label>
                     <select name="cultura" id="cultura_{{ farm_idx }}_{{ safra_group.safra }}" class="form-select form-select-sm" style="width: auto;"
-                            title="(vazio) = nao mostra nenhuma doenca ainda; Todos = mostra toda doenca cadastrada; cultura especifica = so as doencas marcadas pra ela na aba Doencas">
+                            title="(vazio) = nao mostra nenhuma doenca ainda; Todos = mostra toda doenca cadastrada; cultura especifica = só as doenças marcadas para ela na aba Doenças e Culturas">
                         <option value="" {% if not safra_group.cultura %}selected{% endif %}>(vazio)</option>
                         <option value="Todos" {% if safra_group.cultura == "Todos" %}selected{% endif %}>Todos</option>
                         {% for c in culturas_ativas %}
