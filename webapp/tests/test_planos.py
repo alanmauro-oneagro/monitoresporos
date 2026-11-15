@@ -1309,3 +1309,37 @@ class RegrasNivelAcaoTelaTest(unittest.TestCase):
         models.set_setting("regras_nivel_acao", "{}")
         with webapp.app.test_request_context():
             self.assertEqual(webapp._nivel_acao("Perigo", prev)["chave"], "acompanhar")  # volta ao padrao (3 dias)
+
+
+class ManejoFungicidasTest(unittest.TestCase):
+    """Aba Manejo e Fungicidas: o que examinar no campo por doenca + guia em PDF (pedido do Alan, 15/11/2026)."""
+
+    def test_texto_semeado_editado_e_pdf(self):
+        if not models.get_user_by_username("Zzz Master Manejo"):
+            models.create_user("Zzz Master Manejo", "x", is_master=True)
+        models.save_disease_translation("Zzz Ramulose En", "Ramulose", "Colletotrichum gossypii")
+        models.set_fungicida_monitoramento("Zzz Ramulose En", "")
+        models.set_setting("monitoramento_semeado", "[]")
+        try:
+            c = webapp.app.test_client()
+            with c.session_transaction() as s:
+                s["_user_id"] = str(models.get_user_by_username("Zzz Master Manejo")["id"])
+                s["_fresh"] = True
+            html = c.get("/admin/fungicidas").get_data(as_text=True)
+            self.assertIn("Manejo e Fungicidas", html)
+            self.assertIn("Examinar ponteiros, folhas novas e ramos.", html)
+            self.assertIn("Zzz Ramulose En", models.get_all_fungicida_monitoramento())
+            r = c.post("/admin/fungicidas", data={"monitoramento_key": "Zzz Ramulose En", "monitoramento": "Zzz olhar ponteiros."},
+                       headers={"X-Autosave": "1"})
+            self.assertTrue(r.get_json()["ok"])
+            self.assertEqual(models.get_all_fungicida_monitoramento()["Zzz Ramulose En"], "Zzz olhar ponteiros.")
+            models.set_fungicida_monitoramento("Zzz Ramulose En", "")
+            c.get("/admin/fungicidas")
+            self.assertNotIn("Zzz Ramulose En", models.get_all_fungicida_monitoramento())  # apagado nao volta
+            models.set_fungicida_monitoramento("Zzz Ramulose En", "Zzz olhar ponteiros. Procurar lesões.")
+            pdf = c.get("/admin/fungicidas/guia-manejo.pdf")
+            self.assertEqual(pdf.mimetype, "application/pdf")
+            self.assertTrue(pdf.data.startswith(b"%PDF"))
+        finally:
+            models.delete_disease_translation("Zzz Ramulose En")
+        self.assertNotIn("Zzz Ramulose En", models.get_all_fungicida_monitoramento())
