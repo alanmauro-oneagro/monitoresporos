@@ -6086,7 +6086,7 @@ def admin_doencas():
 
 # O que verificar em campo + objetivo, por doenca (pedido do Alan, 15/11/2026): protocolo do
 # documento do Alan (`protocolo_manejo.PROTOCOLO`), gravado 1x na doenca do site de mesmo nome
-# (ou um dos outros nomes; setting `protocolo_manejo_semeado`). Depois disso o Master edita (ou
+# (ou um dos outros nomes; setting `protocolo_manejo_semeado_v2`). Depois disso o Master edita (ou
 # apaga) na aba Manejo e Fungicidas e nada volta sozinho.
 _TEXTOS_ANTIGOS_MONITORAMENTO = {  # 1a versao (so' um campo, com o objetivo junto) -- trocada pelo protocolo
     "Examinar ponteiros, folhas novas e ramos. Procurar lesões necróticas de aspecto estrelado, encurtamento dos "
@@ -6103,7 +6103,8 @@ def _chave_doenca(nome):
 
 
 def _semear_monitoramento(translations):
-    feitos = set(json.loads(models.get_setting("protocolo_manejo_semeado") or "[]"))
+    # v2: uma 2a passada preenche de novo os campos que estavam vazios (o guia de producao saiu so' com 2 doencas)
+    feitos = set(json.loads(models.get_setting("protocolo_manejo_semeado_v2") or "[]"))
     faltam = [p for p in protocolo_manejo.PROTOCOLO if p[1] not in feitos]
     if not faltam:
         return
@@ -6121,7 +6122,7 @@ def _semear_monitoramento(translations):
                 models.set_fungicida_monitoramento(doenca_en, atual["texto"], objetivo)
         if achadas:
             feitos.add(nome)
-    models.set_setting("protocolo_manejo_semeado", json.dumps(sorted(feitos)))
+    models.set_setting("protocolo_manejo_semeado_v2", json.dumps(sorted(feitos)))
 
 
 @app.route("/admin/fungicidas/guia-manejo.pdf")
@@ -6144,14 +6145,24 @@ def guia_manejo_pdf():
             "nome": translations[d]["nome_pt"], "cientifico": translations[d].get("nome_cientifico") or "",
             "texto": t["texto"], "objetivo": t["objetivo"], "outras_culturas": culturas[1:],
         })
-    # Doenca do protocolo que ainda nao existe no site (nenhuma doenca com esse nome ou um dos
-    # outros nomes) entra com o texto do documento, na cultura do documento -- o guia sempre
-    # traz o protocolo inteiro (pedido do Alan, 15/11/2026).
-    chaves_site = {_chave_doenca(info.get("nome_pt") or "") for info in translations.values()}
+    # O guia sempre traz o protocolo inteiro (pedido do Alan, 15/11/2026): doenca do protocolo sem
+    # nenhuma doenca do site com texto preenchido (nao cadastrada, ou cadastrada com os campos vazios)
+    # entra com o texto do documento -- na cultura da doenca do site, se houver, senao na do documento.
+    com_texto = {_chave_doenca(item["nome"]) for itens in grupos.values() for item in itens}
+    por_chave = {}
+    for d, info in translations.items():
+        por_chave.setdefault(_chave_doenca(info.get("nome_pt") or ""), []).append(d)
     for cultura, nome, outros, verificar, objetivo in protocolo_manejo.PROTOCOLO:
-        if not any(_chave_doenca(n) in chaves_site for n in [nome] + outros):
-            grupos.setdefault(cultura, []).append(
-                {"nome": nome, "cientifico": "", "texto": verificar, "objetivo": objetivo, "outras_culturas": []})
+        chaves = [_chave_doenca(n) for n in [nome] + outros]
+        if any(c in com_texto for c in chaves):
+            continue
+        do_site = next((d for c in chaves for d in por_chave.get(c, [])), None)
+        culturas = [c for c in culturas_site if c in doenca_culturas.get(do_site, set())] if do_site else []
+        grupos.setdefault(culturas[0] if culturas else cultura, []).append({
+            "nome": translations[do_site]["nome_pt"] if do_site else nome,
+            "cientifico": (translations[do_site].get("nome_cientifico") or "") if do_site else "",
+            "texto": verificar, "objetivo": objetivo, "outras_culturas": culturas[1:],
+        })
     ordem = culturas_site + [c for c in dict.fromkeys(p[0] for p in protocolo_manejo.PROTOCOLO) if c not in culturas_site]
     ordem += ["Outras culturas"]
     secoes = [(g, sorted(grupos[g], key=lambda i: _chave_alfabetica(i["nome"]))) for g in ordem if g in grupos]

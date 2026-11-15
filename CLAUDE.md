@@ -961,11 +961,12 @@ site tem que entrar la'.
   `models.get_all/set_fungicida_monitoramento`, salva sozinho com o resto da aba; entra nas cascatas de fusao/juncao/exclusao).
   O documento do Alan ("Protocolo de verificação em campo", 20 doencas de soja/milho/algodao + a ficha de inspecao) fica em
   `protocolo_manejo.py` (`PROTOCOLO` com outros nomes de cada doenca, `REGISTRO_INSPECAO`) e e' gravado UMA vez na doenca do
-  site de mesmo nome (`_semear_monitoramento`, nome sem acento/hifen -- `_chave_doenca`; setting `protocolo_manejo_semeado`;
-  apagar nao volta; o texto da 1a versao de Ramulose/Mancha Salmao e' trocado). Botao "📄 Guia de manejo (PDF)"
+  site de mesmo nome (`_semear_monitoramento`, nome sem acento/hifen -- `_chave_doenca`; setting `protocolo_manejo_semeado_v2`
+  -- o v2 preencheu de novo os campos vazios, o guia de producao saiu so' com 2 doencas; apagar nao volta; o texto da 1a versao de Ramulose/Mancha Salmao e' trocado). Botao "📄 Guia de manejo (PDF)"
   (`guia_manejo_pdf`, `export_pdf.build_guia_manejo_pdf`): faixa por cultura (1a cultura marcada da doenca em
-  Doenças/Culturas, na ordem das culturas do site; sem cultura = "Outras culturas"; doenca do protocolo que NAO
-  existe no site entra com o texto do documento na cultura do documento -- o guia traz sempre as 20), quadro por doenca com o que verificar
+  Doenças/Culturas, na ordem das culturas do site; sem cultura = "Outras culturas"; doenca do protocolo sem doenca
+  do site com texto preenchido -- nao cadastrada ou com os campos vazios -- entra com o texto do documento, na cultura da
+  doenca do site se houver, senao na do documento -- o guia traz sempre as 20), quadro por doenca com o que verificar
   (uma frase por item) e o objetivo, e no fim a "Ficha de inspeção -- o que registrar em cada visita". Ainda NAO aparece
   nas Recomendações/relatorios.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela

@@ -1322,7 +1322,7 @@ class ManejoFungicidasTest(unittest.TestCase):
         antigo = webapp._TEXTOS_ANTIGOS_MONITORAMENTO
         models.set_fungicida_monitoramento("Zzz Ramulose En", sorted(antigo)[0], "")  # 1a versao (texto junto)
         models.set_fungicida_monitoramento("Zzz Alvo En", "", "")
-        models.set_setting("protocolo_manejo_semeado", "[]")
+        models.set_setting("protocolo_manejo_semeado_v2", "[]")
         try:
             c = webapp.app.test_client()
             with c.session_transaction() as s:
@@ -1354,7 +1354,9 @@ class ManejoFungicidasTest(unittest.TestCase):
                 webapp.export_pdf.build_guia_manejo_pdf = original
             nomes = {i["nome"] for itens in secoes.values() for i in itens}
             self.assertIn("Mancha de Diplodia", nomes)  # do documento, sem doenca no site
-            self.assertNotIn("Mancha-alvo", nomes)  # existe no site (Mancha Alvo) com o texto apagado
+            self.assertIn("Mancha Alvo", nomes)  # cadastrada com os campos apagados: sai com o texto do documento
+            self.assertNotIn("Mancha-alvo", nomes)
+            self.assertGreaterEqual(len(nomes), len(webapp.protocolo_manejo.PROTOCOLO))
         finally:
             models.delete_disease_translation("Zzz Ramulose En")
             models.delete_disease_translation("Zzz Alvo En")
