@@ -687,7 +687,14 @@ def _no_cache(response):
     que carregam ~2MB de rodovias). Tambem fica de fora qualquer rota que ja
     tenha definido seu proprio Cache-Control (ex. imagem_ndvi_historico,
     imutavel por id -- ver a rota)."""
-    if request.endpoint == "static" or "Cache-Control" in response.headers:
+    if request.endpoint == "static":
+        return response
+    # send_file poe sozinho o "public, max-age" de 12 h do SEND_FILE_MAX_AGE_DEFAULT (pensado pros
+    # estaticos) tambem nos arquivos GERADOS na hora (PDF do relatorio, guia de manejo, Excel, backup):
+    # o navegador reabria o arquivo antigo por 12 h (pedido do Alan, 15/11/2026). So' respeita o
+    # Cache-Control que a propria rota escolheu.
+    padrao_send_file = f"public, max-age={app.config['SEND_FILE_MAX_AGE_DEFAULT']}"
+    if response.headers.get("Cache-Control") not in (None, padrao_send_file):
         return response
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -6170,7 +6177,7 @@ def guia_manejo_pdf():
     pdf = export_pdf.build_guia_manejo_pdf(secoes, protocolo_manejo,
                                            agora.strftime("Extraído em %d/%m/%Y %H:%M"))
     return send_file(io.BytesIO(pdf), mimetype="application/pdf", as_attachment=True,
-                     download_name=_nome_arquivo("Guia_Manejo", "pdf"))
+                     download_name=_nome_arquivo("Guia_Manejo", "pdf", com_hora=True))
 
 
 @app.route("/admin/fungicidas", methods=["GET", "POST"])

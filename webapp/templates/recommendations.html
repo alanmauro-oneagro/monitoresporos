@@ -179,7 +179,7 @@
                     <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}" id="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}"{% if not wa_ok %} disabled{% endif %}>
                     <label class="form-check-label small" for="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">PDF</label>
                 </div>
-                <a class="btn btn-sm btn-outline-primary acao-pdf" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra) }}"
+                <a class="btn btn-sm btn-outline-primary acao-pdf" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra, v=versao_estaticos) }}"
                    title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- PDF vem so' com o clima{% else %}Gerar PDF com clima, recomendacoes, produtos, datas de plantio e de pulverizacao -- pra encaminhar pra alguem{% endif %}">
                     📄 <span class="d-none d-sm-inline">Recomendação (PDF)</span><span class="d-sm-none">Abrir PDF</span>
                 </a>
