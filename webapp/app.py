@@ -6132,49 +6132,56 @@ def _semear_monitoramento(translations):
     models.set_setting("protocolo_manejo_semeado_v2", json.dumps(sorted(feitos)))
 
 
+def _secoes_guia_manejo(translations):
+    """Itens 1, 2, 3... do guia de manejo (uma secao por cultura), os mesmos na aba Manejo e Fungicidas
+    (blocos editaveis) e no PDF (pedido do Alan, 15/11/2026). Cada item: `chave` (doenca do site, ou
+    "protocolo:<nome>" pra doenca do documento que nao esta' cadastrada), nome, cientifico, texto,
+    objetivo, outras_culturas. Texto gravado (mesmo vazio) vale; sem nada gravado, o do documento.
+    Secao = 1a cultura marcada da doenca em Doenças/Culturas; sem cultura, a do documento; doenca fora
+    do documento e sem cultura = "Outras culturas"."""
+    _semear_monitoramento(translations)
+    gravados = models.get_all_fungicida_monitoramento()
+    culturas_site = models.get_culturas_ativas()
+    doenca_culturas = models.get_doenca_culturas()
+    protocolo_por_chave = {}
+    for item in protocolo_manejo.PROTOCOLO:
+        for n in [item[1]] + item[2]:
+            protocolo_por_chave.setdefault(_chave_doenca(n), item)
+    grupos, usados = {}, set()
+
+    def incluir(chave, nome, cientifico, culturas, protocolo):
+        grav = gravados.get(chave)
+        texto = grav["texto"] if grav else (protocolo[3] if protocolo else "")
+        objetivo = grav["objetivo"] if grav else (protocolo[4] if protocolo else "")
+        grupo = culturas[0] if culturas else (protocolo[0] if protocolo else "Outras culturas")
+        grupos.setdefault(grupo, []).append({"chave": chave, "nome": nome, "cientifico": cientifico, "texto": texto,
+                                             "objetivo": objetivo, "outras_culturas": culturas[1:]})
+
+    for d, info in translations.items():
+        protocolo = protocolo_por_chave.get(_chave_doenca(info.get("nome_pt") or ""))
+        if d not in gravados and not protocolo:
+            continue
+        if protocolo:
+            usados.add(protocolo[1])
+        culturas = [c for c in culturas_site if c in doenca_culturas.get(d, set())]
+        incluir(d, info["nome_pt"], info.get("nome_cientifico") or "", culturas, protocolo)
+    for protocolo in protocolo_manejo.PROTOCOLO:
+        if protocolo[1] not in usados:
+            incluir(f"protocolo:{protocolo[1]}", protocolo[1], "", [], protocolo)
+    ordem = culturas_site + [c for c in dict.fromkeys(p[0] for p in protocolo_manejo.PROTOCOLO) if c not in culturas_site]
+    ordem += ["Outras culturas"]
+    return [(g, sorted(grupos[g], key=lambda i: _chave_alfabetica(i["nome"]))) for g in ordem if g in grupos]
+
+
 @app.route("/admin/fungicidas/guia-manejo.pdf")
 @aba_required("fungicidas")
 def guia_manejo_pdf():
-    """Guia de manejo em PDF: doencas com o protocolo preenchido, agrupadas pela 1a cultura
-    marcada em Doenças/Culturas (na ordem das culturas do site)."""
-    translations = _load_translations()
-    _semear_monitoramento(translations)
-    textos = models.get_all_fungicida_monitoramento()
-    culturas_site = models.get_culturas_ativas()
-    doenca_culturas = models.get_doenca_culturas()
-    grupos = {}
-    for d, t in textos.items():
-        if d not in translations or not (t["texto"].strip() or t["objetivo"].strip()):
-            continue
-        culturas = [c for c in culturas_site if c in doenca_culturas.get(d, set())]
-        grupo = culturas[0] if culturas else "Outras culturas"
-        grupos.setdefault(grupo, []).append({
-            "nome": translations[d]["nome_pt"], "cientifico": translations[d].get("nome_cientifico") or "",
-            "texto": t["texto"], "objetivo": t["objetivo"], "outras_culturas": culturas[1:],
-        })
-    # O guia sempre traz o protocolo inteiro (pedido do Alan, 15/11/2026): doenca do protocolo sem
-    # nenhuma doenca do site com texto preenchido (nao cadastrada, ou cadastrada com os campos vazios)
-    # entra com o texto do documento -- na cultura da doenca do site, se houver, senao na do documento.
-    com_texto = {_chave_doenca(item["nome"]) for itens in grupos.values() for item in itens}
-    por_chave = {}
-    for d, info in translations.items():
-        por_chave.setdefault(_chave_doenca(info.get("nome_pt") or ""), []).append(d)
-    for cultura, nome, outros, verificar, objetivo in protocolo_manejo.PROTOCOLO:
-        chaves = [_chave_doenca(n) for n in [nome] + outros]
-        if any(c in com_texto for c in chaves):
-            continue
-        do_site = next((d for c in chaves for d in por_chave.get(c, [])), None)
-        culturas = [c for c in culturas_site if c in doenca_culturas.get(do_site, set())] if do_site else []
-        grupos.setdefault(culturas[0] if culturas else cultura, []).append({
-            "nome": translations[do_site]["nome_pt"] if do_site else nome,
-            "cientifico": (translations[do_site].get("nome_cientifico") or "") if do_site else "",
-            "texto": verificar, "objetivo": objetivo, "outras_culturas": culturas[1:],
-        })
-    ordem = culturas_site + [c for c in dict.fromkeys(p[0] for p in protocolo_manejo.PROTOCOLO) if c not in culturas_site]
-    ordem += ["Outras culturas"]
-    secoes = [(g, sorted(grupos[g], key=lambda i: _chave_alfabetica(i["nome"]))) for g in ordem if g in grupos]
+    """Guia de manejo em PDF: os mesmos itens dos blocos da aba (so' os preenchidos) + as secoes fixas
+    do documento."""
+    secoes = [(g, [i for i in itens if i["texto"].strip() or i["objetivo"].strip()])
+              for g, itens in _secoes_guia_manejo(_load_translations())]
     agora = weather_forecast._agora_cuiaba()
-    pdf = export_pdf.build_guia_manejo_pdf(secoes, protocolo_manejo,
+    pdf = export_pdf.build_guia_manejo_pdf([(g, itens) for g, itens in secoes if itens], protocolo_manejo,
                                            agora.strftime("Extraído em %d/%m/%Y %H:%M"))
     return send_file(io.BytesIO(pdf), mimetype="application/pdf", as_attachment=True,
                      download_name=_nome_arquivo("Guia_Manejo", "pdf", com_hora=True))
@@ -6245,8 +6252,10 @@ def admin_fungicidas():
     doenca_paises = models.get_doenca_paises()
     translations = _load_translations()
     notas = models.get_all_fungicida_notas()
-    _semear_monitoramento(translations)
-    monitoramento = models.get_all_fungicida_monitoramento()
+    secoes_guia = _secoes_guia_manejo(translations)
+    no_guia = {i["chave"] for _, itens in secoes_guia for i in itens}
+    fora_do_guia = sorted(((d, info["nome_pt"]) for d, info in translations.items() if d not in no_guia),
+                          key=lambda x: _chave_alfabetica(x[1]))
     nome_brasil = countries.get_country("BR")["nome"]
     bandeira_por_nome = {
         _chave_alfabetica(info["nome"]): "".join(chr(0x1F1E6 + ord(letra) - ord("A")) for letra in codigo)
@@ -6276,8 +6285,7 @@ def admin_fungicidas():
                 "doenca": doenca_en, "rotulo": rotulo, "grupos": [], "sem_dados": True, "paises": paises_doenca,
                 "pais": _pais_da_doenca(doenca_en),
                 "bandeiras": bandeiras,
-                "nota": notas.get(doenca_en, ""), "monitoramento": monitoramento.get(doenca_en, {}).get("texto", ""),
-                "monitoramento_objetivo": monitoramento.get(doenca_en, {}).get("objetivo", ""),
+                "nota": notas.get(doenca_en, ""),
                 "cientifico": info.get("nome_cientifico") or "",
                 "pesquisa_fora_brasil": bool(paises_doenca) and _chave_alfabetica(nome_brasil) not in map(_chave_alfabetica, paises_doenca),
             })
@@ -6319,8 +6327,7 @@ def admin_fungicidas():
             "doenca": doenca_en, "rotulo": rotulo, "grupos": grupos, "sem_dados": False, "paises": paises_doenca,
             "pais": _pais_da_doenca(doenca_en),
             "bandeiras": bandeiras,
-            "nota": notas.get(doenca_en, ""), "monitoramento": monitoramento.get(doenca_en, {}).get("texto", ""),
-                "monitoramento_objetivo": monitoramento.get(doenca_en, {}).get("objetivo", ""),
+            "nota": notas.get(doenca_en, ""),
             "cientifico": info.get("nome_cientifico") or "",
             # Agrofit/MAPA e' o registro do Brasil -- doenca marcada so' pra
             # outro pais fica de fora (ver `aplicar_pesquisa_registro`).
@@ -6329,7 +6336,8 @@ def admin_fungicidas():
 
     return render_template(
         "admin_fungicidas.html", doencas_data=doencas_data, culturas_ativas=culturas_ativas,
-        agrofit=agrofit_dados.status(),
+        agrofit=agrofit_dados.status(), secoes_guia=secoes_guia, fora_do_guia=fora_do_guia,
+        titulo_secao_guia=export_pdf._titulo_secao_cultura,
     )
 
 

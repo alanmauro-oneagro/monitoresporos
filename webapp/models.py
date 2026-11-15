@@ -2025,19 +2025,18 @@ def get_all_fungicida_monitoramento():
 
 
 def set_fungicida_monitoramento(doenca, texto, objetivo=None):
-    """`objetivo` None = nao mexe no objetivo gravado. Os dois vazios apagam a linha."""
+    """`objetivo` None = nao mexe no objetivo gravado."""
     conn = get_db()
     if objetivo is None:
         row = conn.execute("SELECT objetivo FROM fungicida_monitoramento WHERE doenca = ?", (doenca,)).fetchone()
         objetivo = (row["objetivo"] or "") if row else ""
-    if texto or objetivo:
-        conn.execute(
-            "INSERT INTO fungicida_monitoramento (doenca, texto, objetivo) VALUES (?, ?, ?) "
-            "ON CONFLICT(doenca) DO UPDATE SET texto = excluded.texto, objetivo = excluded.objetivo",
-            (doenca, texto or "", objetivo),
-        )
-    else:
-        conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca = ?", (doenca,))
+    # Linha vazia fica gravada: no guia de manejo ela quer dizer "apagado de proposito" (sem ela, a
+    # doenca do documento voltaria com o texto do documento).
+    conn.execute(
+        "INSERT INTO fungicida_monitoramento (doenca, texto, objetivo) VALUES (?, ?, ?) "
+        "ON CONFLICT(doenca) DO UPDATE SET texto = excluded.texto, objetivo = excluded.objetivo",
+        (doenca, texto or "", objetivo),
+    )
     conn.commit()
     conn.close()
 
