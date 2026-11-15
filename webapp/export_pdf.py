@@ -761,6 +761,8 @@ _ESTILO_GUIA_ROTULO = ParagraphStyle("GuiaRotulo", parent=_styles["Normal"], fon
                                      leading=11, textColor=colors.HexColor("#2b6a2f"), spaceBefore=3)
 _ESTILO_GUIA_TEXTO = ParagraphStyle("GuiaTexto", parent=_styles["Normal"], fontSize=9, leading=12.5, leftIndent=10)
 _VERDE_GUIA = colors.HexColor("#2b6a2f")
+_ESTILO_GUIA_SUB_ESQ = ParagraphStyle("GuiaSubEsq", parent=_styles["Normal"], fontSize=8.5, leading=11,
+                                      textColor=colors.HexColor("#555555"))
 
 
 def _faixa_secao(titulo):
@@ -771,11 +773,43 @@ def _faixa_secao(titulo):
     return faixa
 
 
-def build_guia_manejo_pdf(secoes, registro=None, extraido_em=None):
-    """Guia de manejo (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026): protocolo de verificacao em
-    campo agrupado por cultura -- `secoes` = [(cultura, [{nome, cientifico, texto, objetivo,
-    outras_culturas}])] -- um quadro por doenca (o que verificar, uma frase por item, e o objetivo) e,
-    no fim, a ficha do que registrar em cada inspecao (`registro`)."""
+_AMARELO_GUIA = colors.HexColor("#fff4d6")
+_ESTILO_GUIA_PARAGRAFO = ParagraphStyle("GuiaParagrafo", parent=_styles["Normal"], fontSize=9, leading=12.5, spaceAfter=4)
+_PREPOSICAO_CULTURA = {"soja": "da", "milho": "do", "algodao": "do", "algodão": "do", "feijao": "do", "feijão": "do",
+                       "trigo": "do", "cafe": "do", "café": "do", "arroz": "do", "cana": "da", "batata": "da"}
+
+
+def _titulo_secao_cultura(cultura):
+    if cultura == "Outras culturas":
+        return "Outras culturas"
+    prep = _PREPOSICAO_CULTURA.get(cultura.lower())
+    return f"Doenças {prep} {cultura.lower()}" if prep else f"Doenças: {cultura}"
+
+
+def _quadro_doenca(nome, cientifico, texto, objetivo, extra="", fundo=CINZA_CLARO, selo=""):
+    titulo = escape(nome.upper())
+    if cientifico:
+        titulo += f' <font color="#777777" size="9"><i>({escape(cientifico)})</i></font>'
+    if extra:
+        titulo += f' <font color="#777777" size="8">· {escape(extra)}</font>'
+    if selo:
+        titulo += f' <font color="#8a5a00" size="8"><b>· {escape(selo)}</b></font>'
+    conteudo = [Paragraph(titulo, _ESTILO_GUIA_DOENCA)]
+    if (texto or "").strip():
+        conteudo.append(Paragraph("O que verificar em campo", _ESTILO_GUIA_ROTULO))
+        conteudo += [Paragraph(escape(f), _ESTILO_GUIA_ITEM, bulletText="•") for f in _frases(texto)]
+    if (objetivo or "").strip():
+        conteudo.append(Paragraph("Objetivo da verificação", _ESTILO_GUIA_ROTULO))
+        conteudo.append(Paragraph(escape(objetivo.strip()), _ESTILO_GUIA_TEXTO))
+    return _caixa(conteudo, fundo=fundo)
+
+
+def build_guia_manejo_pdf(secoes, documento=None, extraido_em=None):
+    """Guia de manejo (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026) -- o documento "Protocolo de
+    verificacao em campo" inteiro, organizado: uma secao numerada por cultura (`secoes` = [(cultura,
+    [{nome, cientifico, texto, objetivo, outras_culturas}])], um quadro por doenca) e, com `documento`
+    (modulo `protocolo_manejo`), as secoes fixas: protocolos provisorios, modelo da ficha de inspecao,
+    revisao do cadastro e recomendacao final."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.8 * cm - 6, rightMargin=1.8 * cm - 6,
                             topMargin=1.5 * cm, bottomMargin=1.8 * cm, title="Guia de manejo - OneAgro")
@@ -785,33 +819,55 @@ def build_guia_manejo_pdf(secoes, registro=None, extraido_em=None):
         Paragraph("<b>ONEAGRO</b> · Protocolo de verificação em campo", _ESTILO_GUIA_SUB),
         HRFlowable(width="100%", thickness=1, color=AZUL_MARCA, spaceBefore=4, spaceAfter=10),
     ]
-    if not secoes:
-        historia.append(Paragraph("Nenhuma doença com o protocolo preenchido.", _ESTILO_NORMAL))
+    numero = 0
+
+    def secao(titulo, primeiro_bloco):
+        nonlocal numero
+        numero += 1
+        historia.append(KeepTogether([_faixa_secao(f"{numero}. {titulo}"), Spacer(1, 6)] + primeiro_bloco))
+
     for cultura, itens in secoes:
-        primeiro = True
-        for item in itens:
-            titulo = escape(item["nome"].upper())
-            if item.get("cientifico"):
-                titulo += f' <font color="#777777" size="9"><i>({escape(item["cientifico"])})</i></font>'
-            if item.get("outras_culturas"):
-                titulo += f' <font color="#777777" size="8">· também em {escape(", ".join(item["outras_culturas"]))}</font>'
-            conteudo = [Paragraph(titulo, _ESTILO_GUIA_DOENCA)]
-            if item.get("texto", "").strip():
-                conteudo.append(Paragraph("O que verificar em campo", _ESTILO_GUIA_ROTULO))
-                conteudo += [Paragraph(escape(f), _ESTILO_GUIA_ITEM, bulletText="•") for f in _frases(item["texto"])]
-            if item.get("objetivo", "").strip():
-                conteudo.append(Paragraph("Objetivo da verificação", _ESTILO_GUIA_ROTULO))
-                conteudo.append(Paragraph(escape(item["objetivo"].strip()), _ESTILO_GUIA_TEXTO))
-            bloco = [_caixa(conteudo, fundo=CINZA_CLARO), Spacer(1, 7)]
-            if primeiro:
-                # faixa da cultura nunca fica sozinha no pe' da pagina
-                bloco = [_faixa_secao(cultura), Spacer(1, 6)] + bloco
-                primeiro = False
-            historia.append(KeepTogether(bloco))
-    if registro:
-        conteudo = [Paragraph("FICHA DE INSPEÇÃO — O QUE REGISTRAR EM CADA VISITA", _ESTILO_GUIA_DOENCA), Spacer(1, 3)]
-        conteudo += [Paragraph(escape(r), _ESTILO_GUIA_ITEM, bulletText="•") for r in registro]
-        historia += [Spacer(1, 4), KeepTogether([_caixa(conteudo)])]
+        blocos = [[_quadro_doenca(i["nome"], i.get("cientifico"), i.get("texto"), i.get("objetivo"),
+                                  ("também em " + ", ".join(i["outras_culturas"])) if i.get("outras_culturas") else ""),
+                   Spacer(1, 7)] for i in itens]
+        if not blocos:
+            continue
+        secao(_titulo_secao_cultura(cultura), blocos[0])
+        historia += [KeepTogether(b) for b in blocos[1:]]
+    if documento is not None:
+        d = documento
+        blocos = [[_quadro_doenca(nome, "", texto, objetivo, fundo=_AMARELO_GUIA, selo="protocolo provisório"),
+                   Spacer(1, 7)] for nome, texto, objetivo in d.PROVISORIOS]
+        secao("Doenças com identificação dependente da cultura",
+              [Paragraph(escape(d.PROVISORIOS_INTRO), _ESTILO_GUIA_PARAGRAFO)] + blocos[0])
+        historia += [KeepTogether(b) for b in blocos[1:]]
+        historia += [_caixa([Paragraph(f"<b>{escape(d.PROVISORIOS_IMPORTANTE)}</b>", _ESTILO_GUIA_PARAGRAFO)],
+                            fundo=_AMARELO_GUIA), Spacer(1, 10)]
+
+        ex = d.FICHA_EXEMPLO
+        ficha = [Paragraph("FICHA DE INSPEÇÃO FITOSSANITÁRIA", _ESTILO_GUIA_DOENCA),
+                 Paragraph(f"Modelo proposto · exemplo: {escape(ex['doenca'])}", _ESTILO_GUIA_SUB_ESQ),
+                 Paragraph("1. Verificação em campo", _ESTILO_GUIA_ROTULO)]
+        ficha += [Paragraph(escape(t), _ESTILO_GUIA_ITEM, bulletText="•") for t in ex["verificacao"]]
+        ficha.append(Paragraph("2. Registro da inspeção", _ESTILO_GUIA_ROTULO))
+        ficha += [Paragraph(escape(t), _ESTILO_GUIA_ITEM, bulletText="•") for t in ex["registro"]]
+        ficha += [Paragraph("3. Objetivo", _ESTILO_GUIA_ROTULO), Paragraph(escape(ex["objetivo"]), _ESTILO_GUIA_TEXTO),
+                  Paragraph("4. Conclusão do consultor", _ESTILO_GUIA_ROTULO),
+                  Paragraph(escape(ex["conclusao"]), _ESTILO_GUIA_TEXTO)]
+        secao("Ficha de inspeção (modelo)",
+              [Paragraph(escape(d.FICHA_INTRO), _ESTILO_GUIA_PARAGRAFO), _caixa(ficha), Spacer(1, 10)])
+
+        revisao = [Paragraph(escape(d.REVISAO_INTRO), _ESTILO_GUIA_PARAGRAFO)]
+        revisao += [Paragraph(escape(t), _ESTILO_GUIA_ITEM, bulletText="•") for t in d.REVISAO_ITENS]
+        revisao.append(Spacer(1, 5))
+        revisao += [Paragraph(escape(t), _ESTILO_GUIA_PARAGRAFO) for t in d.REVISAO_TEXTOS]
+        secao("Melhoria do banco de dados", revisao + [Spacer(1, 6)])
+
+        final = [Paragraph("RECOMENDAÇÃO FINAL", _ESTILO_GUIA_DOENCA), Spacer(1, 3)]
+        final += [Paragraph(escape(t), _ESTILO_GUIA_PARAGRAFO) for t in d.RECOMENDACAO_FINAL]
+        historia.append(KeepTogether([_caixa(final, fundo=CINZA_CLARO)]))
+    if not secoes and documento is None:
+        historia.append(Paragraph("Nenhuma doença com o protocolo preenchido.", _ESTILO_NORMAL))
     historia += [Spacer(1, 8), Paragraph(AVISO_AGRONOMO, _ESTILO_LEGENDA_RISCO), Paragraph(CONTATO_RELATORIO, _ESTILO_LEGENDA_RISCO)]
     rodape = _rodape_pagina(extraido_em)
     doc.build(historia, onFirstPage=rodape, onLaterPages=rodape)
