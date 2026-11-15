@@ -910,6 +910,13 @@ site tem que entrar la'.
   (`_uf_da_fazenda`): a digitada (cliente_pontos/fazendas_dados), senao a da estacao INMET mais proxima
   (`_uf_por_site`); fora do Brasil ou sem UF = mostra tudo. Digitada invalida/vazia -> estado no fim do nome
   ("3 Irmaos - MT", `_UF_NO_NOME`, 14/11/2026) antes do INMET.
+- **Nivel de acao por doenca** (regra do Alan, 15/11/2026; `app._nivel_acao`/`_com_nivel_acao`, `NIVEIS_ACAO`,
+  `DIAS_RISCO_ALTO_PARA_ACAO` = 3): concentracao (Perigo = alta, Atencao = media) x dias de risco ALTO (vermelho) nos
+  5 da previsao. Alta + 3+ dias altos = 🔴 "Preparar aplicação" (acompanhar estadio; se no momento, preparar); alta com
+  menos, ou media + 3+ = 🟡 "Acompanhar" (estadio e sinais de infeccao); media com menos, ou baixa = 🟢 "Monitorar".
+  Calculado depois do `previsao_risco` em `_preparar_relatorio`, `recommendations` e na rota do PDF; as doencas saem
+  ordenadas pela urgencia. Aparece no selo ao lado da doenca em Recomendações, na linha "👉 Ação: ..." do texto
+  (WhatsApp/app) e no PDF (`export_pdf._COR_ACAO`). Sem previsao = conta 0 dias altos.
 - **BioScout 403 na contagem de esporos** (pedido do Alan, 14/11/2026): uma fazenda sem permissao na conta derrubava a
   busca de TODAS (uma chamada so' com todos os `SiteIds`). Agora `bioscout_fetch._contagens` levanta `_SemPermissao`
   (401/403 com 2+ fazendas) e `fetch_recent` busca fazenda por fazenda; as recusadas aparecem no aviso do Alertas

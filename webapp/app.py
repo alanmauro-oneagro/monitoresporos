@@ -1341,6 +1341,40 @@ def _risco_label(risco):
     return _RISCO_LABELS.get(risco)
 
 
+# Nivel de acao por doenca (regra do Alan, 15/11/2026): concentracao de esporos (Perigo = alta, Atencao = media,
+# o resto = baixa) x dias de risco ALTO de infeccao nos proximos 5.
+DIAS_RISCO_ALTO_PARA_ACAO = 3
+NIVEIS_ACAO = {
+    "preparar": {"ordem": 0, "emoji": "🔴", "rotulo": "Preparar aplicação",
+                 "texto": "Acompanhar o estádio fenológico e, se estiver no momento, preparar a aplicação."},
+    "acompanhar": {"ordem": 1, "emoji": "🟡", "rotulo": "Acompanhar",
+                   "texto": "Acompanhar o estádio fenológico e os sinais de infecção."},
+    "monitorar": {"ordem": 2, "emoji": "🟢", "rotulo": "Monitorar", "texto": "Monitorar."},
+}
+
+
+def _nivel_acao(status, previsao_risco):
+    """Alta + 3 de 5 dias de risco alto = preparar; alta com menos dias de risco alto, ou media + 3 de 5 = acompanhar;
+    media com menos dias de risco alto, ou baixa = monitorar."""
+    altos = sum(1 for p in (previsao_risco or [])[:5] if p.get("risco") == "vermelho")
+    risco_alto = altos >= DIAS_RISCO_ALTO_PARA_ACAO
+    if status == "Perigo":
+        chave = "preparar" if risco_alto else "acompanhar"
+    elif status == "Atencao":
+        chave = "acompanhar" if risco_alto else "monitorar"
+    else:
+        chave = "monitorar"
+    return {"chave": chave, "dias_alto": altos, **NIVEIS_ACAO[chave]}
+
+
+def _com_nivel_acao(diseases):
+    """Marca `acao` em cada doenca (depois do `previsao_risco`) e poe as mais urgentes primeiro."""
+    for d in diseases:
+        d["acao"] = _nivel_acao(d.get("status"), d.get("previsao_risco"))
+    diseases.sort(key=lambda d: (d["acao"]["ordem"], 0 if d.get("status") == "Perigo" else 1, d.get("doenca") or ""))
+    return diseases
+
+
 def _calc_previsao_risco_germinacao(disease, weather):
     """Extensao do Risco de Infeccao (`_calc_risco_germinacao`) pros
     proximos 5 dias, pro WhatsApp e o PDF -- mesma conta do grafico de
@@ -1667,6 +1701,8 @@ def _format_whatsapp_message(
             risco_label = _risco_label(d.get("risco"))
             if risco_label:
                 lines.append(f"Risco de infecção: {_RISCO_EMOJI.get(d.get('risco'), '')} {risco_label}")
+        if d.get("acao"):
+            lines.append(f"👉 *Ação: {d['acao']['emoji']} {d['acao']['rotulo']}* -- {d['acao']['texto']}")
         biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
         quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None
         if biologicos_itens or quimicos_itens:
@@ -1973,6 +2009,7 @@ def _preparar_relatorio(site, safra=None):
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    _com_nivel_acao(diseases)
     if not bloqueado and not is_clima_point:
         riscos_climaticos = _riscos_climaticos_sem_alerta(cards, weather, diseases, site, safra)
     produtos = _farm_produtos_estoque(site, safra)
@@ -4294,6 +4331,7 @@ def recommendations(safra):
         for d in diseases:
             d["risco"] = _calc_risco_germinacao(d, weather)
             d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+        _com_nivel_acao(diseases)
         thumbnails = sorted(cards, key=lambda c: c["doenca"])
         existentes = produtos_by_site.get(site, {})
         # So' leitura -- a secao Folha e' editada na aba Manejos.
@@ -4653,6 +4691,7 @@ def recommendation_pdf(site_name):
     for d in diseases:
         d["risco"] = _calc_risco_germinacao(d, weather)
         d["previsao_risco"] = _calc_previsao_risco_germinacao(d, weather)
+    _com_nivel_acao(diseases)
     if not bloqueado:
         riscos_climaticos = _riscos_climaticos_sem_alerta(cards_by_site.get(site_name, []), weather, diseases, site_name, safra)
     produtos = _farm_produtos_estoque(site_name, safra)
