@@ -6167,7 +6167,7 @@ def guia_manejo_pdf():
     ordem += ["Outras culturas"]
     secoes = [(g, sorted(grupos[g], key=lambda i: _chave_alfabetica(i["nome"]))) for g in ordem if g in grupos]
     agora = weather_forecast._agora_cuiaba()
-    pdf = export_pdf.build_guia_manejo_pdf(secoes, protocolo_manejo.REGISTRO_INSPECAO,
+    pdf = export_pdf.build_guia_manejo_pdf(secoes, protocolo_manejo,
                                            agora.strftime("Extraído em %d/%m/%Y %H:%M"))
     return send_file(io.BytesIO(pdf), mimetype="application/pdf", as_attachment=True,
                      download_name=_nome_arquivo("Guia_Manejo", "pdf"))

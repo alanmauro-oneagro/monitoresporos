@@ -967,7 +967,10 @@ site tem que entrar la'.
   Doenças/Culturas, na ordem das culturas do site; sem cultura = "Outras culturas"; doenca do protocolo sem doenca
   do site com texto preenchido -- nao cadastrada ou com os campos vazios -- entra com o texto do documento, na cultura da
   doenca do site se houver, senao na do documento -- o guia traz sempre as 20), quadro por doenca com o que verificar
-  (uma frase por item) e o objetivo, e no fim a "Ficha de inspeção -- o que registrar em cada visita". Ainda NAO aparece
+  (uma frase por item) e o objetivo; depois as secoes fixas do documento (pedido do Alan: "tudo que mandei no Word"),
+  em `protocolo_manejo.py`: "Doenças com identificação dependente da cultura" (`PROVISORIOS`, quadros amarelos "protocolo
+  provisório" + aviso), "Ficha de inspeção (modelo)" (`FICHA_EXEMPLO`, ferrugem da soja), "Melhoria do banco de dados"
+  (`REVISAO_*`) e "Recomendação final"; secoes numeradas 1., 2., ... na faixa verde. Ainda NAO aparece
   nas Recomendações/relatorios.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
