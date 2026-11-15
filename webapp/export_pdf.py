@@ -755,28 +755,64 @@ def _frases(texto):
     return partes or [texto]
 
 
-def build_guia_manejo_pdf(itens, extraido_em=None):
-    """Guia "O que examinar no campo" (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026):
-    um quadro por doenca com o nome, o nome cientifico e cada frase do texto como item."""
+_ESTILO_GUIA_SECAO = ParagraphStyle("GuiaSecao", parent=_styles["Normal"], fontName="Helvetica-Bold", fontSize=11.5,
+                                    leading=14, textColor=colors.white)
+_ESTILO_GUIA_ROTULO = ParagraphStyle("GuiaRotulo", parent=_styles["Normal"], fontName="Helvetica-Bold", fontSize=8.5,
+                                     leading=11, textColor=colors.HexColor("#2b6a2f"), spaceBefore=3)
+_ESTILO_GUIA_TEXTO = ParagraphStyle("GuiaTexto", parent=_styles["Normal"], fontSize=9, leading=12.5, leftIndent=10)
+_VERDE_GUIA = colors.HexColor("#2b6a2f")
+
+
+def _faixa_secao(titulo):
+    faixa = Table([[Paragraph(escape(titulo.upper()), _ESTILO_GUIA_SECAO)]], colWidths=[17.4 * cm])
+    faixa.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), _VERDE_GUIA),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 3),
+                               ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    return faixa
+
+
+def build_guia_manejo_pdf(secoes, registro=None, extraido_em=None):
+    """Guia de manejo (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026): protocolo de verificacao em
+    campo agrupado por cultura -- `secoes` = [(cultura, [{nome, cientifico, texto, objetivo,
+    outras_culturas}])] -- um quadro por doenca (o que verificar, uma frase por item, e o objetivo) e,
+    no fim, a ficha do que registrar em cada inspecao (`registro`)."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.8 * cm - 6, rightMargin=1.8 * cm - 6,
-                            topMargin=1.5 * cm, bottomMargin=1.8 * cm, title="Manejo e Fungicidas")
+                            topMargin=1.5 * cm, bottomMargin=1.8 * cm, title="Guia de manejo - OneAgro")
     historia = [
         HRFlowable(width="100%", thickness=1, color=AZUL_MARCA, spaceAfter=4),
-        Paragraph("MANEJO E FUNGICIDAS", _ESTILO_GUIA_TITULO),
-        Paragraph("<b>ONEAGRO</b> · O que examinar no campo, por doença", _ESTILO_GUIA_SUB),
+        Paragraph("GUIA DE MANEJO", _ESTILO_GUIA_TITULO),
+        Paragraph("<b>ONEAGRO</b> · Protocolo de verificação em campo", _ESTILO_GUIA_SUB),
         HRFlowable(width="100%", thickness=1, color=AZUL_MARCA, spaceBefore=4, spaceAfter=10),
     ]
-    if not itens:
-        historia.append(Paragraph("Nenhuma doença com o texto de manejo preenchido.", _ESTILO_NORMAL))
-    for item in itens:
-        titulo = escape(item["nome"].upper())
-        if item.get("cientifico"):
-            titulo += f' <font color="#777777" size="9"><i>({escape(item["cientifico"])})</i></font>'
-        conteudo = [Paragraph(titulo, _ESTILO_GUIA_DOENCA), Spacer(1, 3)]
-        conteudo += [Paragraph(escape(f), _ESTILO_GUIA_ITEM, bulletText="•") for f in _frases(item["texto"])]
-        historia += [KeepTogether([_caixa(conteudo, fundo=CINZA_CLARO)]), Spacer(1, 8)]
-    historia += [Spacer(1, 6), Paragraph(AVISO_AGRONOMO, _ESTILO_LEGENDA_RISCO), Paragraph(CONTATO_RELATORIO, _ESTILO_LEGENDA_RISCO)]
+    if not secoes:
+        historia.append(Paragraph("Nenhuma doença com o protocolo preenchido.", _ESTILO_NORMAL))
+    for cultura, itens in secoes:
+        primeiro = True
+        for item in itens:
+            titulo = escape(item["nome"].upper())
+            if item.get("cientifico"):
+                titulo += f' <font color="#777777" size="9"><i>({escape(item["cientifico"])})</i></font>'
+            if item.get("outras_culturas"):
+                titulo += f' <font color="#777777" size="8">· também em {escape(", ".join(item["outras_culturas"]))}</font>'
+            conteudo = [Paragraph(titulo, _ESTILO_GUIA_DOENCA)]
+            if item.get("texto", "").strip():
+                conteudo.append(Paragraph("O que verificar em campo", _ESTILO_GUIA_ROTULO))
+                conteudo += [Paragraph(escape(f), _ESTILO_GUIA_ITEM, bulletText="•") for f in _frases(item["texto"])]
+            if item.get("objetivo", "").strip():
+                conteudo.append(Paragraph("Objetivo da verificação", _ESTILO_GUIA_ROTULO))
+                conteudo.append(Paragraph(escape(item["objetivo"].strip()), _ESTILO_GUIA_TEXTO))
+            bloco = [_caixa(conteudo, fundo=CINZA_CLARO), Spacer(1, 7)]
+            if primeiro:
+                # faixa da cultura nunca fica sozinha no pe' da pagina
+                bloco = [_faixa_secao(cultura), Spacer(1, 6)] + bloco
+                primeiro = False
+            historia.append(KeepTogether(bloco))
+    if registro:
+        conteudo = [Paragraph("FICHA DE INSPEÇÃO — O QUE REGISTRAR EM CADA VISITA", _ESTILO_GUIA_DOENCA), Spacer(1, 3)]
+        conteudo += [Paragraph(escape(r), _ESTILO_GUIA_ITEM, bulletText="•") for r in registro]
+        historia += [Spacer(1, 4), KeepTogether([_caixa(conteudo)])]
+    historia += [Spacer(1, 8), Paragraph(AVISO_AGRONOMO, _ESTILO_LEGENDA_RISCO), Paragraph(CONTATO_RELATORIO, _ESTILO_LEGENDA_RISCO)]
     rodape = _rodape_pagina(extraido_em)
     doc.build(historia, onFirstPage=rodape, onLaterPages=rodape)
     return buf.getvalue()

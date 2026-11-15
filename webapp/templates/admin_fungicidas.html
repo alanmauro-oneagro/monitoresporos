@@ -85,10 +85,13 @@
             </div>
         </div>
         <div class="mb-3 manejo-campo">
-            <label class="form-label small fw-bold mb-1" for="monitoramento_{{ loop.index0 }}">🔎 Manejo — o que examinar no campo</label>
+            <label class="form-label small fw-bold mb-1" for="monitoramento_{{ loop.index0 }}">🔎 O que verificar em campo</label>
             <input type="hidden" name="monitoramento_key" value="{{ d.doenca }}">
             <textarea name="monitoramento" id="monitoramento_{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="4"
                       placeholder="Partes da planta a examinar, sintomas a procurar e o que avaliar...">{{ d.monitoramento }}</textarea>
+            <label class="form-label small fw-bold mb-1 mt-2" for="monitoramento_objetivo_{{ loop.index0 }}">🎯 Objetivo da verificação</label>
+            <textarea name="monitoramento_objetivo" id="monitoramento_objetivo_{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="2"
+                      placeholder="O que a verificação quer identificar ou acompanhar...">{{ d.monitoramento_objetivo }}</textarea>
         </div>
         {% if d.sem_dados %}
         <p class="text-muted small mb-0">

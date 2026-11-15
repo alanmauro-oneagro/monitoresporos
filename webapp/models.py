@@ -712,6 +712,10 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     try:
+        conn.execute("ALTER TABLE fungicida_monitoramento ADD COLUMN objetivo TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
         conn.execute("ALTER TABLE disease_translations ADD COLUMN nome_cientifico TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
@@ -2012,20 +2016,25 @@ def get_all_fungicida_notas():
 
 
 def get_all_fungicida_monitoramento():
-    """doenca_en -> o que examinar no campo (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026)."""
+    """doenca_en -> {"texto": o que verificar em campo, "objetivo": objetivo da verificacao}
+    (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026)."""
     conn = get_db()
-    rows = conn.execute("SELECT doenca, texto FROM fungicida_monitoramento").fetchall()
+    rows = conn.execute("SELECT doenca, texto, objetivo FROM fungicida_monitoramento").fetchall()
     conn.close()
-    return {r["doenca"]: r["texto"] for r in rows}
+    return {r["doenca"]: {"texto": r["texto"] or "", "objetivo": r["objetivo"] or ""} for r in rows}
 
 
-def set_fungicida_monitoramento(doenca, texto):
+def set_fungicida_monitoramento(doenca, texto, objetivo=None):
+    """`objetivo` None = nao mexe no objetivo gravado. Os dois vazios apagam a linha."""
     conn = get_db()
-    if texto:
+    if objetivo is None:
+        row = conn.execute("SELECT objetivo FROM fungicida_monitoramento WHERE doenca = ?", (doenca,)).fetchone()
+        objetivo = (row["objetivo"] or "") if row else ""
+    if texto or objetivo:
         conn.execute(
-            "INSERT INTO fungicida_monitoramento (doenca, texto) VALUES (?, ?) "
-            "ON CONFLICT(doenca) DO UPDATE SET texto = excluded.texto",
-            (doenca, texto),
+            "INSERT INTO fungicida_monitoramento (doenca, texto, objetivo) VALUES (?, ?, ?) "
+            "ON CONFLICT(doenca) DO UPDATE SET texto = excluded.texto, objetivo = excluded.objetivo",
+            (doenca, texto or "", objetivo),
         )
     else:
         conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca = ?", (doenca,))
