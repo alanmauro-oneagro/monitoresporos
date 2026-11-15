@@ -29,8 +29,8 @@ padrao: Administrador = Usuarios + Mapas de Estudo, Usuario = nenhuma).
 **Nomes no menu (pedido do Alan, 01/11/2026)**: "Mapas de NDVI" (rota `ndvi`),
 "Planos e Valores" (`admin_planos`), "Gerenciar Acessos" (`admin_acessos`)
 e "Programação de Envios" (`whatsapp_gerenciamento`, chave `envios`), "Mapas de Solo" (`solo`),
-"Gerenciar Exportações" (`admin_exportar`, ex-"Exportar"), "Doenças/Culturas"
-(`admin_doencas`, chave `doencas`, ex-"Doenças", 08/11/2026), "Manejo e Fungicidas" (`admin_fungicidas`,
+"Gerenciar Exportações" (`admin_exportar`, ex-"Exportar"), "Doenças e Culturas"
+(`admin_doencas`, chave `doencas`, ex-"Doenças/Culturas" e ex-"Doenças"; nome atual pedido do Alan, 15/11/2026), "Manejo e Fungicidas" (`admin_fungicidas`,
 chave `fungicidas`, ex-"Fungicidas", 15/11/2026); onde
 este arquivo diz NDVI/Planos/Acessos/Envios, sao essas abas.
 **Mapas de Estudo = ex-"Mapa Interpolado"** (renomeado pelo Alan,
@@ -864,7 +864,7 @@ site tem que entrar la'.
   agenda que antes ficava espalhada em Manejos/NDVI/Alertas Clima — ao
   mexer em agenda de envio, e' aqui que fica agora. Pontos "so' clima" NAO
   tem PDF nem anotacao (pedido do Alan): so' texto, manual ou agendado.
-- **Aba Doencas** (pedido do Alan, 18/10/2026): cadastro manual ja' pede
+- **Aba Doencas (hoje "Doenças e Culturas")** (pedido do Alan, 18/10/2026): cadastro manual ja' pede
   o nome cientifico -- germinacao vem de `_PESQUISA_GERMINACAO` e as
   culturas de `agrofit_dados.culturas_do_fungo` (culturas com fungicida
   registrado pro fungo); o botao "Buscar pelo nome cientifico" tambem
@@ -978,6 +978,15 @@ site tem que entrar la'.
   Doenças/Culturas; sem cultura, a do guia; fora do guia e sem cultura = "Outras culturas"), um quadro por doenca
   (sintomas = uma linha por item, `_frases`; objetivo; fonte) e o quadro Fontes. Doenca com os campos vazios nao sai.
   Ainda NAO aparece nas Recomendações/relatorios. A aba tem auto-ajuste da altura das caixas de texto (`crescer`).
+  **Vinculos com Doenças e Culturas** (pedido do Alan, 15/11/2026): doenca NOVA so' se cadastra em Doenças e Culturas
+  ("Adicionar doença manualmente", `adicionar_doenca_manual`; as do BioScout entram sozinhas) -- Manejo e Fungicidas so'
+  usa. Item do guia "não cadastrada" tem o link "Cadastrar em Doenças e Culturas" (`/admin/doencas?nova=<nome>` ja' preenche
+  o nome, `nova_doenca`) e, ao lado do "+ Incluir doença no guia", "Doença nova? Cadastre em Doenças e Culturas".
+  Cadastrada com o nome (ou outro nome) do guia, o que foi editado em "protocolo:<nome>" passa pra ela
+  (`_secoes_guia_manejo` -> `models.mover_fungicida_monitoramento`). Cada cartao de Doenças e Culturas tem
+  "📘 Manejo e Fungicidas" (`/admin/fungicidas?abrir=<doenca_en>`: abre e rola ate' o cartao da doenca; so' com acesso
+  a' aba). Renomear/fundir/excluir doenca ja' leva junto o guia e os fungicidas (chave em ingles + cascatas). Teste
+  `DoencasEManejoVinculosTest`.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);

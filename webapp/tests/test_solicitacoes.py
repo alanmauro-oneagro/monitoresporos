@@ -242,8 +242,8 @@ class CadastroTest(unittest.TestCase):
             models.create_user("Zzz Teste Master Cad", "x", is_master=True)
         master = self._logado("Zzz Teste Master Cad")
         html = master.get("/admin/doencas").get_data(as_text=True)
-        self.assertIn("<h4 class=\"mb-2\">Doenças/Culturas</h4>", html)
-        self.assertIn(">Doenças/Culturas</a>", html)  # menu
+        self.assertIn("<h4 class=\"mb-2\">Doenças e Culturas</h4>", html)
+        self.assertIn(">Doenças e Culturas</a>", html)  # menu
         self.assertIn('name="cultura_grupo__0"', html)
         nomes = models.get_culturas()
         antes = models.get_grupos_culturas()

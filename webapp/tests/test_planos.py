@@ -1393,3 +1393,47 @@ class ManejoFungicidasTest(unittest.TestCase):
             self.assertIn('data-chave="Zzz Fora En"', html)
         finally:
             models.delete_disease_translation("Zzz Fora En")
+
+
+class DoencasEManejoVinculosTest(unittest.TestCase):
+    """Doenças e Culturas cadastra; Manejo e Fungicidas so' usa (pedido do Alan, 15/11/2026)."""
+
+    def test_vinculos(self):
+        if not models.get_user_by_username("Zzz Master Vinculo"):
+            models.create_user("Zzz Master Vinculo", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Vinculo")["id"])
+            s["_fresh"] = True
+        conn = models.get_db()
+        conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca LIKE 'protocolo:%'")
+        conn.commit()
+        conn.close()
+        models.set_setting("protocolo_manejo_semeado_v3", "[]")
+        chave = None
+        try:
+            html = c.get("/admin/fungicidas").get_data(as_text=True)
+            self.assertIn("Cadastrar em Doenças e Culturas", html)
+            self.assertIn("/admin/doencas?nova=Mancha+de+Diplodia", html)
+            c.post("/admin/fungicidas", headers={"X-Autosave": "1"}, data={
+                "monitoramento_key": "protocolo:Mancha de Diplodia", "monitoramento": "Zzz editado antes do cadastro",
+                "monitoramento_objetivo": "Zzz obj", "monitoramento_fonte": "Zzz fonte"})
+            d = c.get("/admin/doencas?nova=Mancha+de+Diplodia").get_data(as_text=True)
+            self.assertIn("Doenças e Culturas", d)
+            self.assertIn('value="Mancha de Diplodia"', d)
+            c.post("/admin/doencas/manual", data={"nome_pt": "Mancha de Diplodia"})
+            chave = next(k for k, v in models.get_all_disease_translations().items() if v["nome_pt"] == "Mancha de Diplodia")
+            with webapp.app.test_request_context():
+                link = webapp.url_for("admin_fungicidas", abrir=chave)
+            self.assertIn(f'href="{link}"', c.get("/admin/doencas").get_data(as_text=True))
+            c.get("/admin/fungicidas")
+            dados = models.get_all_fungicida_monitoramento()
+            self.assertEqual(dados[chave]["texto"], "Zzz editado antes do cadastro")  # o editado passou pra doenca
+            self.assertNotIn("protocolo:Mancha de Diplodia", dados)
+        finally:
+            if chave:
+                models.delete_disease_translation(chave)
+            conn = models.get_db()
+            conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca LIKE 'protocolo:%'")
+            conn.commit()
+            conn.close()

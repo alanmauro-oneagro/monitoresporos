@@ -2760,7 +2760,7 @@ def master_required(view):
 # sempre so' Master.
 ABAS_CONFIG = [
     ("usuarios", "Usuários", "admin_users"),
-    ("doencas", "Doenças/Culturas", "admin_doencas"),
+    ("doencas", "Doenças e Culturas", "admin_doencas"),
     ("fungicidas", "Manejo e Fungicidas", "admin_fungicidas"),
     ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo"),
@@ -6088,6 +6088,7 @@ def admin_doencas():
         grupos_cultura=GRUPOS_CULTURA,
         tipo_cultura=[_grupo_da_cultura(c) if c else "" for c in culturas],
         paises=paises, matriz_paises=matriz_paises, fusoes=models.get_fusoes_doencas(),
+        nova_doenca=(request.args.get("nova") or "").strip()[:80],
     )
 
 
@@ -6156,6 +6157,11 @@ def _secoes_guia_manejo(translations):
         protocolo = protocolo_por_chave.get(_chave_doenca(info.get("nome_pt") or ""))
         if d not in gravados and not protocolo:
             continue
+        # Doenca do guia que acabou de ser cadastrada em Doenças e Culturas: o que foi editado no
+        # "protocolo:<nome>" (selo "não cadastrada") passa pra ela (pedido do Alan, 15/11/2026).
+        if protocolo and d not in gravados and f"protocolo:{protocolo[1]}" in gravados:
+            models.mover_fungicida_monitoramento(f"protocolo:{protocolo[1]}", d)
+            gravados[d] = gravados.pop(f"protocolo:{protocolo[1]}")
         if protocolo:
             usados.add(protocolo[1])
         culturas = [c for c in culturas_site if c in doenca_culturas.get(d, set())]
@@ -9727,7 +9733,7 @@ def _faltando_no_cadastro(p):
 # ve os itens que pode abrir). Aba nova do menu entra aqui tambem.
 MENU_CONFIG = [
     ("usuarios", "Usuários", "admin_users", "usuarios"),
-    ("doencas", "Doenças/Culturas", "admin_doencas", "doencas"),
+    ("doencas", "Doenças e Culturas", "admin_doencas", "doencas"),
     ("fungicidas", "Manejo e Fungicidas", "admin_fungicidas", "fungicidas"),
     ("mapa_interpolado", "Mapas de Estudo", "mapa_interpolado", "mapa_interpolado"),
     ("solo", "Mapas de Solo", "solo", "solo"),
