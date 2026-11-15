@@ -297,7 +297,12 @@
                 <span class="badge ms-2 {{ 'bg-danger' if row.status == 'Perigo' else 'bg-warning text-dark' }}">
                     {{ 'Alta concentração de esporos' if row.status == 'Perigo' else 'Moderada concentração de esporos' }}
                 </span>
+                {% if row.acao %}
+                <span class="badge ms-1 acao-{{ row.acao.chave }} {{ {'preparar': 'text-bg-danger', 'acompanhar': 'text-bg-warning', 'monitorar': 'text-bg-success'}[row.acao.chave] }}"
+                      title="{{ row.acao.dias_alto }} de 5 dias com risco alto de infecção">{{ row.acao.emoji }} {{ row.acao.rotulo }}</span>
+                {% endif %}
             </div>
+            {% if row.acao %}<div class="small text-muted mt-1">{{ row.acao.texto }}</div>{% endif %}
             {% if row.previsao_risco %}
             <div class="small mt-1">
                 <span class="fw-bold">Risco de infecção:</span>

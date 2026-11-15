@@ -72,6 +72,7 @@ _ESTILO_PREVISAO_RISCO = ParagraphStyle(
 
 _RISCO_LABELS = {"vermelho": "Alto", "amarelo": "Médio", "verde": "Baixo"}
 _RISCO_CORES = {"vermelho": "#c0392b", "amarelo": "#b7860b", "verde": "#2e7d32"}
+_COR_ACAO = {"preparar": "#b02a37", "acompanhar": "#8a6d00", "monitorar": "#146c43"}
 _STATUS_LABELS = {"Perigo": "Alta concentração de esporos", "Atencao": "Moderada concentração de esporos"}
 
 
@@ -571,7 +572,7 @@ def build_recommendation_pdf(
         else:
             story += topo
 
-        secao = [Paragraph("Doencas em Atencao / Perigo", _ESTILO_SECAO)] if mostrar_secao_doencas else []
+        secao = [Paragraph("Doenças em Atenção / Perigo", _ESTILO_SECAO)] if mostrar_secao_doencas else []
         fontes_pesquisadas = []
         if not diseases:
             if secao:
@@ -602,6 +603,12 @@ def build_recommendation_pdf(
                     ))
                 elif d.get("cientifico"):
                     cabecalho.append(Paragraph(d["cientifico"], _escalar(_ESTILO_GERMINACAO, fonte)))
+                if d.get("acao"):
+                    # Nivel de acao (regra do Alan, 15/11/2026).
+                    cor_acao = _COR_ACAO.get(d["acao"]["chave"], "#495057")
+                    cabecalho.append(Paragraph(
+                        f'<font color="{cor_acao}"><b>Ação: {d["acao"]["rotulo"]}</b></font> — {d["acao"]["texto"]}',
+                        _escalar(_ESTILO_PREVISAO_RISCO, fonte)))
                 grafico = _build_spore_chart(d.get("historico") or [], altura=3.6 * cm * escala)
                 if grafico:
                     cabecalho.append(Spacer(1, 2))

@@ -1235,3 +1235,29 @@ class LoginInstalarAppTest(unittest.TestCase):
         html = webapp.app.test_client().get("/login").get_data(as_text=True)
         for trecho in ('id="instalar-app"', "beforeinstallprompt", "Adicionar à Tela de Início"):
             self.assertIn(trecho, html)
+
+
+class NivelAcaoTest(unittest.TestCase):
+    """Urgencia de aplicacao por concentracao de esporos x dias de risco alto (regra do Alan, 15/11/2026)."""
+
+    def _prev(self, altos):
+        return [{"data_fmt": f"{16 + i}/11", "risco": "vermelho" if i < altos else "amarelo"} for i in range(5)]
+
+    def test_regra(self):
+        casos = [("Perigo", 3, "preparar"), ("Perigo", 5, "preparar"), ("Perigo", 2, "acompanhar"),
+                 ("Atencao", 3, "acompanhar"), ("Atencao", 2, "monitorar"), ("Normal", 5, "monitorar")]
+        for status, altos, esperado in casos:
+            self.assertEqual(webapp._nivel_acao(status, self._prev(altos))["chave"], esperado, (status, altos))
+        self.assertEqual(webapp._nivel_acao("Perigo", [])["chave"], "acompanhar")  # sem previsao
+
+    def test_ordem_e_texto(self):
+        doencas = [{"doenca": "B", "rotulo": "B", "status": "Atencao", "previsao_risco": self._prev(1),
+                    "biologicos": None, "quimicos": None, "classe_label": {}},
+                   {"doenca": "A", "rotulo": "A", "status": "Perigo", "previsao_risco": self._prev(4),
+                    "biologicos": None, "quimicos": None, "classe_label": {}}]
+        webapp._com_nivel_acao(doencas)
+        self.assertEqual([d["rotulo"] for d in doencas], ["A", "B"])
+        with webapp.app.test_request_context():
+            texto = webapp._format_whatsapp_message("Zzz Acao", doencas, weather={"previsao_5_dias": []}, produtos={})
+        self.assertIn("Ação: 🔴 Preparar aplicação", texto)
+        self.assertIn("Ação: 🟢 Monitorar", texto)
