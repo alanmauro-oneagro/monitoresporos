@@ -1226,3 +1226,12 @@ class TresEstacoesProximasTest(unittest.TestCase):
         self.assertEqual(len(fz["estacoes_proximas"]), 3)
         distancias = [e["distancia_km"] for e in fz["estacoes_proximas"]]
         self.assertEqual(distancias, sorted(distancias))
+
+
+class LoginInstalarAppTest(unittest.TestCase):
+    """Convite pra instalar o OneAgro na tela inicial do celular, no login (pedido do Alan, 15/11/2026)."""
+
+    def test_caixa_instalar(self):
+        html = webapp.app.test_client().get("/login").get_data(as_text=True)
+        for trecho in ('id="instalar-app"', "beforeinstallprompt", "Adicionar à Tela de Início"):
+            self.assertIn(trecho, html)

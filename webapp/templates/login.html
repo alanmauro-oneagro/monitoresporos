@@ -76,10 +76,46 @@
                     <div class="login-ou my-3"><span>ou</span></div>
                     <a href="{{ url_for('solicitar_acesso') }}" class="btn btn-light w-100 fw-semibold border border-success text-success login-cadastre">Ainda não tem conta? Cadastre-se<span class="d-block small fw-normal">Grátis por 7 dias</span></a>
                     <a href="{{ url_for('planos_publico') }}" class="btn btn-light w-100 mt-2 fw-semibold border border-success text-success">Conheça os planos</a>
+                    {# Instalar na tela inicial do celular (pedido do Alan, 15/11/2026): Android/Chrome abre o pedido de
+                       instalacao do navegador; iPhone e quem nao tem o pedido veem como fazer. Some com o app ja' instalado. #}
+                    <div class="d-none mt-3 p-2 rounded border border-success-subtle bg-success-subtle text-start small" id="instalar-app">
+                        <div class="fw-semibold">📲 Tenha o OneAgro na tela inicial do celular</div>
+                        <div class="text-muted">Abre direto, sem digitar o endereço.</div>
+                        <button type="button" class="btn btn-success btn-sm w-100 mt-2" id="botao-instalar">Instalar na tela inicial</button>
+                        <div class="d-none mt-2" id="instalar-ios">No iPhone: toque em <strong>Compartilhar</strong> (⬆) e depois em <strong>Adicionar à Tela de Início</strong>.</div>
+                        <div class="d-none mt-2" id="instalar-outros">No navegador, abra o menu <strong>⋮</strong> e toque em <strong>Instalar app</strong> (ou <strong>Adicionar à tela inicial</strong>).</div>
+                    </div>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
+<script>
+(function () {
+    var box = document.getElementById('instalar-app');
+    if (!box) return;
+    var instalado = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
+    if (instalado) return;
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var celular = ios || /android|mobile/i.test(navigator.userAgent);
+    var pedido = null;
+    var botao = document.getElementById('botao-instalar');
+    window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        pedido = e;
+        box.classList.remove('d-none');
+    });
+    window.addEventListener('appinstalled', function () { box.classList.add('d-none'); });
+    if (celular) box.classList.remove('d-none');
+    botao.addEventListener('click', function () {
+        if (pedido) {
+            pedido.prompt();
+            pedido.userChoice.finally(function () { pedido = null; });
+            return;
+        }
+        document.getElementById(ios ? 'instalar-ios' : 'instalar-outros').classList.remove('d-none');
+    });
+})();
+</script>
 {% endblock %}
