@@ -354,7 +354,9 @@ def _tabela_riscos_climaticos(riscos):
             if p["data_fmt"] not in datas:
                 datas.append(p["data_fmt"])
     ncols = max(len(datas), 1)
-    dados = [[Paragraph("<b>Doença</b>", _ESTILO_TAB_RISCO)] + ([f"{dt}" for dt in datas] or ["Agora"])]
+    com_acao = any(d.get("acao") for d in riscos)
+    dados = [[Paragraph("<b>Doença</b>", _ESTILO_TAB_RISCO)] + ([f"{dt}" for dt in datas] or ["Agora"])
+             + (["Ação"] if com_acao else [])]
     estilo = [
         ("GRID", (0, 0), (-1, -1), 0.4, colors.lightgrey),
         ("BACKGROUND", (0, 0), (-1, 0), CINZA_CLARO),
@@ -386,9 +388,17 @@ def _tabela_riscos_climaticos(riscos):
             estilo.append(("SPAN", (1, i), (ncols, i)))
             if risco in _FUNDO_RISCO:
                 estilo.append(("BACKGROUND", (1, i), (ncols, i), _FUNDO_RISCO[risco]))
+        if com_acao:
+            acao = d.get("acao")
+            linha.append(acao["rotulo"] if acao else "")
+            if acao:
+                estilo.append(("TEXTCOLOR", (ncols + 1, i), (ncols + 1, i), colors.HexColor(_COR_ACAO.get(acao["chave"], "#495057"))))
+                estilo.append(("FONTNAME", (ncols + 1, i), (ncols + 1, i), "Helvetica-Bold"))
         dados.append(linha)
     largura_dia = 1.6 * cm
-    tabela = Table(dados, colWidths=[17.4 * cm - largura_dia * ncols] + [largura_dia] * ncols, repeatRows=1)
+    largura_acao = 3.3 * cm if com_acao else 0
+    tabela = Table(dados, colWidths=[17.4 * cm - largura_dia * ncols - largura_acao] + [largura_dia] * ncols
+                   + ([largura_acao] if com_acao else []), repeatRows=1)
     tabela.setStyle(TableStyle(estilo))
     if not any(d["doenca_en"].startswith("manual:") for d in riscos):
         return [tabela]

@@ -1250,6 +1250,21 @@ class NivelAcaoTest(unittest.TestCase):
             self.assertEqual(webapp._nivel_acao(status, self._prev(altos))["chave"], esperado, (status, altos))
         self.assertEqual(webapp._nivel_acao("Perigo", [])["chave"], "acompanhar")  # sem previsao
 
+    def test_linhas_sem_leitura(self):
+        """Fungo sem leitura = linha da Media; nao monitorado (manual) = linha da Baixa (pedido do Alan, 15/11/2026)."""
+        self.assertEqual(webapp._nivel_acao("SemLeitura", self._prev(3))["chave"], "acompanhar")
+        self.assertEqual(webapp._nivel_acao("SemLeitura", self._prev(2))["chave"], "monitorar")
+        self.assertEqual(webapp._nivel_acao("NaoMonitorada", self._prev(5))["chave"], "monitorar")
+        riscos = [{"doenca_en": "Rust", "rotulo": "Ferrugem", "previsao_risco": self._prev(4)},
+                  {"doenca_en": "manual:Zzz", "rotulo": "Zzz", "previsao_risco": self._prev(4)}]
+        webapp._acao_favorabilidade(riscos, sem_leitura=True)
+        self.assertEqual([r["acao"]["chave"] for r in riscos], ["acompanhar", "monitorar"])
+        webapp._acao_favorabilidade(riscos)
+        self.assertEqual(riscos[0]["acao"]["chave"], "monitorar")
+        import export_pdf
+        tabela = export_pdf._tabela_riscos_climaticos(riscos)[0]
+        self.assertIn("Ação", tabela._cellvalues[0])
+
     def test_ordem_e_texto(self):
         doencas = [{"doenca": "B", "rotulo": "B", "status": "Atencao", "previsao_risco": self._prev(1),
                     "biologicos": None, "quimicos": None, "classe_label": {}},
@@ -1277,8 +1292,14 @@ class RegrasNivelAcaoTelaTest(unittest.TestCase):
         dados = {"dias": "2", "acao_Perigo_0": "preparar", "acao_Perigo_1": "preparar", "acao_Atencao_0": "acompanhar",
                  "acao_Atencao_1": "monitorar", "acao_Normal_0": "monitorar", "acao_Normal_1": "monitorar",
                  "rotulo_preparar": "Aplicar já", "texto_preparar": "Zzz texto novo"}
+        html = c.get("/admin/doencas").get_data(as_text=True)
+        self.assertIn("(-) Sem leitura", html)
+        self.assertIn("acao_NaoMonitorada_0", html)
+        dados["acao_SemLeitura_0"] = "preparar"
         r = c.post("/admin/doencas/nivel-acao", data=dados, headers={"X-Autosave": "1"})
         self.assertTrue(r.get_json()["ok"])
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._nivel_acao("SemLeitura", [{"risco": "vermelho"}] * 2)["chave"], "preparar")
         prev = [{"risco": "vermelho"}, {"risco": "vermelho"}, {"risco": "verde"}, {"risco": "verde"}, {"risco": "verde"}]
         with webapp.app.test_request_context():
             acao = webapp._nivel_acao("Perigo", prev)
