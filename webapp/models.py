@@ -716,6 +716,10 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     try:
+        conn.execute("ALTER TABLE fungicida_monitoramento ADD COLUMN fonte TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
         conn.execute("ALTER TABLE disease_translations ADD COLUMN nome_cientifico TEXT")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
@@ -2016,26 +2020,29 @@ def get_all_fungicida_notas():
 
 
 def get_all_fungicida_monitoramento():
-    """doenca_en -> {"texto": o que verificar em campo, "objetivo": objetivo da verificacao}
-    (aba Manejo e Fungicidas, pedido do Alan, 15/11/2026)."""
+    """doenca_en -> {"texto": sintomas iniciais, "objetivo": objetivo da verificacao, "fonte"} (guia de manejo,
+    aba Manejo e Fungicidas, pedido do Alan, 15/11/2026)."""
     conn = get_db()
-    rows = conn.execute("SELECT doenca, texto, objetivo FROM fungicida_monitoramento").fetchall()
+    rows = conn.execute("SELECT doenca, texto, objetivo, fonte FROM fungicida_monitoramento").fetchall()
     conn.close()
-    return {r["doenca"]: {"texto": r["texto"] or "", "objetivo": r["objetivo"] or ""} for r in rows}
+    return {r["doenca"]: {"texto": r["texto"] or "", "objetivo": r["objetivo"] or "", "fonte": r["fonte"] or ""}
+            for r in rows}
 
 
-def set_fungicida_monitoramento(doenca, texto, objetivo=None):
-    """`objetivo` None = nao mexe no objetivo gravado."""
+def set_fungicida_monitoramento(doenca, texto, objetivo=None, fonte=None):
+    """`objetivo`/`fonte` None = nao mexe no que esta' gravado."""
     conn = get_db()
+    row = conn.execute("SELECT objetivo, fonte FROM fungicida_monitoramento WHERE doenca = ?", (doenca,)).fetchone()
     if objetivo is None:
-        row = conn.execute("SELECT objetivo FROM fungicida_monitoramento WHERE doenca = ?", (doenca,)).fetchone()
         objetivo = (row["objetivo"] or "") if row else ""
+    if fonte is None:
+        fonte = (row["fonte"] or "") if row else ""
     # Linha vazia fica gravada: no guia de manejo ela quer dizer "apagado de proposito" (sem ela, a
-    # doenca do documento voltaria com o texto do documento).
+    # doenca do guia voltaria com o texto padrao).
     conn.execute(
-        "INSERT INTO fungicida_monitoramento (doenca, texto, objetivo) VALUES (?, ?, ?) "
-        "ON CONFLICT(doenca) DO UPDATE SET texto = excluded.texto, objetivo = excluded.objetivo",
-        (doenca, texto or "", objetivo),
+        "INSERT INTO fungicida_monitoramento (doenca, texto, objetivo, fonte) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(doenca) DO UPDATE SET texto = excluded.texto, objetivo = excluded.objetivo, fonte = excluded.fonte",
+        (doenca, texto or "", objetivo, fonte),
     )
     conn.commit()
     conn.close()

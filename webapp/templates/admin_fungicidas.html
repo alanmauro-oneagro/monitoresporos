@@ -51,8 +51,20 @@
 {% endif %}
 
 {# Itens 1, 2, 3... do Guia de manejo editaveis aqui -- os mesmos blocos do PDF (pedido do Alan, 15/11/2026). #}
-<h6 class="mt-2 mb-2">📘 Guia de manejo — protocolo de verificação em campo</h6>
+<h6 class="mt-2 mb-2">📘 Guia de manejo — identificação precoce</h6>
 <form method="post" data-autosave id="form-guia-manejo">
+<div class="card shadow-sm fung-card guia-bloco" data-doenca="guia:objetivo">
+    <div class="card-body px-2 px-sm-3">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start fung-toggle" data-target="guia-sec-objetivo">
+            <span class="toggle-icon">▶</span> Objetivo da verificação a campo
+        </button>
+        <div class="d-none mt-1 mb-2" id="guia-sec-objetivo">
+            <textarea name="guia_objetivo_geral" class="form-control form-control-sm auto-grow-textarea" rows="4" aria-label="Objetivo da verificação a campo"
+                      placeholder="Um item por linha (abre o PDF)">{{ guia_objetivo_geral }}</textarea>
+            <div class="form-text">Um item por linha. Abre o PDF.</div>
+        </div>
+    </div>
+</div>
 {% for cultura, itens in secoes_guia %}
 <div class="card shadow-sm fung-card guia-bloco" data-doenca="guia:{{ cultura }}">
     <div class="card-body px-2 px-sm-3">
@@ -70,12 +82,15 @@
                 {% if item.outras_culturas %}<span class="text-muted small">· também em {{ item.outras_culturas | join(', ') }}</span>{% endif %}
             </div>
             <input type="hidden" name="monitoramento_key" value="{{ item.chave }}">
-            <label class="form-label small fw-bold mb-1 mt-1" for="guia_{{ n_sec }}_{{ loop.index }}">🔎 O que verificar em campo</label>
+            <label class="form-label small fw-bold mb-1 mt-1" for="guia_{{ n_sec }}_{{ loop.index }}">🔎 Sintomas iniciais</label>
             <textarea name="monitoramento" id="guia_{{ n_sec }}_{{ loop.index }}" class="form-control form-control-sm auto-grow-textarea" rows="3"
-                      placeholder="Partes da planta a examinar, sintomas a procurar e o que avaliar (cada frase vira um item no PDF)...">{{ item.texto }}</textarea>
+                      placeholder="Um sintoma por linha: onde olhar primeiro, como é a lesão no começo, o sinal que confirma...">{{ item.texto }}</textarea>
             <label class="form-label small fw-bold mb-1 mt-2" for="guia_obj_{{ n_sec }}_{{ loop.index }}">🎯 Objetivo da verificação</label>
             <textarea name="monitoramento_objetivo" id="guia_obj_{{ n_sec }}_{{ loop.index }}" class="form-control form-control-sm auto-grow-textarea" rows="2"
                       placeholder="O que a verificação quer identificar ou acompanhar...">{{ item.objetivo }}</textarea>
+            <label class="form-label small fw-bold mb-1 mt-2" for="guia_fonte_{{ n_sec }}_{{ loop.index }}">📚 Fonte</label>
+            <input type="text" name="monitoramento_fonte" id="guia_fonte_{{ n_sec }}_{{ loop.index }}" class="form-control form-control-sm"
+                   value="{{ item.fonte }}" placeholder="Ex.: Embrapa Soja (Doc. 256, 2023)">
             {% if not item.texto.strip() and not item.objetivo.strip() %}<div class="form-text">Vazia: não sai no PDF.</div>{% endif %}
         </div>
         {% endfor %}
@@ -83,11 +98,24 @@
     </div>
 </div>
 {% endfor %}
+<div class="card shadow-sm fung-card guia-bloco" data-doenca="guia:fontes">
+    <div class="card-body px-2 px-sm-3">
+        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold text-start fung-toggle" data-target="guia-sec-fontes">
+            <span class="toggle-icon">▶</span> Fontes
+        </button>
+        <div class="d-none mt-1 mb-2" id="guia-sec-fontes">
+            <textarea name="guia_fontes" class="form-control form-control-sm auto-grow-textarea" rows="4" aria-label="Fontes"
+                      placeholder="Uma fonte por linha (fecha o PDF)">{{ guia_fontes }}</textarea>
+            <div class="form-text">Uma fonte por linha. Fecha o PDF.</div>
+        </div>
+    </div>
+</div>
 </form>
 {% if fora_do_guia %}
 <form method="post" class="d-flex flex-wrap align-items-center gap-2 mb-3 small" id="form-incluir-guia">
     <input type="hidden" name="monitoramento" value="">
     <input type="hidden" name="monitoramento_objetivo" value="">
+    <input type="hidden" name="monitoramento_fonte" value="">
     <label class="text-muted" for="incluir-guia">+ Incluir doença no guia:</label>
     <select name="monitoramento_key" id="incluir-guia" class="form-select form-select-sm" style="max-width: 18rem;"
             data-auto-enviar="Incluir {nome} no Guia de manejo?">
