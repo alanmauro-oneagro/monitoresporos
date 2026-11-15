@@ -1148,6 +1148,10 @@ site tem que entrar la'.
 - **Abrir pelo icone retoma a janela** (pedido do Alan, 14/11/2026): `static/site.webmanifest` com `id`/`scope` "/" e
   `launch_handler.client_mode` = focus-existing (navigate-existing, auto de reserva) -- vale pro app INSTALADO (Chrome ⋮ ->
   "Instalar app"); atalho comum da tela inicial abre aba nova no navegador de qualquer jeito.
+  **Convite no login** (pedido do Alan, 15/11/2026): caixa `#instalar-app` (so' no celular e fora do app da loja /
+  do app ja' instalado): Android/Chrome usa o `beforeinstallprompt` (botao "Instalar na tela inicial" abre o pedido do
+  navegador); iPhone e quem nao tem o pedido veem o passo a passo. E' o app (icone), nao widget -- widget de verdade so'
+  com o app nativo da loja (`mobile/`).
 - **3 estacoes oficiais mais proximas** (pedido do Alan, 14/11/2026): o seletor da estacao de referencia ('Dados da fazenda'
   em Gerenciar Clientes, pontos so' clima em Recomendações e Manejos) lista 3 estacoes (`estacoes_mais_proximas_global(..., n=3)`
   e o `_lote`), alem de 'Coordenada da propria fazenda' e 'Interpolação das 3'.
