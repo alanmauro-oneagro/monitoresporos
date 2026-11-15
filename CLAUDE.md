@@ -962,30 +962,22 @@ site tem que entrar la'.
   portugues. Doenca que entrou ha' menos de `app.DIAS_DOENCA_NOVA` (3) dias (coluna
   `disease_translations.criado_em`, gravada ao entrar do BioScout ou a mao; as antigas ficam sem
   data) fica em azul escuro (`.doenca-nova`, faixa e fundo azul + selo "Nova"), depois volta ao normal.
-- **Manejo -- protocolo de verificacao em campo** (pedido do Alan, 15/11/2026; aba Manejo e Fungicidas): em cada doenca
-  "🔎 O que verificar em campo" + "🎯 Objetivo da verificação" (tabela `fungicida_monitoramento`, colunas `texto`/`objetivo`,
-  `models.get_all/set_fungicida_monitoramento`, salva sozinho com o resto da aba; entra nas cascatas de fusao/juncao/exclusao).
-  O documento do Alan ("Protocolo de verificação em campo", 20 doencas de soja/milho/algodao + a ficha de inspecao) fica em
-  `protocolo_manejo.py` (`PROTOCOLO` com outros nomes de cada doenca, `REGISTRO_INSPECAO`) e e' gravado UMA vez na doenca do
-  site de mesmo nome (`_semear_monitoramento`, nome sem acento/hifen -- `_chave_doenca`; setting `protocolo_manejo_semeado_v2`
-  -- o v2 preencheu de novo os campos vazios, o guia de producao saiu so' com 2 doencas; apagar nao volta; o texto da 1a versao de Ramulose/Mancha Salmao e' trocado). Botao "📄 Guia de manejo (PDF)"
-  (`guia_manejo_pdf`, `export_pdf.build_guia_manejo_pdf`): faixa por cultura (1a cultura marcada da doenca em
-  Doenças/Culturas, na ordem das culturas do site; sem cultura = "Outras culturas"; doenca do protocolo sem doenca
-  do site com texto preenchido -- nao cadastrada ou com os campos vazios -- entra com o texto do documento, na cultura da
-  doenca do site se houver, senao na do documento -- o guia traz sempre as 20), quadro por doenca com o que verificar
-  (uma frase por item) e o objetivo; secoes numeradas 1., 2., 3. na faixa verde e, no fim, o quadro "Fontes"
-  (`protocolo_manejo.FONTES`: Embrapa Soja/Milho e Sorgo/Algodao, IMA-MT, Fundacao Rio Verde). As secoes fixas do documento
-  (provisorios, modelo da ficha, revisao do cadastro, recomendacao final) SAIRAM do PDF (pedido do Alan, 15/11/2026: "deixar
-  so' os itens 1, 2 e 3 e colocar fontes"). Ainda NAO aparece
-  nas Recomendações/relatorios.
-  **Itens 1, 2, 3 editaveis na aba** (pedido do Alan, 15/11/2026): topo da aba Manejo e Fungicidas = "📘 Guia de manejo"
-  (`#form-guia-manejo`, salva sozinho) com um bloco recolhivel por cultura ("1. Doenças da soja" ..., `.guia-bloco`, o
-  mesmo `.fung-toggle`), cada doenca com "O que verificar em campo" + "Objetivo" -- os campos SAIRAM dos cartoes de
-  fungicida. Blocos e PDF saem do MESMO `_secoes_guia_manejo` (chave = doenca do site ou "protocolo:<nome>" pra doenca do
-  documento ainda nao cadastrada, selo "não cadastrada"; texto gravado vale, mesmo vazio; sem nada gravado = o do
-  documento). `set_fungicida_monitoramento` nao apaga mais a linha vazia (vazio = tirado do PDF de proposito, nao volta).
-  "+ Incluir doença no guia" (select `data-auto-enviar`) poe outra doenca do site no guia. A aba tem auto-ajuste da altura
-  das caixas de texto (`crescer`, ao abrir o bloco e ao digitar) -- a classe `.auto-grow-textarea` sozinha nao cresce.
+- **Guia de manejo -- identificacao precoce** (pedidos do Alan, 15/11/2026; aba Manejo e Fungicidas): topo da aba =
+  "📘 Guia de manejo — identificação precoce" (`#form-guia-manejo`, salva sozinho): bloco "Objetivo da verificação a
+  campo" (setting `guia_objetivo_geral`, um item por linha), um bloco recolhivel por cultura ("1. Doenças da soja"...,
+  `.guia-bloco`/`.fung-toggle`) com, em cada doenca, "🔎 Sintomas iniciais" (um por linha), "🎯 Objetivo da verificação" e
+  "📚 Fonte" (tabela `fungicida_monitoramento`: `texto`/`objetivo`/`fonte`; `models.get_all/set_fungicida_monitoramento`,
+  linha vazia fica gravada = tirada do PDF de proposito) e o bloco "Fontes" (setting `guia_fontes`, uma por linha).
+  Conteudo inicial = pesquisa Embrapa Soja (Doc. 256, 2023)/Milho e Sorgo/Algodao/Fundacao Rio Verde em
+  `protocolo_manejo.py` (`PROTOCOLO` = cultura, nome, outros nomes, sintomas, objetivo, fonte; `OBJETIVO_GERAL`, `FONTES`),
+  gravado UMA vez na doenca do site de mesmo nome (`_semear_monitoramento`, `_chave_doenca`; sem doenca no site =
+  chave "protocolo:<nome>", selo "não cadastrada"; setting `protocolo_manejo_semeado_v3`, que trocou os textos do 1o
+  documento). "+ Incluir doença no guia" poe outra doenca do site. **O PDF sai SO' do que esta' na aba** (botao "📄 Guia
+  de manejo (PDF)", `guia_manejo_pdf` + `_secoes_guia_manejo` -- a MESMA funcao dos blocos; `export_pdf.build_guia_manejo_pdf(
+  secoes, objetivo_geral=, fontes=)`): quadro do objetivo, secoes numeradas por cultura (1a cultura marcada da doenca em
+  Doenças/Culturas; sem cultura, a do guia; fora do guia e sem cultura = "Outras culturas"), um quadro por doenca
+  (sintomas = uma linha por item, `_frases`; objetivo; fonte) e o quadro Fontes. Doenca com os campos vazios nao sai.
+  Ainda NAO aparece nas Recomendações/relatorios. A aba tem auto-ajuste da altura das caixas de texto (`crescer`).
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);

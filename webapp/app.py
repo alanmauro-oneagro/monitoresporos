@@ -6091,45 +6091,39 @@ def admin_doencas():
     )
 
 
-# O que verificar em campo + objetivo, por doenca (pedido do Alan, 15/11/2026): protocolo do
-# documento do Alan (`protocolo_manejo.PROTOCOLO`), gravado 1x na doenca do site de mesmo nome
-# (ou um dos outros nomes; setting `protocolo_manejo_semeado_v2`). Depois disso o Master edita (ou
-# apaga) na aba Manejo e Fungicidas e nada volta sozinho.
-_TEXTOS_ANTIGOS_MONITORAMENTO = {  # 1a versao (so' um campo, com o objetivo junto) -- trocada pelo protocolo
-    "Examinar ponteiros, folhas novas e ramos. Procurar lesões necróticas de aspecto estrelado, encurtamento dos "
-    "entrenós, superbrotamento e deformação dos ponteiros. Identificar infecções iniciais e avaliar o comprometimento "
-    "do crescimento vegetativo e da arquitetura das plantas.",
-    "Inspecionar folhas, pecíolos, hastes e estruturas reprodutivas, procurando lesões com coloração salmão ou "
-    "alaranjada, quando compatíveis com a doença cadastrada. Registrar distribuição e evolução. Identificar sintomas "
-    "suspeitos e avaliar a necessidade de confirmação da identidade do patógeno antes de definir o manejo.",
-}
-
-
+# Guia de manejo -- identificacao precoce (pedido do Alan, 15/11/2026): sintomas iniciais, objetivo e fonte de
+# cada doenca (`protocolo_manejo.PROTOCOLO`, pesquisa Embrapa/Fundacao Rio Verde) gravados UMA vez na doenca do
+# site de mesmo nome (ou um dos outros nomes) e, sem doenca no site, em "protocolo:<nome>" (setting
+# `protocolo_manejo_semeado_v3`, que trocou os textos do 1o documento). Depois disso o que vale e' o que o Master
+# edita na aba Manejo e Fungicidas -- o PDF sai so' do que esta' gravado.
 def _chave_doenca(nome):
     return " ".join(re.sub(r"[-/()]", " ", _chave_alfabetica(nome)).split())
 
 
 def _semear_monitoramento(translations):
-    # v2: uma 2a passada preenche de novo os campos que estavam vazios (o guia de producao saiu so' com 2 doencas)
-    feitos = set(json.loads(models.get_setting("protocolo_manejo_semeado_v2") or "[]"))
+    feitos = set(json.loads(models.get_setting("protocolo_manejo_semeado_v3") or "[]"))
     faltam = [p for p in protocolo_manejo.PROTOCOLO if p[1] not in feitos]
     if not faltam:
         return
-    existentes = models.get_all_fungicida_monitoramento()
     por_chave = {}
     for doenca_en, info in translations.items():
         por_chave.setdefault(_chave_doenca(info.get("nome_pt") or ""), []).append(doenca_en)
-    for _cultura, nome, outros, verificar, objetivo in faltam:
+    for _cultura, nome, outros, sintomas, objetivo, fonte in faltam:
         achadas = [d for n in [nome] + outros for d in por_chave.get(_chave_doenca(n), [])]
-        for doenca_en in achadas:
-            atual = existentes.get(doenca_en) or {}
-            if not atual.get("texto") or atual["texto"] in _TEXTOS_ANTIGOS_MONITORAMENTO:
-                models.set_fungicida_monitoramento(doenca_en, verificar, objetivo)
-            elif not atual.get("objetivo"):
-                models.set_fungicida_monitoramento(doenca_en, atual["texto"], objetivo)
-        if achadas:
-            feitos.add(nome)
-    models.set_setting("protocolo_manejo_semeado_v2", json.dumps(sorted(feitos)))
+        for chave in achadas or [f"protocolo:{nome}"]:
+            models.set_fungicida_monitoramento(chave, sintomas, objetivo, fonte)
+        feitos.add(nome)
+    models.set_setting("protocolo_manejo_semeado_v3", json.dumps(sorted(feitos)))
+
+
+def _guia_objetivo_geral():
+    gravado = models.get_setting("guia_objetivo_geral")
+    return gravado if gravado is not None else "\n".join(protocolo_manejo.OBJETIVO_GERAL)
+
+
+def _guia_fontes():
+    gravado = models.get_setting("guia_fontes")
+    return gravado if gravado is not None else "\n".join(protocolo_manejo.FONTES)
 
 
 def _secoes_guia_manejo(translations):
@@ -6153,9 +6147,10 @@ def _secoes_guia_manejo(translations):
         grav = gravados.get(chave)
         texto = grav["texto"] if grav else (protocolo[3] if protocolo else "")
         objetivo = grav["objetivo"] if grav else (protocolo[4] if protocolo else "")
+        fonte = grav["fonte"] if grav else (protocolo[5] if protocolo else "")
         grupo = culturas[0] if culturas else (protocolo[0] if protocolo else "Outras culturas")
         grupos.setdefault(grupo, []).append({"chave": chave, "nome": nome, "cientifico": cientifico, "texto": texto,
-                                             "objetivo": objetivo, "outras_culturas": culturas[1:]})
+                                             "objetivo": objetivo, "fonte": fonte, "outras_culturas": culturas[1:]})
 
     for d, info in translations.items():
         protocolo = protocolo_por_chave.get(_chave_doenca(info.get("nome_pt") or ""))
@@ -6181,8 +6176,10 @@ def guia_manejo_pdf():
     secoes = [(g, [i for i in itens if i["texto"].strip() or i["objetivo"].strip()])
               for g, itens in _secoes_guia_manejo(_load_translations())]
     agora = weather_forecast._agora_cuiaba()
-    pdf = export_pdf.build_guia_manejo_pdf([(g, itens) for g, itens in secoes if itens], protocolo_manejo,
-                                           agora.strftime("Extraído em %d/%m/%Y %H:%M"))
+    linhas = lambda texto: [l.strip() for l in (texto or "").splitlines() if l.strip()]
+    pdf = export_pdf.build_guia_manejo_pdf([(g, itens) for g, itens in secoes if itens],
+                                           objetivo_geral=linhas(_guia_objetivo_geral()), fontes=linhas(_guia_fontes()),
+                                           extraido_em=agora.strftime("Extraído em %d/%m/%Y %H:%M"))
     return send_file(io.BytesIO(pdf), mimetype="application/pdf", as_attachment=True,
                      download_name=_nome_arquivo("Guia_Manejo", "pdf", com_hora=True))
 
@@ -6236,9 +6233,14 @@ def admin_fungicidas():
         for doenca, nota in zip(request.form.getlist("nota_doenca_key"), request.form.getlist("nota_doenca")):
             models.set_fungicida_nota(doenca, nota.strip())
         objetivos = request.form.getlist("monitoramento_objetivo")
+        fontes = request.form.getlist("monitoramento_fonte")
         for k, (doenca, texto) in enumerate(zip(request.form.getlist("monitoramento_key"), request.form.getlist("monitoramento"))):
             objetivo = objetivos[k].strip() if k < len(objetivos) else None
-            models.set_fungicida_monitoramento(doenca, texto.strip(), objetivo)
+            fonte = fontes[k].strip() if k < len(fontes) else None
+            models.set_fungicida_monitoramento(doenca, texto.strip(), objetivo, fonte)
+        for campo in ("guia_objetivo_geral", "guia_fontes"):
+            if campo in request.form:
+                models.set_setting(campo, request.form[campo].strip())
         translations = _load_translations()
         for doenca, cientifico in zip(request.form.getlist("cientifico_key"), request.form.getlist("cientifico")):
             info = translations.get(doenca)
@@ -6338,6 +6340,7 @@ def admin_fungicidas():
         "admin_fungicidas.html", doencas_data=doencas_data, culturas_ativas=culturas_ativas,
         agrofit=agrofit_dados.status(), secoes_guia=secoes_guia, fora_do_guia=fora_do_guia,
         titulo_secao_guia=export_pdf._titulo_secao_cultura,
+        guia_objetivo_geral=_guia_objetivo_geral(), guia_fontes=_guia_fontes(),
     )
 
 

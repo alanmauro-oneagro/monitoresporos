@@ -1323,16 +1323,6 @@ class ManejoFungicidasTest(unittest.TestCase):
             s["_fresh"] = True
         return c
 
-    def _secoes_pdf(self, c):
-        secoes = {}
-        original = webapp.export_pdf.build_guia_manejo_pdf
-        webapp.export_pdf.build_guia_manejo_pdf = lambda sec, *a, **k: secoes.update(sec) or b"%PDF"
-        try:
-            c.get("/admin/fungicidas/guia-manejo.pdf")
-        finally:
-            webapp.export_pdf.build_guia_manejo_pdf = original
-        return {i["nome"]: i for itens in secoes.values() for i in itens}
-
     def test_blocos_editaveis_e_pdf(self):
         c = self._cliente()
         models.save_disease_translation("Zzz Ramulose En", "Ramulose", "Colletotrichum gossypii")
@@ -1342,35 +1332,52 @@ class ManejoFungicidasTest(unittest.TestCase):
                      "OR doenca LIKE 'protocolo:%'")
         conn.commit()
         conn.close()
-        models.set_fungicida_monitoramento("Zzz Ramulose En", sorted(webapp._TEXTOS_ANTIGOS_MONITORAMENTO)[0], "")
-        models.set_setting("protocolo_manejo_semeado_v2", "[]")
+        models.set_fungicida_monitoramento("Zzz Ramulose En", "Zzz texto antigo do 1o documento.", "Zzz obj antigo")
+        models.set_setting("protocolo_manejo_semeado_v3", "[]")
+        for s_ in ("guia_objetivo_geral", "guia_fontes"):
+            conn = models.get_db(); conn.execute("DELETE FROM app_settings WHERE key = ?", (s_,)); conn.commit(); conn.close()
         try:
             html = c.get("/admin/fungicidas").get_data(as_text=True)
-            self.assertIn("form-guia-manejo", html)
+            self.assertIn("Sintomas iniciais", html)
             self.assertIn("Doenças da soja", html)
-            self.assertIn('value="protocolo:Mancha de Diplodia"', html)  # do documento, sem cadastro: editavel
-            self.assertIn("estrangulamento do colo", html)  # doenca do site com o texto do documento
+            self.assertIn('value="protocolo:Mancha de Diplodia"', html)  # sem doenca no site: editavel
+            self.assertIn("estrangulamento da haste", html)  # pesquisa gravada na doenca do site
+            self.assertIn("Embrapa Soja", html)  # fonte
             dados = models.get_all_fungicida_monitoramento()
-            self.assertTrue(dados["Zzz Ramulose En"]["texto"].startswith("Examinar ponteiros"))
+            self.assertTrue(dados["Zzz Ramulose En"]["texto"].startswith("Manchas necróticas circulares"))  # v3 trocou o antigo
+            self.assertEqual(dados["Zzz Ramulose En"]["fonte"], "Embrapa Algodão")
             r = c.post("/admin/fungicidas", headers={"X-Autosave": "1"}, data={
                 "monitoramento_key": ["Zzz Ramulose En", "protocolo:Mancha de Diplodia", "Zzz Rhizo En"],
-                "monitoramento": ["Zzz olhar ponteiros.", "Zzz olhar colmo.", ""],
-                "monitoramento_objetivo": ["Zzz objetivo.", "", ""]})
+                "monitoramento": ["Zzz linha 1\nZzz linha 2", "Zzz olhar colmo.", ""],
+                "monitoramento_objetivo": ["Zzz objetivo.", "", ""],
+                "monitoramento_fonte": ["Zzz fonte", "", ""],
+                "guia_objetivo_geral": "Zzz objetivo geral 1\nZzz objetivo geral 2",
+                "guia_fontes": "Zzz Fonte A"})
             self.assertTrue(r.get_json()["ok"])
             self.assertEqual(models.get_all_fungicida_monitoramento()["Zzz Ramulose En"],
-                             {"texto": "Zzz olhar ponteiros.", "objetivo": "Zzz objetivo."})
-            itens = self._secoes_pdf(c)
+                             {"texto": "Zzz linha 1\nZzz linha 2", "objetivo": "Zzz objetivo.", "fonte": "Zzz fonte"})
+            chamada = {}
+            original = webapp.export_pdf.build_guia_manejo_pdf
+            webapp.export_pdf.build_guia_manejo_pdf = lambda sec, **k: chamada.update(k, secoes=sec) or b"%PDF"
+            try:
+                c.get("/admin/fungicidas/guia-manejo.pdf")
+            finally:
+                webapp.export_pdf.build_guia_manejo_pdf = original
+            itens = {i["nome"]: i for _, lista in chamada["secoes"] for i in lista}
             self.assertEqual(itens["Mancha de Diplodia"]["texto"], "Zzz olhar colmo.")
             self.assertNotIn("Rhizoctonia", itens)  # apagada no bloco: sai do PDF e nao volta
-            self.assertEqual(models.get_all_fungicida_monitoramento()["Zzz Rhizo En"]["texto"], "")
+            self.assertEqual(chamada["objetivo_geral"], ["Zzz objetivo geral 1", "Zzz objetivo geral 2"])
+            self.assertEqual(chamada["fontes"], ["Zzz Fonte A"])
+            self.assertEqual(webapp.export_pdf._frases("Zzz linha 1\nZzz linha 2"), ["Zzz linha 1", "Zzz linha 2"])
             pdf = c.get("/admin/fungicidas/guia-manejo.pdf")
             self.assertEqual(pdf.mimetype, "application/pdf")
-            self.assertIn("no-store", pdf.headers["Cache-Control"])  # o navegador reabria o PDF antigo por 12 h
+            self.assertIn("no-store", pdf.headers["Cache-Control"])
         finally:
             models.delete_disease_translation("Zzz Ramulose En")
             models.delete_disease_translation("Zzz Rhizo En")
             conn = models.get_db()
             conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca LIKE 'protocolo:%'")
+            conn.execute("DELETE FROM app_settings WHERE key IN ('guia_objetivo_geral', 'guia_fontes')")
             conn.commit()
             conn.close()
         self.assertNotIn("Zzz Ramulose En", models.get_all_fungicida_monitoramento())
