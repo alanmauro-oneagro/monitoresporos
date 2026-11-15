@@ -1261,3 +1261,30 @@ class NivelAcaoTest(unittest.TestCase):
             texto = webapp._format_whatsapp_message("Zzz Acao", doencas, weather={"previsao_5_dias": []}, produtos={})
         self.assertIn("Ação: 🔴 Preparar aplicação", texto)
         self.assertIn("Ação: 🟢 Monitorar", texto)
+
+
+class RegrasNivelAcaoTelaTest(unittest.TestCase):
+    """Regras do nivel de acao editaveis em Doenças/Culturas (pedido do Alan, 15/11/2026)."""
+
+    def test_salvar_regras(self):
+        if not models.get_user_by_username("Zzz Master Regras"):
+            models.create_user("Zzz Master Regras", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Regras")["id"])
+            s["_fresh"] = True
+        self.assertIn("form-nivel-acao", c.get("/admin/doencas").get_data(as_text=True))
+        dados = {"dias": "2", "acao_Perigo_0": "preparar", "acao_Perigo_1": "preparar", "acao_Atencao_0": "acompanhar",
+                 "acao_Atencao_1": "monitorar", "acao_Normal_0": "monitorar", "acao_Normal_1": "monitorar",
+                 "rotulo_preparar": "Aplicar já", "texto_preparar": "Zzz texto novo"}
+        r = c.post("/admin/doencas/nivel-acao", data=dados, headers={"X-Autosave": "1"})
+        self.assertTrue(r.get_json()["ok"])
+        prev = [{"risco": "vermelho"}, {"risco": "vermelho"}, {"risco": "verde"}, {"risco": "verde"}, {"risco": "verde"}]
+        with webapp.app.test_request_context():
+            acao = webapp._nivel_acao("Perigo", prev)
+        self.assertEqual((acao["chave"], acao["rotulo"], acao["texto"]), ("preparar", "Aplicar já", "Zzz texto novo"))
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._nivel_acao("Perigo", prev[2:])["chave"], "preparar")  # sem os dias tambem preparar
+        models.set_setting("regras_nivel_acao", "{}")
+        with webapp.app.test_request_context():
+            self.assertEqual(webapp._nivel_acao("Perigo", prev)["chave"], "acompanhar")  # volta ao padrao (3 dias)

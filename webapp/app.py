@@ -1353,18 +1353,49 @@ NIVEIS_ACAO = {
 }
 
 
+CONCENTRACOES_ACAO = [("Perigo", "Alta"), ("Atencao", "Média"), ("Normal", "Baixa")]
+_MATRIZ_ACAO_PADRAO = {"Perigo": ["preparar", "acompanhar"], "Atencao": ["acompanhar", "monitorar"],
+                       "Normal": ["monitorar", "monitorar"]}
+
+
+def _regras_nivel_acao():
+    """Regras editaveis em Doenças/Culturas > "Nível de ação" (pedido do Alan, 15/11/2026; setting
+    `regras_nivel_acao`): dias de risco alto, nivel de cada concentracao (com/sem os dias) e texto de cada nivel."""
+    cache = None
+    try:
+        cache = getattr(g, "_regras_nivel_acao", None)
+    except RuntimeError:
+        pass
+    if cache is not None:
+        return cache
+    try:
+        gravado = json.loads(models.get_setting("regras_nivel_acao") or "{}")
+    except (TypeError, ValueError):
+        gravado = {}
+    dias = gravado.get("dias")
+    regras = {
+        "dias": dias if isinstance(dias, int) and 1 <= dias <= 5 else DIAS_RISCO_ALTO_PARA_ACAO,
+        "matriz": {c: [v if v in NIVEIS_ACAO else p for v, p in zip((gravado.get("matriz") or {}).get(c) or padrao, padrao)]
+                   for c, padrao in _MATRIZ_ACAO_PADRAO.items()},
+        "niveis": {k: {**v, **{campo: ((gravado.get("niveis") or {}).get(k) or {}).get(campo) or v[campo]
+                               for campo in ("rotulo", "texto")}} for k, v in NIVEIS_ACAO.items()},
+    }
+    try:
+        g._regras_nivel_acao = regras
+    except RuntimeError:
+        pass
+    return regras
+
+
 def _nivel_acao(status, previsao_risco):
-    """Alta + 3 de 5 dias de risco alto = preparar; alta com menos dias de risco alto, ou media + 3 de 5 = acompanhar;
-    media com menos dias de risco alto, ou baixa = monitorar."""
+    """Concentracao (Perigo = alta, Atencao = media, resto = baixa) x dias de risco ALTO nos 5 da previsao, pelas
+    regras de Doenças/Culturas (padrao do Alan: alta + 3 dias = preparar; alta com menos ou media + 3 = acompanhar;
+    o resto = monitorar)."""
+    regras = _regras_nivel_acao()
     altos = sum(1 for p in (previsao_risco or [])[:5] if p.get("risco") == "vermelho")
-    risco_alto = altos >= DIAS_RISCO_ALTO_PARA_ACAO
-    if status == "Perigo":
-        chave = "preparar" if risco_alto else "acompanhar"
-    elif status == "Atencao":
-        chave = "acompanhar" if risco_alto else "monitorar"
-    else:
-        chave = "monitorar"
-    return {"chave": chave, "dias_alto": altos, **NIVEIS_ACAO[chave]}
+    linha = regras["matriz"].get(status if status in ("Perigo", "Atencao") else "Normal")
+    chave = linha[0] if altos >= regras["dias"] else linha[1]
+    return {"chave": chave, "dias_alto": altos, **regras["niveis"][chave]}
 
 
 def _com_nivel_acao(diseases):
@@ -6027,7 +6058,8 @@ def admin_doencas():
         for d in doencas
     ]
     return render_template(
-        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, ufs_br=UFS_BR, culturas=culturas,
+        "admin_doencas.html", doencas=doencas, culturas_ativas=culturas_ativas, ufs_br=UFS_BR, regras_acao=_regras_nivel_acao(),
+        niveis_acao=NIVEIS_ACAO, concentracoes_acao=CONCENTRACOES_ACAO, culturas=culturas,
         grupos_cultura=GRUPOS_CULTURA,
         tipo_cultura=[_grupo_da_cultura(c) if c else "" for c in culturas],
         paises=paises, matriz_paises=matriz_paises, fusoes=models.get_fusoes_doencas(),
@@ -6550,6 +6582,23 @@ def _pesquisa_germinacao_por_cientifico(nome_cientifico):
         if palavra in _PESQUISA_GERMINACAO:
             return palavra, _PESQUISA_GERMINACAO[palavra]
     return None, None
+
+
+@app.route("/admin/doencas/nivel-acao", methods=["POST"])
+@aba_required("doencas")
+def admin_nivel_acao_salvar():
+    """Regras do nivel de acao (Preparar aplicação / Acompanhar / Monitorar), salvas sozinhas."""
+    f = request.form
+    try:
+        dias = min(5, max(1, int(f.get("dias", DIAS_RISCO_ALTO_PARA_ACAO))))
+    except ValueError:
+        dias = DIAS_RISCO_ALTO_PARA_ACAO
+    matriz = {c: [f.get(f"acao_{c}_{i}") if f.get(f"acao_{c}_{i}") in NIVEIS_ACAO else _MATRIZ_ACAO_PADRAO[c][i]
+                  for i in (0, 1)] for c in _MATRIZ_ACAO_PADRAO}
+    niveis = {k: {"rotulo": " ".join(f.get(f"rotulo_{k}", "").split())[:40] or v["rotulo"],
+                  "texto": " ".join(f.get(f"texto_{k}", "").split())[:300] or v["texto"]} for k, v in NIVEIS_ACAO.items()}
+    models.set_setting("regras_nivel_acao", json.dumps({"dias": dias, "matriz": matriz, "niveis": niveis}, ensure_ascii=False))
+    return _save_response("Regras do nível de ação salvas.", "admin_doencas")
 
 
 @app.route("/admin/doencas/buscar-germinacao", methods=["POST"])
