@@ -917,6 +917,10 @@ site tem que entrar la'.
   Calculado depois do `previsao_risco` em `_preparar_relatorio`, `recommendations` e na rota do PDF; as doencas saem
   ordenadas pela urgencia. Aparece no selo ao lado da doenca em Recomendações, na linha "👉 Ação: ..." do texto
   (WhatsApp/app) e no PDF (`export_pdf._COR_ACAO`). Sem previsao = conta 0 dias altos.
+  **Regras editaveis** (pedido do Alan, 15/11/2026): Doenças/Culturas > "Nível de ação (urgência de aplicação)"
+  (`#form-nivel-acao`, salva sozinho, rota `admin_nivel_acao_salvar`, setting `regras_nivel_acao`): dias de risco alto
+  (1-5), o nivel de cada concentracao Alta/Media/Baixa com e sem esses dias, e o nome + orientacao de cada nivel.
+  `_regras_nivel_acao` le (cache em `g`); vazio = o padrao acima.
 - **BioScout 403 na contagem de esporos** (pedido do Alan, 14/11/2026): uma fazenda sem permissao na conta derrubava a
   busca de TODAS (uma chamada so' com todos os `SiteIds`). Agora `bioscout_fetch._contagens` levanta `_SemPermissao`
   (401/403 com 2+ fazendas) e `fetch_recent` busca fazenda por fazenda; as recusadas aparecem no aviso do Alertas

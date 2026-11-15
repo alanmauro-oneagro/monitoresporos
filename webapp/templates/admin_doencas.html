@@ -179,6 +179,45 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
 {% endif %}
 {% endif %}
 
+{# Regras do nivel de acao (pedido do Alan, 15/11/2026): o relatorio (tela, WhatsApp e PDF) le daqui. #}
+<h6 class="mb-2 mt-4">Nível de ação (urgência de aplicação)</h6>
+<form method="post" action="{{ url_for('admin_nivel_acao_salvar') }}" data-autosave class="card shadow-sm mb-2" id="form-nivel-acao">
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <label class="small" for="dias-acao">Risco alto de infecção em pelo menos</label>
+            <input type="number" min="1" max="5" name="dias" id="dias-acao" value="{{ regras_acao.dias }}" class="form-control form-control-sm" style="width: 4.5rem;">
+            <span class="small">de 5 dias</span>
+        </div>
+        <div class="table-responsive">
+        <table class="table table-sm align-middle mb-2">
+            <thead><tr><th>Esporos</th><th>Com os dias</th><th>Sem os dias</th></tr></thead>
+            <tbody>
+            {% for chave_c, rotulo_c in concentracoes_acao %}
+            <tr>
+                <td class="fw-semibold">{{ rotulo_c }}</td>
+                {% for i in [0, 1] %}
+                <td><select name="acao_{{ chave_c }}_{{ i }}" class="form-select form-select-sm" style="min-width: 8.5rem;" aria-label="{{ rotulo_c }} {{ 'com' if i == 0 else 'sem' }} os dias">
+                    {% for k, n in niveis_acao.items() %}<option value="{{ k }}" {% if regras_acao.matriz[chave_c][i] == k %}selected{% endif %}>{{ n.emoji }} {{ regras_acao.niveis[k].rotulo }}</option>{% endfor %}
+                </select></td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <div class="small fw-semibold mb-1">Nome e orientação de cada nível</div>
+        {% for k, n in niveis_acao.items() %}
+        <div class="row g-2 mb-2">
+            <div class="col-12 col-md-3"><div class="input-group input-group-sm"><span class="input-group-text">{{ n.emoji }}</span>
+                <input type="text" name="rotulo_{{ k }}" value="{{ regras_acao.niveis[k].rotulo }}" class="form-control" maxlength="40" aria-label="Nome do nível"></div></div>
+            <div class="col-12 col-md-9"><textarea name="texto_{{ k }}" rows="2" class="form-control form-control-sm" maxlength="300" aria-label="Orientação do nível">{{ regras_acao.niveis[k].texto }}</textarea></div>
+        </div>
+        {% endfor %}
+        <div class="small text-muted mt-1">Vale nas Recomendações, no texto do WhatsApp/app e no PDF de todas as fazendas.</div>
+        <span class="autosave-status small"></span>
+    </div>
+</form>
+
 <h6 class="mb-2 mt-4">Culturas</h6>
 <form method="post" data-autosave class="card shadow-sm mb-2" id="form-culturas">
     <input type="hidden" name="form_id" value="matriz_culturas">
