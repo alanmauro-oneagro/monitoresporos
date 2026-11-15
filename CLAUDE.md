@@ -978,6 +978,14 @@ site tem que entrar la'.
   provisório" + aviso), "Ficha de inspeção (modelo)" (`FICHA_EXEMPLO`, ferrugem da soja), "Melhoria do banco de dados"
   (`REVISAO_*`) e "Recomendação final"; secoes numeradas 1., 2., ... na faixa verde. Ainda NAO aparece
   nas Recomendações/relatorios.
+  **Itens 1, 2, 3 editaveis na aba** (pedido do Alan, 15/11/2026): topo da aba Manejo e Fungicidas = "📘 Guia de manejo"
+  (`#form-guia-manejo`, salva sozinho) com um bloco recolhivel por cultura ("1. Doenças da soja" ..., `.guia-bloco`, o
+  mesmo `.fung-toggle`), cada doenca com "O que verificar em campo" + "Objetivo" -- os campos SAIRAM dos cartoes de
+  fungicida. Blocos e PDF saem do MESMO `_secoes_guia_manejo` (chave = doenca do site ou "protocolo:<nome>" pra doenca do
+  documento ainda nao cadastrada, selo "não cadastrada"; texto gravado vale, mesmo vazio; sem nada gravado = o do
+  documento). `set_fungicida_monitoramento` nao apaga mais a linha vazia (vazio = tirado do PDF de proposito, nao volta).
+  "+ Incluir doença no guia" (select `data-auto-enviar`) poe outra doenca do site no guia. A aba tem auto-ajuste da altura
+  das caixas de texto (`crescer`, ao abrir o bloco e ao digitar) -- a classe `.auto-grow-textarea` sozinha nao cresce.
 - **Anotacao padrao por doenca** (Biblioteca de fungicidas, tabela
   `fungicida_nota_doenca`): vale nas Recomendacoes/texto/PDF de toda
   fazenda SEM anotacao propria daquela doenca (`_build_site_diseases`);
