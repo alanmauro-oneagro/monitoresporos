@@ -52,7 +52,8 @@ STORE_PATH = DATA_DIR / "open_meteo_diario.json"
 HORARIOS_LEITURA = ((4, 45), (11, 45), (17, 45))  # (hora, minuto) de Cuiaba
 DIAS_HISTORICO_GUARDADOS = 400
 _HOURLY_CAMPOS = "temperature_2m,relative_humidity_2m,precipitation,wind_direction_10m"
-_DAILY_CAMPOS = "precipitation_sum,temperature_2m_max,temperature_2m_min,cloud_cover_mean,precipitation_probability_max"
+_DAILY_CAMPOS = ("precipitation_sum,temperature_2m_max,temperature_2m_min,cloud_cover_mean,precipitation_probability_max,"
+                 "wind_direction_10m_dominant,wind_speed_10m_max")
 # Chuva prevista dos relatorios = media de 3 modelos globais (pedido do Alan, 13/11/2026): a media
 # erra menos que um modelo so'. Sem resposta, fica o modelo padrao (best_match) da leitura normal.
 MODELOS_CHUVA = ("ecmwf_ifs025", "gfs_seamless", "icon_seamless")
@@ -433,6 +434,8 @@ def get_weather_forecast(lat, lon):
     tmin = daily.get("temperature_2m_min", [])
     nuvens = daily.get("cloud_cover_mean", [])
     probabilidade = daily.get("precipitation_probability_max", [])
+    vento_dir = daily.get("wind_direction_10m_dominant", [])
+    vento_kmh = daily.get("wind_speed_10m_max", [])
     media_modelos = registro.get("chuva_modelos") or {}
     previsao = []
     chuva_hoje_mm = chuva_hoje_prob = None
@@ -450,6 +453,9 @@ def get_weather_forecast(lat, lon):
             "temp_max": tmax[i] if i < len(tmax) else None,
             "temp_min": tmin[i] if i < len(tmin) else None,
             "nuvens_pct": nuvens[i] if i < len(nuvens) else None,
+            # Vento do dia (sequencia de aplicacao no PDF, pedido do Alan, 16/11/2026).
+            "vento_dir": vento_dir[i] if i < len(vento_dir) else None,
+            "vento_kmh": vento_kmh[i] if i < len(vento_kmh) else None,
         })
 
     # Previsao horaria por dia -- usada pro risco de germinacao previsto
@@ -529,6 +535,8 @@ def get_weather_forecast_interpolado(coords_list):
             "temp_max": _media([d["temp_max"] for d in dias_i]),
             "temp_min": _media([d["temp_min"] for d in dias_i]),
             "nuvens_pct": _media([d["nuvens_pct"] for d in dias_i]),
+            "vento_dir": dias_i[0].get("vento_dir"),
+            "vento_kmh": _media([d.get("vento_kmh") for d in dias_i]),
         })
 
     ultimas_24h = _media_por_horario([r["ultimas_24h"] for r in resultados], ["temp", "umidade", "chuva"])

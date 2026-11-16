@@ -2014,9 +2014,23 @@ def _build_site_pdf(
         mostrar_secao_doencas=mostrar_secao_doencas, anotacao=anotacao,
         riscos_climaticos=riscos_climaticos, titulo_fazenda=_whatsapp_titulo(site),
         data_relatorio=weather_forecast._agora_cuiaba().strftime("%d/%m/%Y"),
+        guias=_guias_relatorio(),
     )
     filename = _nome_arquivo("Relatorio", "pdf", nome_fazenda)
     return nome_fazenda, filename, buffer.getvalue()
+
+
+def _guias_relatorio():
+    """{doenca_en: {texto, objetivo, fonte}} do Guia de manejo (os mesmos itens da aba Manejo e Fungicidas) pro
+    "Sintomas iniciais / Objetivo da verificação" do PDF da fazenda (pedido do Alan, 16/11/2026)."""
+    guias = getattr(g, "_guias_relatorio", None)
+    if guias is None:
+        guias = {i["chave"]: i for _, itens in _secoes_guia_manejo(_load_translations()) for i in itens}
+        try:
+            g._guias_relatorio = guias
+        except RuntimeError:
+            pass
+    return guias
 
 
 def _preparar_relatorio(site, safra=None):

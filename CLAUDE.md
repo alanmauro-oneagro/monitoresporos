@@ -776,6 +776,20 @@ site tem que entrar la'.
   selos "📎 N CAR" e "🛰️ N" ao lado; abertos lembrados no navegador (`ndvi.abertas`), com pre-visualizacao pendente
   ja' abre. Coordenadas em destaque abaixo do nome (`.coords-fazenda`, pilula verde, link pro Google Maps). Anexar
   CAR salva sozinho (escolher o arquivo ou sair do campo do KML; sem botao).
+- **PDF da fazenda no modelo "Monitoramento e Manejo"** (pedido do Alan, 16/11/2026; substitui o layout antigo --
+  vale no botao PDF, envio por WhatsApp e app; `export_pdf.build_recommendation_pdf`): faixa azul no topo; RESUMO DA
+  SEMANA (Entrar com aplicação / Acompanhar / Monitorar + chuva, dia com menos chuva, vento); CLIMA NA FAZENDA (temp.,
+  umidade, chuva hoje com %, 24 h, acumulado; tabela dos 5 dias com mm, PROBABILIDADE, vento do dia -- `vento_dir`/
+  `vento_kmh` em `previsao_5_dias`, campos `wind_direction_10m_dominant`/`wind_speed_10m_max` da Open-Meteo -- e
+  "Janela p/ pulverizar": Boa < 5 mm e < 80%, Possível ate' 10 mm, Difícil > 10 mm); ROSA DOS VENTOS E SEQUÊNCIA DE
+  APLICAÇÃO (rosa dos 30 dias + croqui com faixas 1-4 a partir do lado de onde vem o vento, `_croqui_aplicacao`);
+  1. ENTRAR COM APLICAÇÃO e 2. ACOMPANHAR (cartao por doenca pelo nivel de acao: risco dos 5 dias, sintomas iniciais e
+  objetivo do Guia de manejo -- `app._guias_relatorio` = itens de `_secoes_guia_manejo` --, referencias de pesquisa,
+  anotacao da fazenda e o grafico de esporos SO' nas de alta concentracao/Perigo); 3. MONITORAR = quadro de
+  favorabilidade (doencas em Monitorar + riscos climaticos); PLANO DE ACOMPANHAMENTO E MANEJO: o que fazer na proxima
+  visita, produtos de folha por aplicacao, datas de plantio/pulverizacao e criterio de decisao. Sem registro de campo.
+  Ponto so' clima/estacao sem leitura (`mostrar_secao_doencas=False`): so' resumo, clima, vento e favorabilidade.
+  Teste `PdfMonitoramentoManejoTest`.
 - **Produtos de folha por data de aplicacao** (pedido do Alan, 16/11/2026): Recomendações (secao "Folha (aplicação
   foliar)", um bloco "📅 25DAP" por aplicacao), texto/WhatsApp ("📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*") e PDF (tabela
   Aplicação | Químicos | Biológicos) agrupam os produtos da secao Folha de Manejos pela data (`models.produtos_por_data`:

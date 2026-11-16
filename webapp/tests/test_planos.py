@@ -1475,3 +1475,52 @@ class ProdutosFolhaPorDataTest(unittest.TestCase):
         self.assertIn("*25DAP:*\n⚗️ Alade\n🧪 Vult", texto)
         pdf = export_pdf.build_recommendation_pdf("Zzz Teste Folha", "Safra", [], produtos=produtos)
         self.assertTrue(pdf.getvalue()[:4] == b"%PDF")
+
+
+class PdfMonitoramentoManejoTest(unittest.TestCase):
+    """PDF da fazenda no modelo "Monitoramento e Manejo" (pedido do Alan, 16/11/2026)."""
+
+    def test_secoes(self):
+        import shutil
+        import subprocess
+        import export_pdf
+        prev = [{"data_fmt": f"{16 + i}/11", "risco": "vermelho"} for i in range(5)]
+        doencas = [
+            {"doenca": "Antracnose", "doenca_en": "Anthracnose", "rotulo": "Antracnose", "status": "Perigo",
+             "previsao_risco": prev, "acao": {"chave": "preparar", "rotulo": "Preparar aplicação", "texto": "Prepare."},
+             "biologicos": {"itens": [{"ingrediente": "Trichoderma spp."}], "fonte": "Embrapa -- x"}, "quimicos": None,
+             "classe_label": {}, "historico": [], "nota": "Nota da fazenda"},
+            {"doenca": "Ferrugem", "doenca_en": "Soybean Rust", "rotulo": "Ferrugem", "status": "Atencao",
+             "previsao_risco": prev, "acao": {"chave": "acompanhar", "rotulo": "Acompanhar", "texto": "Acompanhe."},
+             "biologicos": None, "quimicos": None, "classe_label": {}, "historico": []},
+        ]
+        riscos = [{"doenca_en": "Target Spot", "rotulo": "Mancha-alvo", "previsao_risco": prev,
+                   "acao": {"chave": "monitorar", "rotulo": "Monitorar", "texto": ""}}]
+        weather = {"temperatura_atual": 24.5, "umidade_atual": 90, "chuva_hoje_mm": 3.0, "chuva_hoje_prob": 70,
+                   "chuva_24h_mm": 10,
+                   "previsao_5_dias": [{"data": f"2026-11-{16 + i}", "chuva_mm": 2.0 + i * 4, "chuva_prob": 60 + i * 5,
+                                        "vento_dir": 45, "vento_kmh": 12} for i in range(5)],
+                   "vento_30d": {"codigo": "NE", "nome": "Nordeste",
+                                 "percentuais": {"N": 20, "NE": 40, "E": 10, "SE": 5, "S": 5, "SW": 5, "W": 5, "NW": 10}}}
+        guias = {"Anthracnose": {"texto": "Manchas negras nas nervuras.\nVagens escuras.", "objetivo": "Achar cedo.",
+                                 "fonte": "Embrapa Soja (2023)"}}
+        produtos = {"quimico": [{"nome": "Alade", "data_anotacao": "25DAP"}], "biologico": []}
+        pdf = export_pdf.build_recommendation_pdf("Zzz PDF", "Safra", doencas, weather=weather, produtos=produtos,
+                                                  cultura="Soja", riscos_climaticos=riscos, guias=guias,
+                                                  data_relatorio="15/11/2026").getvalue()
+        self.assertEqual(pdf[:4], b"%PDF")
+        if not shutil.which("pdftotext"):
+            return
+        texto = subprocess.run(["pdftotext", "-", "-"], input=pdf, capture_output=True).stdout.decode()
+        for trecho in ("RESUMO DA SEMANA", "1. ENTRAR COM APLICAÇÃO", "2. ACOMPANHAR", "3. MONITORAR",
+                       "ROSA DOS VENTOS", "Comece pelos talhões do lado Nordeste", "Probabilidade de chuva",
+                       "Janela p/ pulverizar", "Sintomas iniciais a procurar", "Manchas negras nas nervuras",
+                       "PLANO DE ACOMPANHAMENTO E MANEJO", "PRODUTOS DE FOLHA POR APLICAÇÃO", "25DAP",
+                       "Nota da fazenda", "CRITÉRIO PARA DECIDIR"):
+            self.assertIn(trecho, texto)
+
+    def test_ponto_so_clima(self):
+        import export_pdf
+        pdf = export_pdf.build_recommendation_pdf("Zzz Clima", "Safra", [], weather={"temperatura_atual": 20},
+                                                  mostrar_secao_doencas=False).getvalue()
+        self.assertEqual(pdf[:4], b"%PDF")
