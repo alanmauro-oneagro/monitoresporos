@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import unicodedata
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from flask import g, has_app_context
@@ -2249,6 +2250,36 @@ def set_farm_produtos(site_name, safra, momento, tipo, linhas):
     conn.commit()
     conn.close()
 
+
+
+def produtos_por_data(produtos):
+    """Produtos de folha agrupados pela data de aplicacao (pedido do Alan, 16/11/2026): [{"data", "quimico": [...],
+    "biologico": [...]}], na ordem das aplicacoes -- "25DAP" pelo numero, data pelo dia, texto livre depois e sem data
+    por ultimo. Cada item = {"nome", "ingrediente_ativo"}."""
+    grupos = {}
+    for tipo in TIPOS_PRODUTO:
+        for p in (produtos or {}).get(tipo) or []:
+            nome = (p.get("nome") or "").strip()
+            if not nome:
+                continue
+            data = (p.get("data_anotacao") or "").strip()
+            g = grupos.setdefault(re.sub(r"\s+", "", data.lower()), {"data": data, "quimico": [], "biologico": []})
+            g[tipo].append({"nome": nome, "ingrediente_ativo": (p.get("ingrediente_ativo") or "").strip()})
+
+    def chave(g):
+        d = g["data"]
+        if not d:
+            return (3, 0, "")
+        dap = re.match(r"^\s*(\d+)\s*(dap|dae|dias?)\b", d, re.I)
+        if dap:
+            return (0, int(dap.group(1)), d)
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y"):
+            try:
+                return (1, datetime.strptime(d, fmt).toordinal(), d)
+            except ValueError:
+                pass
+        return (2, 0, d.lower())
+    return sorted(grupos.values(), key=chave)
 
 def set_farm_produtos_caixas(site_name, safra, momento, caixas):
     """TS/Sulco/Folha em boxes (pedido do Alan, 12/11/2026): cada box =

@@ -1437,3 +1437,41 @@ class DoencasEManejoVinculosTest(unittest.TestCase):
             conn.execute("DELETE FROM fungicida_monitoramento WHERE doenca LIKE 'protocolo:%'")
             conn.commit()
             conn.close()
+
+
+class ProdutosFolhaPorDataTest(unittest.TestCase):
+    """Produtos de folha agrupados pela data de aplicacao (pedido do Alan, 16/11/2026)."""
+
+    def test_agrupa_e_ordena(self):
+        import models
+        produtos = {
+            "quimico": [{"nome": "Cypress", "data_anotacao": "85DAP"}, {"nome": "Alade", "data_anotacao": "25DAP"},
+                        {"nome": "Mancozebe", "data_anotacao": "55DAP"}, {"nome": "Fox Supra", "data_anotacao": "55 DAP"},
+                        {"nome": "", "data_anotacao": "10DAP"}, {"nome": "Bravonil", "data_anotacao": ""}],
+            "biologico": [{"nome": "Vult", "data_anotacao": "25DAP", "ingrediente_ativo": "Bacillus subtilis"}],
+        }
+        grupos = models.produtos_por_data(produtos)
+        self.assertEqual([g["data"] for g in grupos], ["25DAP", "55DAP", "85DAP", ""])
+        self.assertEqual([p["nome"] for p in grupos[0]["quimico"]], ["Alade"])
+        self.assertEqual([p["nome"] for p in grupos[1]["quimico"]], ["Mancozebe", "Fox Supra"])
+        self.assertEqual(grupos[0]["biologico"][0]["ingrediente_ativo"], "Bacillus subtilis")
+        datas = models.produtos_por_data({"quimico": [{"nome": "B", "data_anotacao": "20/12/2026"},
+                                                       {"nome": "A", "data_anotacao": "05/11/2026"}]})
+        self.assertEqual([g["data"] for g in datas], ["05/11/2026", "20/12/2026"])
+
+    def test_texto_e_pdf(self):
+        import app as app_mod
+        import export_pdf
+        produtos = {"quimico": [{"nome": "Alade", "data_anotacao": "25DAP"}, {"nome": "Cypress", "data_anotacao": "85DAP"}],
+                    "biologico": [{"nome": "Vult", "data_anotacao": "25DAP"}]}
+        with app_mod.app.test_request_context():
+            doencas = [{"doenca": "A", "rotulo": "A", "status": "Perigo", "previsao_risco": [],
+                        "biologicos": None, "quimicos": None, "classe_label": {}}]
+            app_mod._com_nivel_acao(doencas)
+            texto = app_mod._format_whatsapp_message("Zzz Teste Folha", doencas, weather={"previsao_5_dias": []},
+                                                      produtos=produtos)
+        self.assertIn("*PRODUTOS DE FOLHA POR APLICAÇÃO*", texto)
+        self.assertLess(texto.index("*25DAP:*"), texto.index("*85DAP:*"))
+        self.assertIn("*25DAP:*\n⚗️ Alade\n🧪 Vult", texto)
+        pdf = export_pdf.build_recommendation_pdf("Zzz Teste Folha", "Safra", [], produtos=produtos)
+        self.assertTrue(pdf.getvalue()[:4] == b"%PDF")

@@ -776,6 +776,11 @@ site tem que entrar la'.
   selos "📎 N CAR" e "🛰️ N" ao lado; abertos lembrados no navegador (`ndvi.abertas`), com pre-visualizacao pendente
   ja' abre. Coordenadas em destaque abaixo do nome (`.coords-fazenda`, pilula verde, link pro Google Maps). Anexar
   CAR salva sozinho (escolher o arquivo ou sair do campo do KML; sem botao).
+- **Produtos de folha por data de aplicacao** (pedido do Alan, 16/11/2026): Recomendações (secao "Folha (aplicação
+  foliar)", um bloco "📅 25DAP" por aplicacao), texto/WhatsApp ("📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*") e PDF (tabela
+  Aplicação | Químicos | Biológicos) agrupam os produtos da secao Folha de Manejos pela data (`models.produtos_por_data`:
+  "25DAP" pelo numero, "55 DAP" = "55DAP", data pelo dia, texto livre depois, sem data por ultimo). Teste
+  `ProdutosFolhaPorDataTest`.
 - **Manejos -- TS/Sulco/Folha em boxes** (pedido do Alan, 12/11/2026): cada secao recolhida
   (▶, `.secao-toggle`, numero de boxes preenchidas ao lado) com boxes iguais a Aplicacoes: Data
   aplicacao, Talhao, Fungicidas quimicos, Fungicidas biologicos (campos `cx_*_<momento>`); 1 box
