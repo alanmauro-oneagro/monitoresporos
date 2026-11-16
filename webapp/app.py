@@ -1773,16 +1773,12 @@ def _format_whatsapp_message(
         lines += ["", _WHATSAPP_SEPARADOR, "📝 *ANOTAÇÕES*"]
         lines += [f"• *{rotulo}:* {nota.strip()}" for rotulo, nota in anotacoes]
 
-    produtos = produtos or {}
     linhas_produtos = []
-    for tipo, titulo, emoji in (("biologico", "Biológicos", "🧪"), ("quimico", "Químicos", "⚗️")):
-        nomes = [
-            f"{p['nome']} ({p['data_anotacao']})" if p.get("data_anotacao") else p["nome"]
-            for p in (produtos.get(tipo) or []) if p.get("nome")
-        ]
-        if nomes:
-            linhas_produtos.append(f"{emoji} {titulo}: {', '.join(nomes)}")
-    lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DISPONÍVEIS NA FAZENDA*"]
+    for grupo in models.produtos_por_data(produtos):
+        linhas_produtos.append(f"*{grupo['data'] or 'Sem data'}:*")
+        for tipo, emoji in (("quimico", "⚗️"), ("biologico", "🧪")):
+            linhas_produtos += [f"{emoji} {p['nome']}" for p in grupo[tipo]]
+    lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*"]
     lines += linhas_produtos or ["Nenhum produto cadastrado."]
 
     lines += ["", f"_{_AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
@@ -4449,6 +4445,7 @@ def recommendations(safra):
             "weather": weather,
             "leitura_data": leitura_data,
             "produtos_folha": produtos_folha,
+            "produtos_folha_por_data": models.produtos_por_data(produtos_folha),
             "cultura": cultura_info.get("cultura") or "",
             "dias_desde_atualizacao": dias_desde_atualizacao,
             "dias_sem_leitura": dias_sem_leitura,

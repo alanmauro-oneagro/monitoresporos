@@ -665,20 +665,19 @@ def build_recommendation_pdf(
             ]))
             story.append(Spacer(1, 4))
 
-        produtos_fazenda = produtos or {}
-        # Secao vazia (sem produto/plantio/pulverizacao cadastrado) nao entra
-        # no relatorio.
-        conteudo = []
-        for tipo, titulo in (("biologico", "Biologicos"), ("quimico", "Quimicos")):
-            partes = [
-                f"{p['nome']} ({p['data_anotacao']})" if p.get("data_anotacao") else p["nome"]
-                for p in (produtos_fazenda.get(tipo) or []) if p.get("nome")
-            ]
-            if partes:
-                conteudo.append(Paragraph(f"<b>{titulo}:</b> {', '.join(partes)}", _ESTILO_NORMAL))
-        if conteudo:
-            story.append(Paragraph("Produtos ja disponiveis na fazenda", _ESTILO_SECAO))
-            story.append(_caixa(conteudo, fundo=CINZA_CLARO))
+        # Produtos de folha agrupados pela data de aplicacao (pedido do Alan, 16/11/2026). Secao vazia (sem
+        # produto/plantio/pulverizacao cadastrado) nao entra no relatorio.
+        grupos = models.produtos_por_data(produtos)
+        if grupos:
+            def _itens(lista):
+                return "<br/>".join(
+                    f"<b>{escape(p['nome'])}</b>" + (f" ({escape(p['ingrediente_ativo'])})" if p["ingrediente_ativo"] else "")
+                    for p in lista
+                ) or "-"
+            rows = [[g["data"] or "Sem data", Paragraph(_itens(g["quimico"]), _ESTILO_NORMAL),
+                     Paragraph(_itens(g["biologico"]), _ESTILO_NORMAL)] for g in grupos]
+            story.append(Paragraph("Produtos de folha por aplicação", _ESTILO_SECAO))
+            story.append(_tabela_padrao(["Aplicação", "Químicos", "Biológicos"], rows, [2.6 * cm, 7.6 * cm, 6.7 * cm]))
 
         plantio = [l for l in (plantio_linhas or []) if any(l.values())]
         if plantio:
