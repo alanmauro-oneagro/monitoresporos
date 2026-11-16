@@ -790,6 +790,11 @@ site tem que entrar la'.
   visita, produtos de folha por aplicacao, datas de plantio/pulverizacao e criterio de decisao. Sem registro de campo.
   Ponto so' clima/estacao sem leitura (`mostrar_secao_doencas=False`): so' resumo, clima, vento e favorabilidade.
   Teste `PdfMonitoramentoManejoTest`.
+  **Probabilidade de chuva sempre** (pedido do Alan, 16/11/2026): a linha aparece sempre (sem dado = "-"); quando a
+  leitura principal da Open-Meteo cai no MET Norway (sem probabilidade) ou falha, `weather_forecast._extras_do_dia`
+  busca so' probabilidade + vento do dia (daily leve, 1x por janela, `registro["extras_dia"]`/`extras_janela`) e
+  `get_weather_forecast` completa os dias com ela; a previsao do SMN (`_aplicar_previsao_orgao`) tambem leva o vento.
+  Teste `ProbabilidadeChuvaTest`.
 - **Produtos de folha por data de aplicacao** (pedido do Alan, 16/11/2026): Recomendações (secao "Folha (aplicação
   foliar)", um bloco "📅 25DAP" por aplicacao), texto/WhatsApp ("📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*") e PDF (tabela
   Aplicação | Químicos | Biológicos) agrupam os produtos da secao Folha de Manejos pela data (`models.produtos_por_data`:

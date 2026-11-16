@@ -122,13 +122,28 @@ def _ponto(lat, lon, salvar=True):
     ou None se nunca teve nada."""
     chave = _chave(lat, lon)
     dia = janela_de_leitura()
+    precisa_extras = False
     with _lock:
         registro = _carregar()["pontos"].get(chave)
         # Leitura guardada antes da media de modelos/probabilidade (13/11/2026) nao tem
         # "chuva_modelos": busca de novo 1 vez, sem esperar a proxima janela.
         atual = registro and "chuva_modelos" in registro
         if registro and ((registro.get("dia") == dia and atual) or _falhou_ha_pouco(registro)):
-            return registro if registro.get("horas") else None
+            precisa_extras = (registro.get("horas") and not registro.get("extras_dia")
+                              and registro.get("extras_janela") != dia
+                              and not all((registro.get("daily") or {}).get(c) for c in _CAMPOS_EXTRAS_DIA))
+            if not precisa_extras:
+                return registro if registro.get("horas") else None
+    if precisa_extras:
+        # Leitura da janela sem probabilidade/vento do dia (MET Norway, falha ou formato antigo): busca so' esses
+        # (busca leve, 1x por janela).
+        extras = _extras_do_dia(lat, lon)
+        with _lock:
+            registro = dict(registro, extras_dia=extras or {}, extras_janela=dia)
+            _store["pontos"][chave] = registro
+            if salvar:
+                _salvar()
+        return registro
     params = {
         "latitude": lat, "longitude": lon,
         "hourly": _HOURLY_CAMPOS, "daily": _DAILY_CAMPOS,
@@ -161,17 +176,38 @@ def _ponto(lat, lon, salvar=True):
             return registro if registro.get("horas") else None
 
     chuva_modelos = (_chuva_media_modelos(lat, lon) if fonte == "Open-Meteo" else None) or (registro or {}).get("chuva_modelos")
+    extras_dia = {}
+    if not all(daily.get(c) for c in _CAMPOS_EXTRAS_DIA):
+        extras_dia = _extras_do_dia(lat, lon) or (registro or {}).get("extras_dia") or {}
     corte = (datetime.now() - timedelta(days=DIAS_HISTORICO_GUARDADOS)).strftime("%Y-%m-%d")
     with _lock:
         horas = dict((registro or {}).get("horas") or {})
         horas.update(novas)
         horas = {t: v for t, v in horas.items() if t >= corte}
         registro = {"dia": dia, "horas": horas, "daily": daily, "utc_offset": utc_offset, "fonte": fonte,
-                    "chuva_modelos": chuva_modelos}
+                    "chuva_modelos": chuva_modelos, "extras_dia": extras_dia, "extras_janela": dia}
         _store["pontos"][chave] = registro
         if salvar:
             _salvar()
     return registro
+
+
+_CAMPOS_EXTRAS_DIA = ("precipitation_probability_max", "wind_direction_10m_dominant", "wind_speed_10m_max")
+
+
+def _extras_do_dia(lat, lon):
+    """{campo: {"YYYY-MM-DD": valor}} da probabilidade de chuva e do vento do dia numa busca leve (so' daily, sem
+    historico) -- a leitura principal pesada as vezes cai no MET Norway, que nao tem probabilidade, e o relatorio
+    ficava sem ela (pedido do Alan, 16/11/2026). None em falha."""
+    params = {"latitude": lat, "longitude": lon, "daily": ",".join(_CAMPOS_EXTRAS_DIA), "forecast_days": 7,
+              "timezone": "auto"}
+    try:
+        daily = _abrir_json(f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}", timeout=30).get("daily", {})
+    except Exception:
+        return None
+    saida = {c: {dia: v for dia, v in zip(daily.get("time", []), daily.get(c) or []) if v is not None}
+             for c in _CAMPOS_EXTRAS_DIA}
+    return saida if any(saida.values()) else None
 
 
 def _chuva_media_modelos(lat, lon):
@@ -436,6 +472,11 @@ def get_weather_forecast(lat, lon):
     probabilidade = daily.get("precipitation_probability_max", [])
     vento_dir = daily.get("wind_direction_10m_dominant", [])
     vento_kmh = daily.get("wind_speed_10m_max", [])
+    extras = registro.get("extras_dia") or {}
+
+    def _do_dia(lista, campo, i):
+        valor = lista[i] if i < len(lista) else None
+        return valor if valor is not None else (extras.get(campo) or {}).get(dias[i])
     media_modelos = registro.get("chuva_modelos") or {}
     previsao = []
     chuva_hoje_mm = chuva_hoje_prob = None
@@ -443,19 +484,19 @@ def get_weather_forecast(lat, lon):
         if dias[i] == hoje:
             # Chuva prevista pro dia de hoje (pedido do Alan, 13/11/2026: substitui "Chuva agora").
             chuva_hoje_mm = media_modelos.get(hoje, chuva[i] if i < len(chuva) else None)
-            chuva_hoje_prob = probabilidade[i] if i < len(probabilidade) else None
+            chuva_hoje_prob = _do_dia(probabilidade, "precipitation_probability_max", i)
         if dias[i] <= hoje:
             continue
         previsao.append({
             "data": dias[i],
             "chuva_mm": media_modelos.get(dias[i], chuva[i] if i < len(chuva) else None),
-            "chuva_prob": probabilidade[i] if i < len(probabilidade) else None,
+            "chuva_prob": _do_dia(probabilidade, "precipitation_probability_max", i),
             "temp_max": tmax[i] if i < len(tmax) else None,
             "temp_min": tmin[i] if i < len(tmin) else None,
             "nuvens_pct": nuvens[i] if i < len(nuvens) else None,
             # Vento do dia (sequencia de aplicacao no PDF, pedido do Alan, 16/11/2026).
-            "vento_dir": vento_dir[i] if i < len(vento_dir) else None,
-            "vento_kmh": vento_kmh[i] if i < len(vento_kmh) else None,
+            "vento_dir": _do_dia(vento_dir, "wind_direction_10m_dominant", i),
+            "vento_kmh": _do_dia(vento_kmh, "wind_speed_10m_max", i),
         })
 
     # Previsao horaria por dia -- usada pro risco de germinacao previsto
