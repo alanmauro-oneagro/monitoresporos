@@ -500,7 +500,7 @@ def _clima_da_fazenda(weather):
                   f'<font color="#1c5fa8"><b>{_fmt(d.get("chuva_mm"))} mm</b></font>', _E_CENTRO) for d in previsao]]
     estilo = [("GRID", (0, 0), (-1, -1), 0.4, _LINHA_TAB), ("BACKGROUND", (0, 0), (-1, 0), CINZA_CLARO),
               ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]
-    if any(isinstance(d.get("chuva_prob"), (int, float)) for d in previsao):
+    if previsao:  # sempre (pedido do Alan, 16/11/2026); sem o dado = "-"
         linhas.append([Paragraph("Probabilidade de chuva", _E_PEQ)] + [Paragraph(
             f"<b>{d['chuva_prob']:.0f}%</b>" if isinstance(d.get("chuva_prob"), (int, float)) else "-", _E_CENTRO)
             for d in previsao])

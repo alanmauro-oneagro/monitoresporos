@@ -400,7 +400,7 @@ def _aplicar_previsao_orgao(data, previsao):
                 "chuva": round((chuva or 0) / 3, 2),
             })
     nuvens_open_meteo = {d["data"]: d.get("nuvens_pct") for d in data.get("previsao_5_dias") or []}
-    prob_open_meteo = {d["data"]: d.get("chuva_prob") for d in data.get("previsao_5_dias") or []}
+    dias_open_meteo = {d["data"]: d for d in data.get("previsao_5_dias") or []}
     previsao_5_dias = []
     for dia in sorted(d for d in por_dia if d > hoje)[:5]:
         pontos = [previsao[h] for h in previsao if h[:10] == dia]
@@ -410,7 +410,9 @@ def _aplicar_previsao_orgao(data, previsao):
             "temp_max": max(p[0] for p in pontos),
             "temp_min": min(p[0] for p in pontos),
             "nuvens_pct": nuvens_open_meteo.get(dia),
-            "chuva_prob": prob_open_meteo.get(dia),
+            "chuva_prob": dias_open_meteo.get(dia, {}).get("chuva_prob"),
+            "vento_dir": dias_open_meteo.get(dia, {}).get("vento_dir"),
+            "vento_kmh": dias_open_meteo.get(dia, {}).get("vento_kmh"),
         })
     data["previsao_horaria_por_dia"] = por_dia
     data["previsao_5_dias"] = previsao_5_dias

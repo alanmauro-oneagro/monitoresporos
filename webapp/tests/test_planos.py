@@ -1524,3 +1524,35 @@ class PdfMonitoramentoManejoTest(unittest.TestCase):
         pdf = export_pdf.build_recommendation_pdf("Zzz Clima", "Safra", [], weather={"temperatura_atual": 20},
                                                   mostrar_secao_doencas=False).getvalue()
         self.assertEqual(pdf[:4], b"%PDF")
+
+
+class ProbabilidadeChuvaTest(unittest.TestCase):
+    """Probabilidade de chuva sempre no relatorio, mesmo com a previsao principal no MET Norway (16/11/2026)."""
+
+    def test_met_norway_com_probabilidade(self):
+        from unittest import mock
+        from datetime import timedelta
+        import weather_forecast as wf
+        hoje = wf._agora_cuiaba().date()
+        dias = [(hoje + timedelta(days=i)).isoformat() for i in range(7)]
+        horas = {f"{d}T{h:02d}:00": [25, 90, 0.5, 45] for d in dias for h in range(24)}
+        horas.update({f"{(hoje - timedelta(days=1)).isoformat()}T{h:02d}:00": [25, 90, 0.5, 45] for h in range(24)})
+        daily_met = {"time": dias, "precipitation_sum": [3.0] * 7}
+
+        def abrir(url, timeout=30):
+            if "past_days" in url or "models=" in url:
+                raise OSError("limite")
+            return {"daily": {"time": dias, "precipitation_probability_max": [10, 20, 30, 40, 50, 60, 70],
+                              "wind_direction_10m_dominant": [45] * 7, "wind_speed_10m_max": [12] * 7}}
+        antigo = wf._store
+        wf._store = {"pontos": {}, "grades": {}, "estacoes": {}, "previsoes": {}, "ultima_rodada": None}
+        try:
+            with mock.patch.object(wf, "_abrir_json", side_effect=abrir), \
+                    mock.patch.object(wf, "_met_norway", return_value=(horas, daily_met)), \
+                    mock.patch.object(wf, "_salvar"):
+                r = wf.get_weather_forecast(-10.5, -54.5)
+        finally:
+            wf._store = antigo
+        self.assertEqual([d["chuva_prob"] for d in r["previsao_5_dias"]], [20, 30, 40, 50, 60])
+        self.assertEqual(r["chuva_hoje_prob"], 10)
+        self.assertEqual(r["previsao_5_dias"][0]["vento_dir"], 45)
