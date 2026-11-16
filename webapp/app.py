@@ -1719,7 +1719,7 @@ def _format_whatsapp_message(
     if por_acao["preparar"] or por_acao["acompanhar"]:
         lines += ["", _WHATSAPP_SEPARADOR, "", "*RECOMENDAÇÕES*:"]
     if por_acao["preparar"]:
-        lines += ["", "🔴 *1. ENTRAR COM APLICAÇÃO*:"]
+        lines += ["", "🔴 *ENTRAR COM APLICAÇÃO*:"]
         for d in por_acao["preparar"]:
             lines += ["", f"🍄 *{d['rotulo']}*" + (f" ({d['cientifico']})" if d.get("cientifico") else "")]
             biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
@@ -1733,7 +1733,7 @@ def _format_whatsapp_message(
             if (d.get("nota") or "").strip():
                 lines += ["", f"*Sugestão OneAgro*: {d['nota'].strip()}"]
     if por_acao["acompanhar"]:
-        lines += ["", "🟡 *2. ACOMPANHAR*"]
+        lines += ["", "🟡 *ACOMPANHAR*"]
         lines += [nome(d, negrito=False) for d in por_acao["acompanhar"]]
 
     lines += ["", _WHATSAPP_SEPARADOR, "✅ Antes de aplicar: confirme estádio, sintomas no campo, registro e bula do produto."]
