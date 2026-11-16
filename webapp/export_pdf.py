@@ -635,7 +635,7 @@ def _cartao_doenca(d, guia, fontes_pesquisadas):
         esquerda.append(Paragraph(f'<b>Sintomas iniciais a procurar</b><br/>{_itens_lista(guia["texto"])}', _E_PEQ))
     if (d.get("nota") or "").strip():
         esquerda += [Spacer(1, 3), Paragraph(
-            "<b>Anotação</b><br/>" + escape(d["nota"].strip()).replace("\n", "<br/>"), _E_PEQ)]
+            "<b>Sugestão OneAgro</b><br/>" + escape(d["nota"].strip()).replace("\n", "<br/>"), _E_PEQ)]
     direita = []
     if guia and (guia.get("objetivo") or "").strip():
         direita += [Paragraph(f'<b>Objetivo da verificação</b><br/>{escape(guia["objetivo"].strip())}', _E_PEQ),
@@ -826,7 +826,7 @@ def build_recommendation_pdf(
     notas += [Paragraph(f"<b>{escape(d['rotulo'])}:</b> " + escape(d["nota"].strip()).replace("\n", "<br/>"), _E_PEQ)
               for d in doencas_por_acao["monitorar"] if (d.get("nota") or "").strip()]
     if notas:
-        story += [KeepTogether([Paragraph("ANOTAÇÕES", _E_SECAO), _quadro(notas)])]
+        story += [KeepTogether([Paragraph("SUGESTÃO ONEAGRO", _E_SECAO), _quadro(notas)])]
 
     plano = _visita(doencas_por_acao["preparar"] + doencas_por_acao["acompanhar"], monitorar, guias) \
         if mostrar_secao_doencas else []

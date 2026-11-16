@@ -213,10 +213,10 @@
         </div>
         {% endfor %}
         <div class="mt-2">
-            <label class="form-label small fw-bold mb-1" for="nota_doenca_{{ loop.index0 }}">Anotações</label>
+            <label class="form-label small fw-bold mb-1" for="nota_doenca_{{ loop.index0 }}">Sugestão OneAgro</label>
             <input type="hidden" name="nota_doenca_key" value="{{ d.doenca }}">
             <textarea name="nota_doenca" id="nota_doenca_{{ loop.index0 }}" class="form-control form-control-sm auto-grow-textarea" rows="2"
-                      placeholder="Vale para todas as fazendas sem anotacao propria dessa doenca na aba Recomendacoes...">{{ d.nota }}</textarea>
+                      placeholder="Vale para todas as fazendas sem sugestão própria dessa doença (aba Manejos)...">{{ d.nota }}</textarea>
         </div>
         </div>
     </div>

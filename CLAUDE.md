@@ -810,6 +810,11 @@ site tem que entrar la'.
   com sintomas iniciais + objetivo do Guia, anotacao, referencias); 3. Monitorar = favorabilidade (doencas em Monitorar
   + riscos climaticos); Plano de acompanhamento e manejo (o que fazer na proxima visita, produtos por aplicacao,
   plantio/pulverizacao, criterio recolhido em <details>).
+- **"Sugestão OneAgro" no lugar de "Anotações"** (pedido do Alan, 16/11/2026): nome visivel da anotacao por doenca
+  em Manejos ("Sugestão OneAgro por doença"), Manejo e Fungicidas (padrao por doenca), Recomendações ("📝 Sugestão
+  OneAgro:" no cartao e o bloco das doencas em Monitorar), texto ("📝 *Sugestão OneAgro:*") e PDF ("Sugestão OneAgro"
+  no cartao, secao "SUGESTÃO ONEAGRO"). Codigo/tabelas continuam `nota`/`recommendation_notes`; a "Anotação" do ponto
+  so' clima nao mudou.
 - **Produtos de folha por data de aplicacao** (pedido do Alan, 16/11/2026): Recomendações (secao "Folha (aplicação
   foliar)", um bloco "📅 25DAP" por aplicacao), texto/WhatsApp ("📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*") e PDF (tabela
   Aplicação | Químicos | Biológicos) agrupam os produtos da secao Folha de Manejos pela data (`models.produtos_por_data`:

@@ -202,7 +202,7 @@
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn acao-copiar"
                         data-text="{{ site_group.whatsapp_text }}"
-                        title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- copia so' o clima{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e anotacoes) pra colar manualmente no WhatsApp{% endif %}">
+                        title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- copia so' o clima{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e sugestões OneAgro) pra colar manualmente no WhatsApp{% endif %}">
                     📋 <span class="d-none d-sm-inline">Copiar recomendacao</span><span class="d-sm-none">Copiar texto</span>
                 </button>
                 {% if not wa_ok %}
@@ -365,7 +365,7 @@
                 {% if row.guia.objetivo %}<div class="col-md-5"><div class="fw-bold">🎯 Objetivo da verificação</div>{{ row.guia.objetivo }}</div>{% endif %}
             </div>
             {% endif %}
-            {% if row.nota %}<div class="small mt-1"><strong>📝 Anotação:</strong> {{ row.nota }}</div>{% endif %}
+            {% if row.nota %}<div class="small mt-1"><strong>📝 Sugestão OneAgro:</strong> {{ row.nota }}</div>{% endif %}
             {% if (row.quimicos and row.quimicos.itens) or (row.biologicos and row.biologicos.itens) %}
             <div class="mt-2">
                 <label class="form-label small fw-bold mb-1">Recomendações das Instituições de Pesquisa</label>
@@ -387,7 +387,7 @@
         {% set notas = site_group.por_acao.monitorar | selectattr('nota') | list %}
         {% if notas %}
         <div class="mt-3 pt-3 border-top">
-            <label class="form-label small fw-bold d-block mb-1">Anotações <a href="{{ url_for('fazendas') }}" class="fw-normal text-muted small">(editar em Manejos)</a></label>
+            <label class="form-label small fw-bold d-block mb-1">Sugestão OneAgro <a href="{{ url_for('fazendas') }}" class="fw-normal text-muted small">(editar em Manejos)</a></label>
             <div class="small">
                 {% for row in notas %}
                 <div><strong class="text-uppercase">{{ row.rotulo }}:</strong> {{ row.nota }}</div>

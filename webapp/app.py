@@ -1750,7 +1750,7 @@ def _format_whatsapp_message(
                 if objetivo:
                     lines.append(f"🎯 {objetivo}")
             if (d.get("nota") or "").strip():
-                lines.append(f"📝 *Anotação:* {d['nota'].strip()}")
+                lines.append(f"📝 *Sugestão OneAgro:* {d['nota'].strip()}")
 
     grupos = models.produtos_por_data(produtos)
     if grupos:
