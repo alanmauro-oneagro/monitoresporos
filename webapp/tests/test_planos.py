@@ -1274,7 +1274,7 @@ class NivelAcaoTest(unittest.TestCase):
         self.assertEqual([d["rotulo"] for d in doencas], ["A", "B"])
         with webapp.app.test_request_context():
             texto = webapp._format_whatsapp_message("Zzz Acao", doencas, weather={"previsao_5_dias": []}, produtos={})
-        self.assertIn("🔴 *1. ENTRAR COM APLICAÇÃO*:", texto)
+        self.assertIn("🔴 *ENTRAR COM APLICAÇÃO*:", texto)
         self.assertIn("⚠️ *DOENÇAS EM ATENÇÃO / PERIGO*", texto)
         self.assertIn("🍄 *B*", texto)  # na lista de doencas em atencao
         self.assertNotIn(" B", texto.split("*RECOMENDAÇÕES*")[1])  # Monitorar fica fora das recomendacoes

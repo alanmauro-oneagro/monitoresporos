@@ -813,8 +813,8 @@ site tem que entrar la'.
 - **Texto do WhatsApp no padrao do Alan** (16/11/2026; substitui o texto "Resumo da semana" acima): `*FAZENDA*` /
   RELATÓRIO DE MONITORAMENTO E MANEJO / ONEAGRO - data / Cultura: *SOJA* / ━━(20) -> 🌦️ CLIMA NA FAZENDA (temp.,
   umidade, chuva hoje + Previsão de chuva com %) -> ━━ -> ⚠️ *DOENÇAS EM ATENÇÃO / PERIGO* (🍄 nome (cientifico), Esporos no
-  ar, Risco de infecção "🔴 17/11 · ...") -> ━━ -> *RECOMENDAÇÕES*: 🔴 *1. ENTRAR COM APLICAÇÃO*: (nome, *Biológicos*/
-  *Químicos*, *Sugestão OneAgro*) e 🟡 *2. ACOMPANHAR* (so' os nomes) -> ━━ -> ✅ Antes de aplicar -> rodape `_RODAPE_TEXTO`
+  ar, Risco de infecção "🔴 17/11 · ...") -> ━━ -> *RECOMENDAÇÕES*: 🔴 *ENTRAR COM APLICAÇÃO*: (sem numero, 16/11; nome, *Biológicos*/
+  *Químicos*, *Sugestão OneAgro*) e 🟡 *ACOMPANHAR* (so' os nomes) -> ━━ -> ✅ Antes de aplicar -> rodape `_RODAPE_TEXTO`
   (aviso + "Quer ter essa ferramenta... entre em contato com:" + "*OneAgro: (43)99114-7595*"). Sem sintomas/objetivo
   e sem produtos de folha no texto (ficam no PDF/tela). `_cabecalho_relatorio_cliente` = as 2 linhas abaixo do nome;
   `_juntar_relatorios` poe o topo 1 vez e cada fazenda comecando pelo nome. Sem doenca: clima + "✅ Nenhuma doença em
