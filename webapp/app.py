@@ -1590,11 +1590,15 @@ _SEP_RELATORIO = "━" * 20
 
 
 def _cabecalho_relatorio_cliente():
-    """Topo do relatorio (WhatsApp e aba Relatorios do app; formato do Alan,
-    08/11/2026, tudo em negrito): ━━ / *RELATÓRIO DE MONITORAMENTO* /
-    *ONEAGRO - dd/mm/aaaa*."""
+    """Linhas do topo do relatorio de texto (WhatsApp e aba Relatorios do app) que vem logo abaixo do nome da
+    fazenda (padrao do Alan, 16/11/2026)."""
     hoje = weather_forecast._agora_cuiaba().strftime("%d/%m/%Y")
-    return [_SEP_RELATORIO, "*RELATÓRIO DE MONITORAMENTO E MANEJO*", f"*ONEAGRO - {hoje}*"]
+    return ["RELATÓRIO DE MONITORAMENTO E MANEJO", f"ONEAGRO - {hoje}"]
+
+
+# Rodape do texto (padrao do Alan, 16/11/2026); o PDF continua com `CONTATO_RELATORIO` numa linha.
+_RODAPE_TEXTO = ["", export_pdf.AVISO_AGRONOMO, "Quer ter essa ferramenta para sua lavoura, entre em contato com:",
+                 "*OneAgro: (43)99114-7595*"]
 
 
 def _whatsapp_titulo(site):
@@ -1640,16 +1644,12 @@ def _format_whatsapp_message(
     mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
     vento_dia=None, ponto_clima=False,
 ):
-    """Relatorio da fazenda numa mensagem de texto (WhatsApp e aba Relatorios do app), no modelo
-    "Monitoramento e Manejo" do PDF (pedido do Alan, 16/11/2026): topo -> cultura/validade -> RESUMO DA SEMANA ->
-    CLIMA NA FAZENDA (+ previsao de chuva com probabilidade) -> 1. ENTRAR COM APLICAÇÃO (esporos, risco, acao,
-    o que olhar e objetivo do Guia de manejo, referencias) -> 2. ACOMPANHAR (esporos, risco, 1 sintoma, objetivo)
-    -> PRODUTOS DE FOLHA POR APLICAÇÃO -> "Antes de aplicar" -> aviso/contato. Doenca em Monitorar, vento,
-    sequencia e janela de aplicacao ficam so' no PDF. Sem doenca pra aplicar/acompanhar: so' o clima e o aviso
-    (`mostrar_secao_doencas=False` tira o aviso; `ponto_clima=True` tira o rodape). `plantio_linhas`,
-    `aplicacoes_linhas`, `riscos_climaticos`, `vento_dia`, `is_virtual`, `safra_label` e `leitura_bioscout`
-    sao aceitos e ignorados."""
-    _AVISO_AGRONOMO = AVISO_AGRONOMO
+    """Relatorio da fazenda numa mensagem de texto (WhatsApp e aba Relatorios do app), no padrao do Alan
+    (16/11/2026): *FAZENDA* / RELATÓRIO DE MONITORAMENTO E MANEJO / ONEAGRO - data / Cultura -> CLIMA NA FAZENDA
+    (+ previsao de chuva com probabilidade) -> DOENÇAS EM ATENÇÃO / PERIGO (esporos e risco de cada uma) ->
+    RECOMENDAÇÕES: 1. ENTRAR COM APLICAÇÃO (referencias + Sugestão OneAgro), 2. ACOMPANHAR (so' o nome) ->
+    "Antes de aplicar" -> rodape (`_RODAPE_TEXTO`). Sem doenca: clima + aviso (`mostrar_secao_doencas=False`
+    tira o aviso; `ponto_clima=True` tira o rodape). Os demais parametros sao aceitos e ignorados."""
 
     def _linhas_clima():
         """Clima agora + previsao de chuva (sem min/max, igual a tela/PDF)
@@ -1667,12 +1667,11 @@ def _format_whatsapp_message(
             if weather.get("chuva_hoje_mm") is not None:
                 partes.append(f"🌧️ {_num_br(weather['chuva_hoje_mm'])} mm hoje (prev.)"
                               + _prob_chuva({"chuva_prob": weather.get("chuva_hoje_prob")}))
-            linhas.append("🌦️ *CLIMA NA FAZENDA*")
+            linhas.append("🌦️ CLIMA NA FAZENDA")
             if partes:
                 linhas.append(" · ".join(partes))
             if weather.get("previsao_5_dias"):
-                linhas.append("")
-                linhas.append("*Previsão de chuva:*")
+                linhas.append("Previsão de chuva:")
                 linhas.extend(_linhas_previsao_chuva(weather["previsao_5_dias"]))
         # "Última leitura BioScout" saiu do texto (pedido do Alan, 10/11/2026).
         if anotacao:
@@ -1683,14 +1682,13 @@ def _format_whatsapp_message(
     # Modelo "Monitoramento e Manejo" (pedido do Alan, 16/11/2026, igual ao PDF): resumo da semana, clima, 1. Entrar
     # com aplicação, 2. Acompanhar, produtos de folha por aplicação. Doenca em Monitorar nao entra no texto (fica no
     # quadro de favorabilidade do PDF/tela); vento, sequencia e janela de aplicacao tambem so' no PDF.
-    cabecalho = _cabecalho_relatorio_cliente() + ["", f"*{_whatsapp_titulo(site)}*", _SEP_RELATORIO]
-    previsao = (weather or {}).get("previsao_5_dias") or []
+    # Padrao do Alan (16/11/2026): nome da fazenda, topo, cultura, clima, DOENÇAS EM ATENÇÃO / PERIGO (esporos e
+    # risco de cada uma), RECOMENDAÇÕES (1. Entrar com aplicação: referencias + Sugestão OneAgro; 2. Acompanhar: so'
+    # o nome) e rodape.
+    cabecalho = [f"*{_whatsapp_titulo(site)}*"] + _cabecalho_relatorio_cliente()
     if cultura:
-        linha = " / ".join(p.strip().capitalize() for p in cultura.split("/") if p.strip())
-        if previsao:
-            linha += f" · válido de {previsao[0]['data'][8:10]}/{previsao[0]['data'][5:7]} a " \
-                     f"{previsao[-1]['data'][8:10]}/{previsao[-1]['data'][5:7]}"
-        cabecalho += [f"*{linha}*", ""]
+        cabecalho.append(f"Cultura: *{cultura.upper()}*")
+    cabecalho.append(_SEP_RELATORIO)
 
     por_acao = {"preparar": [], "acompanhar": []}
     for d in diseases or []:
@@ -1698,70 +1696,48 @@ def _format_whatsapp_message(
         if chave in por_acao:
             por_acao[chave].append(d)
 
-    if not (por_acao["preparar"] or por_acao["acompanhar"]):
-        partes = cabecalho + _linhas_clima()
+    def nome(d, negrito=True):
+        texto = f"{d['rotulo']} ({d['cientifico']})" if d.get("cientifico") else d["rotulo"]
+        return f"🍄 *{texto}*" if negrito else f"🍄 {texto}"
+
+    lines = cabecalho + _linhas_clima()
+    if not diseases:
         if mostrar_secao_doencas:
-            partes += ["", "✅ Nenhuma doença para entrar com aplicação ou acompanhar nesta fazenda no momento."]
-        if not ponto_clima:
-            partes += ["", f"_{_AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
-        return "\n".join(partes)
+            lines += ["", "✅ Nenhuma doença em atenção ou perigo nesta fazenda no momento."]
+        return "\n".join(lines + ([] if ponto_clima else _RODAPE_TEXTO))
 
-    lines = cabecalho + ["📌 *RESUMO DA SEMANA*"]
-    for chave, emoji, rotulo in (("preparar", "🔴", "Entrar com aplicação"), ("acompanhar", "🟡", "Acompanhar")):
-        if por_acao[chave]:
-            lines.append(f"{emoji} *{rotulo}:* " + ", ".join(d["rotulo"] for d in por_acao[chave]))
-    lines += [""] + _linhas_clima()
+    lines += [_WHATSAPP_SEPARADOR, "", "⚠️ *DOENÇAS EM ATENÇÃO / PERIGO*"]
+    for d in diseases:
+        lines += ["", nome(d), f"Esporos no ar: {_QUANTIDADE_ESPOROS.get(d['status'], d['status'])}"]
+        previsao_risco = d.get("previsao_risco")
+        if previsao_risco:
+            lines.append("Risco de infecção: " + " · ".join(
+                f"{_RISCO_EMOJI.get(p['risco'], '⚪')} {p['data_fmt']}" for p in previsao_risco))
+        elif _risco_label(d.get("risco")):
+            lines.append(f"Risco de infecção: {_RISCO_EMOJI.get(d.get('risco'), '')} {_risco_label(d.get('risco'))}")
 
-    guias = _guias_relatorio()
-    for chave, titulo in (("preparar", "🔴 *1. ENTRAR COM APLICAÇÃO*"), ("acompanhar", "🟡 *2. ACOMPANHAR*")):
-        if not por_acao[chave]:
-            continue
-        lines += ["", _WHATSAPP_SEPARADOR, titulo]
-        for d in por_acao[chave]:
-            nome = f"*{d['rotulo']}*" + (f" ({d['cientifico']})" if d.get("cientifico") else "")
-            lines += ["", nome, f"Esporos no ar: {_QUANTIDADE_ESPOROS.get(d['status'], d['status'])}"]
-            previsao_risco = d.get("previsao_risco")
-            if previsao_risco:
-                lines.append("Risco de infecção: " + " · ".join(
-                    f"{p['data_fmt']} {_RISCO_EMOJI.get(p['risco'], '⚪')}" for p in previsao_risco))
-            elif _risco_label(d.get("risco")):
-                lines.append(f"Risco de infecção: {_RISCO_EMOJI.get(d.get('risco'), '')} {_risco_label(d.get('risco'))}")
-            guia = guias.get(d.get("doenca_en")) or {}
-            sintomas = [s for s in export_pdf._frases(guia.get("texto") or "") if s.strip()] if (guia.get("texto") or "").strip() else []
-            objetivo = (guia.get("objetivo") or "").strip()
-            if chave == "preparar":
-                lines.append(f"👉 *Ação:* {d['acao']['texto']}")
-                if sintomas:
-                    lines.append("🔎 *O que olhar na lavoura:*")
-                    lines += [f"• {s}" for s in sintomas[:2]]
-                if objetivo:
-                    lines.append(f"🎯 *Objetivo:* {objetivo}")
-                biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
-                quimicos_itens = d["quimicos"]["itens"][:3] if d.get("quimicos") else None
-                if biologicos_itens or quimicos_itens:
-                    lines.append("📚 *Referências de pesquisa:*")
-                if biologicos_itens:
-                    lines.append("🧪 " + "; ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens))
-                if quimicos_itens:
-                    lines.append("⚗️ " + "; ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens))
-            else:
-                if sintomas:
-                    lines.append(f"🔎 {sintomas[0]}")
-                if objetivo:
-                    lines.append(f"🎯 {objetivo}")
+    if por_acao["preparar"] or por_acao["acompanhar"]:
+        lines += ["", _WHATSAPP_SEPARADOR, "", "*RECOMENDAÇÕES*:"]
+    if por_acao["preparar"]:
+        lines += ["", "🔴 *1. ENTRAR COM APLICAÇÃO*:"]
+        for d in por_acao["preparar"]:
+            lines += ["", f"🍄 *{d['rotulo']}*" + (f" ({d['cientifico']})" if d.get("cientifico") else "")]
+            biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
+            quimicos_itens = d["quimicos"]["itens"][:3] if d.get("quimicos") else None
+            if biologicos_itens or quimicos_itens:
+                lines.append("")
+            if biologicos_itens:
+                lines.append("*Biológicos*: " + "; ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens))
+            if quimicos_itens:
+                lines.append("*Químicos*: " + "; ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens))
             if (d.get("nota") or "").strip():
-                lines.append(f"📝 *Sugestão OneAgro:* {d['nota'].strip()}")
+                lines += ["", f"*Sugestão OneAgro*: {d['nota'].strip()}"]
+    if por_acao["acompanhar"]:
+        lines += ["", "🟡 *2. ACOMPANHAR*"]
+        lines += [nome(d, negrito=False) for d in por_acao["acompanhar"]]
 
-    grupos = models.produtos_por_data(produtos)
-    if grupos:
-        lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*"]
-        for grupo in grupos:
-            itens = [f"⚗️ {p['nome']}" for p in grupo["quimico"]] + [f"🧪 {p['nome']}" for p in grupo["biologico"]]
-            lines.append(f"*{grupo['data'] or 'Sem data'}:* " + " · ".join(itens))
-
-    lines += ["", "✅ *Antes de aplicar:* confirme estádio, sintomas no campo, registro e bula do produto."]
-    lines += ["", f"_{_AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
-    return "\n".join(lines).strip()
+    lines += ["", _WHATSAPP_SEPARADOR, "✅ Antes de aplicar: confirme estádio, sintomas no campo, registro e bula do produto."]
+    return "\n".join(lines + _RODAPE_TEXTO).strip()
 
 
 def _site_whatsapp_destinations(site):
@@ -4554,23 +4530,18 @@ def _agrupar_por_grupo_economico(sites_data):
 
 
 def _juntar_relatorios(textos):
-    """Varios relatorios numa mensagem so': o topo (RELATÓRIO DE
-    MONITORAMENTO / data) e o rodape uma vez; no meio, o bloco de cada
-    fazenda separado por ━━ (grupo economico em Recomendacoes e "Todas as
-    fazendas" do app -- pedidos do Alan, 08 e 09/11/2026)."""
+    """Varios relatorios numa mensagem so' (grupo economico em Recomendacoes e "Todas as fazendas" do app): o topo
+    (RELATÓRIO... / data) e o rodape uma vez; no meio, o bloco de cada fazenda (que comeca pelo nome) separado por ━━."""
     topo = _cabecalho_relatorio_cliente()
-    rodape = ["", f"_{AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
     linhas, com_rodape = list(topo), False
-    for i, texto in enumerate(textos):
+    for texto in textos:
         partes = texto.split("\n")
-        if partes[:len(topo)] == topo:
-            partes = partes[len(topo):]
-        if partes[-len(rodape):] == rodape:
-            partes, com_rodape = partes[:-len(rodape)], True
-        if i:
-            linhas += ["", _SEP_RELATORIO]
-        linhas += partes
-    return "\n".join(linhas + (rodape if com_rodape else []))
+        if partes[1:1 + len(topo)] == topo:
+            partes = partes[:1] + partes[1 + len(topo):]
+        if partes[-len(_RODAPE_TEXTO):] == _RODAPE_TEXTO:
+            partes, com_rodape = partes[:-len(_RODAPE_TEXTO)], True
+        linhas += [_SEP_RELATORIO] + partes
+    return "\n".join(linhas + (_RODAPE_TEXTO if com_rodape else []))
 
 
 @app.route("/recommendations/grupo/whatsapp", methods=["POST"])
