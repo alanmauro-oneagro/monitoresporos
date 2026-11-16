@@ -68,6 +68,16 @@
 .risco-tabela .risco-amarelo { background-color: #fff3cd; color: #7a5a00; font-weight: 600; }
 .risco-tabela .risco-verde { background-color: #d1e7dd; color: #0f5132; }
 .card[data-site], #pontos-clima { scroll-margin-top: 80px; }
+/* Mesmo modelo do PDF "Monitoramento e Manejo" (pedido do Alan, 16/11/2026). */
+.faixa-prioridade { color: #fff; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 0.25rem; }
+.faixa-preparar { background: #b02a37; }
+.faixa-acompanhar { background: #8a6d00; }
+.faixa-monitorar { background: #146c43; }
+.faixa-plano { background: #0a1f44; }
+.resumo-semana > div { margin-bottom: 0.2rem; }
+.janela-dia { font-size: 0.7rem; font-weight: 700; border-radius: 0.2rem; margin: 0.15rem 0.2rem 0; }
+.acao-texto { font-size: 0.75rem; font-weight: 700; }
+.acao-texto.acao-preparar { color: #b02a37; } .acao-texto.acao-acompanhar { color: #8a6d00; } .acao-texto.acao-monitorar { color: #146c43; }
 </style>
 {% endblock %}
 {% block content %}
@@ -238,11 +248,19 @@
         <div class="rec-topo">
         <div class="rec-topo-esq">
 
+        {% if site_group.por_acao.preparar or site_group.por_acao.acompanhar or site_group.riscos_sem_alerta %}
+        <div class="clima-titulo">Resumo da semana</div>
+        <div class="resumo-semana mb-2">
+            {% if site_group.por_acao.preparar %}<div><span class="badge text-bg-danger">🔴 Entrar com aplicação</span> {{ site_group.por_acao.preparar | map(attribute='rotulo') | join(', ') }}</div>{% endif %}
+            {% if site_group.por_acao.acompanhar %}<div><span class="badge text-bg-warning">🟡 Acompanhar</span> {{ site_group.por_acao.acompanhar | map(attribute='rotulo') | join(', ') }}</div>{% endif %}
+            {% if site_group.riscos_sem_alerta %}<div><span class="badge text-bg-success">🟢 Monitorar</span> {{ site_group.riscos_sem_alerta | length }} doença{{ 's' if site_group.riscos_sem_alerta | length > 1 }} no quadro de favorabilidade</div>{% endif %}
+        </div>
+        {% endif %}
         {% if site_group.weather %}
         {% set w = site_group.weather %}
         {% set indicadores = [('Temperatura', w.temperatura_atual, ' °C'), ('Umidade', w.umidade_atual, '%'), ('Chuva hoje (prevista)', w.chuva_hoje_mm, ' mm' ~ (' (%.0f%%)'|format(w.chuva_hoje_prob) if w.chuva_hoje_prob is number else '')), ('Chuva 24h', w.chuva_24h_mm, ' mm')] | selectattr(1, 'ne', none) | list %}
         {% if indicadores %}
-        <div class="clima-titulo">Clima agora</div>
+        <div class="clima-titulo">Clima na fazenda</div>
         <div class="clima-indicadores">
             {% for rotulo, valor, unidade in indicadores %}
             <div class="clima-ind"><div class="clima-rotulo">{{ rotulo }}</div><div class="clima-valor">{{ valor }}{{ unidade }}</div></div>
@@ -253,7 +271,8 @@
         <div class="clima-titulo clima-previsao-titulo">Previsão de chuva</div>
         <div class="clima-previsao">
             {% for d in w.previsao_5_dias %}
-            <div class="clima-prev-dia"><div class="clima-rotulo">{{ d.data[8:10] }}/{{ d.data[5:7] }}</div><div class="clima-valor">{{ d.chuva_mm }} mm</div>{% if d.chuva_prob is number %}<div class="clima-rotulo" title="Probabilidade de chuva">{{ "%.0f"|format(d.chuva_prob) }}%</div>{% endif %}</div>
+            {% set j = site_group.janelas[loop.index0] if site_group.janelas|length > loop.index0 else none %}
+            <div class="clima-prev-dia"><div class="clima-rotulo">{{ d.data[8:10] }}/{{ d.data[5:7] }}</div><div class="clima-valor">{{ d.chuva_mm }} mm</div><div class="clima-rotulo" title="Probabilidade de chuva">{{ "%.0f"|format(d.chuva_prob) ~ '%' if d.chuva_prob is number else '-' }}</div>{% if j %}<div class="janela-dia" style="color: {{ j[1] }}; background: {{ j[2] }};" title="Janela para pulverizar">{{ j[0] }}</div>{% endif %}</div>
             {% endfor %}
         </div>
         {% endif %}
@@ -261,7 +280,8 @@
         </div>
         {% if site_group.vento_dia %}
         <div class="vento-dia" title="Direcao de onde o vento soprou hoje -- cada gomo e' a % das leituras vindas daquela direcao">
-            <div class="vento-texto"><strong>Vento predominante</strong> (hoje)<br>de {{ site_group.vento_dia.nome }}</div>
+            <div class="vento-texto"><strong>Vento predominante</strong> (hoje)<br>de {{ site_group.vento_dia.nome }}
+                <div class="small text-muted mt-1">Aplicação: comece pelo lado {{ site_group.vento_dia.nome }} e avance para o {{ site_group.vento_oposto }}, cruzando o vento (3 a 10 km/h).</div></div>
             <div class="vento-rosa"><canvas data-percentuais="{{ site_group.vento_dia.percentuais | tojson | forceescape }}"></canvas></div>
         </div>
         {% endif %}
@@ -271,8 +291,8 @@
         {# Sem cultura na safra nao mostra doenca (decisao do Alan) -- avisa em vez de parecer "tudo bem" (11/11/2026). #}
         <div class="alert alert-warning small mb-3">Nenhuma cultura definida para esta safra -- as doenças não aparecem
             aqui nem no relatório. Escolha a cultura (ou "Todos") em <a href="{{ url_for('fazendas') }}">Manejos</a>.</div>
-        {% elif not site_group.diseases %}
-        <div class="alert alert-info small mb-3">Nenhuma doença em Atenção ou Perigo nessa fazenda no momento.</div>
+        {% elif not (site_group.por_acao.preparar or site_group.por_acao.acompanhar) %}
+        <div class="alert alert-info small mb-3">Nenhuma doença para entrar com aplicação ou acompanhar nesta fazenda no momento.</div>
         {% endif %}
 
         {% if site_group.nivel_dados == 'bloqueado' %}
@@ -290,7 +310,10 @@
         </div>
         {% endif %}
 
-        {% for row in site_group.diseases %}
+        {% for prioridade, titulo, cor in [('preparar', '1. Entrar com aplicação', 'danger'), ('acompanhar', '2. Acompanhar', 'warning')] %}
+        {% if site_group.por_acao[prioridade] %}
+        <div class="faixa-prioridade faixa-{{ prioridade }} mt-3 mb-2">{{ titulo }}</div>
+        {% for row in site_group.por_acao[prioridade] %}
         <div class="{% if not loop.last %}border-bottom pb-3 mb-3{% endif %}">
             <div>
                 <strong class="text-uppercase">{{ row.rotulo }}</strong>
@@ -322,6 +345,13 @@
             </div>
             {% endif %}
 
+            {% if row.sintomas or row.guia.objetivo %}
+            <div class="row g-2 mt-1 small">
+                {% if row.sintomas %}<div class="col-md-7"><div class="fw-bold">🔎 Sintomas iniciais a procurar</div>{% for s in (row.sintomas if prioridade == 'preparar' else row.sintomas[:1]) %}<div>• {{ s }}</div>{% endfor %}</div>{% endif %}
+                {% if row.guia.objetivo %}<div class="col-md-5"><div class="fw-bold">🎯 Objetivo da verificação</div>{{ row.guia.objetivo }}</div>{% endif %}
+            </div>
+            {% endif %}
+            {% if row.nota %}<div class="small mt-1"><strong>📝 Anotação:</strong> {{ row.nota }}</div>{% endif %}
             {% if (row.quimicos and row.quimicos.itens) or (row.biologicos and row.biologicos.itens) %}
             <div class="mt-2">
                 <label class="form-label small fw-bold mb-1">Recomendações das Instituições de Pesquisa</label>
@@ -337,8 +367,10 @@
             {% endif %}
         </div>
         {% endfor %}
+        {% endif %}
+        {% endfor %}
 
-        {% set notas = site_group.diseases | selectattr('nota') | list %}
+        {% set notas = site_group.por_acao.monitorar | selectattr('nota') | list %}
         {% if notas %}
         <div class="mt-3 pt-3 border-top">
             <label class="form-label small fw-bold d-block mb-1">Anotações <a href="{{ url_for('fazendas') }}" class="fw-normal text-muted small">(editar em Manejos)</a></label>
@@ -357,7 +389,7 @@
         {% for row in site_group.riscos_sem_alerta %}{% if row.doenca_en.startswith('manual:') %}{% set ns.manual = True %}{% endif %}{% for p in row.previsao_risco or [] %}{% if p.data_fmt not in ns.datas %}{% set ns.datas = ns.datas + [p.data_fmt] %}{% endif %}{% endfor %}{% endfor %}
         {% set ncols = ns.datas|length if ns.datas else 1 %}
         <div class="mt-3 pt-3 border-top">
-            <div class="small fw-bold">🌡️ Favorabilidade climática para doenças na lavoura</div>
+            <div class="faixa-prioridade faixa-monitorar mb-2">3. Monitorar — favorabilidade climática</div>
             <div class="small text-muted mb-2">Condições climáticas previstas para os próximos 5 dias e seu potencial para favorecer o desenvolvimento das principais doenças, independentemente da presença de esporos no ar.</div>
             <div class="table-responsive">
             <table class="table table-sm table-bordered align-middle mb-0 risco-tabela">
@@ -407,6 +439,28 @@
             <div class="esporos-lista small text-muted">Carregando...</div>
         </div>
 
+        {% if site_group.visita or site_group.produtos_folha.quimico or site_group.produtos_folha.biologico or site_group.plantio_linhas or site_group.aplicacoes_linhas or site_group.diseases or site_group.riscos_sem_alerta %}
+        <div class="faixa-prioridade faixa-plano mt-3 mb-2">Plano de acompanhamento e manejo</div>
+        {% endif %}
+        {% if site_group.visita %}
+        <div class="small fw-bold mb-1">O que fazer na próxima visita</div>
+        <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle mb-1 small">
+            <thead class="table-light"><tr><th>Prioridade</th><th>Sintomas iniciais a procurar</th><th>Objetivo da verificação</th></tr></thead>
+            <tbody>
+            {% for v in site_group.visita %}
+            <tr>
+                <td><strong>{{ v.rotulo }}</strong>{% if v.acao %}<div class="acao-texto acao-{{ v.acao.chave }}">{{ v.acao.emoji }} {{ v.acao.rotulo }}</div>{% endif %}</td>
+                <td>{% for s in v.sintomas[:2] %}<div>• {{ s }}</div>{% endfor %}</td>
+                <td>{{ v.guia.objetivo }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <div class="text-muted small mb-2">Sintomas e objetivos do Guia de manejo (aba Manejo e Fungicidas).</div>
+        {% endif %}
+
         {% if site_group.produtos_folha.quimico or site_group.produtos_folha.biologico %}
         <div class="mt-3 pt-3 border-top">
             <label class="form-label small fw-bold d-block mb-1">Folha (aplicação foliar) <a href="{{ url_for('fazendas') }}" class="fw-normal text-muted small">(editar em Manejos)</a></label>
@@ -449,6 +503,20 @@
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
+
+        {% if site_group.diseases or site_group.riscos_sem_alerta %}
+        <details class="mt-3 pt-3 border-top small">
+            <summary class="fw-bold">Critério para decidir sobre a aplicação</summary>
+            <ul class="mb-1 mt-1">
+                <li>Confirmar estádio fenológico e cultivar.</li>
+                <li>Inspecionar e registrar presença, incidência e severidade dos sintomas.</li>
+                <li>Considerar o histórico da área e o programa de aplicações.</li>
+                <li>Cruzar esporos medidos, risco de infecção, chuva prevista e vento (janela e sequência).</li>
+                <li>Verificar registro para cultura/alvo, bula, dose, intervalo de segurança e rotação de modos de ação.</li>
+            </ul>
+            <div><strong>Decisão do responsável técnico:</strong> se é necessário intervir, qual alvo priorizar e quando reavaliar. O alerta da estação apoia a decisão; não substitui a vistoria.</div>
+        </details>
         {% endif %}
 
         </div>

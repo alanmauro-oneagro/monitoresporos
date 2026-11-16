@@ -795,6 +795,19 @@ site tem que entrar la'.
   busca so' probabilidade + vento do dia (daily leve, 1x por janela, `registro["extras_dia"]`/`extras_janela`) e
   `get_weather_forecast` completa os dias com ela; a previsao do SMN (`_aplicar_previsao_orgao`) tambem leva o vento.
   Teste `ProbabilidadeChuvaTest`.
+- **Texto e aba Recomendações no modelo do PDF** (pedido do Alan, 16/11/2026): TEXTO (WhatsApp/aba Relatórios do
+  app, `_format_whatsapp_message`): topo "*RELATÓRIO DE MONITORAMENTO E MANEJO*" / ONEAGRO - data / fazenda / ━━ /
+  "*Soja · válido de 16/11 a 20/11*" -> 📌 RESUMO DA SEMANA (🔴 Entrar com aplicação / 🟡 Acompanhar) -> 🌦️ CLIMA NA
+  FAZENDA (temp., umidade, chuva hoje; previsao 1 dia por linha com %, numeros com virgula, `_num_br`) -> 🔴 1. ENTRAR
+  COM APLICAÇÃO (esporos, risco, ação, 🔎 o que olhar = 2 sintomas do Guia, 🎯 objetivo, 📚 referencias) -> 🟡 2.
+  ACOMPANHAR (esporos, risco, 1 sintoma, objetivo) -> 📦 produtos de folha por aplicacao numa linha por data -> ✅ Antes
+  de aplicar -> aviso/contato. SEM vento/sequencia, janela de aplicacao e item 3 Monitorar (so' PDF/tela). Sem doenca
+  pra aplicar/acompanhar: clima + "✅ Nenhuma doença para entrar com aplicação ou acompanhar...". ABA RECOMENDAÇÕES
+  (cada fazenda): Resumo da semana; Clima na fazenda com % e "janela" (Boa/Possível/Difícil) em cada dia; vento do dia
+  com "comece pelo lado X e avance para o Y" (`_OPOSTO_VENTO`); faixas 1. Entrar com aplicação / 2. Acompanhar (cartao
+  com sintomas iniciais + objetivo do Guia, anotacao, referencias); 3. Monitorar = favorabilidade (doencas em Monitorar
+  + riscos climaticos); Plano de acompanhamento e manejo (o que fazer na proxima visita, produtos por aplicacao,
+  plantio/pulverizacao, criterio recolhido em <details>).
 - **Produtos de folha por data de aplicacao** (pedido do Alan, 16/11/2026): Recomendações (secao "Folha (aplicação
   foliar)", um bloco "📅 25DAP" por aplicacao), texto/WhatsApp ("📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*") e PDF (tabela
   Aplicação | Químicos | Biológicos) agrupam os produtos da secao Folha de Manejos pela data (`models.produtos_por_data`:

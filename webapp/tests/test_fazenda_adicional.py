@@ -225,11 +225,11 @@ class FazendaAdicionalTest(unittest.TestCase):
         self.assertIn('class="toggle-icon">▶</span>Faz Mourão', tela)
         self.assertIn(f"/app/relatorios/{ponto['id']}.txt?ver=1", tela)
         self.assertNotIn("Content-Disposition", ver.headers)
-        self.assertTrue(ver.get_data(as_text=True).startswith("━" * 20 + "\n*RELATÓRIO DE MONITORAMENTO*\n*ONEAGRO - "))
+        self.assertTrue(ver.get_data(as_text=True).startswith("━" * 20 + "\n*RELATÓRIO DE MONITORAMENTO E MANEJO*\n*ONEAGRO - "))
         self.assertIn("Clima ok", ver.get_data(as_text=True))
         self.assertEqual(txt.mimetype, "text/plain")
         self.assertIn("attachment", txt.headers["Content-Disposition"])
-        self.assertIn("*RELATÓRIO DE MONITORAMENTO*", txt.get_data(as_text=True))
+        self.assertIn("*RELATÓRIO DE MONITORAMENTO E MANEJO*", txt.get_data(as_text=True))
         # edicao automatica: sem botao Salvar, devolve JSON
         tela = c.get(f"/app/pontos/{ponto['id']}/editar").get_data(as_text=True)
         self.assertNotIn("Salvar alterações", tela)
@@ -262,17 +262,16 @@ class FazendaAdicionalTest(unittest.TestCase):
             msg = webapp._format_whatsapp_message(pontos[0]["site_name"], [], cultura="soja / milho")
             topo = webapp._cabecalho_relatorio_cliente()
             fazenda = webapp._nome_exibicao(pontos[0]["site_name"]).upper()[len("GRUPO CAB - "):]
-        self.assertEqual(msg.split("\n")[:8], topo + [
-            "", f"*Grupo Cab - {fazenda}*", "",
-            "*Informações relevantes para manejo da(s) cultura(s) de: SOJA / MILHO*", "━" * 20])
+        self.assertEqual(msg.split("\n")[:7], topo + [
+            "", f"*Grupo Cab - {fazenda}*", "━" * 20, "*Soja / Milho*"])
         with mock.patch.object(webapp, "_texto_relatorio", return_value=corpo):
             um = c.get(f"/app/relatorios/{pontos[0]['id']}.txt?ver=1").get_data(as_text=True)
             todos = c.get("/app/relatorios/todos.txt?ver=1").get_data(as_text=True)
             tela = c.get("/app/relatorios").get_data(as_text=True)
         linhas = um.split("\n")
-        self.assertEqual(linhas[:3], ["━" * 20, "*RELATÓRIO DE MONITORAMENTO*", f"*ONEAGRO - {webapp._hoje_cuiaba():%d/%m/%Y}*"])
+        self.assertEqual(linhas[:3], ["━" * 20, "*RELATÓRIO DE MONITORAMENTO E MANEJO*", f"*ONEAGRO - {webapp._hoje_cuiaba():%d/%m/%Y}*"])
         self.assertEqual(linhas[3:6], ["", "*Grupo Cab - FAZ MOURÃO*", ""])
-        self.assertEqual(todos.count("*RELATÓRIO DE MONITORAMENTO*"), 1)
+        self.assertEqual(todos.count("*RELATÓRIO DE MONITORAMENTO E MANEJO*"), 1)
         self.assertEqual(todos.count("Clima ok"), 2)
         self.assertIn("Todas as fazendas (uma mensagem só)", tela)
         # Mesmo relatorio pra todo cliente, Free ou pago (pedido do Alan, 14/11/2026)
@@ -280,7 +279,7 @@ class FazendaAdicionalTest(unittest.TestCase):
         args = dict(weather=weather, produtos={}, leitura_bioscout="07/11/26")
         with webapp.app.test_request_context():
             cheio = webapp._format_whatsapp_message(pontos[0]["site_name"], [], **args)
-        self.assertIn("Clima agora", cheio)
+        self.assertIn("CLIMA NA FAZENDA", cheio)
         self.assertNotIn("Última leitura BioScout", cheio)  # saiu de todo texto (10/11/2026)
         self.assertFalse(hasattr(webapp, "_relatorio_simples"))
 
