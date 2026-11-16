@@ -1594,7 +1594,7 @@ def _cabecalho_relatorio_cliente():
     08/11/2026, tudo em negrito): ━━ / *RELATÓRIO DE MONITORAMENTO* /
     *ONEAGRO - dd/mm/aaaa*."""
     hoje = weather_forecast._agora_cuiaba().strftime("%d/%m/%Y")
-    return [_SEP_RELATORIO, "*RELATÓRIO DE MONITORAMENTO*", f"*ONEAGRO - {hoje}*"]
+    return [_SEP_RELATORIO, "*RELATÓRIO DE MONITORAMENTO E MANEJO*", f"*ONEAGRO - {hoje}*"]
 
 
 def _whatsapp_titulo(site):
@@ -1626,7 +1626,12 @@ def _prob_chuva(dia):
 def _linhas_previsao_chuva(previsao):
     """Previsao de chuva 1 dia por linha: "09/11: 12.2 mm (80%)" (pedido do Alan, 13/11/2026 --
     com a probabilidade, a linha de 2 dias quebrava no meio no WhatsApp)."""
-    return [f"{d['data'][8:10]}/{d['data'][5:7]}: {d['chuva_mm']} mm" + _prob_chuva(d) for d in previsao]
+    return [f"{d['data'][8:10]}/{d['data'][5:7]}: {_num_br(d['chuva_mm'])} mm" + _prob_chuva(d) for d in previsao]
+
+
+def _num_br(valor):
+    """1 casa com virgula ("23,6") no texto do relatorio (pedido do Alan, 16/11/2026)."""
+    return f"{valor:.1f}".replace(".", ",") if isinstance(valor, (int, float)) else valor
 
 
 def _format_whatsapp_message(
@@ -1635,61 +1640,15 @@ def _format_whatsapp_message(
     mostrar_secao_doencas=True, anotacao=None, riscos_climaticos=None,
     vento_dia=None, ponto_clima=False,
 ):
-    """Monta o relatorio inteiro de uma fazenda numa unica mensagem de
-    texto -- MESMO conteudo e ordem do PDF (`export_pdf.build_recommendation_pdf`),
-    so' sem o graficozinho de concentracao (texto puro nao desenha grafico),
-    agrupado POR DOENCA (status, contagem, recomendacao e observacao
-    juntos num bloco so, em vez de secoes separadas repetindo o nome da
-    doenca) -- mais facil do cliente ler e agir. `weather` e' o retorno de
-    `_get_weather_for_site` (ou None); `produtos` e' {"quimico": [...],
-    "biologico": [...]} com os itens que a fazenda ja tem comprado (aba
-    Recomendacoes > Produtos Fazenda); `safra_label`/`plantio_linhas`/
-    `aplicacoes_linhas` vem do mesmo lugar que alimenta o PDF (ver
-    `_build_site_pdf`/`_farm_plantio_aplicacoes_estoque`) -- omitidos
-    (None), a mensagem so' fica sem essas partes, sem quebrar.
-    `leitura_bioscout` (dd/mm/aa, ja formatada) e' a data da ultima
-    leitura de doenca do dispositivo BioScout -- None se nao houver
-    nenhuma (ponto "so clima"). `anotacao` (texto livre, ver
-    `models.get_site_climate_note`) aparece logo apos o clima, quando
-    preenchida -- hoje so' usado pelos pontos "so clima" da aba Alertas
-    Clima, mas funciona pra qualquer site. Sem
-    nenhuma doenca em Atencao/Perigo, a mensagem e' o clima (ver
-    `_linhas_clima`) seguido do aviso de que esta tudo tranquilo (mesmo
-    texto usado na tela de Recomendacoes) -- e' o caminho SEMPRE usado
-    pelos pontos "so clima" da aba Alertas Clima (nunca tem doenca), por
-    isso o clima nao pode faltar aqui. `mostrar_secao_doencas=False`
-    omite esse aviso "tudo tranquilo" (nao so' o do PDF, ver
-    `export_pdf.build_recommendation_pdf`) -- usado quando `diseases`
-    esta vazio por nao haver monitoramento de doenca de verdade
-    acontecendo (ponto "so clima", ou fazenda real com estacao sem
-    leitura ha muito tempo), pra nao sugerir que a fazenda foi checada e
-    esta tudo bem quando na verdade nao foi checada. Esse caminho curto NAO repete
-    Produtos (ao contrario do PDF, que sempre mostra essa secao), de proposito, pra' manter o aviso "esta tudo tranquilo"
-    curto. Anotacoes das doencas vem num bloco so' ("Doenca: nota", so'
-    as preenchidas), igual a caixa unica da tela de Recomendacoes.
-    `is_virtual` (fazenda virtual/estimada, ver `virtual_farms.py`) so
-    muda o jeito de extrair o nome do site_name pro titulo
-    (`_whatsapp_titulo`) -- a mensagem em si nao tem nenhum aviso de que
-    o valor e' estimado, pro relatorio ficar igual ao de uma fazenda
-    real. `cultura` (nome da cultura atual definida na aba Manejo, ou
-    None/"" se ainda estiver "(vazio)") aparece em destaque (negrito,
-    maiuscula), logo abaixo do titulo, antes do clima. Ordem do
-    relatorio (mesma da tela): titulo -> safra/cultura -> Clima agora ->
-    Previsao de chuva -> Doencas em Atencao/Perigo (um bloco por doenca:
-    nome, risco, recomendacao) -> Anotacoes -> Produtos disponiveis ->
-    rodape. Datas de Plantio, Datas de Pulverizacao e o
-    Risco de infeccao pelo clima NAO entram no texto (pedido do usuario,
-    16/10/2026 -- o PDF continua com eles); `plantio_linhas`,
-    `aplicacoes_linhas` e `riscos_climaticos` sao aceitos e ignorados. Rodape
-    (so' o aviso de nao substituir agronomo -- pedido explicito do
-    usuario pra' tirar fonte do clima/atualizado em/instituicoes
-    consultadas/"Powered by BioScout" do relatorio de TEXTO, mantendo so'
-    o aviso de responsabilidade; o PDF continua com essa info completa,
-    ver `_build_site_pdf`/`export_pdf.build_recommendation_pdf`).
-    `vento_dia` (retorno de `_rosa_ventos` do dia, ou None) entra no
-    Clima agora como direcao predominante do vento. `ponto_clima=True`
-    (pontos "so clima") tira o aviso de agronomo (pedido do Alan,
-    19/10/2026)."""
+    """Relatorio da fazenda numa mensagem de texto (WhatsApp e aba Relatorios do app), no modelo
+    "Monitoramento e Manejo" do PDF (pedido do Alan, 16/11/2026): topo -> cultura/validade -> RESUMO DA SEMANA ->
+    CLIMA NA FAZENDA (+ previsao de chuva com probabilidade) -> 1. ENTRAR COM APLICAÇÃO (esporos, risco, acao,
+    o que olhar e objetivo do Guia de manejo, referencias) -> 2. ACOMPANHAR (esporos, risco, 1 sintoma, objetivo)
+    -> PRODUTOS DE FOLHA POR APLICAÇÃO -> "Antes de aplicar" -> aviso/contato. Doenca em Monitorar, vento,
+    sequencia e janela de aplicacao ficam so' no PDF. Sem doenca pra aplicar/acompanhar: so' o clima e o aviso
+    (`mostrar_secao_doencas=False` tira o aviso; `ponto_clima=True` tira o rodape). `plantio_linhas`,
+    `aplicacoes_linhas`, `riscos_climaticos`, `vento_dia`, `is_virtual`, `safra_label` e `leitura_bioscout`
+    sao aceitos e ignorados."""
     _AVISO_AGRONOMO = AVISO_AGRONOMO
 
     def _linhas_clima():
@@ -1701,22 +1660,19 @@ def _format_whatsapp_message(
         if weather:
             partes = []
             if weather.get("temperatura_atual") is not None:
-                partes.append(f"🌡️ {weather['temperatura_atual']} °C")
+                partes.append(f"🌡️ {_num_br(weather['temperatura_atual'])} °C")
             if weather.get("umidade_atual") is not None:
-                partes.append(f"💧 {weather['umidade_atual']}%")
+                partes.append(f"💧 {weather['umidade_atual']:.0f}%" if isinstance(weather["umidade_atual"], (int, float))
+                              else f"💧 {weather['umidade_atual']}%")
             if weather.get("chuva_hoje_mm") is not None:
-                partes.append(f"🌧️ {weather['chuva_hoje_mm']} mm hoje (prev.)"
+                partes.append(f"🌧️ {_num_br(weather['chuva_hoje_mm'])} mm hoje (prev.)"
                               + _prob_chuva({"chuva_prob": weather.get("chuva_hoje_prob")}))
-            if weather.get("chuva_24h_mm") is not None:
-                partes.append(f"☔ {weather['chuva_24h_mm']} mm em 24h")
-            linhas.append("🌤️ *Clima agora*")
+            linhas.append("🌦️ *CLIMA NA FAZENDA*")
             if partes:
                 linhas.append(" · ".join(partes))
-            if vento_dia:
-                linhas.append(f"🧭 Vento predominante (hoje): de {vento_dia['nome']}")
             if weather.get("previsao_5_dias"):
                 linhas.append("")
-                linhas.append("🌧️ *Previsão de chuvas:*")
+                linhas.append("*Previsão de chuva:*")
                 linhas.extend(_linhas_previsao_chuva(weather["previsao_5_dias"]))
         # "Última leitura BioScout" saiu do texto (pedido do Alan, 10/11/2026).
         if anotacao:
@@ -1724,65 +1680,86 @@ def _format_whatsapp_message(
             linhas.append(f"📝 *Anotação:* {anotacao}")
         return linhas
 
-    cabecalho = _cabecalho_relatorio_cliente() + ["", f"*{_whatsapp_titulo(site)}*"]
+    # Modelo "Monitoramento e Manejo" (pedido do Alan, 16/11/2026, igual ao PDF): resumo da semana, clima, 1. Entrar
+    # com aplicação, 2. Acompanhar, produtos de folha por aplicação. Doenca em Monitorar nao entra no texto (fica no
+    # quadro de favorabilidade do PDF/tela); vento, sequencia e janela de aplicacao tambem so' no PDF.
+    cabecalho = _cabecalho_relatorio_cliente() + ["", f"*{_whatsapp_titulo(site)}*", _SEP_RELATORIO]
+    previsao = (weather or {}).get("previsao_5_dias") or []
     if cultura:
-        cabecalho += ["", f"*Informações relevantes para manejo da(s) cultura(s) de: {cultura.upper()}*"]
-    cabecalho.append(_SEP_RELATORIO)
+        linha = " / ".join(p.strip().capitalize() for p in cultura.split("/") if p.strip())
+        if previsao:
+            linha += f" · válido de {previsao[0]['data'][8:10]}/{previsao[0]['data'][5:7]} a " \
+                     f"{previsao[-1]['data'][8:10]}/{previsao[-1]['data'][5:7]}"
+        cabecalho += [f"*{linha}*", ""]
 
-    if not diseases:
+    por_acao = {"preparar": [], "acompanhar": []}
+    for d in diseases or []:
+        chave = (d.get("acao") or {}).get("chave")
+        if chave in por_acao:
+            por_acao[chave].append(d)
+
+    if not (por_acao["preparar"] or por_acao["acompanhar"]):
         partes = cabecalho + _linhas_clima()
         if mostrar_secao_doencas:
-            partes += ["", "✅ Nenhuma doença em atenção ou perigo nessa fazenda no momento."]
+            partes += ["", "✅ Nenhuma doença para entrar com aplicação ou acompanhar nesta fazenda no momento."]
         if not ponto_clima:
             partes += ["", f"_{_AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
         return "\n".join(partes)
 
-    lines = cabecalho + _linhas_clima()
-    lines += ["", _WHATSAPP_SEPARADOR, "⚠️ *DOENÇAS EM ATENÇÃO / PERIGO*"]
+    lines = cabecalho + ["📌 *RESUMO DA SEMANA*"]
+    for chave, emoji, rotulo in (("preparar", "🔴", "Entrar com aplicação"), ("acompanhar", "🟡", "Acompanhar")):
+        if por_acao[chave]:
+            lines.append(f"{emoji} *{rotulo}:* " + ", ".join(d["rotulo"] for d in por_acao[chave]))
+    lines += [""] + _linhas_clima()
 
-    for d in diseases:
-        # Formato do Alan (09/11/2026): "- *Doenca:*" / "Quantidade de esporos:
-        # 🔴 Alta" / "Risco de infecção:" + "09/11 🟢; 10/11 🟡 ..." numa linha /
-        # "Recomendações das instituições de pesquisa:" + biologicos/quimicos.
-        lines += ["", f"- *{d['rotulo']}:*",
-                  f"Quantidade de esporos: {_QUANTIDADE_ESPOROS.get(d['status'], d['status'])}"]
-        previsao_risco = d.get("previsao_risco")
-        if previsao_risco:
-            lines += ["Risco de infecção:", "; ".join(
-                f"{p['data_fmt']} {_RISCO_EMOJI.get(p['risco'], '⚪')}" for p in previsao_risco)]
-        else:
-            # Sem previsao (falha da Open-Meteo, ou doenca sem limite
-            # cadastrado) -- cai pro Risco de Infeccao "de agora", baseado
-            # no horario ja observado (`_calc_risco_germinacao`).
-            risco_label = _risco_label(d.get("risco"))
-            if risco_label:
-                lines.append(f"Risco de infecção: {_RISCO_EMOJI.get(d.get('risco'), '')} {risco_label}")
-        if d.get("acao"):
-            lines.append(f"👉 *Ação: {d['acao']['emoji']} {d['acao']['rotulo']}* -- {d['acao']['texto']}")
-        biologicos_itens = d["biologicos"]["itens"][:3] if d["biologicos"] else None
-        quimicos_itens = d["quimicos"]["itens"][:3] if d["quimicos"] else None
-        if biologicos_itens or quimicos_itens:
-            lines.append("Recomendações das instituições de pesquisa:")
-        if biologicos_itens:
-            lines.append("🧪 Biológicos: " + " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens))
-        if quimicos_itens:
-            lines.append("⚗️ Químicos: " + " // ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens))
+    guias = _guias_relatorio()
+    for chave, titulo in (("preparar", "🔴 *1. ENTRAR COM APLICAÇÃO*"), ("acompanhar", "🟡 *2. ACOMPANHAR*")):
+        if not por_acao[chave]:
+            continue
+        lines += ["", _WHATSAPP_SEPARADOR, titulo]
+        for d in por_acao[chave]:
+            nome = f"*{d['rotulo']}*" + (f" ({d['cientifico']})" if d.get("cientifico") else "")
+            lines += ["", nome, f"Esporos no ar: {_QUANTIDADE_ESPOROS.get(d['status'], d['status'])}"]
+            previsao_risco = d.get("previsao_risco")
+            if previsao_risco:
+                lines.append("Risco de infecção: " + " · ".join(
+                    f"{p['data_fmt']} {_RISCO_EMOJI.get(p['risco'], '⚪')}" for p in previsao_risco))
+            elif _risco_label(d.get("risco")):
+                lines.append(f"Risco de infecção: {_RISCO_EMOJI.get(d.get('risco'), '')} {_risco_label(d.get('risco'))}")
+            guia = guias.get(d.get("doenca_en")) or {}
+            sintomas = [s for s in export_pdf._frases(guia.get("texto") or "") if s.strip()] if (guia.get("texto") or "").strip() else []
+            objetivo = (guia.get("objetivo") or "").strip()
+            if chave == "preparar":
+                lines.append(f"👉 *Ação:* {d['acao']['texto']}")
+                if sintomas:
+                    lines.append("🔎 *O que olhar na lavoura:*")
+                    lines += [f"• {s}" for s in sintomas[:2]]
+                if objetivo:
+                    lines.append(f"🎯 *Objetivo:* {objetivo}")
+                biologicos_itens = d["biologicos"]["itens"][:3] if d.get("biologicos") else None
+                quimicos_itens = d["quimicos"]["itens"][:3] if d.get("quimicos") else None
+                if biologicos_itens or quimicos_itens:
+                    lines.append("📚 *Referências de pesquisa:*")
+                if biologicos_itens:
+                    lines.append("🧪 " + "; ".join(_fmt_ingrediente(p, d["classe_label"]) for p in biologicos_itens))
+                if quimicos_itens:
+                    lines.append("⚗️ " + "; ".join(_fmt_ingrediente(p, d["classe_label"]) for p in quimicos_itens))
+            else:
+                if sintomas:
+                    lines.append(f"🔎 {sintomas[0]}")
+                if objetivo:
+                    lines.append(f"🎯 {objetivo}")
+            if (d.get("nota") or "").strip():
+                lines.append(f"📝 *Anotação:* {d['nota'].strip()}")
 
-    # Anotacoes das doencas num bloco so' (igual a caixa unica da tela),
-    # so' as preenchidas.
-    anotacoes = [(d["rotulo"], d.get("nota")) for d in diseases if (d.get("nota") or "").strip()]
-    if anotacoes:
-        lines += ["", _WHATSAPP_SEPARADOR, "📝 *ANOTAÇÕES*"]
-        lines += [f"• *{rotulo}:* {nota.strip()}" for rotulo, nota in anotacoes]
+    grupos = models.produtos_por_data(produtos)
+    if grupos:
+        lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*"]
+        for grupo in grupos:
+            itens = [f"⚗️ {p['nome']}" for p in grupo["quimico"]] + [f"🧪 {p['nome']}" for p in grupo["biologico"]]
+            lines.append(f"*{grupo['data'] or 'Sem data'}:* " + " · ".join(itens))
 
-    linhas_produtos = []
-    for grupo in models.produtos_por_data(produtos):
-        linhas_produtos.append(f"*{grupo['data'] or 'Sem data'}:*")
-        for tipo, emoji in (("quimico", "⚗️"), ("biologico", "🧪")):
-            linhas_produtos += [f"{emoji} {p['nome']}" for p in grupo[tipo]]
-    lines += ["", _WHATSAPP_SEPARADOR, "📦 *PRODUTOS DE FOLHA POR APLICAÇÃO*"]
-    lines += linhas_produtos or ["Nenhum produto cadastrado."]
-
+    lines += ["", "✅ *Antes de aplicar:* confirme estádio, sintomas no campo, registro e bula do produto."]
     lines += ["", f"_{_AVISO_AGRONOMO}_", "", CONTATO_RELATORIO]
     return "\n".join(lines).strip()
 
@@ -4453,9 +4430,29 @@ def recommendations(safra):
         manuais_sem_germinacao = [
             c["doenca"] for c in _doencas_manuais_do_site(site, safra) if c["doenca_en"] not in com_germinacao
         ]
+        # Mesma organizacao do PDF "Monitoramento e Manejo" (pedido do Alan, 16/11/2026): 1. Entrar com aplicação,
+        # 2. Acompanhar (com sintomas/objetivo do Guia de manejo), 3. Monitorar = quadro de favorabilidade.
+        guias = _guias_relatorio()
+        for d in diseases:
+            d["guia"] = guias.get(d["doenca_en"]) or {}
+            d["sintomas"] = export_pdf._frases(d["guia"].get("texto") or "") if (d["guia"].get("texto") or "").strip() else []
+        por_acao = {chave: [d for d in diseases if (d.get("acao") or {}).get("chave") == chave]
+                    for chave in ("preparar", "acompanhar", "monitorar")}
+        monitorar = por_acao["monitorar"] + riscos_tela
+        visita = [d for d in por_acao["preparar"] + por_acao["acompanhar"] if d["sintomas"] or d["guia"].get("objetivo")]
+        for d in [r for r in riscos_tela if not r["doenca_en"].startswith("manual:")]:
+            if len([v for v in visita if v.get("acao", {}).get("chave") == "monitorar"]) >= 2:
+                break
+            guia = guias.get(d["doenca_en"]) or {}
+            if sum(1 for p in d.get("previsao_risco") or [] if p.get("risco") == "vermelho") >= 3 and \
+                    ((guia.get("texto") or "").strip() or (guia.get("objetivo") or "").strip()):
+                visita.append({**d, "guia": guia, "sintomas": export_pdf._frases(guia.get("texto") or "")})
+        vento_dia = _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()])
         sites_data.append({
             "site": site, "nome_exibicao": _nome_exibicao(site), "diseases": diseases, "thumbnails": thumbnails,
-            "riscos_sem_alerta": riscos_tela,
+            "por_acao": por_acao, "visita": visita,
+            "janelas": [export_pdf._janela(d) for d in (weather or {}).get("previsao_5_dias") or []],
+            "riscos_sem_alerta": monitorar,
             "manuais_sem_germinacao": manuais_sem_germinacao,
             "virtual": is_virtual,
             "weather": weather,
@@ -4473,7 +4470,8 @@ def recommendations(safra):
             "whatsapp_text": whatsapp_text,
             "plantio_linhas": plantio_linhas,
             "aplicacoes_linhas": aplicacoes_linhas,
-            "vento_dia": _rosa_ventos(site, [weather_forecast._agora_cuiaba().date().isoformat()]),
+            "vento_dia": vento_dia,
+            "vento_oposto": _NOME_DIRECAO_VENTO[_OPOSTO_VENTO[vento_dia["codigo"]]] if vento_dia else None,
         })
     sites_data.sort(key=lambda s: _ordem_fazenda(s["site"]))
     sites_data = _agrupar_por_grupo_economico(sites_data)
@@ -5167,6 +5165,7 @@ def delete_ndvi_car():
 # `data_reader._DIRECOES_VENTO` -- so' pro quadro desenhado na imagem
 # NDVI (`ndvi_service.desenhar_informacoes`), que mostra o nome completo
 # em vez da abreviacao (pedido explicito do usuario).
+_OPOSTO_VENTO = {"N": "S", "NE": "SW", "E": "W", "SE": "NW", "S": "N", "SW": "NE", "W": "E", "NW": "SE"}
 _NOME_DIRECAO_VENTO = {
     "N": "Norte", "NE": "Nordeste", "E": "Leste", "SE": "Sudeste",
     "S": "Sul", "SW": "Sudoeste", "W": "Oeste", "NW": "Noroeste",

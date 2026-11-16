@@ -1274,8 +1274,9 @@ class NivelAcaoTest(unittest.TestCase):
         self.assertEqual([d["rotulo"] for d in doencas], ["A", "B"])
         with webapp.app.test_request_context():
             texto = webapp._format_whatsapp_message("Zzz Acao", doencas, weather={"previsao_5_dias": []}, produtos={})
-        self.assertIn("Ação: 🔴 Preparar aplicação", texto)
-        self.assertIn("Ação: 🟢 Monitorar", texto)
+        self.assertIn("🔴 *1. ENTRAR COM APLICAÇÃO*", texto)
+        self.assertIn("👉 *Ação:*", texto)
+        self.assertNotIn("*B*", texto)  # Monitorar fica fora do texto (so' no PDF/tela)
 
 
 class RegrasNivelAcaoTelaTest(unittest.TestCase):
@@ -1472,7 +1473,7 @@ class ProdutosFolhaPorDataTest(unittest.TestCase):
                                                       produtos=produtos)
         self.assertIn("*PRODUTOS DE FOLHA POR APLICAÇÃO*", texto)
         self.assertLess(texto.index("*25DAP:*"), texto.index("*85DAP:*"))
-        self.assertIn("*25DAP:*\n⚗️ Alade\n🧪 Vult", texto)
+        self.assertIn("*25DAP:* ⚗️ Alade · 🧪 Vult", texto)
         pdf = export_pdf.build_recommendation_pdf("Zzz Teste Folha", "Safra", [], produtos=produtos)
         self.assertTrue(pdf.getvalue()[:4] == b"%PDF")
 
