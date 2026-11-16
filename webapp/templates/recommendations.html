@@ -75,7 +75,10 @@
 .faixa-monitorar { background: #146c43; }
 .faixa-plano { background: #0a1f44; }
 .resumo-semana > div { margin-bottom: 0.2rem; }
-.janela-dia { font-size: 0.7rem; font-weight: 700; border-radius: 0.2rem; margin: 0.15rem 0.2rem 0; }
+.janela-dia { font-size: 0.7rem; font-weight: 700; border-radius: 0.2rem; margin: 0.15rem 0.2rem 0; white-space: nowrap; }
+.clima-previsao.com-janela { margin-bottom: 0.2rem; }
+.janela-legenda { font-size: 0.75rem; color: #495057; max-width: 34rem; margin-bottom: 0.6rem; line-height: 1.6; }
+.janela-legenda .janela-dia { margin: 0; }
 .acao-texto { font-size: 0.75rem; font-weight: 700; }
 .acao-texto.acao-preparar { color: #b02a37; } .acao-texto.acao-acompanhar { color: #8a6d00; } .acao-texto.acao-monitorar { color: #146c43; }
 </style>
@@ -268,13 +271,24 @@
         </div>
         {% endif %}
         {% if w.previsao_5_dias %}
-        <div class="clima-titulo clima-previsao-titulo">Previsão de chuva</div>
-        <div class="clima-previsao">
+        {% set tem_janela = site_group.janelas | select | list %}
+        <div class="clima-titulo clima-previsao-titulo">Previsão de chuva{% if tem_janela %} e janela para pulverizar{% endif %}</div>
+        <div class="clima-previsao{% if tem_janela %} com-janela{% endif %}">
             {% for d in w.previsao_5_dias %}
             {% set j = site_group.janelas[loop.index0] if site_group.janelas|length > loop.index0 else none %}
-            <div class="clima-prev-dia"><div class="clima-rotulo">{{ d.data[8:10] }}/{{ d.data[5:7] }}</div><div class="clima-valor">{{ d.chuva_mm }} mm</div><div class="clima-rotulo" title="Probabilidade de chuva">{{ "%.0f"|format(d.chuva_prob) ~ '%' if d.chuva_prob is number else '-' }}</div>{% if j %}<div class="janela-dia" style="color: {{ j[1] }}; background: {{ j[2] }};" title="Janela para pulverizar">{{ j[0] }}</div>{% endif %}</div>
+            <div class="clima-prev-dia"><div class="clima-rotulo">{{ d.data[8:10] }}/{{ d.data[5:7] }}</div><div class="clima-valor">{{ d.chuva_mm }} mm</div><div class="clima-rotulo" title="Probabilidade de chuva">{{ "%.0f"|format(d.chuva_prob) ~ '%' if d.chuva_prob is number else '-' }}</div>{% if j %}<div class="janela-dia" style="color: {{ j[1] }}; background: {{ j[2] }};" title="Janela para pulverizar: {{ j[0] }}">🚜 {{ j[0] }}</div>{% endif %}</div>
             {% endfor %}
         </div>
+        {% if tem_janela %}
+        {# Deixa claro que Boa/Possível/Difícil e' a janela pra pulverizar (pedido do Alan, 16/11/2026). #}
+        <div class="janela-legenda">
+            <strong>🚜 Janela para pulverizar</strong> (pela chuva prevista):
+            <span class="janela-dia d-inline-block px-1" style="color: #146c43; background: #dff3e6;">Boa</span> menos de 5 mm e chance abaixo de 80% ·
+            <span class="janela-dia d-inline-block px-1" style="color: #8a6d00; background: #fdf3cf;">Possível</span> até 10 mm ·
+            <span class="janela-dia d-inline-block px-1" style="color: #b02a37; background: #fbe3e3;">Difícil</span> mais de 10 mm.
+            O % é a chance de chuva no dia.
+        </div>
+        {% endif %}
         {% endif %}
         {% endif %}
         </div>

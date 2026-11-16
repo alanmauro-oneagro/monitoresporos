@@ -803,7 +803,9 @@ site tem que entrar la'.
   ACOMPANHAR (esporos, risco, 1 sintoma, objetivo) -> 📦 produtos de folha por aplicacao numa linha por data -> ✅ Antes
   de aplicar -> aviso/contato. SEM vento/sequencia, janela de aplicacao e item 3 Monitorar (so' PDF/tela). Sem doenca
   pra aplicar/acompanhar: clima + "✅ Nenhuma doença para entrar com aplicação ou acompanhar...". ABA RECOMENDAÇÕES
-  (cada fazenda): Resumo da semana; Clima na fazenda com % e "janela" (Boa/Possível/Difícil) em cada dia; vento do dia
+  (cada fazenda): Resumo da semana; Clima na fazenda com % e "janela" (Boa/Possível/Difícil) em cada dia -- titulo
+  "Previsão de chuva e janela para pulverizar", selo "🚜 Possível" e legenda `.janela-legenda` com a regra de cada cor
+  e "O % é a chance de chuva no dia" (pedido do Alan, 16/11/2026); vento do dia
   com "comece pelo lado X e avance para o Y" (`_OPOSTO_VENTO`); faixas 1. Entrar com aplicação / 2. Acompanhar (cartao
   com sintomas iniciais + objetivo do Guia, anotacao, referencias); 3. Monitorar = favorabilidade (doencas em Monitorar
   + riscos climaticos); Plano de acompanhamento e manejo (o que fazer na proxima visita, produtos por aplicacao,
