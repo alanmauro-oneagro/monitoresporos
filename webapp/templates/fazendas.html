@@ -199,7 +199,7 @@
             <div class="mt-3 pt-3 border-top">
                 {% set n_notas = site_group.anotacoes | selectattr('nota') | list | length %}
                 <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold secao-toggle" data-target="sec-notas-{{ farm_idx }}">
-                        <span class="toggle-icon">▶</span> Anotações por doença{% if n_notas %} <span class="badge bg-light text-dark border fw-normal">{{ n_notas }}</span>{% endif %}
+                        <span class="toggle-icon">▶</span> Sugestão OneAgro por doença{% if n_notas %} <span class="badge bg-light text-dark border fw-normal">{{ n_notas }}</span>{% endif %}
                     </button>
                 <div class="d-none mt-2" id="sec-notas-{{ farm_idx }}">
                 {% if site_group.anotacoes %}
@@ -217,7 +217,7 @@
                     {% endfor %}
                 </form>
                 {% else %}
-                <div class="text-muted small">Escolha a cultura de uma safra acima para anotar por doença.</div>
+                <div class="text-muted small">Escolha a cultura de uma safra acima para escrever a sugestão por doença.</div>
                 {% endif %}
                 </div>
             </div>

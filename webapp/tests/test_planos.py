@@ -1517,7 +1517,7 @@ class PdfMonitoramentoManejoTest(unittest.TestCase):
                        "ROSA DOS VENTOS", "Comece pelos talhões do lado Nordeste", "Probabilidade de chuva",
                        "Janela p/ pulverizar", "Sintomas iniciais a procurar", "Manchas negras nas nervuras",
                        "PLANO DE ACOMPANHAMENTO E MANEJO", "PRODUTOS DE FOLHA POR APLICAÇÃO", "25DAP",
-                       "Nota da fazenda", "CRITÉRIO PARA DECIDIR"):
+                       "Nota da fazenda", "Sugestão OneAgro", "CRITÉRIO PARA DECIDIR"):
             self.assertIn(trecho, texto)
 
     def test_ponto_so_clima(self):
