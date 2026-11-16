@@ -216,7 +216,7 @@ class FazendaAdicionalTest(unittest.TestCase):
             self._nova(c)
         ponto = models.get_cliente_pontos(uid)[0]
         with webapp.app.test_request_context():
-            corpo = "\n".join(webapp._cabecalho_relatorio_cliente() + ["", "*Faz Mourão*", "━" * 20, "Clima ok"])
+            corpo = "\n".join(["*Faz Mourão*"] + webapp._cabecalho_relatorio_cliente() + ["━" * 20, "Clima ok"])
         with mock.patch.object(webapp, "_texto_relatorio", return_value=corpo):
             tela = c.get("/app/relatorios").get_data(as_text=True)
             ver = c.get(f"/app/relatorios/{ponto['id']}.txt?ver=1")
@@ -225,11 +225,11 @@ class FazendaAdicionalTest(unittest.TestCase):
         self.assertIn('class="toggle-icon">▶</span>Faz Mourão', tela)
         self.assertIn(f"/app/relatorios/{ponto['id']}.txt?ver=1", tela)
         self.assertNotIn("Content-Disposition", ver.headers)
-        self.assertTrue(ver.get_data(as_text=True).startswith("━" * 20 + "\n*RELATÓRIO DE MONITORAMENTO E MANEJO*\n*ONEAGRO - "))
+        self.assertTrue(ver.get_data(as_text=True).startswith("*Faz Mourão*\nRELATÓRIO DE MONITORAMENTO E MANEJO\nONEAGRO - "))
         self.assertIn("Clima ok", ver.get_data(as_text=True))
         self.assertEqual(txt.mimetype, "text/plain")
         self.assertIn("attachment", txt.headers["Content-Disposition"])
-        self.assertIn("*RELATÓRIO DE MONITORAMENTO E MANEJO*", txt.get_data(as_text=True))
+        self.assertIn("RELATÓRIO DE MONITORAMENTO E MANEJO", txt.get_data(as_text=True))
         # edicao automatica: sem botao Salvar, devolve JSON
         tela = c.get(f"/app/pontos/{ponto['id']}/editar").get_data(as_text=True)
         self.assertNotIn("Salvar alterações", tela)
@@ -257,21 +257,20 @@ class FazendaAdicionalTest(unittest.TestCase):
             self._nova(c, nome="Faz Retiro", lat="-12.9")
         pontos = models.get_cliente_pontos(uid)
         with webapp.app.test_request_context():
-            corpo = "\n".join(webapp._cabecalho_relatorio_cliente() + ["", "*Grupo Cab - FAZ MOURÃO*", "", "*Informações x*", "━" * 20, "Clima ok"])
+            corpo = "\n".join(["*Grupo Cab - FAZ MOURÃO*"] + webapp._cabecalho_relatorio_cliente() + ["Cultura: *X*", "━" * 20, "Clima ok"])
             # cabecalho do WhatsApp automatico = o do app, com o grupo como foi digitado
             msg = webapp._format_whatsapp_message(pontos[0]["site_name"], [], cultura="soja / milho")
             topo = webapp._cabecalho_relatorio_cliente()
             fazenda = webapp._nome_exibicao(pontos[0]["site_name"]).upper()[len("GRUPO CAB - "):]
-        self.assertEqual(msg.split("\n")[:7], topo + [
-            "", f"*Grupo Cab - {fazenda}*", "━" * 20, "*Soja / Milho*"])
+        self.assertEqual(msg.split("\n")[:5], [f"*Grupo Cab - {fazenda}*"] + topo + ["Cultura: *SOJA / MILHO*", "━" * 20])
         with mock.patch.object(webapp, "_texto_relatorio", return_value=corpo):
             um = c.get(f"/app/relatorios/{pontos[0]['id']}.txt?ver=1").get_data(as_text=True)
             todos = c.get("/app/relatorios/todos.txt?ver=1").get_data(as_text=True)
             tela = c.get("/app/relatorios").get_data(as_text=True)
         linhas = um.split("\n")
-        self.assertEqual(linhas[:3], ["━" * 20, "*RELATÓRIO DE MONITORAMENTO E MANEJO*", f"*ONEAGRO - {webapp._hoje_cuiaba():%d/%m/%Y}*"])
-        self.assertEqual(linhas[3:6], ["", "*Grupo Cab - FAZ MOURÃO*", ""])
-        self.assertEqual(todos.count("*RELATÓRIO DE MONITORAMENTO E MANEJO*"), 1)
+        self.assertEqual(linhas[:3], ["*Grupo Cab - FAZ MOURÃO*", "RELATÓRIO DE MONITORAMENTO E MANEJO",
+                                      f"ONEAGRO - {webapp._hoje_cuiaba():%d/%m/%Y}"])
+        self.assertEqual(todos.count("RELATÓRIO DE MONITORAMENTO E MANEJO"), 1)
         self.assertEqual(todos.count("Clima ok"), 2)
         self.assertIn("Todas as fazendas (uma mensagem só)", tela)
         # Mesmo relatorio pra todo cliente, Free ou pago (pedido do Alan, 14/11/2026)
@@ -298,12 +297,12 @@ class FazendaAdicionalTest(unittest.TestCase):
         master = self._logado(models.get_user_by_username("Zzz Master Grupo Rec")["id"])
         with webapp.app.test_request_context():
             topo = webapp._cabecalho_relatorio_cliente()
-            rodape = ["", f"_{webapp.AVISO_AGRONOMO}_", "", webapp.CONTATO_RELATORIO]
+            rodape = webapp._RODAPE_TEXTO
             junto = webapp._juntar_relatorios([
-                "\n".join(topo + ["", "*A*", "━" * 20, "corpo A"] + rodape),
-                "\n".join(topo + ["", "*B*", "━" * 20, "corpo B"] + rodape)])
+                "\n".join(["*A*"] + topo + ["━" * 20, "corpo A"] + rodape),
+                "\n".join(["*B*"] + topo + ["━" * 20, "corpo B"] + rodape)])
         self.assertEqual(junto.count("RELATÓRIO DE MONITORAMENTO"), 1)
-        self.assertEqual(junto.count(webapp.CONTATO_RELATORIO), 1)
+        self.assertEqual(junto.count("*OneAgro: (43)99114-7595*"), 1)
         self.assertLess(junto.index("corpo A"), junto.index("*B*"))
         with mock.patch.object(webapp, "_texto_relatorio", side_effect=lambda site, *a, **k: f"texto de {site}"), \
                 mock.patch.object(webapp, "_cards_by_site_all", return_value={s: [] for s in sites}), \

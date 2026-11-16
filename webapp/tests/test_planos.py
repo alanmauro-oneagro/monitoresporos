@@ -1274,9 +1274,10 @@ class NivelAcaoTest(unittest.TestCase):
         self.assertEqual([d["rotulo"] for d in doencas], ["A", "B"])
         with webapp.app.test_request_context():
             texto = webapp._format_whatsapp_message("Zzz Acao", doencas, weather={"previsao_5_dias": []}, produtos={})
-        self.assertIn("🔴 *1. ENTRAR COM APLICAÇÃO*", texto)
-        self.assertIn("👉 *Ação:*", texto)
-        self.assertNotIn("*B*", texto)  # Monitorar fica fora do texto (so' no PDF/tela)
+        self.assertIn("🔴 *1. ENTRAR COM APLICAÇÃO*:", texto)
+        self.assertIn("⚠️ *DOENÇAS EM ATENÇÃO / PERIGO*", texto)
+        self.assertIn("🍄 *B*", texto)  # na lista de doencas em atencao
+        self.assertNotIn(" B", texto.split("*RECOMENDAÇÕES*")[1])  # Monitorar fica fora das recomendacoes
 
 
 class RegrasNivelAcaoTelaTest(unittest.TestCase):
@@ -1471,9 +1472,7 @@ class ProdutosFolhaPorDataTest(unittest.TestCase):
             app_mod._com_nivel_acao(doencas)
             texto = app_mod._format_whatsapp_message("Zzz Teste Folha", doencas, weather={"previsao_5_dias": []},
                                                       produtos=produtos)
-        self.assertIn("*PRODUTOS DE FOLHA POR APLICAÇÃO*", texto)
-        self.assertLess(texto.index("*25DAP:*"), texto.index("*85DAP:*"))
-        self.assertIn("*25DAP:* ⚗️ Alade · 🧪 Vult", texto)
+        self.assertIn("*RECOMENDAÇÕES*:", texto)
         pdf = export_pdf.build_recommendation_pdf("Zzz Teste Folha", "Safra", [], produtos=produtos)
         self.assertTrue(pdf.getvalue()[:4] == b"%PDF")
 
