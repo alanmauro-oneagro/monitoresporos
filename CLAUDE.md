@@ -764,8 +764,9 @@ site tem que entrar la'.
   `admin_report_permissions.html`) mostram o nome de exibicao (template global `nome_fazenda`), nao o `site_name`.
   Na aba NDVI: "Nuvens até" por fazenda (`NDVI_OPCOES_NUVENS`, setting `ndvi_nuvens_por_fazenda`,
   `models.get/set_ndvi_nuvens`, rota `salvar_ndvi_nuvens`, salva sozinho; vazio = padrao 5% no Pre-visualizar e 3%
-  no automatico) vale no Pre-visualizar e no envio automatico; "📋 Copiar mensagem" copia o texto das imagens
-  marcadas (mesma legenda do envio) pra mandar a mao; "Recebem o NDVI" fica no rodape do cartao.
+  no automatico) vale no Pre-visualizar e no envio automatico; "📋 Copiar imagem" (ex-"Copiar mensagem", pedido do Alan, 17/11/2026) copia a
+  IMAGEM marcada (`navigator.clipboard.write` + `ClipboardItem` image/png, rota `imagem_ndvi_historico`); com 2+ marcadas
+  ou sem copiar imagem no navegador abre o compartilhar do celular (`navigator.share({files})`), senao baixa os arquivos; "Recebem o NDVI" fica no rodape do cartao.
   **Nuvem medida SOBRE A FAZENDA** (pedido do Alan, 13/11/2026: o `eo:cloud_cover` do catalogo e' do quadro de
   100 x 100 km -- "2% de nuvens" com a fazenda encoberta): o `EVALSCRIPT_NDVI` pinta nuvem com alfa ~0.1 (fora do
   contorno alfa 0), `ndvi_service.nuvens_na_fazenda` conta; `buscar_ndvi` tenta os dias mais perto da data
