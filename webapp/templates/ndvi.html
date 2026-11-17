@@ -5,7 +5,9 @@
 .coords-fazenda { display: inline-block; margin-top: .35rem; padding: .2rem .6rem; border-radius: 999px;
     background: #e7f5ea; color: #1b5e20; font-weight: 600; font-size: .9rem; text-decoration: none; font-variant-numeric: tabular-nums; }
 .coords-fazenda:hover { background: #d3eed9; color: #1b5e20; }
-.mapa-car { height: 280px; border-radius: .4rem; border: 1px solid #ccc; }
+.mapa-car { height: 320px; border-radius: .4rem; border: 1px solid #ccc; }
+.mapa-car.recortando { cursor: crosshair; }
+.vertice-recorte { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid #2e7d32; }
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 {% endblock %}
@@ -60,6 +62,14 @@
                             <input type="text" name="nome" value="{{ car.nome }}" maxlength="120" required class="form-control form-control-sm" title="Nome do CAR (salva sozinho)" aria-label="Nome do CAR">
                             <span class="autosave-status small"></span>
                         </form>
+                        <form method="post" action="{{ url_for('usar_ndvi_car') }}" data-autosave class="d-flex align-items-center">
+                            <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                            <input type="hidden" name="car_id" value="{{ car.id }}">
+                            <input type="hidden" name="usar" value="0">
+                            <label class="form-check-label small d-flex align-items-center gap-1 mb-0" title="Só os CAR marcados geram a imagem NDVI (nenhum marcado = todos)">
+                                <input type="checkbox" class="form-check-input mt-0" name="usar" value="1" {% if car.usar %}checked{% endif %}> Usar no NDVI
+                            </label>
+                        </form>
                         <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 ver-car"
                                 data-url="{{ url_for('contorno_ndvi_car', car_id=car.id, site_name=site_group.site) }}" title="Ver o contorno do CAR no mapa">👁 Ver</button>
                         <a class="btn btn-sm btn-outline-secondary py-0 px-2" href="{{ url_for('baixar_ndvi_car', car_id=car.id, site_name=site_group.site) }}" title="Baixar o arquivo do CAR (.kml)">⬇ Baixar</a>
@@ -70,7 +80,20 @@
                         </form>
                     </div>
                     <div class="small text-muted">anexado em {{ car.criado_em | data_br }}</div>
-                    <div class="mapa-car d-none mt-1"></div>
+                    <div class="caixa-mapa-car d-none mt-1">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                            <button type="button" class="btn btn-sm btn-outline-success py-0 px-2 recortar-car">✂️ Recortar área</button>
+                            <span class="barra-recorte d-none d-flex flex-wrap align-items-center gap-2">
+                                <span class="small text-muted dica-recorte">Clique no mapa os cantos da área (arraste para ajustar).</span>
+                                <button type="button" class="btn btn-sm btn-success py-0 px-2 salvar-recorte" disabled>Salvar recorte</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 desfazer-recorte">↶ Desfazer ponto</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 cancelar-recorte">Cancelar</button>
+                            </span>
+                            <span class="small status-recorte"></span>
+                        </div>
+                        <div class="mapa-car"
+                             data-recortar="{{ url_for('recortar_ndvi_car', car_id=car.id) }}" data-site="{{ site_group.site }}"></div>
+                    </div>
                     </div>
                     {% endfor %}
                 </div>
@@ -288,21 +311,79 @@ document.querySelectorAll('.copiar-ndvi').forEach(function (botao) {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 document.querySelectorAll('.ver-car').forEach(function (botao) {
-    botao.addEventListener('click', function () {
-        var caixa = botao.closest('.car-item').querySelector('.mapa-car');
-        if (!caixa.classList.contains('d-none')) { caixa.classList.add('d-none'); botao.textContent = '👁 Ver'; return; }
-        caixa.classList.remove('d-none'); botao.textContent = '✕ Fechar';
-        if (caixa._mapa) { caixa._mapa.invalidateSize(); return; }
-        if (!window.L) { caixa.textContent = 'Mapa indisponível.'; return; }
-        var mapa = L.map(caixa);
-        caixa._mapa = mapa;
+    var item = botao.closest('.car-item');
+    var caixa = item.querySelector('.caixa-mapa-car');
+    var div = item.querySelector('.mapa-car');
+    var barra = item.querySelector('.barra-recorte');
+    var botaoRecortar = item.querySelector('.recortar-car');
+    var status = item.querySelector('.status-recorte');
+    var salvar = item.querySelector('.salvar-recorte');
+    var mapa = null, contorno = null, pontos = [], marcadores = [], desenho = null, recortando = false;
+
+    function redesenhar() {
+        var latlngs = marcadores.map(function (m) { return m.getLatLng(); });
+        if (desenho) { mapa.removeLayer(desenho); desenho = null; }
+        if (latlngs.length >= 2) desenho = L.polygon(latlngs, {color: '#00e676', weight: 2, fillOpacity: 0.25, dashArray: '5,4'}).addTo(mapa);
+        salvar.disabled = latlngs.length < 3;
+    }
+    function limpar() {
+        marcadores.forEach(function (m) { mapa.removeLayer(m); });
+        marcadores = [];
+        redesenhar();
+    }
+    function modo(ligado) {
+        recortando = ligado;
+        barra.classList.toggle('d-none', !ligado);
+        botaoRecortar.classList.toggle('d-none', ligado);
+        div.classList.toggle('recortando', ligado);
+        if (!ligado && mapa) limpar();
+    }
+    function abrirMapa() {
+        mapa = L.map(div);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri' }).addTo(mapa);
+        mapa.on('click', function (e) {
+            if (!recortando) return;
+            var m = L.marker(e.latlng, {draggable: true, icon: L.divIcon({className: 'vertice-recorte', iconSize: [12, 12]})}).addTo(mapa);
+            m.on('drag', redesenhar);
+            marcadores.push(m);
+            redesenhar();
+        });
         fetch(botao.dataset.url, {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (d) {
             var aneis = (d.aneis || []).map(function (anel) { return anel.map(function (p) { return [p[1], p[0]]; }); });
             if (!aneis.length) { mapa.setView([-14, -52], 4); return; }
-            var forma = L.polygon(aneis, {color: '#ffeb3b', weight: 2, fillOpacity: 0.15}).addTo(mapa).bindTooltip(d.nome || '');
-            mapa.fitBounds(forma.getBounds(), {padding: [10, 10]});
+            contorno = L.polygon(aneis, {color: '#ffeb3b', weight: 2, fillOpacity: 0.12, interactive: false}).addTo(mapa);
+            mapa.fitBounds(contorno.getBounds(), {padding: [10, 10]});
         }).catch(function () { mapa.setView([-14, -52], 4); });
+    }
+
+    botao.addEventListener('click', function () {
+        if (!caixa.classList.contains('d-none')) { caixa.classList.add('d-none'); botao.textContent = '👁 Ver'; modo(false); return; }
+        caixa.classList.remove('d-none'); botao.textContent = '✕ Fechar';
+        if (!window.L) { div.textContent = 'Mapa indisponível.'; return; }
+        if (mapa) { mapa.invalidateSize(); return; }
+        abrirMapa();
+    });
+    botaoRecortar.addEventListener('click', function () { status.textContent = ''; modo(true); });
+    item.querySelector('.cancelar-recorte').addEventListener('click', function () { modo(false); });
+    item.querySelector('.desfazer-recorte').addEventListener('click', function () {
+        var m = marcadores.pop();
+        if (m) { mapa.removeLayer(m); redesenhar(); }
+    });
+    salvar.addEventListener('click', function () {
+        var dados = new FormData();
+        dados.append('site_name', div.dataset.site);
+        dados.append('pontos', JSON.stringify(marcadores.map(function (m) { var p = m.getLatLng(); return [p.lng, p.lat]; })));
+        salvar.disabled = true;
+        status.textContent = 'Salvando...';
+        fetch(div.dataset.recortar, {method: 'POST', body: dados, credentials: 'same-origin', headers: {'X-Autosave': '1'}})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                status.textContent = d.message || '';
+                status.className = 'small status-recorte ' + (d.ok ? 'text-success' : 'text-danger');
+                if (d.ok) setTimeout(function () { location.reload(); }, 900);
+                else salvar.disabled = false;
+            })
+            .catch(function () { status.textContent = 'Não foi possível salvar.'; status.className = 'small status-recorte text-danger'; salvar.disabled = false; });
     });
 });
 </script>

@@ -784,6 +784,12 @@ site tem que entrar la'.
   cartao (`contorno_ndvi_car` -> aneis do KML, Leaflet + Esri) e "⬇ Baixar" baixa o KML guardado
   (`baixar_ndvi_car`, `OneAgro_CAR_<nome>_<data>.kml`; shapefile anexado e' guardado ja' convertido em KML). Teste
   `NdviCarEditarVerTest`.
+  **Recorte de CAR grande + quais CAR geram o NDVI** (pedido do Alan, 17/11/2026): no mapa do "👁 Ver", "✂️ Recortar
+  área" -- clique os cantos (vertices arrastaveis, "↶ Desfazer ponto", Cancelar), "Salvar recorte" (rota
+  `recortar_ndvi_car`, `_recortar_car`: desenho cortado pelo contorno do CAR com shapely) cria o CAR "Recorte - <nome>"
+  marcado e DESMARCA o CAR de origem (que fica guardado). Caixa "Usar no NDVI" em cada CAR (`farm_ndvi_car.usar`,
+  rota `usar_ndvi_car`, `models.set_farm_ndvi_car_usar`; mudar limpa a imagem guardada): `get_farm_ndvi_cars_kml`
+  devolve so' os marcados (Pre-visualizar e envio automatico); nenhum marcado = todos. Teste `NdviCarRecorteTest`.
 - **PDF da fazenda no modelo "Monitoramento e Manejo"** (pedido do Alan, 16/11/2026; substitui o layout antigo --
   vale no botao PDF, envio por WhatsApp e app; `export_pdf.build_recommendation_pdf`): faixa azul no topo; RESUMO DA
   SEMANA (Entrar com aplicação / Acompanhar / Monitorar + chuva, dia com menos chuva, vento); CLIMA NA FAZENDA (temp.,

@@ -1635,3 +1635,54 @@ class NdviCarEditarVerTest(unittest.TestCase):
                 self.assertEqual(c.get(f"/ndvi/car/{car_id}/kml?site_name=Outra").status_code, 404)
         finally:
             models.delete_farm_ndvi_car(car_id, site)
+
+
+class NdviCarRecorteTest(unittest.TestCase):
+    """Recortar um pedaco do CAR e escolher quais CAR geram o NDVI (pedido do Alan, 17/11/2026)."""
+
+    def test_recorte_e_usar(self):
+        from unittest import mock
+        import json as _json
+        import ndvi_service
+        if not models.get_user_by_username("Zzz Master NDVI"):
+            models.create_user("Zzz Master NDVI", "x", is_master=True)
+        uid = models.get_user_by_username("Zzz Master NDVI")["id"]
+        site = "Zzz Fazenda NDVI Recorte"
+        quadrado = [[-55.0, -12.0], [-54.9, -12.0], [-54.9, -12.1], [-55.0, -12.1], [-55.0, -12.0]]
+        grande = models.add_farm_ndvi_car(site, "Grande", ndvi_service.aneis_para_kml([quadrado]))
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(uid)
+            s["_fresh"] = True
+        try:
+            with mock.patch.object(webapp, "_checar_acesso_site"):
+                # desenho passa do contorno: o recorte fica so' dentro do CAR
+                pontos = [[-55.05, -12.0], [-54.95, -12.0], [-54.95, -12.05], [-55.05, -12.05]]
+                r = c.post(f"/ndvi/car/{grande}/recortar", data={"site_name": site, "pontos": _json.dumps(pontos)},
+                           headers={"X-Autosave": "1"}).get_json()
+                self.assertTrue(r["ok"], r)
+                cars = {x["id"]: x for x in models.get_farm_ndvi_cars(site)}
+                self.assertFalse(cars[grande]["usar"])
+                self.assertTrue(cars[r["car_id"]]["usar"])
+                self.assertEqual(cars[r["car_id"]]["nome"], "Recorte - Grande")
+                kmls = models.get_farm_ndvi_cars_kml(site)
+                self.assertEqual(len(kmls), 1)
+                xs = [p[0] for p in ndvi_service.parse_kml_poligono(kmls[0])[0]]
+                self.assertGreaterEqual(min(xs), -55.0)
+                # fora do contorno = recusado
+                fora = [[-56, -13], [-55.9, -13], [-55.9, -13.1]]
+                r2 = c.post(f"/ndvi/car/{grande}/recortar", data={"site_name": site, "pontos": _json.dumps(fora)},
+                            headers={"X-Autosave": "1"}).get_json()
+                self.assertFalse(r2["ok"])
+                # marcar o grande de volta (campo escondido "0" + caixa "1")
+                c.post("/ndvi/car/usar", data={"site_name": site, "car_id": grande, "usar": ["0", "1"]},
+                       headers={"X-Autosave": "1"})
+                self.assertEqual(len(models.get_farm_ndvi_cars_kml(site)), 2)
+                # nenhum marcado = usa todos
+                for x in models.get_farm_ndvi_cars(site):
+                    c.post("/ndvi/car/usar", data={"site_name": site, "car_id": x["id"], "usar": "0"},
+                           headers={"X-Autosave": "1"})
+                self.assertEqual(len(models.get_farm_ndvi_cars_kml(site)), 2)
+        finally:
+            for x in models.get_farm_ndvi_cars(site):
+                models.delete_farm_ndvi_car(x["id"], site)
