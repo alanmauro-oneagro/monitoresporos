@@ -1556,3 +1556,33 @@ class ProbabilidadeChuvaTest(unittest.TestCase):
         self.assertEqual([d["chuva_prob"] for d in r["previsao_5_dias"]], [20, 30, 40, 50, 60])
         self.assertEqual(r["chuva_hoje_prob"], 10)
         self.assertEqual(r["previsao_5_dias"][0]["vento_dir"], 45)
+
+
+class NdviNuvensDaTelaTest(unittest.TestCase):
+    """O Pre-visualizar usa o "Nuvens na fazenda até" que esta' na tela, mesmo antes do autosave (17/11/2026)."""
+
+    def test_usa_limite_enviado(self):
+        from unittest import mock
+        import ndvi_service
+        if not models.get_user_by_username("Zzz Master NDVI"):
+            models.create_user("Zzz Master NDVI", "x", is_master=True)
+        uid = models.get_user_by_username("Zzz Master NDVI")["id"]
+        site = "Zzz Fazenda NDVI Nuvens"
+        models.set_ndvi_nuvens(site, 5)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(uid)
+            s["_fresh"] = True
+        visto = {}
+
+        def falso(aneis, data_alvo=None, cobertura_maxima=None, **kw):
+            visto["limite"] = cobertura_maxima
+            return None, "teste"
+        with mock.patch.object(webapp, "_checar_acesso_site"), \
+                mock.patch.object(models, "get_farm_ndvi_cars_kml", return_value=["<kml/>"]), \
+                mock.patch.object(ndvi_service, "parse_kml_poligono", return_value=[[(0, 0)]]), \
+                mock.patch.object(ndvi_service, "buscar_ndvi", side_effect=falso):
+            c.post("/ndvi/pre_visualizar", data={"site_name": site, "nuvens": "30"})
+        self.assertEqual(visto["limite"], 30)
+        self.assertEqual(models.get_ndvi_nuvens().get(site), 30)
+        models.set_ndvi_nuvens(site, None)

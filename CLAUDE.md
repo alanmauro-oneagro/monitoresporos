@@ -764,7 +764,9 @@ site tem que entrar la'.
   `admin_report_permissions.html`) mostram o nome de exibicao (template global `nome_fazenda`), nao o `site_name`.
   Na aba NDVI: "Nuvens até" por fazenda (`NDVI_OPCOES_NUVENS`, setting `ndvi_nuvens_por_fazenda`,
   `models.get/set_ndvi_nuvens`, rota `salvar_ndvi_nuvens`, salva sozinho; vazio = padrao 5% no Pre-visualizar e 3%
-  no automatico) vale no Pre-visualizar e no envio automatico; "📋 Copiar imagem" (ex-"Copiar mensagem", pedido do Alan, 17/11/2026) copia a
+  no automatico) vale no Pre-visualizar e no envio automatico (o Pre-visualizar MANDA o valor da tela junto -- campo escondido `nuvens` em
+  `.form-preview-ndvi`, preenchido no submit -- e a rota grava; antes, mudar e clicar logo usava o valor anterior por causa
+  do autosave de ~1,2 s; pedido do Alan, 17/11/2026; teste `NdviNuvensDaTelaTest`; `MAX_CENAS_TENTADAS` foi de 6 pra 10); "📋 Copiar imagem" (ex-"Copiar mensagem", pedido do Alan, 17/11/2026) copia a
   IMAGEM marcada (`navigator.clipboard.write` + `ClipboardItem` image/png, rota `imagem_ndvi_historico`); com 2+ marcadas
   ou sem copiar imagem no navegador abre o compartilhar do celular (`navigator.share({files})`), senao baixa os arquivos; "Recebem o NDVI" fica no rodape do cartao.
   **Nuvem medida SOBRE A FAZENDA** (pedido do Alan, 13/11/2026: o `eo:cloud_cover` do catalogo e' do quadro de

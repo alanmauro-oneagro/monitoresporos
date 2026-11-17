@@ -474,7 +474,7 @@ def _resumir_erro_process_api(corpo_erro):
     return " -- ".join(partes)
 
 
-MAX_CENAS_TENTADAS = 6  # imagens pedidas a' Process API, no maximo, ate' achar uma com a fazenda limpa
+MAX_CENAS_TENTADAS = 10  # imagens pedidas a' Process API, no maximo, ate' achar uma com a fazenda limpa (era 6; 17/11/2026)
 NUVEM_MAXIMA_DO_QUADRO = 90  # % do quadro inteiro (100 x 100 km) -- acima disso nem tenta
 
 
