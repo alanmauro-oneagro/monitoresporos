@@ -5278,6 +5278,10 @@ def pre_visualizar_ndvi():
         lista_de_aneis_por_car = [ndvi_service.parse_kml_poligono(kml) for kml in cars_kml]
     except ValueError as exc:
         return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' invalido: {exc}", "ndvi", ok=False)
+    # Limite de nuvens que esta' na tela (o select salva sozinho com atraso; mandado junto, vale ele e ja' grava).
+    nuvens_tela = (request.form.get("nuvens") or "").strip()
+    if "nuvens" in request.form and (not nuvens_tela or (nuvens_tela.isdigit() and int(nuvens_tela) in NDVI_OPCOES_NUVENS)):
+        models.set_ndvi_nuvens(site_name, int(nuvens_tela) if nuvens_tela else None)
     resultado, erro = ndvi_service.buscar_ndvi(lista_de_aneis_por_car, data_alvo=data_alvo,
                                                cobertura_maxima=models.get_ndvi_nuvens().get(site_name))
     if erro:
