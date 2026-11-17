@@ -135,6 +135,8 @@
                         <div class="form-check mb-1" title="Marcar pra enviar por WhatsApp">
                             <input class="form-check-input" type="checkbox" form="ndvi_whats_{{ site_idx }}"
                                    name="historico_ids" value="{{ item.id }}" id="ndvi_sel_{{ site_idx }}_{{ item.id }}"
+                                   data-imagem="{{ url_for('imagem_ndvi_historico', historico_id=item.id, site_name=site_group.site) }}"
+                                   data-arquivo="NDVI_{{ site_group.nome_exibicao | replace(' ', '_') }}_{{ item.data_alvo }}.png"
                                    data-mensagem="🛰️ NDVI - {{ site_group.nome_exibicao }} - {{ item.data_alvo | data_br }}{% if item.cobertura_nuvens is not none %} ({{ '%.0f'|format(item.cobertura_nuvens) }}% de nuvens){% endif %}">
                             <label class="form-check-label small" for="ndvi_sel_{{ site_idx }}_{{ item.id }}">Selecionar</label>
                         </div>
@@ -161,7 +163,7 @@
                     📲 Enviar selecionadas por WhatsApp
                 </button>
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-2 copiar-ndvi" data-form="ndvi_whats_{{ site_idx }}"
-                        title="Copia o texto das imagens marcadas pra mandar pelo seu WhatsApp">📋 Copiar mensagem</button>
+                        title="Copia a imagem marcada (mais de uma: abre o compartilhar do celular) pra colar no seu WhatsApp">📋 Copiar imagem</button>
                 {% else %}
                 <div class="text-muted small">Nenhuma imagem gerada ainda.</div>
                 {% endif %}
@@ -220,15 +222,42 @@ document.querySelectorAll('.form-car').forEach(function (form) {
     form.querySelector('input[type="file"]').addEventListener('change', function (e) { if (e.target.files.length) enviar(); });
     form.querySelector('textarea').addEventListener('change', function (e) { if (e.target.value.trim()) enviar(); });
 });
+// "Copiar imagem" (pedido do Alan, 17/11/2026): copia a IMAGEM marcada, nao o texto. A area de transferencia guarda
+// so' uma imagem: com mais de uma marcada (ou sem copiar imagem no navegador) abre o compartilhar do celular com
+// todas; sem isso, baixa os arquivos.
 document.querySelectorAll('.copiar-ndvi').forEach(function (botao) {
     botao.addEventListener('click', function () {
-        var marcadas = document.querySelectorAll('input[name="historico_ids"][form="' + botao.dataset.form + '"]:checked');
+        var marcadas = Array.from(document.querySelectorAll('input[name="historico_ids"][form="' + botao.dataset.form + '"]:checked'));
         if (!marcadas.length) { alert('Marque pelo menos uma imagem.'); return; }
-        var texto = Array.from(marcadas).map(function (c) { return c.dataset.mensagem; }).join('\n');
-        var pronto = function () { var antes = botao.textContent; botao.textContent = '✓ Copiado'; setTimeout(function () { botao.textContent = antes; }, 2000); };
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(texto).then(pronto, function () { prompt('Copie a mensagem:', texto); });
-        } else { prompt('Copie a mensagem:', texto); }
+        var rotulo = botao.textContent;
+        var aviso = function (txt) { botao.textContent = txt; setTimeout(function () { botao.textContent = rotulo; }, 2500); };
+        var baixar = function (c) { return fetch(c.dataset.imagem, {credentials: 'same-origin'}).then(function (r) {
+            if (!r.ok) throw new Error('imagem'); return r.blob(); }).then(function (b) { return b.type === 'image/png' ? b : new Blob([b], {type: 'image/png'}); }); };
+        var salvarArquivos = function (blobs) {
+            blobs.forEach(function (b, i) {
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(b); a.download = marcadas[i].dataset.arquivo || 'NDVI.png';
+                document.body.appendChild(a); a.click(); a.remove();
+            });
+            aviso('⬇ Imagem baixada');
+        };
+        var compartilhar = function () {
+            return Promise.all(marcadas.map(baixar)).then(function (blobs) {
+                var arquivos = blobs.map(function (b, i) { return new File([b], marcadas[i].dataset.arquivo || 'NDVI.png', {type: 'image/png'}); });
+                if (navigator.canShare && navigator.canShare({files: arquivos})) {
+                    return navigator.share({files: arquivos}).then(function () { aviso('✓ Compartilhado'); }, function () {});
+                }
+                salvarArquivos(blobs);
+            });
+        };
+        botao.textContent = '⏳ Copiando...';
+        if (marcadas.length === 1 && navigator.clipboard && navigator.clipboard.write && window.ClipboardItem && window.isSecureContext) {
+            navigator.clipboard.write([new ClipboardItem({'image/png': baixar(marcadas[0])})])
+                .then(function () { aviso('✓ Imagem copiada'); })
+                .catch(function () { compartilhar().catch(function () { aviso('Não deu para copiar a imagem'); }); });
+        } else {
+            compartilhar().catch(function () { aviso('Não deu para copiar a imagem'); });
+        }
     });
 });
 </script>
