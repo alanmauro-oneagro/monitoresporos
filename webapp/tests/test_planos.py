@@ -1599,3 +1599,39 @@ class NdviNuvensDaTelaTest(unittest.TestCase):
         self.assertEqual(visto["limite"], 30)
         self.assertEqual(models.get_ndvi_nuvens().get(site), 30)
         models.set_ndvi_nuvens(site, None)
+
+
+class NdviCarEditarVerTest(unittest.TestCase):
+    """CAR da aba NDVI: nome editavel, ver o contorno e baixar o arquivo (pedido do Alan, 17/11/2026)."""
+
+    def test_renomear_ver_baixar(self):
+        from unittest import mock
+        import ndvi_service
+        if not models.get_user_by_username("Zzz Master NDVI"):
+            models.create_user("Zzz Master NDVI", "x", is_master=True)
+        uid = models.get_user_by_username("Zzz Master NDVI")["id"]
+        site = "Zzz Fazenda NDVI CAR"
+        anel = [[-55.0, -12.0], [-55.0, -12.1], [-55.1, -12.1], [-55.0, -12.0]]
+        models.add_farm_ndvi_car(site, "arquivo.zip", ndvi_service.aneis_para_kml([anel]))
+        car_id = models.get_farm_ndvi_cars(site)[0]["id"]
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(uid)
+            s["_fresh"] = True
+        try:
+            with mock.patch.object(webapp, "_checar_acesso_site"):
+                r = c.post("/ndvi/car/renomear", data={"site_name": site, "car_id": car_id, "nome": "Faz Ouro Branco II"},
+                           headers={"X-Autosave": "1"})
+                self.assertTrue(r.get_json()["ok"])
+                self.assertEqual(models.get_farm_ndvi_cars(site)[0]["nome"], "Faz Ouro Branco II")
+                r = c.post("/ndvi/car/renomear", data={"site_name": site, "car_id": car_id, "nome": " "},
+                           headers={"X-Autosave": "1"})
+                self.assertFalse(r.get_json()["ok"])
+                d = c.get(f"/ndvi/car/{car_id}/contorno?site_name={site}").get_json()
+                self.assertEqual(d["aneis"][0][0], [-55.0, -12.0])
+                r = c.get(f"/ndvi/car/{car_id}/kml?site_name={site}")
+                self.assertIn(b"<kml", r.data)
+                self.assertIn("OneAgro_CAR_Faz_Ouro_Branco_II", r.headers["Content-Disposition"])
+                self.assertEqual(c.get(f"/ndvi/car/{car_id}/kml?site_name=Outra").status_code, 404)
+        finally:
+            models.delete_farm_ndvi_car(car_id, site)
