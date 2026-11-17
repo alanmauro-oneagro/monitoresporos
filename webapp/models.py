@@ -783,6 +783,11 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
+        # CAR que entra no NDVI (recorte de area grande, pedido do Alan, 17/11/2026).
+        conn.execute("ALTER TABLE farm_ndvi_car ADD COLUMN usar INTEGER NOT NULL DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass
+    try:
         # Estacao escolhida pode ser do INMET (Brasil) ou da DMC (Chile) --
         # sem essa coluna, um codigo de estacao chileno colidiria com a
         # numeracao do INMET. Default 'BR' preserva o comportamento de
@@ -2600,7 +2605,7 @@ def get_farm_ndvi_cars(site_name):
     cadastrados na aba NDVI."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, nome, criado_em FROM farm_ndvi_car WHERE site_name = ? ORDER BY criado_em, id",
+        "SELECT id, nome, criado_em, usar FROM farm_ndvi_car WHERE site_name = ? ORDER BY criado_em, id",
         (site_name,),
     ).fetchall()
     conn.close()
@@ -2612,13 +2617,13 @@ def get_all_farm_ndvi_cars():
     NDVI de todas as fazendas de uma vez sem carregar todo KML."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT site_name, id, nome, criado_em FROM farm_ndvi_car ORDER BY site_name, criado_em, id"
+        "SELECT site_name, id, nome, criado_em, usar FROM farm_ndvi_car ORDER BY site_name, criado_em, id"
     ).fetchall()
     conn.close()
     por_site = {}
     for r in rows:
         por_site.setdefault(r["site_name"], []).append(
-            {"id": r["id"], "nome": r["nome"], "criado_em": r["criado_em"]}
+            {"id": r["id"], "nome": r["nome"], "criado_em": r["criado_em"], "usar": bool(r["usar"])}
         )
     return por_site
 
@@ -2630,21 +2635,24 @@ def get_farm_ndvi_cars_kml(site_name):
     em app.py)."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT kml FROM farm_ndvi_car WHERE site_name = ? ORDER BY criado_em, id", (site_name,)
+        "SELECT kml, usar FROM farm_ndvi_car WHERE site_name = ? ORDER BY criado_em, id", (site_name,)
     ).fetchall()
     conn.close()
-    return [r["kml"] for r in rows]
+    # So' os marcados "Usar no NDVI"; nenhum marcado = todos (nao deixa a fazenda sem NDVI).
+    marcados = [r["kml"] for r in rows if r["usar"]]
+    return marcados or [r["kml"] for r in rows]
 
 
 def add_farm_ndvi_car(site_name, nome, kml):
     """Anexa mais um CAR a fazenda -- NAO substitui os anteriores, cada
     CAR fica numa linha propria, removivel independente (ver
-    `delete_farm_ndvi_car`)."""
+    `delete_farm_ndvi_car`). Devolve o id."""
     conn = get_db()
-    conn.execute(
+    cur = conn.execute(
         "INSERT INTO farm_ndvi_car (site_name, nome, kml, criado_em) VALUES (?, ?, ?, ?)",
         (site_name, nome, kml, _agora_cuiaba()),
     )
+    novo_id = cur.lastrowid
     # O CAR anexado muda o contorno combinado da fazenda -- a ultima
     # imagem cacheada (se tiver) nao vale mais.
     conn.execute(
@@ -2652,6 +2660,7 @@ def add_farm_ndvi_car(site_name, nome, kml):
     )
     conn.commit()
     conn.close()
+    return novo_id
 
 
 def get_farm_ndvi_car(car_id, site_name):
@@ -2662,6 +2671,17 @@ def get_farm_ndvi_car(car_id, site_name):
     ).fetchone()
     conn.close()
     return dict(r) if r else None
+
+
+def set_farm_ndvi_car_usar(car_id, site_name, usar):
+    """Marca/desmarca o CAR pra entrar no NDVI; a imagem guardada da fazenda deixa de valer."""
+    conn = get_db()
+    cur = conn.execute("UPDATE farm_ndvi_car SET usar = ? WHERE id = ? AND site_name = ?",
+                       (1 if usar else 0, car_id, site_name))
+    conn.execute("UPDATE farm_ndvi_area SET imagem = NULL, imagem_gerada_em = NULL WHERE site_name = ?", (site_name,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
 
 
 def renomear_farm_ndvi_car(car_id, site_name, nome):

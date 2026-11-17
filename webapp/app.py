@@ -5136,6 +5136,55 @@ def renomear_ndvi_car():
     return _save_response(f"CAR renomeado para '{nome[:120]}'.", "ndvi")
 
 
+@app.route("/ndvi/car/usar", methods=["POST"])
+@aba_required("ndvi")
+def usar_ndvi_car():
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    car_id = request.form.get("car_id", type=int)
+    if car_id is None:
+        abort(400)
+    usar = "1" in request.form.getlist("usar")
+    if not models.set_farm_ndvi_car_usar(car_id, site_name, usar):
+        abort(404)
+    return _save_response("CAR vai entrar no NDVI." if usar else "CAR fora do NDVI.", "ndvi")
+
+
+def _recortar_car(aneis_car, pontos):
+    """Area desenhada (pontos [[lon, lat], ...]) dentro do contorno do CAR -> aneis do recorte."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    if len(pontos) < 3:
+        raise ValueError("Marque pelo menos 3 pontos no mapa.")
+    desenho = Polygon(pontos).buffer(0)
+    car = unary_union([Polygon(a).buffer(0) for a in aneis_car if len(a) >= 3])
+    recorte = desenho.intersection(car)
+    partes = [g for g in getattr(recorte, "geoms", [recorte]) if g.geom_type == "Polygon" and not g.is_empty]
+    if not partes:
+        raise ValueError("A área desenhada não cai dentro do contorno do CAR.")
+    return [[[round(x, 7), round(y, 7)] for x, y in p.exterior.coords] for p in partes]
+
+
+@app.route("/ndvi/car/<int:car_id>/recortar", methods=["POST"])
+@aba_required("ndvi")
+def recortar_ndvi_car(car_id):
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    car = models.get_farm_ndvi_car(car_id, site_name)
+    if not car:
+        abort(404)
+    try:
+        pontos = [[float(lon), float(lat)] for lon, lat in json.loads(request.form.get("pontos") or "[]")]
+        aneis = _recortar_car(ndvi_service.parse_kml_poligono(car["kml"]), pontos)
+    except (ValueError, TypeError) as exc:
+        return _save_response(f"Não foi possível recortar: {exc}", "ndvi", ok=False)
+    nome = (request.form.get("nome") or "").strip()[:120] or f"Recorte - {car['nome']}"[:120]
+    novo_id = models.add_farm_ndvi_car(site_name, nome, ndvi_service.aneis_para_kml(aneis))
+    # O recorte passa a ser o que gera a imagem; o CAR grande fica guardado, desmarcado.
+    models.set_farm_ndvi_car_usar(car_id, site_name, False)
+    return _save_response(f"Recorte '{nome}' salvo -- ele é que vai gerar o NDVI.", "ndvi", extra={"car_id": novo_id})
+
+
 @app.route("/ndvi/car/<int:car_id>/contorno")
 @aba_required("ndvi")
 def contorno_ndvi_car(car_id):
