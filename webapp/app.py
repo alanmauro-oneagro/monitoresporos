@@ -5120,6 +5120,51 @@ def save_ndvi_car():
     return _save_response(f"CAR '{nome}' anexado a '{_nome_exibicao(site_name)}' -- agora e' so' clicar em \"Pre-visualizar\".", "ndvi")
 
 
+@app.route("/ndvi/car/renomear", methods=["POST"])
+@aba_required("ndvi")
+def renomear_ndvi_car():
+    site_name = request.form.get("site_name")
+    _checar_acesso_site(site_name)
+    car_id = request.form.get("car_id", type=int)
+    nome = request.form.get("nome", "").strip()
+    if car_id is None:
+        abort(400)
+    if not nome:
+        return _save_response("O nome do CAR não pode ficar vazio.", "ndvi", ok=False)
+    if not models.renomear_farm_ndvi_car(car_id, site_name, nome[:120]):
+        abort(404)
+    return _save_response(f"CAR renomeado para '{nome[:120]}'.", "ndvi")
+
+
+@app.route("/ndvi/car/<int:car_id>/contorno")
+@aba_required("ndvi")
+def contorno_ndvi_car(car_id):
+    site_name = request.args.get("site_name")
+    _checar_acesso_site(site_name)
+    car = models.get_farm_ndvi_car(car_id, site_name)
+    if not car:
+        abort(404)
+    try:
+        aneis = ndvi_service.parse_kml_poligono(car["kml"])
+    except ValueError:
+        aneis = []
+    return {"nome": car["nome"], "aneis": aneis}
+
+
+@app.route("/ndvi/car/<int:car_id>/kml")
+@aba_required("ndvi")
+def baixar_ndvi_car(car_id):
+    site_name = request.args.get("site_name")
+    _checar_acesso_site(site_name)
+    car = models.get_farm_ndvi_car(car_id, site_name)
+    if not car:
+        abort(404)
+    base = car["nome"].rsplit(".", 1)[0] if car["nome"].lower().endswith((".zip", ".kml")) else car["nome"]
+    nome = _nome_arquivo("CAR", "kml", base)
+    return Response(car["kml"], mimetype="application/vnd.google-earth.kml+xml",
+                    headers={"Content-Disposition": f"attachment; filename=\"{nome}\""})
+
+
 @app.route("/ndvi/car/delete", methods=["POST"])
 @aba_required("ndvi")
 def delete_ndvi_car():

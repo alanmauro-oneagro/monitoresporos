@@ -779,6 +779,11 @@ site tem que entrar la'.
   selos "📎 N CAR" e "🛰️ N" ao lado; abertos lembrados no navegador (`ndvi.abertas`), com pre-visualizacao pendente
   ja' abre. Coordenadas em destaque abaixo do nome (`.coords-fazenda`, pilula verde, link pro Google Maps). Anexar
   CAR salva sozinho (escolher o arquivo ou sair do campo do KML; sem botao).
+  **CAR anexado: editar e ver** (pedido do Alan, 17/11/2026): o nome de cada CAR e' um campo que salva sozinho
+  (`renomear_ndvi_car`, `models.renomear_farm_ndvi_car`); "👁 Ver" abre o contorno num mapa de satelite no proprio
+  cartao (`contorno_ndvi_car` -> aneis do KML, Leaflet + Esri) e "⬇ Baixar" baixa o KML guardado
+  (`baixar_ndvi_car`, `OneAgro_CAR_<nome>_<data>.kml`; shapefile anexado e' guardado ja' convertido em KML). Teste
+  `NdviCarEditarVerTest`.
 - **PDF da fazenda no modelo "Monitoramento e Manejo"** (pedido do Alan, 16/11/2026; substitui o layout antigo --
   vale no botao PDF, envio por WhatsApp e app; `export_pdf.build_recommendation_pdf`): faixa azul no topo; RESUMO DA
   SEMANA (Entrar com aplicação / Acompanhar / Monitorar + chuva, dia com menos chuva, vento); CLIMA NA FAZENDA (temp.,

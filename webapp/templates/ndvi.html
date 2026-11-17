@@ -5,7 +5,9 @@
 .coords-fazenda { display: inline-block; margin-top: .35rem; padding: .2rem .6rem; border-radius: 999px;
     background: #e7f5ea; color: #1b5e20; font-weight: 600; font-size: .9rem; text-decoration: none; font-variant-numeric: tabular-nums; }
 .coords-fazenda:hover { background: #d3eed9; color: #1b5e20; }
+.mapa-car { height: 280px; border-radius: .4rem; border: 1px solid #ccc; }
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 {% endblock %}
 {% block content %}
 <h4 class="mb-2">Mapas de NDVI <span class="fs-6 text-muted fw-normal">(Sentinel-2)</span></h4>
@@ -50,13 +52,25 @@
                 <div class="mb-2">
                     <div class="small text-muted mb-1">CAR anexados ({{ site_group.cars|length }}):</div>
                     {% for car in site_group.cars %}
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="small flex-grow-1">{{ car.nome }} <span class="text-muted">-- anexado em {{ car.criado_em | data_br }}</span></span>
+                    <div class="car-item mb-2" data-car="{{ car.id }}">
+                    <div class="d-flex align-items-center flex-wrap gap-2">
+                        <form method="post" action="{{ url_for('renomear_ndvi_car') }}" data-autosave class="d-flex align-items-center gap-2 flex-grow-1" style="min-width: 12rem;">
+                            <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                            <input type="hidden" name="car_id" value="{{ car.id }}">
+                            <input type="text" name="nome" value="{{ car.nome }}" maxlength="120" required class="form-control form-control-sm" title="Nome do CAR (salva sozinho)" aria-label="Nome do CAR">
+                            <span class="autosave-status small"></span>
+                        </form>
+                        <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 ver-car"
+                                data-url="{{ url_for('contorno_ndvi_car', car_id=car.id, site_name=site_group.site) }}" title="Ver o contorno do CAR no mapa">👁 Ver</button>
+                        <a class="btn btn-sm btn-outline-secondary py-0 px-2" href="{{ url_for('baixar_ndvi_car', car_id=car.id, site_name=site_group.site) }}" title="Baixar o arquivo do CAR (.kml)">⬇ Baixar</a>
                         <form method="post" action="{{ url_for('delete_ndvi_car') }}" onsubmit="return confirm('Remover o CAR &quot;{{ car.nome }}&quot; de {{ site_group.nome_exibicao }}?');">
                             <input type="hidden" name="site_name" value="{{ site_group.site }}">
                             <input type="hidden" name="car_id" value="{{ car.id }}">
                             <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Remover esse CAR">Remover</button>
                         </form>
+                    </div>
+                    <div class="small text-muted">anexado em {{ car.criado_em | data_br }}</div>
+                    <div class="mapa-car d-none mt-1"></div>
                     </div>
                     {% endfor %}
                 </div>
@@ -268,6 +282,27 @@ document.querySelectorAll('.copiar-ndvi').forEach(function (botao) {
         } else {
             compartilhar().catch(function () { aviso('Não deu para copiar a imagem'); });
         }
+    });
+});
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+document.querySelectorAll('.ver-car').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+        var caixa = botao.closest('.car-item').querySelector('.mapa-car');
+        if (!caixa.classList.contains('d-none')) { caixa.classList.add('d-none'); botao.textContent = '👁 Ver'; return; }
+        caixa.classList.remove('d-none'); botao.textContent = '✕ Fechar';
+        if (caixa._mapa) { caixa._mapa.invalidateSize(); return; }
+        if (!window.L) { caixa.textContent = 'Mapa indisponível.'; return; }
+        var mapa = L.map(caixa);
+        caixa._mapa = mapa;
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri' }).addTo(mapa);
+        fetch(botao.dataset.url, {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (d) {
+            var aneis = (d.aneis || []).map(function (anel) { return anel.map(function (p) { return [p[1], p[0]]; }); });
+            if (!aneis.length) { mapa.setView([-14, -52], 4); return; }
+            var forma = L.polygon(aneis, {color: '#ffeb3b', weight: 2, fillOpacity: 0.15}).addTo(mapa).bindTooltip(d.nome || '');
+            mapa.fitBounds(forma.getBounds(), {padding: [10, 10]});
+        }).catch(function () { mapa.setView([-14, -52], 4); });
     });
 });
 </script>

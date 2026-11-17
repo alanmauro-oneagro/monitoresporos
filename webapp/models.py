@@ -2654,6 +2654,24 @@ def add_farm_ndvi_car(site_name, nome, kml):
     conn.close()
 
 
+def get_farm_ndvi_car(car_id, site_name):
+    """Um CAR da fazenda com o KML (ver/baixar na aba NDVI, pedido do Alan, 17/11/2026)."""
+    conn = get_db()
+    r = conn.execute(
+        "SELECT id, nome, kml, criado_em FROM farm_ndvi_car WHERE id = ? AND site_name = ?", (car_id, site_name)
+    ).fetchone()
+    conn.close()
+    return dict(r) if r else None
+
+
+def renomear_farm_ndvi_car(car_id, site_name, nome):
+    conn = get_db()
+    cur = conn.execute("UPDATE farm_ndvi_car SET nome = ? WHERE id = ? AND site_name = ?", (nome, car_id, site_name))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
 def delete_farm_ndvi_car(car_id, site_name):
     """Remove um CAR especifico da fazenda (`site_name` filtrado pelo
     mesmo motivo de `get_farm_ndvi_historico_imagem` -- fecha o vinculo
