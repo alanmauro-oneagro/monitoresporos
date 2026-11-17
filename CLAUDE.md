@@ -835,7 +835,8 @@ site tem que entrar la'.
 - **Manejos -- TS/Sulco/Folha em boxes** (pedido do Alan, 12/11/2026): cada secao recolhida
   (▶, `.secao-toggle`, numero de boxes preenchidas ao lado) com boxes iguais a Aplicacoes: Data
   aplicacao, Talhao, Fungicidas quimicos, Fungicidas biologicos (campos `cx_*_<momento>`); 1 box
-  vazia por padrao e mais uma aparece ao preencher. Gravado em `farm_produtos` (colunas novas
+  vazia por padrao e mais uma aparece ao preencher. **Data aplicacao e' campo de TEXTO** (pedido do Alan, 17/11/2026): aceita "17/11/2026" ou "25DAP" (placeholder);
+  grava como digitado; data ISO antiga aparece como dd/mm/aaaa (`_caixas_de_produtos`). Gravado em `farm_produtos` (colunas novas
   `talhao`, `caixa`; `models.set_farm_produtos_caixas`: uma linha por tipo preenchido, mesmo
   `caixa`; o ingrediente ativo de produto que ja' existia fica). Linha antiga (sem caixa) vira uma
   box sozinha com "Produto (ingrediente)"; data/anotacao que nao e' data fica em campo de texto

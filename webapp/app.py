@@ -5690,7 +5690,9 @@ def _caixas_de_produtos(existentes, safra, momento):
         if cx is None:
             data = r["data_anotacao"]
             iso = models.parse_data_flexivel(data) if data else ""
-            cx = {"data": iso or data, "data_texto": bool(data and not iso), "talhao": r.get("talhao") or "",
+            if iso and re.fullmatch(r"\d{4}-\d{2}-\d{2}", data.strip()):
+                data = f"{iso[8:10]}/{iso[5:7]}/{iso[0:4]}"
+            cx = {"data": data or "", "talhao": r.get("talhao") or "",
                   "quimicos": "", "biologicos": ""}
             por_chave[chave] = cx
             caixas.append(cx)

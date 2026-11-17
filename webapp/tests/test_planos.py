@@ -1461,6 +1461,19 @@ class ProdutosFolhaPorDataTest(unittest.TestCase):
                                                        {"nome": "A", "data_anotacao": "05/11/2026"}]})
         self.assertEqual([g["data"] for g in datas], ["05/11/2026", "20/12/2026"])
 
+    def test_data_digitavel_nas_boxes(self):
+        """Data aplicacao das boxes TS/Sulco/Folha e' campo de texto (pedido do Alan, 17/11/2026)."""
+        import app as app_mod
+        def linha(i, data):
+            return {"id": i, "caixa": i, "data_anotacao": data, "talhao": "", "nome": "X", "ingrediente_ativo": ""}
+        existentes = {("1", "folha", "quimico"): [linha(1, "25DAP"), linha(2, "2026-11-17"), linha(3, "17/11/2026")]}
+        caixas = app_mod._caixas_de_produtos(existentes, "1", "folha")
+        self.assertEqual([c["data"] for c in caixas], ["25DAP", "17/11/2026", "17/11/2026"])
+        with open(os.path.join(os.path.dirname(app_mod.__file__), "templates", "fazendas.html"), encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn('<input type="text" name="cx_data_', html)
+        self.assertNotIn("inp.type = 'date'", html)
+
     def test_texto_e_pdf(self):
         import app as app_mod
         import export_pdf
