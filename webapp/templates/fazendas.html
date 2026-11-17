@@ -106,7 +106,7 @@
                                     <tbody>
                                         {% for cx in secao.caixas %}
                                         <tr>
-                                            <td data-label="Data aplicação"><input type="{{ 'text' if cx.data_texto else 'date' }}" name="cx_data_{{ secao.momento }}" class="form-control form-control-sm" value="{{ cx.data }}"></td>
+                                            <td data-label="Data aplicação"><input type="text" name="cx_data_{{ secao.momento }}" class="form-control form-control-sm" value="{{ cx.data }}" placeholder="17/11/2026 ou 25DAP"></td>
                                             <td data-label="Talhão"><input type="text" name="cx_talhao_{{ secao.momento }}" class="form-control form-control-sm" value="{{ cx.talhao }}"></td>
                                             <td data-label="Fungicidas químicos" class="campo-largo"><input type="text" name="cx_quimicos_{{ secao.momento }}" list="catalogo-nomes-quimico" class="form-control form-control-sm" value="{{ cx.quimicos }}"></td>
                                             <td data-label="Fungicidas biológicos" class="campo-largo"><input type="text" name="cx_biologicos_{{ secao.momento }}" list="catalogo-nomes-biologico" class="form-control form-control-sm" value="{{ cx.biologicos }}"></td>
@@ -253,7 +253,6 @@ document.querySelectorAll('table.produtos-table tbody').forEach(function (tbody)
         delete clone.dataset.grown;
         clone.querySelectorAll('input').forEach(function (inp) {
             inp.value = '';
-            if (inp.name.indexOf('cx_data_') === 0) inp.type = 'date';
         });
         tbody.appendChild(clone);
     });
