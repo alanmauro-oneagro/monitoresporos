@@ -15,7 +15,7 @@
             <td>{{ grupos.get(u.id) or '-' }}</td>
             <td>{{ u.email or '-' }}</td>
             <td>{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
-            <td>{% if u.is_cliente %}<span class="badge bg-success">Cliente do app</span>{% else %}{{ niveis[nivel_acesso(u)] }}{% endif %}</td>
+            <td>{% if u.is_cliente %}<span class="badge bg-success">Cliente do app</span>{% else %}{{ niveis[nivel_acesso(u)] }}{% endif %}{% if u.dados_desde and not u.is_master %}<div class="small text-muted" title="Vê os dados a partir dessa data">📅 desde {{ u.dados_desde | data_br }}</div>{% endif %}</td>
             <td>
                 {% if u.is_admin %}
                     <span class="text-muted">Todas ({{ niveis[nivel_acesso(u)] }})</span>

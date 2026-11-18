@@ -34,6 +34,19 @@
             <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Voltar</a>
             <span class="autosave-status small ms-2"></span>
         </form>
+        {% if not user.is_master %}
+        <hr>
+        <form method="post" action="{{ url_for('admin_user_dados_desde', user_id=user.id) }}" data-autosave>
+            <label class="form-label" for="dados_desde">📅 Ver dados a partir de</label>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <input type="date" name="dados_desde" id="dados_desde" class="form-control" style="max-width: 12rem;"
+                       value="{{ user.dados_desde or '' }}">
+                <span class="autosave-status small"></span>
+            </div>
+            <div class="form-text">Leituras de esporos anteriores a essa data não aparecem para este usuário (Alertas, Gráficos,
+                Recomendações, relatórios e Excel). Em branco = vê todo o histórico.</div>
+        </form>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

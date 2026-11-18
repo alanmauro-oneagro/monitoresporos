@@ -1715,3 +1715,56 @@ class FazendaApagadaSomeTest(unittest.TestCase):
             self.assertIn("Zzz Fazenda Apagada", [r["site_name"] for r in models.get_all_sites()])
         # a permissao continua gravada (se a fazenda voltar no BioScout, volta junto)
         self.assertIn(ids["Zzz Fazenda Apagada"], models.get_user_permitted_site_ids(uid))
+
+
+class UsuarioDadosDesdeTest(unittest.TestCase):
+    """"Ver dados a partir de" por usuario (pedido do Alan, 18/11/2026)."""
+
+    def test_corte(self):
+        import data_reader
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        for nome, master in (("Zzz Master Desde", True), ("Zzz Usuario Desde", False)):
+            if not models.get_user_by_username(nome):
+                models.create_user(nome, "x", is_master=master)
+        mid = models.get_user_by_username("Zzz Master Desde")["id"]
+        uid = models.get_user_by_username("Zzz Usuario Desde")["id"]
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(mid)
+            s["_fresh"] = True
+        todas = data_reader.read_spore_counts()
+        datas = sorted({(r.get("samplingStartTime") or "")[:10] for r in todas if r.get("samplingStartTime")})
+        self.assertTrue(len(datas) > 2)
+        corte = datas[len(datas) // 2]
+        try:
+            r = c.post(f"/admin/users/{uid}/dados-desde", data={"dados_desde": corte}, headers={"X-Autosave": "1"})
+            self.assertTrue(r.get_json()["ok"])
+            self.assertEqual(models.get_user_by_id(uid)["dados_desde"], corte)
+            self.assertIn("desde", c.get("/admin/users").get_data(as_text=True))
+            self.assertIn('value="' + corte + '"', c.get(f"/admin/users/{uid}/editar").get_data(as_text=True))
+            # master nao recebe corte
+            r = c.post(f"/admin/users/{mid}/dados-desde", data={"dados_desde": corte}, headers={"X-Autosave": "1"})
+            self.assertFalse(r.get_json()["ok"])
+            # o usuario logado so' ve leituras a partir do corte; o master ve tudo
+            with webapp.app.test_request_context():
+                webapp.login_user(webapp.User(models.get_user_by_id(uid)))
+                cortadas = data_reader.read_spore_counts()
+                self.assertTrue(cortadas)
+                self.assertTrue(all((r.get("samplingStartTime") or "")[:10] >= corte for r in cortadas))
+                self.assertLess(len(cortadas), len(todas))
+                lookup = data_reader.build_disease_concentration_lookup(cortadas)
+                self.assertTrue(all(p["data"] >= corte for pts in lookup.values() for p in pts))
+                self.assertEqual(data_reader.read_site_coordinates(), data_reader.read_site_coordinates())
+            with webapp.app.test_request_context():
+                webapp.login_user(webapp.User(models.get_user_by_id(mid)))
+                self.assertEqual(len(data_reader.read_spore_counts()), len(todas))
+                lookup_todo = data_reader.build_disease_concentration_lookup(data_reader.read_spore_counts())
+                self.assertTrue(any(p["data"] < corte for pts in lookup_todo.values() for p in pts))
+            # sem requisicao (agendador): nunca corta
+            self.assertEqual(len(data_reader.read_spore_counts()), len(todas))
+            # limpar a data volta a ver tudo
+            c.post(f"/admin/users/{uid}/dados-desde", data={"dados_desde": ""}, headers={"X-Autosave": "1"})
+            self.assertIsNone(models.get_user_by_id(uid)["dados_desde"])
+        finally:
+            models.set_user_dados_desde(uid, None)
