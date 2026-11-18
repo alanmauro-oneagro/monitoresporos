@@ -2424,7 +2424,10 @@ def _run_scheduled_whatsapp_sends():
     virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
 
     candidatos = []
+    existentes = models.fazendas_existentes()
     for site in set(schedule_texto) | set(schedule_pdf):
+        if existentes is not None and site not in existentes:
+            continue  # fazenda apagada (saiu do BioScout) -- agenda antiga nao envia
         hora_site = horarios.get(site) or {"texto": hora_default, "texto_min": 0, "pdf": hora_default, "pdf_min": 0}
         destinos = _site_whatsapp_destinations(site)
         for idx, (telefone, rotulo) in enumerate(destinos):
@@ -2542,7 +2545,10 @@ def _run_scheduled_ndvi_sends():
     hoje = datetime.now(timezone.utc).date()
     hora_atual = datetime.now().hour
     tentados = _load_ndvi_scheduler_tentados(hoje)
+    existentes = models.fazendas_existentes()
     for site, agendamento in models.get_all_ndvi_agendamentos().items():
+        if existentes is not None and site not in existentes:
+            continue
         if site in tentados or agendamento["proxima_execucao"] > hoje or agendamento["hora"] != hora_atual:
             continue
         try:
@@ -6981,9 +6987,10 @@ def mover_fungicida_item():
 @aba_required("usuarios")
 def admin_users():
     users = models.get_all_users(com_clientes=True)
-    report_counts = {u["id"]: len(models.get_user_report_site_ids(u["id"])) for u in users}
-    permission_counts = {u["id"]: len(models.get_user_permitted_site_ids(u["id"])) for u in users}
     site_name_by_id = {s["id"]: s["site_name"] for s in models.get_all_sites()}
+    # So' conta fazenda que existe e esta' ativa (apagada/oculta nao entra no numero).
+    report_counts = {u["id"]: len(models.get_user_report_site_ids(u["id"]) & site_name_by_id.keys()) for u in users}
+    permission_counts = {u["id"]: len(models.get_user_permitted_site_ids(u["id"]) & site_name_by_id.keys()) for u in users}
     subordinados_by_owner = {}
     grupos = {}
     for u in users:

@@ -884,6 +884,13 @@ site tem que entrar la'.
   (`models.sync_sites`, roda a cada requisicao) — so' ADICIONA linha nova na
   tabela `sites`, NUNCA remove. Uma fazenda no CSV sempre reaparece sozinha,
   mesmo apagada na mao do banco.
+- **Fazenda apagada no BioScout some do site** (pedido do Alan, 18/11/2026): a tabela `sites` nunca perde linha, entao
+  fazenda que saiu da conta BioScout continuava nas telas de permissao (Permissões/Relatórios/Subordinados), na lista
+  de fazendas liberadas de cada usuario/cliente, nas contagens da aba Usuarios e no envio agendado. `models.fazendas_existentes()`
+  = sites.csv da ultima busca + fazendas estimadas/so' clima (None sem sites.csv = nao filtra); `get_all_sites` e
+  `get_user_permitted_site_names` filtram por ela (`_so_existentes`), `admin_users` conta so' as existentes e os
+  agendadores de WhatsApp/NDVI pulam as apagadas. As permissoes NAO sao apagadas (se a fazenda voltar no BioScout,
+  volta liberada pra quem ja' tinha). Teste `FazendaApagadaSomeTest`.
 - **Fazenda ativa/desativada** (`sites.ativo`, `models.set_site_ativo`/
   `get_deactivated_site_names`): esconde fazenda (real ou virtual) de TODAS
   as telas sem apagar — existe por causa do ponto acima (delete nao
