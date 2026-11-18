@@ -27,7 +27,7 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g, get_template_attribute, has_app_context, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, send_file, send_from_directory, jsonify, session, g, get_template_attribute, has_app_context, has_request_context, Response
 from flask_compress import Compress
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user, login_required,
@@ -2685,6 +2685,24 @@ class User(UserMixin):
         self.is_admin = bool(row["is_admin"])
         self.is_master = bool(row["is_master"])
         self.is_cliente = bool(row["is_cliente"])
+        self.dados_desde = row["dados_desde"] if "dados_desde" in row.keys() else None
+
+
+def _corte_leituras_do_usuario():
+    """"Ver dados a partir de" do usuario logado (pedido do Alan, 18/11/2026) -- leituras de
+    esporos antes dessa data nao aparecem pra ele (telas, graficos, PDF, Excel). Agendador e
+    envios em segundo plano (sem requisicao) nunca cortam."""
+    if not has_request_context():
+        return None
+    try:
+        if not current_user.is_authenticated or current_user.is_master:
+            return None
+        return getattr(current_user, "dados_desde", None) or None
+    except Exception:
+        return None
+
+
+data_reader.corte_leituras = _corte_leituras_do_usuario
 
 
 @login_manager.user_loader
@@ -7149,6 +7167,27 @@ def admin_edit_user(user_id):
         codigo_pais=codigo_pais, numero_telefone=numero_telefone, nivel=_nivel_acesso(user_row),
         niveis=NIVEIS_ACESSO,
     )
+
+
+@app.route("/admin/users/<int:user_id>/dados-desde", methods=["POST"])
+@master_required
+def admin_user_dados_desde(user_id):
+    user_row = models.get_user_by_id(user_id)
+    if not user_row:
+        abort(404)
+    if user_row["is_master"]:
+        return _save_response("Master sempre vê todos os dados.", "admin_users", ok=False)
+    texto = request.form.get("dados_desde", "").strip()
+    data_iso = None
+    if texto:
+        try:
+            data_iso = datetime.strptime(texto, "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            return _save_response("Data inválida.", "admin_users", ok=False)
+    models.set_user_dados_desde(user_id, data_iso)
+    msg = (f"'{user_row['username']}' vê os dados a partir de {models.fmt_data_br(data_iso)}." if data_iso
+           else f"'{user_row['username']}' vê todo o histórico.")
+    return _save_response(msg, "admin_users")
 
 
 @app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])

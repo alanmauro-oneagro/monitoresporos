@@ -101,9 +101,12 @@ def _derivado_das_leituras(nome, calcular):
     CSV mudar -- varrer as ~14 mil linhas a cada chamada pesava em toda
     troca de aba (mesmo esquema de `read_site_coordinates`)."""
     linhas = read_spore_counts()
-    cache = _derivados_cache.get(nome)
+    chave = (nome, id(linhas))
+    cache = _derivados_cache.get(chave)
     if cache is None or cache[0] is not linhas:
-        cache = _derivados_cache[nome] = (linhas, calcular(linhas))
+        if len(_derivados_cache) > 200:
+            _derivados_cache.clear()
+        cache = _derivados_cache[chave] = (linhas, calcular(linhas))
     return cache[1]
 
 
@@ -150,7 +153,7 @@ def read_site_coordinates():
     dispositivo, e cada fazenda usa sempre a mesma). Cacheado pelo mtime
     do CSV -- roda varias vezes por request (inclusive no before_request)
     e varria as ~14 mil linhas a cada chamada."""
-    linhas = read_spore_counts()
+    linhas = _todas_leituras()
     if _site_coordinates_cache.get("linhas") is linhas:
         return dict(_site_coordinates_cache["coords"])
     coords = {}
@@ -184,7 +187,11 @@ def read_site_device_ids():
             if site and device and site not in ids:
                 ids[site] = device
         return ids
-    return dict(_derivado_das_leituras("device_ids", calcular))
+    linhas = _todas_leituras()
+    cache = _derivados_cache.get(("device_ids", id(linhas)))
+    if cache is None or cache[0] is not linhas:
+        cache = _derivados_cache[("device_ids", id(linhas))] = (linhas, calcular(linhas))
+    return dict(cache[1])
 
 
 _csv_cache = {}  # path -> (mtime, linhas)
@@ -293,7 +300,7 @@ def nome_canonico_para(display_name_en):
     """Grafia canonica atual (ver `_normalizar_display_names`) pra'
     qualquer displayName, mesmo uma grafia antiga que nao aparece mais
     como valor de nenhuma linha do CSV depois da normalizacao."""
-    read_spore_counts()  # garante que _ultimo_mapa_canonico esta' atualizado
+    _todas_leituras()  # garante que _ultimo_mapa_canonico esta' atualizado
     chave = display_name_en.lower()
     if chave in _ultimo_mapa_canonico:
         return _ultimo_mapa_canonico[chave]
@@ -335,8 +342,28 @@ def read_sites():
     return [row["siteName"] for row in _read_csv_cached(DATA_DIR / "sites.csv")]
 
 
-def read_spore_counts():
+# Corte de dados historicos por usuario (pedido do Alan, 18/11/2026): app.py liga
+# aqui uma funcao que devolve "AAAA-MM-DD" (so' leituras a partir dessa data) ou None.
+corte_leituras = None
+_leituras_cortadas = {}  # corte -> (lista completa que gerou, lista filtrada)
+
+
+def _todas_leituras():
     return _read_csv_cached(DATA_DIR / "spore_counts.csv", postprocess=_normalizar_display_names)
+
+
+def read_spore_counts():
+    linhas = _todas_leituras()
+    corte = corte_leituras() if corte_leituras else None
+    if not corte:
+        return linhas
+    cache = _leituras_cortadas.get(corte)
+    if cache is None or cache[0] is not linhas:
+        if len(_leituras_cortadas) > 20:
+            _leituras_cortadas.clear()
+        cache = _leituras_cortadas[corte] = (
+            linhas, [r for r in linhas if (r.get("samplingStartTime") or "")[:10] >= corte])
+    return cache[1]
 
 
 _disease_concentration_lookup_cache = {}
@@ -352,9 +379,10 @@ def build_disease_concentration_lookup(spore_rows):
     fazenda por vez como o PDF). Cacheado pelo mtime de spore_counts.csv
     -- mesmo motivo de `build_weather_lookup` acima."""
     mtime = (DATA_DIR / "spore_counts.csv").stat().st_mtime
-    cached = _disease_concentration_lookup_cache.get(mtime)
-    if cached is not None:
-        return cached
+    chave = (mtime, id(spore_rows))
+    cached = _disease_concentration_lookup_cache.get(chave)
+    if cached is not None and cached[0] is spore_rows:
+        return cached[1]
     grouped = {}
     for row in spore_rows:
         site, doenca = row.get("siteName"), row.get("displayName")
@@ -379,8 +407,9 @@ def build_disease_concentration_lookup(spore_rows):
     for key, por_dia in grouped.items():
         dias_ordenados = sorted(por_dia.values(), key=lambda r: r["_dt"])
         lookup[key] = [{k: v for k, v in r.items() if k not in ("_dt", "_row")} for r in dias_ordenados]
-    _disease_concentration_lookup_cache.clear()
-    _disease_concentration_lookup_cache[mtime] = lookup
+    if len(_disease_concentration_lookup_cache) > 20 or any(k[0] != mtime for k in _disease_concentration_lookup_cache):
+        _disease_concentration_lookup_cache.clear()
+    _disease_concentration_lookup_cache[chave] = (spore_rows, lookup)
     return lookup
 
 

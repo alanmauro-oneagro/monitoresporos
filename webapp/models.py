@@ -775,6 +775,11 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
     try:
+        # "Ver dados a partir de" (pedido do Alan, 18/11/2026): leituras antes dessa data somem pro usuario.
+        conn.execute("ALTER TABLE users ADD COLUMN dados_desde TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
         conn.execute("ALTER TABLE farm_ndvi_historico ADD COLUMN cobertura_nuvens REAL")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
@@ -3694,7 +3699,7 @@ def get_all_users(com_clientes=False):
     10/11/2026), depois de todos."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, username, is_admin, is_master, is_cliente, email, telefone, whatsapp_pausado FROM users"
+        "SELECT id, username, is_admin, is_master, is_cliente, email, telefone, whatsapp_pausado, dados_desde FROM users"
         + ("" if com_clientes else " WHERE is_cliente = 0")
         + " ORDER BY is_cliente, is_master DESC, is_admin DESC, username COLLATE NOCASE"
     ).fetchall()
@@ -3987,6 +3992,13 @@ def clear_user_temp_password(user_id):
         "UPDATE users SET temp_password_hash = NULL, temp_password_expires_at = NULL WHERE id = ?",
         (user_id,),
     )
+    conn.commit()
+    conn.close()
+
+
+def set_user_dados_desde(user_id, data_iso):
+    conn = get_db()
+    conn.execute("UPDATE users SET dados_desde = ? WHERE id = ?", (data_iso or None, user_id))
     conn.commit()
     conn.close()
 

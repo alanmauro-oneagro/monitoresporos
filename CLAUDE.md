@@ -891,6 +891,14 @@ site tem que entrar la'.
   `get_user_permitted_site_names` filtram por ela (`_so_existentes`), `admin_users` conta so' as existentes e os
   agendadores de WhatsApp/NDVI pulam as apagadas. As permissoes NAO sao apagadas (se a fazenda voltar no BioScout,
   volta liberada pra quem ja' tinha). Teste `FazendaApagadaSomeTest`.
+- **"Ver dados a partir de" por usuario** (pedido do Alan, 18/11/2026): Usuarios > Editar cadastro (Master), campo
+  de data `users.dados_desde` (rota `admin_user_dados_desde`, salva sozinho; Master nao tem -- sempre ve tudo; a aba
+  Usuarios mostra "📅 desde dd/mm/aa" na coluna Acesso). Vale pras fazendas todas do usuario: `data_reader.read_spore_counts()`
+  corta as leituras com `samplingStartTime` antes da data quando `data_reader.corte_leituras` (= `app._corte_leituras_do_usuario`)
+  devolve a data do usuario logado -- Alertas, Graficos, Recomendações, PDF/texto abertos por ele, Excel. Sem requisicao
+  (agendador/envio de fundo) nunca corta. Coordenadas/estacoes (`read_site_coordinates`, `read_site_device_ids`) leem
+  a lista completa (`_todas_leituras`); caches de derivados e do `build_disease_concentration_lookup` sao por lista
+  (completa x cortada). Teste `UsuarioDadosDesdeTest`.
 - **Fazenda ativa/desativada** (`sites.ativo`, `models.set_site_ativo`/
   `get_deactivated_site_names`): esconde fazenda (real ou virtual) de TODAS
   as telas sem apagar — existe por causa do ponto acima (delete nao
