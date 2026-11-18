@@ -3411,15 +3411,37 @@ def seed_default_whatsapp_schedule(site_name):
         conn.close()
 
 
+def fazendas_existentes():
+    """Nomes das fazendas que existem HOJE: as do BioScout (sites.csv da ultima
+    busca) + as estimadas/so' clima. A tabela `sites` nunca perde linha
+    (`sync_sites` so' adiciona), entao fazenda apagada no BioScout ficava nas
+    telas de permissao (pedido do Alan, 18/11/2026). None = sem lista do
+    BioScout ainda (nao filtra, pra nao sumir com tudo)."""
+    try:
+        reais = set(data_reader.read_sites())
+    except (FileNotFoundError, OSError):
+        return None
+    if not reais:
+        return None
+    return reais | virtual_farm_site_names()
+
+
+def _so_existentes(nomes_ou_linhas, chave=None):
+    existentes = fazendas_existentes()
+    if existentes is None:
+        return list(nomes_ou_linhas)
+    return [x for x in nomes_ou_linhas if (x[chave] if chave else x) in existentes]
+
+
 def get_all_sites():
-    """So' fazenda ATIVA (ver `set_site_ativo`) -- usada pelas telas de
-    permissao (admin_user_permissions/reports/subordinados, admin_users)
-    e pelo Excel exportado, entao uma fazenda desativada tambem some
-    dali, igual em qualquer outra tela."""
+    """So' fazenda ATIVA (ver `set_site_ativo`) e que ainda existe
+    (`fazendas_existentes`) -- usada pelas telas de permissao
+    (admin_user_permissions/reports/subordinados, admin_users) e pelo Excel
+    exportado, entao uma fazenda desativada ou apagada tambem some dali."""
     conn = get_db()
     rows = conn.execute("SELECT id, site_name FROM sites WHERE ativo = 1 ORDER BY site_name").fetchall()
     conn.close()
-    return rows
+    return _so_existentes(rows, "site_name")
 
 
 @_cache_requisicao
@@ -4002,7 +4024,7 @@ def get_user_permitted_site_names(user_id):
     conn.close()
     # Fazenda adicional do cliente sem pagamento depois dos 7 dias some das telas dele.
     bloqueadas = sites_bloqueados_de_clientes(user_id)
-    return [r["site_name"] for r in rows if r["site_name"] not in bloqueadas]
+    return _so_existentes([r["site_name"] for r in rows if r["site_name"] not in bloqueadas])
 
 
 def get_user_permitted_site_ids(user_id):

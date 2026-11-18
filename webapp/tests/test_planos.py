@@ -970,10 +970,13 @@ class PermissoesNomeENdviNuvensTest(unittest.TestCase):
         return c
 
     def test_permissoes_mostram_nome_de_exibicao(self):
+        from unittest import mock
+        import data_reader
         uid = models.get_user_by_username("Zzz Usuario Perm")["id"]
         c = self._cliente()
         for url in (f"/admin/users/{uid}/permissions",):
-            h = c.get(url).get_data(as_text=True)
+            with mock.patch.object(data_reader, "read_sites", return_value=["Zzz Fazenda Perm Real"]):
+                h = c.get(url).get_data(as_text=True)
             self.assertIn("Zzz Nome Novo Perm", h)
             self.assertNotIn(">Zzz Fazenda Perm Real<", h)
 
@@ -1686,3 +1689,29 @@ class NdviCarRecorteTest(unittest.TestCase):
         finally:
             for x in models.get_farm_ndvi_cars(site):
                 models.delete_farm_ndvi_car(x["id"], site)
+
+
+class FazendaApagadaSomeTest(unittest.TestCase):
+    """Fazenda que saiu do BioScout some das telas de permissao e da lista do usuario (pedido do Alan, 18/11/2026)."""
+
+    def test_some(self):
+        from unittest import mock
+        import data_reader
+        models.init_db()
+        models.sync_sites(["Zzz Fazenda Fica", "Zzz Fazenda Apagada"])
+        if not models.get_user_by_username("Zzz Usuario Apagada"):
+            models.create_user("Zzz Usuario Apagada", "x")
+        uid = models.get_user_by_username("Zzz Usuario Apagada")["id"]
+        ids = {r["site_name"]: r["id"] for r in models.get_db().execute(
+            "SELECT id, site_name FROM sites WHERE site_name LIKE 'Zzz Fazenda %'").fetchall()}
+        models.set_user_permissions(uid, [ids["Zzz Fazenda Fica"], ids["Zzz Fazenda Apagada"]])
+        with mock.patch.object(data_reader, "read_sites", return_value=["Zzz Fazenda Fica"]):
+            nomes = [r["site_name"] for r in models.get_all_sites()]
+            self.assertIn("Zzz Fazenda Fica", nomes)
+            self.assertNotIn("Zzz Fazenda Apagada", nomes)
+            self.assertEqual(models.get_user_permitted_site_names(uid), ["Zzz Fazenda Fica"])
+        # sem lista do BioScout ainda: nao filtra
+        with mock.patch.object(data_reader, "read_sites", side_effect=FileNotFoundError):
+            self.assertIn("Zzz Fazenda Apagada", [r["site_name"] for r in models.get_all_sites()])
+        # a permissao continua gravada (se a fazenda voltar no BioScout, volta junto)
+        self.assertIn(ids["Zzz Fazenda Apagada"], models.get_user_permitted_site_ids(uid))
