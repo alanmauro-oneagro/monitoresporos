@@ -1768,3 +1768,29 @@ class UsuarioDadosDesdeTest(unittest.TestCase):
             self.assertIsNone(models.get_user_by_id(uid)["dados_desde"])
         finally:
             models.set_user_dados_desde(uid, None)
+
+
+class ClienteDadosDesdeTest(unittest.TestCase):
+    """"Ver dados a partir de" tambem em Gerenciar Clientes (pedido do Alan, 23/11/2026)."""
+
+    def test_campo_no_cartao(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Desde"):
+            models.create_user("Zzz Master Desde", "x", is_master=True)
+        mid = models.get_user_by_username("Zzz Master Desde")["id"]
+        cli = models.get_user_by_username("Zzz Cliente Desde")
+        uid = cli["id"] if cli else models.criar_cliente("Zzz Cliente Desde", "segredo1", "", "5565999990991", "", None)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(mid)
+            s["_fresh"] = True
+        try:
+            r = c.post(f"/admin/users/{uid}/dados-desde", data={"dados_desde": "2026-10-01"}, headers={"X-Autosave": "1"})
+            self.assertTrue(r.get_json()["ok"])
+            h = c.get("/admin/solicitacoes").get_data(as_text=True)
+            self.assertIn(f"/admin/users/{uid}/dados-desde", h)
+            self.assertIn('value="2026-10-01"', h)
+        finally:
+            models.set_user_dados_desde(uid, None)
+            models.delete_user(uid)
