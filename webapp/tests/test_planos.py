@@ -366,9 +366,11 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         dados = models.get_fazendas_dados()[site]
         self.assertEqual((dados["cidade"], dados["uf"], dados["culturas"]), ("Sinop", "MT", "Soja, Milho"))
         with webapp.app.test_request_context():
-            self.assertEqual(webapp._faltando_na_fazenda(webapp._dados_da_fazenda(site)), [])
+            # culturas vindas de Manejos nao tem area: falta a area plantada (23/11/2026)
+            self.assertEqual(webapp._faltando_na_fazenda(webapp._dados_da_fazenda(site)),
+                             ["área plantada de pelo menos uma cultura de Zzz Auto Dados - MT"])
         # fora do Brasil basta o municipio
-        self.assertEqual(webapp._faltando_na_fazenda({"cidade": "Pencahue", "uf": "", "culturas": "Uva",
+        self.assertEqual(webapp._faltando_na_fazenda({"cidade": "Pencahue", "uf": "", "culturas": "Uva (10 ha)",
                                                       "country_code": "CL", "nome_exibicao": "x"}), [])
 
     def test_nomes_antigos_viram_novos_no_init_db(self):
@@ -1923,6 +1925,17 @@ class GerenciarFazendasTest(unittest.TestCase):
                 "site_name": site, "cidade": "Sorriso", "uf": "MT", "grupo_cultura": "cereais", "culturas": ["Soja"],
                 "area_cultura__Soja": "100"})
             c.post(f"/admin/usuarios/{uid}/ligar-fazenda", data={"site_name": site})
+            # cultura sem area = ainda incompleto (23/11/2026)
+            c.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"}, data={
+                "site_name": site, "cidade": "Sorriso", "uf": "MT", "grupo_cultura": "cereais", "culturas": ["Soja"]})
+            parte = cartao()
+            self.assertIn("⚠ Cadastro incompleto", parte)
+            with webapp.app.test_request_context():
+                self.assertIn("área plantada de pelo menos uma cultura de x", " ".join(webapp._faltando_na_fazenda(
+                    {"cidade": "Sorriso", "uf": "MT", "culturas": "Soja, Milho", "nome_exibicao": "x"})))
+            c.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"}, data={
+                "site_name": site, "cidade": "Sorriso", "uf": "MT", "grupo_cultura": "cereais", "culturas": ["Soja", "Milho"],
+                "area_cultura__Soja": "100"})
             parte = cartao()
             self.assertIn("✔ Cadastro completo", parte)
             tela = c.get("/admin/solicitacoes").get_data(as_text=True)

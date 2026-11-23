@@ -9867,6 +9867,9 @@ def _faltando_na_fazenda(fz):
         falta.append(f"município/estado de {fz['nome_exibicao']}")
     if not fz.get("culturas"):
         falta.append(f"culturas de {fz['nome_exibicao']}")
+    elif not any(area and re.search(r"[1-9]", area) for _nome, area in _culturas_com_area(fz["culturas"])):
+        # Cadastro completo so' com a area plantada de pelo menos uma cultura (pedido do Alan, 23/11/2026).
+        falta.append(f"área plantada de pelo menos uma cultura de {fz['nome_exibicao']}")
     return falta
 
 
