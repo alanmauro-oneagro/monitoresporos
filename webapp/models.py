@@ -983,6 +983,17 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN is_cliente INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # coluna ja existe (banco criado antes dessa versao)
+    # "Ver dados a partir de" = data do cadastro pros clientes ja' existentes (pedido do Alan, 23/11/2026),
+    # uma vez so': fazenda que nao vem da BioScout nao mostra historico de antes do cliente entrar. Cliente
+    # com fazenda da BioScout ligada (vinculada e nao estimada) fica sem data.
+    if not conn.execute("SELECT 1 FROM app_settings WHERE key = 'dados_desde_clientes_feito'").fetchone():
+        conn.execute(
+            "UPDATE users SET dados_desde = (SELECT substr(a.criado_em, 1, 10) FROM assinaturas a WHERE a.user_id = users.id)"
+            " WHERE is_cliente = 1 AND (dados_desde IS NULL OR dados_desde = '')"
+            " AND NOT EXISTS (SELECT 1 FROM cliente_pontos p WHERE p.user_id = users.id AND p.vinculada = 1"
+            "                 AND p.site_name IS NOT NULL"
+            "                 AND p.site_name NOT IN (SELECT site_name FROM virtual_farms))")
+        conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('dados_desde_clientes_feito', '1')")
     try:
         # Fazenda desativada (real ou virtual) para de aparecer em
         # qualquer tela (Painel, Mapa, Graficos, Recomendacoes, NDVI,
@@ -4347,10 +4358,12 @@ def criar_cliente(username, password, email, telefone, cpf_cnpj, plano_id, passw
     agora = _agora_cuiaba()
     conn = get_db()
     try:
+        # Fazenda do cliente nao vem da BioScout: ele ve os dados a partir do dia do cadastro (pedido do Alan,
+        # 23/11/2026); o Master muda em Gerenciar Clientes / Usuarios.
         cur = conn.execute(
-            "INSERT INTO users (username, password_hash, is_admin, is_master, is_cliente, email, telefone)"
-            " VALUES (?, ?, 0, 0, 1, ?, ?)",
-            (username, password_hash or generate_password_hash(password), email, telefone),
+            "INSERT INTO users (username, password_hash, is_admin, is_master, is_cliente, email, telefone, dados_desde)"
+            " VALUES (?, ?, 0, 0, 1, ?, ?, ?)",
+            (username, password_hash or generate_password_hash(password), email, telefone, agora[:10]),
         )
         user_id = cur.lastrowid
         conn.execute(

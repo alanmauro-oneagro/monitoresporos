@@ -1843,3 +1843,26 @@ class FazendaLigadaDadosDesdeTest(unittest.TestCase):
         finally:
             models.set_user_dados_desde(uid, None)
             models.delete_virtual_farm(site)
+
+
+class DadosDesdeCadastroClienteTest(unittest.TestCase):
+    """Cliente do app nasce com "Ver dados a partir de" = data do cadastro (pedido do Alan, 23/11/2026)."""
+
+    def test_cliente_novo_e_campo_so_master(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        uid = models.criar_cliente("Zzz Cliente Data Cad", "segredo1", "", "5565999990993", "", None)
+        try:
+            self.assertEqual(models.get_user_by_id(uid)["dados_desde"], models._agora_cuiaba()[:10])
+            if not models.get_user_by_username("Zzz Admin Desde"):
+                models.create_user("Zzz Admin Desde", "x", is_admin=True)
+            aid = models.get_user_by_username("Zzz Admin Desde")["id"]
+            c = webapp.app.test_client()
+            with c.session_transaction() as s:
+                s["_user_id"] = str(aid)
+                s["_fresh"] = True
+            self.assertIn(c.post(f"/admin/users/{uid}/dados-desde", data={"dados_desde": ""}).status_code, (302, 403))
+            self.assertEqual(models.get_user_by_id(uid)["dados_desde"], models._agora_cuiaba()[:10])
+            self.assertNotIn("vê os dados a partir", c.get("/admin/users").get_data(as_text=True))
+        finally:
+            models.delete_user(uid)

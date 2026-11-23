@@ -10516,6 +10516,10 @@ def admin_cliente_novo():
     ligadas = [s for s in f.getlist("site") if s in livres]
     for s in ligadas:
         _vincular(uid, s)
+    if set(ligadas) & set(read_sites()):
+        # Cliente com fazenda da BioScout ve todo o historico; a data do cadastro so' vale pra quem
+        # tem so' fazenda que nao vem da BioScout (pedido do Alan, 23/11/2026).
+        models.set_user_dados_desde(uid, None)
     _recalcular_cadastro(uid)
     flash(f"Cliente '{nome}' criado com {len(ligadas)} fazenda(s).", "success")
     return voltar
