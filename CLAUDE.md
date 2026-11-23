@@ -899,6 +899,9 @@ site tem que entrar la'.
   (agendador/envio de fundo) nunca corta. Coordenadas/estacoes (`read_site_coordinates`, `read_site_device_ids`) leem
   a lista completa (`_todas_leituras`); caches de derivados e do `build_disease_concentration_lookup` sao por lista
   (completa x cortada). Teste `UsuarioDadosDesdeTest`.
+  **Tambem em Gerenciar Clientes** (pedido do Alan, 23/11/2026): cada cartao de pessoa (cliente do app ou acesso a'
+  fazenda) tem "📅 Ver dados a partir de" antes dos botoes, mesma rota `admin_user_dados_desde`, salva sozinho
+  (`models.dados_desde_por_usuario` -> `dados_desde_por_user` no template). Teste `ClienteDadosDesdeTest`.
 - **Fazenda ativa/desativada** (`sites.ativo`, `models.set_site_ativo`/
   `get_deactivated_site_names`): esconde fazenda (real ou virtual) de TODAS
   as telas sem apagar — existe por causa do ponto acima (delete nao

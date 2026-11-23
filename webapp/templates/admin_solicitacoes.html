@@ -234,6 +234,15 @@
         <div class="mb-2"><span class="small text-muted">📶 {{ nome }}</span>{{ sinal_cel.linha(sinal) }}</div>
         {% endfor %}
 
+        {% if c.user_id %}
+        <form method="post" action="{{ url_for('admin_user_dados_desde', user_id=c.user_id) }}" class="small d-flex flex-wrap align-items-center gap-2 mb-3" data-autosave
+              title="Leituras de esporos anteriores a essa data não aparecem para esta pessoa (Alertas, Gráficos, Recomendações, relatórios e Excel). Em branco = todo o histórico.">
+            <label class="text-muted mb-0" for="dados_desde_{{ idx }}">📅 Ver dados a partir de</label>
+            <input class="form-control form-control-sm" style="max-width: 160px;" type="date" name="dados_desde" id="dados_desde_{{ idx }}"
+                   value="{{ dados_desde_por_user.get(c.user_id, '') }}">
+            <span class="autosave-status small"></span>
+        </form>
+        {% endif %}
         <div class="d-flex flex-wrap gap-2">
             <a href="{{ url_for('admin_user_permissions', user_id=c.user_id) }}" class="btn btn-sm btn-outline-primary"
                title="{{ 'Fazendas que o cliente vê nas abas do site: as estimadas das áreas monitoradas dele (já liberadas) e outras que você liberar, como a fazenda real da estação no Premium + Estação' if cl else 'Fazendas que essa pessoa passa a ver' }}">Liberar fazendas</a>

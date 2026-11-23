@@ -3996,6 +3996,14 @@ def clear_user_temp_password(user_id):
     conn.close()
 
 
+def dados_desde_por_usuario():
+    """{user_id: "AAAA-MM-DD"} de quem tem "Ver dados a partir de" (Gerenciar Clientes)."""
+    conn = get_db()
+    rows = conn.execute("SELECT id, dados_desde FROM users WHERE dados_desde IS NOT NULL AND dados_desde != ''").fetchall()
+    conn.close()
+    return {r["id"]: r["dados_desde"] for r in rows}
+
+
 def set_user_dados_desde(user_id, data_iso):
     conn = get_db()
     conn.execute("UPDATE users SET dados_desde = ? WHERE id = ?", (data_iso or None, user_id))

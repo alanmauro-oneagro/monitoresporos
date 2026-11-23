@@ -9698,7 +9698,8 @@ def admin_solicitacoes():
                            grupos=sorted(grupos.values(), key=lambda gr: _chave_alfabetica(gr["nome"])), sem_grupo=sem_grupo,
                            clientes_lista=[{"id": pe["user_id"], "nome": pe.get("nome_completo") or pe["username"]}
                                            for pe in pessoas if pe.get("cliente")],
-                           pedidos_contato=models.pedidos_contato())
+                           pedidos_contato=models.pedidos_contato(),
+                           dados_desde_por_user=models.dados_desde_por_usuario())
 
 
 @app.route("/admin/pedidos-contato/<int:pedido_id>/apagar", methods=["POST"])
