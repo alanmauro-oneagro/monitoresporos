@@ -302,7 +302,8 @@ divisao descrita acima): rota/endpoint `admin_solicitacoes`, template `admin_sol
 `cadastros` continuam com o nome antigo. **Gerenciar Fazendas** = so' fazendas: TODA fazenda (do cliente do app, ligada
 ou sem cadastro) num cartao igual (`cartao_fazenda`, selos `selos_fazenda`): "✔ Cadastro completo" (verde) ou
 "⚠ Cadastro incompleto" + caixa amarela com o que falta (`_faltando_fazenda_completa` = `_faltando_na_fazenda`
-[municipio/estado, culturas] + "ligar a um cliente ou usuário" se nao tem dono nem `usuarios_ligados_a_fazenda`), plano,
+[municipio/estado, culturas e a AREA PLANTADA de pelo menos uma cultura -- "Soja (100 ha)"; cultura sem area, como as
+vindas de Manejos, nao basta (pedido do Alan, 23/11/2026)] + "ligar a um cliente ou usuário" se nao tem dono nem `usuarios_ligados_a_fazenda`), plano,
 origem e "👤 <dono>"; o selo "Fazenda sem cadastro" SAIU. Filtros Todas/Completo/Incompleto; "Exibir por: Nome da Propriedade |
 Grupo Econômico" (nomes pedidos pelo Alan, 23/11/2026) (`session["gerenciar_fazendas_exibir"]`). Pedidos de contato continuam no topo. **Grupo economico e' opcional**:
 rotulo "Grupo econômico*" + "* opcional -- não é preciso para o cadastro completo" (Dados da fazenda, cartao da pessoa,
