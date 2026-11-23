@@ -1989,3 +1989,38 @@ class PlanoNoMapasDeEstudoTest(unittest.TestCase):
             for v in models.get_all_virtual_farms():
                 if v["nome"] == nome:
                     models.delete_virtual_farm(v["site_name"])
+
+
+class NovoUsuarioFazendasTest(unittest.TestCase):
+    """Novo usuario ja' com fazendas e data de inicio (pedido do Alan, 23/11/2026)."""
+
+    def test_cria_com_fazendas_e_data(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Desde"):
+            models.create_user("Zzz Master Desde", "x", is_master=True)
+        mid = models.get_user_by_username("Zzz Master Desde")["id"]
+        nome = "Zzz Fazenda Novo Usuario"
+        models.create_virtual_farm(nome, -12.5, -55.7, 50, criado_por="Zzz Master Desde")
+        site = [v for v in models.get_all_virtual_farms() if v["nome"] == nome][0]["site_name"]
+        sid = next(s["id"] for s in models.get_all_sites() if s["site_name"] == site)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(mid)
+            s["_fresh"] = True
+        try:
+            tela = c.get("/admin/users").get_data(as_text=True)
+            self.assertIn("Fazendas que terá acesso", tela)
+            self.assertIn('name="dados_desde" id="novo_dados_desde"', tela)
+            c.post("/admin/users/create", data={"username": "Zzz Novo Com Faz", "email": "n@t.com", "codigo_pais": "55",
+                                                "numero_telefone": "65999990777", "nivel": "usuario",
+                                                "site_ids": [str(sid)], "dados_desde": "2026-10-01"})
+            u = models.get_user_by_username("Zzz Novo Com Faz")
+            self.assertIn(site, models.get_user_permitted_site_names(u["id"]))
+            self.assertIn(sid, models.get_user_report_site_ids(u["id"]))
+            self.assertEqual(u["dados_desde"], "2026-10-01")
+        finally:
+            u = models.get_user_by_username("Zzz Novo Com Faz")
+            if u:
+                models.delete_user(u["id"])
+            models.delete_virtual_farm(site)

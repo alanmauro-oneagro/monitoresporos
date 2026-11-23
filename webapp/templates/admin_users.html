@@ -166,6 +166,24 @@
                     {% endif %}
                 </select>
             </div>
+            {# Fazendas do novo cadastro + data de inicio (pedido do Alan, 23/11/2026). #}
+            <div class="mb-3">
+                <label class="form-label mb-1">Fazendas que terá acesso</label>
+                <div class="small text-muted mb-1">Cada fazenda marcada fica liberada e a pessoa recebe o relatório dela. Administrador e Master já veem todas.</div>
+                <div class="border rounded p-2 bg-white" style="max-height: 14rem; overflow: auto;">
+                    {% for fz in fazendas_para_novo %}
+                    <div class="form-check small"><input class="form-check-input" type="checkbox" name="site_ids" value="{{ fz.id }}" id="novo_faz_{{ fz.id }}">
+                        <label class="form-check-label" for="novo_faz_{{ fz.id }}">{{ fz.nome }}</label></div>
+                    {% else %}<div class="small text-muted">Nenhuma fazenda cadastrada.</div>{% endfor %}
+                </div>
+            </div>
+            {% if current_user.is_master %}
+            <div class="mb-3" style="max-width: 260px;">
+                <label class="form-label mb-1" for="novo_dados_desde">📅 Ver dados a partir de</label>
+                <input type="date" name="dados_desde" id="novo_dados_desde" class="form-control">
+                <div class="form-text">Em branco = todo o histórico.</div>
+            </div>
+            {% endif %}
             <span class="autocriar-status small text-muted">Salva sozinho ao terminar de preencher.</span>
         </form>
     </div>
