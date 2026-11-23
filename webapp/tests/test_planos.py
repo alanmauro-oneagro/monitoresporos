@@ -406,7 +406,7 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         tela = master.get("/admin/solicitacoes").get_data(as_text=True)
         self.assertIn("<h4 class=\"mb-2\">Gerenciar Fazendas</h4>", tela)  # ex-Gerenciar Clientes (23/11/2026)
         self.assertIn("Cadastro incompleto", tela)
-        self.assertIn("+ Novo cliente", master.get("/admin/users").get_data(as_text=True))  # foi pra Usuarios
+        self.assertNotIn("+ Novo cliente", master.get("/admin/users").get_data(as_text=True))  # saiu (23/11/2026)
         # fazenda sem cadastro = cartao igual ao dos produtores, com o selo e o filtro de incompleto (09/11/2026)
         self.assertIn('data-tipo="fazenda"', tela)
         # cartao da fazenda sem cadastro aberto nao repete nome/plano/origem (10/11/2026)
@@ -1953,3 +1953,39 @@ class GerenciarFazendasTest(unittest.TestCase):
         finally:
             models.delete_virtual_farm(site)
             models.delete_user(cli)
+
+
+class PlanoNoMapasDeEstudoTest(unittest.TestCase):
+    """Plano e Cortesia da fazenda no Mapas de Estudo; "+ Novo cliente" saiu de Usuarios (pedido do Alan, 23/11/2026)."""
+
+    def test_plano_e_cortesia(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Desde"):
+            models.create_user("Zzz Master Desde", "x", is_master=True)
+        mid = models.get_user_by_username("Zzz Master Desde")["id"]
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(mid)
+            s["_fresh"] = True
+        intel = next(p for p in models.get_planos() if p["nome"] == "Inteligência")
+        nome = "Zzz Ponto Plano"
+        try:
+            c.post("/mapa-interpolado/adicionar", data={"nome": nome, "lat": "-12.5", "lon": "-55.7", "raio_km": "50",
+                                                       "tipo": "doenca", "country_code": "BR",
+                                                       "plano_id": str(intel["id"]), "cortesia_ate": "2099-03-31"})
+            site = [v for v in models.get_all_virtual_farms() if v["nome"] == nome][0]["site_name"]
+            with webapp.app.test_request_context():
+                self.assertEqual(webapp._plano_da_fazenda(site)["texto"], "Inteligência · até 31/03/2099")
+            r = c.post("/mapa-interpolado/plano", headers={"X-Autosave": "1"},
+                       data={"site_name": site, "plano_id": str(intel["id"]), "cortesia_ate": "2020-01-01"})
+            self.assertTrue(r.get_json()["ok"])
+            self.assertIn("venceu em 01/01/2020", r.get_json()["selo"])
+            tela = c.get("/mapa-interpolado").get_data(as_text=True)
+            self.assertIn("/mapa-interpolado/plano", tela)
+            self.assertIn('value="2020-01-01"', tela)
+            self.assertNotIn("+ Novo cliente", c.get("/admin/users").get_data(as_text=True))
+        finally:
+            for v in models.get_all_virtual_farms():
+                if v["nome"] == nome:
+                    models.delete_virtual_farm(v["site_name"])
