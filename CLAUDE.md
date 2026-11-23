@@ -280,7 +280,8 @@ o que falta no `title` (`_faltando_no_cadastro`: nome completo, celular,
 plano, fazenda, municipio/estado e culturas de cada fazenda; fazenda sem
 cadastro NUNCA tem o selo "Cadastro incompleto" -- ja' tem o selo "Fazenda sem cadastro" (pedido
 do Alan, 10/11/2026); `_faltando_na_fazenda` = municipio (estado so' no Brasil) e culturas) e filtros "Cadastro
-incompleto" e "Fazendas sem cadastro". **Dados preenchidos sozinhos** (pedido do Alan, 10/11/2026;
+incompleto" e "Fazendas sem cadastro". **O que falta aparece escrito** ao abrir o cartao (caixa amarela "⚠ Para completar o cadastro, falta:" com a
+lista de `_faltando_no_cadastro`; o `title` do selo nao aparece no celular -- pedido do Alan, 23/11/2026). **Dados preenchidos sozinhos** (pedido do Alan, 10/11/2026;
 `_completar_dados_fazendas`, ao abrir Gerenciar Clientes): so' o que esta' VAZIO, nunca troca o digitado
 (`_gravar_dados_vazios`) -- estado pelo fim do nome ("Dallas - MT", so' Brasil), culturas pelas safras de
 Manejos (`farm_culturas`, sem area) e municipio/estado pela coordenada (OpenStreetMap Nominatim reverse,
