@@ -2,6 +2,23 @@
 {% block title %}Usuários - OneAgro App{% endblock %}
 {% block content %}
 {% if pessoa_por_user is defined %}{% import "_gerenciar_cartoes.html" as gc with context %}{{ gc.estilos() }}{% endif %}
+<style>
+/* Tabela mais limpa (pedido do Alan, 23/11/2026): letra menor e uniforme, sem quebrar celular/acesso, botoes compactos. */
+.tabela-usuarios { font-size: 0.85rem; }
+.tabela-usuarios thead th { font-size: 0.78rem; font-weight: 600; color: #495057; background: #f8f9fa; white-space: nowrap;
+    text-transform: uppercase; letter-spacing: 0.02em; border-bottom: 2px solid #dee2e6; }
+.tabela-usuarios td { vertical-align: middle; padding-top: 0.45rem; padding-bottom: 0.45rem; }
+.tabela-usuarios th, .tabela-usuarios td { padding-left: 0.3rem; padding-right: 0.3rem; }
+/* A tabela usa a largura da tela toda (ate' 1500 px), sem ficar presa na coluna do site. */
+.tabela-larga { width: min(calc(100vw - 2rem), 1500px); margin-left: 50%; transform: translateX(-50%); }
+.tabela-usuarios .nome-usuario { font-weight: 600; color: #212529; }
+.tabela-usuarios .nowrap { white-space: nowrap; }
+.tabela-usuarios .email { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabela-usuarios .acoes { white-space: nowrap; }
+.tabela-usuarios .acoes .btn { font-size: 0.78rem; padding: 0.1rem 0.4rem; }
+.tabela-usuarios .acoes form { display: inline; }
+.tabela-usuarios .form-check-label { font-size: 0.8rem; }
+</style>
 <h4 class="mb-3">Usuários</h4>
 
 {% if pessoa_por_user is defined %}
@@ -17,10 +34,10 @@
     <button type="button" class="btn btn-outline-secondary" data-filtro="incompleto">Cadastro incompleto ({{ ps | selectattr('faltando') | list | length }})</button>
 </div>
 {% endif %}
-<div class="table-responsive">
-<table class="table table-sm bg-white shadow-sm">
+<div class="table-responsive tabela-larga">
+<table class="table table-sm table-hover bg-white shadow-sm tabela-usuarios">
     <thead>
-        <tr><th>Usuário</th><th>Grupo</th><th>Email</th><th>Celular</th><th>Acesso</th><th>Permissões</th><th>Receber relatórios</th><th>WhatsApp</th><th>Subordinados</th><th></th></tr>
+        <tr><th>Usuário</th><th>Grupo</th><th>Email</th><th>Celular</th><th>Acesso</th><th>Permissões</th><th>Recebe relatório</th><th>WhatsApp</th><th>Subordinados</th><th>Ações</th></tr>
     </thead>
     <tbody>
     {% for u in users %}
@@ -29,24 +46,24 @@
         <tr id="usuario-{{ u.id }}" class="linha-usuario" data-user="{{ u.id }}" data-novo="{{ 1 if pessoa and not pessoa.visto else 0 }}"
             data-cliente="{{ 1 if u.is_cliente else 0 }}" data-incompleto="{{ 1 if pessoa and pessoa.faltando else 0 }}"
             data-situacao="{{ ('bloqueado' if sit.chave in ('bloqueado', 'sem_plano') else sit.chave) if sit else '' }}">
-            <td>{% if pessoa %}<button type="button" class="btn btn-link btn-sm p-0 text-decoration-none pessoa-toggle" data-user="{{ u.id }}" title="Cadastro, assinatura, plano, cortesia, grupo e data limite">
+            <td class="nowrap">{% if pessoa %}<button type="button" class="btn btn-link btn-sm p-0 text-decoration-none pessoa-toggle" data-user="{{ u.id }}" title="Cadastro, assinatura, plano, cortesia, grupo e data limite">
                     <span class="toggle-icon">▶</span></button>{% endif %}
-                {{ u.username }}{% if pessoa and not pessoa.visto %} <span class="badge bg-danger">Novo</span>{% endif %}
+                <span class="nome-usuario">{{ u.username }}</span>{% if pessoa and not pessoa.visto %} <span class="badge bg-danger">Novo</span>{% endif %}
                 {% if pessoa and pessoa.faltando %} <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ pessoa.faltando | join('; ') }}">⚠ Incompleto</span>{% endif %}</td>
-            <td>{{ grupos.get(u.id) or '-' }}</td>
-            <td>{{ u.email or '-' }}</td>
-            <td>{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
-            <td>{% if u.is_cliente %}<span class="badge bg-success">Cliente do app</span>{% else %}{{ niveis[nivel_acesso(u)] }}{% endif %}{% if u.dados_desde and not u.is_master and current_user.is_master %}<div class="small text-muted" title="Vê os dados a partir dessa data">📅 desde {{ u.dados_desde | data_br }}</div>{% endif %}</td>
-            <td>
+            <td class="text-muted">{{ grupos.get(u.id) or '-' }}</td>
+            <td class="email" title="{{ u.email or '' }}">{{ u.email or '-' }}</td>
+            <td class="nowrap">{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
+            <td class="nowrap">{% if u.is_cliente %}<span class="badge bg-success">Cliente do app</span>{% else %}{{ niveis[nivel_acesso(u)] }}{% endif %}{% if u.dados_desde and not u.is_master and current_user.is_master %}<div class="small text-muted" title="Vê os dados a partir dessa data">📅 desde {{ u.dados_desde | data_br }}</div>{% endif %}</td>
+            <td class="nowrap">
                 {% if u.is_admin %}
-                    <span class="text-muted">Todas ({{ niveis[nivel_acesso(u)] }})</span>
+                    <span class="text-muted">Todas</span>
                 {% else %}
                     <a href="{{ url_for('admin_user_permissions', user_id=u.id) }}">
                         Editar fazendas{% if permission_counts.get(u.id) %} ({{ permission_counts[u.id] }}){% endif %}
                     </a>
                 {% endif %}
             </td>
-            <td>
+            <td class="nowrap">
                 {% if pode_aba('envios') %}
                 <a href="{{ url_for('whatsapp_gerenciamento') }}" class="text-decoration-none" title="Quem recebe cada fazenda e' marcado na aba Programação de Envios">
                     {{ report_counts.get(u.id, 0) }} fazenda(s)
@@ -62,36 +79,36 @@
                     <label class="form-check-label small" for="pausado_user_{{ u.id }}">Pausado</label>
                 </div>
             </td>
-            <td>
+            <td class="nowrap">
                 {% if subordinado_counts.get(u.id) %}
                 <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none sub-toggle" data-owner="{{ u.id }}" title="Mostrar/ocultar subordinados">
                     <span class="toggle-icon">▶</span>
                 </button>
                 {% endif %}
-                <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}">
-                    Subordinados{% if subordinado_counts.get(u.id) %} ({{ subordinado_counts[u.id] }}){% endif %}
+                <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}" title="Ver/editar os subordinados">
+                    {% if subordinado_counts.get(u.id) %}{{ subordinado_counts[u.id] }} subordinado(s){% else %}Adicionar{% endif %}
                 </a>
             </td>
-            <td class="d-flex gap-2">
+            <td class="acoes">
                 {% if u.is_cliente %}
                 {# Cliente do app: cadastro, plano, cortesia e exclusao no "▶" da propria linha (23/11/2026). #}
                 <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" onsubmit="return confirm('Redefinir a senha de {{ u.username }} para a senha padrao?');">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">Redefinir senha</button>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Redefinir senha (volta para a senha padrão)" aria-label="Redefinir senha">🔑</button>
                 </form>
                 {% if current_user.is_master %}
                 <form method="post" action="{{ url_for('admin_cliente_excluir', user_id=u.id) }}" onsubmit="return confirm('Excluir o cliente {{ u.username }}? A cobrança no Asaas é cancelada.');">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir" aria-label="Excluir">🗑️</button>
                 </form>
                 {% endif %}
                 {% else %}
                 {% if current_user.is_master %}
-                <a href="{{ url_for('admin_edit_user', user_id=u.id) }}" class="btn btn-sm btn-outline-primary">Editar cadastro</a>
+                <a href="{{ url_for('admin_edit_user', user_id=u.id) }}" class="btn btn-sm btn-outline-primary" title="Editar cadastro" aria-label="Editar cadastro">✏️</a>
                 {% endif %}
                 <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" onsubmit="return confirm('Redefinir a senha de {{ u.username }} para a senha padrao?');">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">Redefinir senha</button>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Redefinir senha (volta para a senha padrão)" aria-label="Redefinir senha">🔑</button>
                 </form>
                 <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" onsubmit="return confirm('Excluir usuario {{ u.username }}?');">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir" aria-label="Excluir">🗑️</button>
                 </form>
                 {% endif %}
             </td>
