@@ -1600,8 +1600,26 @@ class NdviNuvensDaTelaTest(unittest.TestCase):
                 mock.patch.object(ndvi_service, "buscar_ndvi", side_effect=falso):
             c.post("/ndvi/pre_visualizar", data={"site_name": site, "nuvens": "30"})
         self.assertEqual(visto["limite"], 30)
-        self.assertEqual(models.get_ndvi_nuvens().get(site), 30)
+        # o limite da tela NDVI vale so' pra essa busca; o gravado e' o do envio automatico (23/11/2026)
+        self.assertEqual(models.get_ndvi_nuvens().get(site), 5)
         models.set_ndvi_nuvens(site, None)
+
+
+class NdviAgendaSoEmEnviosTest(unittest.TestCase):
+    """Programacao automatica do NDVI so' em Programacao de Envios; aba NDVI so' manual (pedido do Alan, 23/11/2026)."""
+
+    def test_telas(self):
+        if not models.get_user_by_username("Zzz Master NDVI"):
+            models.create_user("Zzz Master NDVI", "x", is_master=True)
+        uid = models.get_user_by_username("Zzz Master NDVI")["id"]
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(uid)
+            s["_fresh"] = True
+        ndvi = c.get("/ndvi").get_data(as_text=True)
+        self.assertNotIn("/ndvi/nuvens", ndvi)
+        self.assertNotIn("/ndvi/agendamento/save", ndvi)
+        self.assertNotIn("automático 3%", ndvi)
 
 
 class NdviCarEditarVerTest(unittest.TestCase):

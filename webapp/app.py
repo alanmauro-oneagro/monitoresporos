@@ -4959,7 +4959,6 @@ def ndvi():
             return render_template("ndvi.html", sites_data=[], no_access=True, credenciais_ok=True)
 
     cars_by_site = models.get_all_farm_ndvi_cars()
-    nuvens = models.get_ndvi_nuvens()
     coords = _coords_all()
     sites_data = [
         {
@@ -4969,7 +4968,6 @@ def ndvi():
             "coords": coords.get(site),
             "historico": models.get_farm_ndvi_historico(site),
             "preview": _get_ndvi_preview(site),
-            "nuvens": nuvens.get(site),
             # Quem recebe o NDVI e' marcado na aba Envios (`toggle_ndvi_ativo`).
             "ndvi_destinatarios": [
                 {"telefone": telefone, "rotulo": rotulo}
@@ -4982,7 +4980,7 @@ def ndvi():
     ]
     return render_template(
         "ndvi.html", sites_data=sites_data, no_access=False, opcoes_nuvens=NDVI_OPCOES_NUVENS,
-        nuvens_padrao=ndvi_service.COBERTURA_NUVENS_MAXIMA, nuvens_padrao_auto=NDVI_AGENDAMENTO_COBERTURA_MAXIMA,
+        nuvens_padrao=ndvi_service.COBERTURA_NUVENS_MAXIMA,
         credenciais_ok=ndvi_service.credenciais_configuradas(),
         hoje=datetime.now(timezone.utc).date().isoformat(),
     )
@@ -5053,6 +5051,7 @@ def whatsapp_gerenciamento():
     cars_by_site = models.get_all_farm_ndvi_cars()
     hora_default = models.get_whatsapp_send_hour()
     todos_usuarios = models.get_all_users() if current_user.is_admin else []
+    nuvens_ndvi = models.get_ndvi_nuvens()
 
     sites_data = []
     for site in sites:
@@ -5073,6 +5072,7 @@ def whatsapp_gerenciamento():
             "destinatarios": dados["destinatarios"],
             "user_ids_recebendo": dados["user_ids_recebendo"],
             "ndvi_ativos": models.get_ndvi_ativos(site) if cars_by_site.get(site) else set(),
+            "ndvi_nuvens": nuvens_ndvi.get(site),
         })
 
     return render_template(
@@ -5080,6 +5080,7 @@ def whatsapp_gerenciamento():
         weekday_labels=list(enumerate(WEEKDAY_LABELS)),
         hoje=datetime.now(timezone.utc).date().isoformat(),
         todos_usuarios=todos_usuarios,
+        opcoes_nuvens=NDVI_OPCOES_NUVENS, nuvens_padrao_auto=NDVI_AGENDAMENTO_COBERTURA_MAXIMA,
     )
 
 
@@ -5396,12 +5397,11 @@ def pre_visualizar_ndvi():
         lista_de_aneis_por_car = [ndvi_service.parse_kml_poligono(kml) for kml in cars_kml]
     except ValueError as exc:
         return _save_response(f"Contorno de '{_nome_exibicao(site_name)}' invalido: {exc}", "ndvi", ok=False)
-    # Limite de nuvens que esta' na tela (o select salva sozinho com atraso; mandado junto, vale ele e ja' grava).
+    # Limite de nuvens do Pre-visualizar = o escolhido na tela, so' pra essa busca (nao grava: o limite gravado e'
+    # o do envio automatico, que fica em Programacao de Envios -- pedido do Alan, 23/11/2026).
     nuvens_tela = (request.form.get("nuvens") or "").strip()
-    if "nuvens" in request.form and (not nuvens_tela or (nuvens_tela.isdigit() and int(nuvens_tela) in NDVI_OPCOES_NUVENS)):
-        models.set_ndvi_nuvens(site_name, int(nuvens_tela) if nuvens_tela else None)
-    resultado, erro = ndvi_service.buscar_ndvi(lista_de_aneis_por_car, data_alvo=data_alvo,
-                                               cobertura_maxima=models.get_ndvi_nuvens().get(site_name))
+    cobertura = int(nuvens_tela) if nuvens_tela.isdigit() and int(nuvens_tela) in NDVI_OPCOES_NUVENS else None
+    resultado, erro = ndvi_service.buscar_ndvi(lista_de_aneis_por_car, data_alvo=data_alvo, cobertura_maxima=cobertura)
     if erro:
         return _save_response(f"Nao foi possivel gerar o NDVI de '{_nome_exibicao(site_name)}': {erro}", "ndvi", ok=False)
     chuva_acumulada, vento_predominante = _chuva_vento_ultimos_30_dias(site_name, resultado["data"])
@@ -5588,17 +5588,17 @@ def enviar_ndvi_historico_whatsapp():
 
 
 @app.route("/ndvi/nuvens", methods=["POST"])
-@aba_required("ndvi")
+@aba_required("envios")
 def salvar_ndvi_nuvens():
-    """% maximo de nuvens das imagens da fazenda (pedido do Alan, 13/11/2026): vale no
-    Pre-visualizar e no envio automatico. Vazio = padrao."""
+    """% maximo de nuvens do envio AUTOMATICO do NDVI (Programacao de Envios; pedido do Alan,
+    23/11/2026 -- o Pre-visualizar da aba NDVI usa so' o valor da tela). Vazio = padrao."""
     site_name = request.form.get("site_name")
     _checar_acesso_site(site_name)
     valor = (request.form.get("nuvens") or "").strip()
     if valor and (not valor.isdigit() or int(valor) not in NDVI_OPCOES_NUVENS):
-        return _save_response("Valor de nuvens inválido.", "ndvi", ok=False)
+        return _save_response("Valor de nuvens inválido.", "whatsapp_gerenciamento", ok=False)
     models.set_ndvi_nuvens(site_name, int(valor) if valor else None)
-    return _save_response(f"Nuvens de '{_nome_exibicao(site_name)}' salvas.", "ndvi")
+    return _save_response(f"Nuvens do NDVI automático de '{_nome_exibicao(site_name)}' salvas.", "whatsapp_gerenciamento")
 
 
 @app.route("/ndvi/debug/<path:site_name>")

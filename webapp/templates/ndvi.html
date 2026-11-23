@@ -116,21 +116,15 @@
             </div>
             <div class="col-12 col-lg-6">
                 {% if site_group.cars %}
-                <form method="post" action="{{ url_for('salvar_ndvi_nuvens') }}" data-autosave class="mb-2 d-flex align-items-center flex-wrap gap-2">
+                <form method="post" action="{{ url_for('pre_visualizar_ndvi') }}" class="mb-2 d-flex align-items-center flex-wrap gap-2">
                     <input type="hidden" name="site_name" value="{{ site_group.site }}">
                     <label class="small text-muted mb-0" for="nuvens_{{ site_idx }}">Nuvens na fazenda até:</label>
                     <select class="form-select form-select-sm" style="width: auto;" id="nuvens_{{ site_idx }}" name="nuvens">
-                        <option value="" {% if site_group.nuvens is none %}selected{% endif %}>Padrão ({{ nuvens_padrao }}%; automático {{ nuvens_padrao_auto }}%)</option>
+                        <option value="">Padrão ({{ nuvens_padrao }}%)</option>
                         {% for pct in opcoes_nuvens %}
-                        <option value="{{ pct }}" {% if site_group.nuvens == pct %}selected{% endif %}>{{ pct }}%</option>
+                        <option value="{{ pct }}">{{ pct }}%</option>
                         {% endfor %}
                     </select>
-                    <span class="autosave-status small"></span>
-                </form>
-                <form method="post" action="{{ url_for('pre_visualizar_ndvi') }}" class="mb-2 d-flex align-items-center flex-wrap gap-2 form-preview-ndvi"
-                      data-nuvens="nuvens_{{ site_idx }}">
-                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
-                    <input type="hidden" name="nuvens" value="{{ site_group.nuvens if site_group.nuvens is not none else '' }}">
                     <label class="small text-muted mb-0" for="data_alvo_{{ site_idx }}">Data (opcional):</label>
                     <input type="date" class="form-control form-control-sm" style="width: auto;" id="data_alvo_{{ site_idx }}" name="data_alvo" max="{{ hoje }}" min="2015-06-23">
                     <button type="submit" class="btn btn-sm btn-primary" {% if not credenciais_ok %}disabled{% endif %}>Pré-visualizar</button>
@@ -203,6 +197,13 @@
                 </button>
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-2 copiar-ndvi" data-form="ndvi_whats_{{ site_idx }}"
                         title="Copia a imagem marcada (mais de uma: abre o compartilhar do celular) pra colar no seu WhatsApp">📋 Copiar imagem</button>
+                <div class="small text-muted mt-2">
+                    Enviar por WhatsApp vai para:
+                    {% for destinatario in site_group.ndvi_destinatarios %}<strong>{{ destinatario.rotulo }}</strong>{% if not loop.last %}, {% endif %}
+                    <input type="hidden" form="ndvi_whats_{{ site_idx }}" name="destino_telefones" value="{{ destinatario.telefone }}">
+                    {% else %}ninguém marcado{% endfor %}
+                    -- quem recebe e o envio automático ficam em <a href="{{ url_for('whatsapp_gerenciamento') }}">Programação de Envios</a>.
+                </div>
                 {% else %}
                 <div class="text-muted small">Nenhuma imagem gerada ainda.</div>
                 {% endif %}
@@ -211,15 +212,6 @@
                 {% endif %}
             </div>
         </div>
-        {% if site_group.cars %}
-        <div class="small text-muted border-top pt-2 mt-3">
-            Recebem o NDVI:
-            {% for destinatario in site_group.ndvi_destinatarios %}<strong>{{ destinatario.rotulo }}</strong>{% if not loop.last %}, {% endif %}
-            <input type="hidden" form="ndvi_whats_{{ site_idx }}" name="destino_telefones" value="{{ destinatario.telefone }}">
-            {% else %}ninguém marcado{% endfor %}
-            -- muda em <a href="{{ url_for('whatsapp_gerenciamento') }}">Programação de Envios</a>.
-        </div>
-        {% endif %}
         </div>
     </div>
 </div>
@@ -260,14 +252,6 @@ document.querySelectorAll('.form-car').forEach(function (form) {
     }
     form.querySelector('input[type="file"]').addEventListener('change', function (e) { if (e.target.files.length) enviar(); });
     form.querySelector('textarea').addEventListener('change', function (e) { if (e.target.value.trim()) enviar(); });
-});
-// O Pre-visualizar leva o "Nuvens na fazenda até" que esta' na tela -- antes usava o valor ja' salvo e,
-// mudando e clicando logo em seguida (autosave de ~1,2 s), buscava com o limite anterior (pedido do Alan, 17/11/2026).
-document.querySelectorAll('.form-preview-ndvi').forEach(function (form) {
-    form.addEventListener('submit', function () {
-        var sel = document.getElementById(form.dataset.nuvens);
-        if (sel) form.querySelector('input[name="nuvens"]').value = sel.value;
-    });
 });
 // "Copiar imagem" (pedido do Alan, 17/11/2026): copia a IMAGEM marcada, nao o texto. A area de transferencia guarda
 // so' uma imagem: com mais de uma marcada (ou sem copiar imagem no navegador) abre o compartilhar do celular com
