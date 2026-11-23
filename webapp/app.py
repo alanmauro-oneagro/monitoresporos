@@ -3849,6 +3849,7 @@ def mapa_interpolado():
 
     site_countries = models.get_all_site_countries()
     pontos_virtuais = []
+    planos_proprios = models.get_planos_fazendas()
     for vf in models.get_all_virtual_farms():
         tipo = vf.get("tipo") or "doenca"
         if tipo == "clima":
@@ -3875,6 +3876,7 @@ def mapa_interpolado():
             "ativo": vf["site_name"] not in desativadas,
             "cliente": clientes_site.get(vf["site_name"]),
             "grupo": _grupo_economico_da_fazenda(vf["site_name"]),
+            "plano_proprio": planos_proprios.get(vf["site_name"]) or {},
         })
         # Fazenda do cliente (plano) aparece sempre, com o pino verde-claro, mesmo
         # sem fazenda real no raio ainda (pedido do Alan, 08/11/2026).
@@ -3931,7 +3933,7 @@ def mapa_interpolado():
 
     return render_template(
         "mapa_interpolado.html", sites_data=sites_data, pontos_virtuais=pontos_virtuais,
-        pontos_estudo=pontos_estudo,
+        pontos_estudo=pontos_estudo, planos=models.get_planos(),
         grupos_economicos=sorted(set(models.grupos_economicos()) | {p["grupo"] for p in pontos_estudo if p["grupo"]}, key=str.lower),
         countries=countries.COUNTRIES, active_country_codes_interpolado=sorted(active_interpolado),
         # Sinal de celular (ex-aba Sinal telefonia): camada por operadora
@@ -4132,8 +4134,40 @@ def adicionar_ponto_virtual():
         return redirect(url_for("mapa_interpolado"))
     if grupo:
         models.salvar_grupo_fazenda_dados(novo_site, grupo)
+    if current_user.is_master:
+        _gravar_plano_do_form(novo_site, request.form)
     flash(f"Ponto estimado '{nome}' criado -- defina quem pode ve-lo na aba Usuarios.", "success")
     return redirect(url_for("mapa_interpolado"))
+
+
+def _gravar_plano_do_form(site_name, form):
+    """Plano + Cortesia ate' da fazenda (Mapas de Estudo; pedido do Alan, 23/11/2026). Devolve erro ou None."""
+    plano_id = form.get("plano_id", type=int)
+    if plano_id and not models.get_plano(plano_id):
+        return "Plano inválido."
+    validade = (form.get("cortesia_ate") or "").strip()
+    if validade:
+        try:
+            validade = datetime.strptime(validade, "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            return "Data inválida."
+    models.salvar_plano_fazenda(site_name, plano_id=plano_id or None, validade=validade or None)
+    return None
+
+
+@app.route("/mapa-interpolado/plano", methods=["POST"])
+@master_required
+def salvar_plano_ponto():
+    site_name = request.form.get("site_name", "")
+    if not models.get_virtual_farm(site_name):
+        abort(404)
+    if site_name in models.clientes_por_site():
+        return _save_response("Fazenda de cliente do app: o plano vem da assinatura dele (aba Usuários).", "mapa_interpolado", ok=False)
+    erro = _gravar_plano_do_form(site_name, request.form)
+    if erro:
+        return _save_response(erro, "mapa_interpolado", ok=False)
+    return _save_response(f"Plano de '{_nome_exibicao(site_name)}' salvo.", "mapa_interpolado",
+                          extra={"selo": str(selo_plano(site_name))})
 
 
 def _resposta_ponto(mensagem, ok, url, site_name=None):
@@ -9469,6 +9503,19 @@ def _data_br4(iso):
     return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}" if iso and len(iso) >= 10 else (iso or "")
 
 
+def _plano_proprio_da_fazenda(site):
+    """(plano, validade) gravado na propria fazenda pelo Mapas de Estudo (`planos_fazenda`), ou None."""
+    if has_app_context():
+        if "_planos_proprios" not in g:
+            g._planos_proprios = models.get_planos_fazendas()
+            g._planos_por_id = {p["id"]: p for p in models.get_planos()}
+        pf, planos = g._planos_proprios.get(site), g._planos_por_id
+    else:
+        pf, planos = models.get_planos_fazendas().get(site), {p["id"]: p for p in models.get_planos()}
+    plano = planos.get(pf.get("plano_id")) if pf else None
+    return (plano, pf.get("validade") or None) if plano else None
+
+
 def _plano_da_fazenda(site):
     """{"nome", "validade" (ISO ou None), "texto", "chave": ok|aguardando|vencido|sem_plano}.
     Fazenda REAL = Inteligencia; o plano e a validade vem do cadastro (cliente)
@@ -9489,6 +9536,11 @@ def _plano_da_fazenda(site):
             fim = free_ate if free_ate else models.acesso_ate(assinatura)
             info = {"nome": models.PLANO_FAZENDA_REAL if real else plano["nome"], "validade": fim,
                     "chave": "ok" if liberada or free_ate else "vencido"}
+    elif _plano_proprio_da_fazenda(site):
+        # Plano e cortesia escolhidos no Mapas de Estudo (pedido do Alan, 23/11/2026).
+        plano, validade = _plano_proprio_da_fazenda(site)
+        info = {"nome": plano["nome"], "validade": validade,
+                "chave": "vencido" if validade and validade < _hoje_cuiaba().isoformat() else "ok"}
     elif real:
         info = {"nome": models.PLANO_FAZENDA_REAL, "validade": None, "chave": "ok"}
     if info["nome"]:

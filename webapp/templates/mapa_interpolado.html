@@ -114,6 +114,22 @@
                         <label class="form-label small text-muted mb-1">Nome da Fazenda</label>
                         <input type="text" name="nome" class="form-control form-control-sm" placeholder="Ex.: Área Norte" required>
                     </div>
+                    {% if current_user.is_master %}
+                    {# Plano e cortesia da fazenda (ex-"+ Novo cliente" da aba Usuarios; pedido do Alan, 23/11/2026). #}
+                    <div class="row g-2 mb-2 campos-plano-novo">
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Plano</label>
+                            <select name="plano_id" class="form-select form-select-sm">
+                                <option value="">Sem plano</option>
+                                {% for p in planos %}<option value="{{ p.id }}" {% if p.nome == 'Inteligência' %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Cortesia até</label>
+                            <input type="date" name="cortesia_ate" class="form-control form-control-sm">
+                        </div>
+                    </div>
+                    {% endif %}
                     <div class="mb-2">
                         <label class="form-label small text-muted mb-1">País</label>
                         <select name="country_code" id="novo-country" class="form-select form-select-sm">
@@ -209,6 +225,27 @@
             <div class="col-12 small text-muted">Criado em {{ ponto.criado_em }}{% if ponto.criado_por %} por {{ ponto.criado_por }}{% endif %}</div>
             <div class="col-12 small text-muted">Salva sozinho ao sair do campo (ou ao soltar o pino no mapa)<span class="autosave-status small ms-2"></span></div>
         </form>
+        {% if ponto.tipo != 'estudo' and current_user.is_master %}
+        {% if ponto.cliente %}
+        <div class="small text-muted mt-2">💳 Plano e cortesia: da assinatura do cliente {{ ponto.cliente }} (aba Usuários).</div>
+        {% else %}
+        <form method="post" action="{{ url_for('salvar_plano_ponto') }}" class="row g-2 align-items-end mt-1 form-plano-ponto" data-autosave>
+            <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Plano</label>
+                <select name="plano_id" class="form-select form-select-sm">
+                    <option value="" {% if not ponto.plano_proprio.plano_id %}selected{% endif %}>Sem plano</option>
+                    {% for p in planos %}<option value="{{ p.id }}" {% if ponto.plano_proprio.plano_id == p.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted mb-1">Cortesia até</label>
+                <input type="date" name="cortesia_ate" class="form-control form-control-sm" value="{{ ponto.plano_proprio.validade or '' }}">
+            </div>
+            <div class="col-12 col-md-6 small text-muted"><span class="autosave-status small"></span></div>
+        </form>
+        {% endif %}
+        {% endif %}
         <form method="post" action="{{ url_for('remover_ponto_virtual') }}" class="mt-2 text-end"
               onsubmit="return confirm({% if ponto.tipo == 'estudo' %}'Remover o estudo de viabilidade \'{{ ponto.nome }}\'?'{% else %}'Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga também permissões, agenda de WhatsApp e anotações ligadas a ele.'{% endif %});">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
@@ -968,5 +1005,12 @@
         });
     });
 })();
+// Selo do plano do cartao acompanha o Plano/Cortesia salvos (23/11/2026).
+document.addEventListener('autosave:ok', function (e) {
+    var form = e.target.closest('.form-plano-ponto');
+    if (!form || !e.detail.selo) return;
+    var selo = form.closest('.ponto-virtual-card').querySelector('.selo-plano');
+    if (selo) selo.outerHTML = e.detail.selo;
+});
 </script>
 {% endblock %}

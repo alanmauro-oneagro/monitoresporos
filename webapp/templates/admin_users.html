@@ -131,34 +131,7 @@
 </table>
 </div>
 
-{% if pessoa_por_user is defined %}
-<details class="card shadow-sm mt-4"><summary class="card-body py-2 fw-semibold text-success" style="cursor: pointer;">+ Novo cliente (ex.: fazendas da BioScout)</summary>
-    <form method="post" action="{{ url_for('admin_cliente_novo') }}" class="card-body pt-0 row g-2" data-autocriar>
-        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">Nome completo</label><input class="form-control form-control-sm" name="nome_completo" required maxlength="80"></div>
-        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Usuário (login)</label><input class="form-control form-control-sm" name="username" required maxlength="60"></div>
-        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Senha (mín. 6)</label><input class="form-control form-control-sm" name="password" type="text" required minlength="6"></div>
-        <div class="col-4 col-md-1"><label class="form-label small text-muted mb-0">DDI</label><input class="form-control form-control-sm" name="codigo_pais" value="55" inputmode="numeric"></div>
-        <div class="col-8 col-md-3"><label class="form-label small text-muted mb-0">Celular</label><input class="form-control form-control-sm" name="numero_telefone" inputmode="tel"></div>
-        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">E-mail</label><input class="form-control form-control-sm" name="email" type="email"></div>
-        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0" title="Opcional">Grupo econômico* <span class="fw-normal">(opcional)</span></label><input class="form-control form-control-sm" name="grupo_economico" maxlength="40" placeholder="ex.: Grupo PIVA" list="lista-grupos"></div>
-        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Plano</label>
-            <select class="form-select form-select-sm" name="plano_id">
-                {% for p in planos %}<option value="{{ p.id }}" {% if p.nome == 'Inteligência' %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
-            </select></div>
-        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Cortesia até (sem cobrança)</label><input class="form-control form-control-sm" name="cortesia_ate" type="date"></div>
-        <div class="col-12"><div class="small text-muted mb-1">Fazendas deste cadastro (ainda sem cadastro):</div>
-            <div class="border rounded p-2 bg-white" style="max-height: 14rem; overflow: auto;">
-            {% for fz in sem_cadastro %}
-            <div class="form-check small"><input class="form-check-input" type="checkbox" name="site" value="{{ fz.site }}" id="novo_{{ loop.index }}">
-                <label class="form-check-label" for="novo_{{ loop.index }}">{{ fz.nome_exibicao }} <span class="text-muted">· {{ {'bioscout': 'BioScout', 'estudo': 'Mapas de Estudo', 'app': 'App'}[fz.origem] }}</span></label></div>
-            {% else %}<div class="small text-muted">Todas as fazendas já têm cadastro.</div>{% endfor %}
-            </div></div>
-        <div class="col-12"><span class="autocriar-status small text-muted">Salva sozinho ao terminar de preencher.</span>
-            <span class="small text-muted ms-2">O cliente entra no app com esse usuário e senha; a cobrança ele faz em Assinatura.</span></div>
-    </form>
-</details>
-<datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>
-{% endif %}
+{% if pessoa_por_user is defined %}<datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>{% endif %}
 
 <div class="card shadow-sm mt-4">
     <div class="card-body p-4 form-compact">

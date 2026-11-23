@@ -315,6 +315,14 @@ Usuarios do menu. `#usuario-<id>` (link do cartao da fazenda) ja' abre a pessoa.
 `_gerenciar_cartoes.html` (`estilos`, `linha_fazenda`, `selos_pessoa`, `cartao_pessoa`, `scripts`; importar "with
 context"); dados das pessoas em `app._pessoas_para_gerenciar()`. Acoes da pessoa (cortesia, grupo, novo, excluir) voltam
 pra Usuarios; ligar/desligar fazenda volta pra tela de onde veio. Teste `GerenciarFazendasTest`.
+**Plano e Cortesia no Mapas de Estudo; so' "Novo usuário" em Usuarios** (pedido do Alan, 23/11/2026): o "+ Novo
+cliente" saiu da aba Usuarios (fica so' o "Novo usuário"; a rota `admin_cliente_novo` ficou sem tela). Toda fazenda
+nova nasce no Mapas de Estudo, que ganhou **Plano** (padrao Inteligência) e **Cortesia até** no "Adicionar Ponto" e em
+cada cartao de ponto de doenca/clima (form `.form-plano-ponto`, rota `salvar_plano_ponto`, `@master_required`, salva
+sozinho e troca o selo do cartao); gravado em `planos_fazenda` (`plano_id`, `validade`). `_plano_da_fazenda`: cliente do
+app (dono) continua pela assinatura; senao o plano proprio (`_plano_proprio_da_fazenda`; validade passada = vencido);
+senao fazenda real = Inteligência. Fazenda de cliente mostra "plano da assinatura do cliente (aba Usuários)". Teste
+`PlanoNoMapasDeEstudoTest`.
 **Mapas de Estudo -- estudo de viabilidade, regua e grupos** (pedido do Alan, 12/11/2026): tipos
 sem parenteses ("🦠 Monitorar doenças", "☁️ Somente clima", "📐 Estudo de viabilidade"). Estudo de
 viabilidade = tabela PROPRIA `pontos_estudo` (`models.criar/atualizar/excluir_ponto_estudo`), so'
