@@ -1812,3 +1812,34 @@ class ClienteDadosDesdeTest(unittest.TestCase):
         finally:
             models.set_user_dados_desde(uid, None)
             models.delete_user(uid)
+
+
+class FazendaLigadaDadosDesdeTest(unittest.TestCase):
+    """"Ver dados a partir de" de cada pessoa ligada a uma fazenda sem cadastro (pedido do Alan, 23/11/2026)."""
+
+    def test_campo_no_dados_da_fazenda(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Desde"):
+            models.create_user("Zzz Master Desde", "x", is_master=True)
+        mid = models.get_user_by_username("Zzz Master Desde")["id"]
+        if not models.get_user_by_username("Zzz Usuario Ligado"):
+            models.create_user("Zzz Usuario Ligado", "x")
+        uid = models.get_user_by_username("Zzz Usuario Ligado")["id"]
+        nome = "Zzz Fazenda Ligada Desde"
+        models.create_virtual_farm(nome, -12.5, -55.7, 50, criado_por="Zzz Master Desde")
+        site = [v for v in models.get_all_virtual_farms() if v["nome"] == nome][0]["site_name"]
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(mid)
+            s["_fresh"] = True
+        try:
+            c.post(f"/admin/usuarios/{uid}/ligar-fazenda", data={"site_name": site})
+            models.set_user_dados_desde(uid, "2026-10-05")
+            h = c.get("/admin/fazendas/dados", query_string={"site": site}).get_data(as_text=True)
+            self.assertIn(f"/admin/users/{uid}/dados-desde", h)
+            self.assertIn('value="2026-10-05"', h)
+            self.assertIn("Zzz Usuario Ligado vê dados a partir de", h)
+        finally:
+            models.set_user_dados_desde(uid, None)
+            models.delete_virtual_farm(site)

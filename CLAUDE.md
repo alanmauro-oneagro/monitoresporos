@@ -907,6 +907,9 @@ site tem que entrar la'.
   **Tambem em Gerenciar Clientes** (pedido do Alan, 23/11/2026): cada cartao de pessoa (cliente do app ou acesso a'
   fazenda) tem "📅 Ver dados a partir de" antes dos botoes, mesma rota `admin_user_dados_desde`, salva sozinho
   (`models.dados_desde_por_usuario` -> `dados_desde_por_user` no template). Teste `ClienteDadosDesdeTest`.
+  **E nas fazendas sem cadastro** (mesmo dia): no "Dados da fazenda", logo abaixo de "Ligada a:", uma linha por pessoa
+  ligada (nao Master) "📅 <usuario> vê dados a partir de" (mesma rota; `usuarios_ligados_a_fazenda` traz `dados_desde`).
+  A data e' da pessoa (vale em todas as fazendas dela). Teste `FazendaLigadaDadosDesdeTest`.
 - **Fazenda ativa/desativada** (`sites.ativo`, `models.set_site_ativo`/
   `get_deactivated_site_names`): esconde fazenda (real ou virtual) de TODAS
   as telas sem apagar — existe por causa do ponto acima (delete nao
