@@ -910,6 +910,11 @@ site tem que entrar la'.
   **E nas fazendas sem cadastro** (mesmo dia): no "Dados da fazenda", logo abaixo de "Ligada a:", uma linha por pessoa
   ligada (nao Master) "📅 <usuario> vê dados a partir de" (mesma rota; `usuarios_ligados_a_fazenda` traz `dados_desde`).
   A data e' da pessoa (vale em todas as fazendas dela). Teste `FazendaLigadaDadosDesdeTest`.
+  **Padrao = data do cadastro pro cliente sem fazenda da BioScout** (pedido do Alan, 23/11/2026): `criar_cliente` grava
+  `dados_desde` = dia da criacao; o "+ Novo cliente" do Master limpa se ligou fazenda da BioScout; clientes antigos
+  receberam `assinaturas.criado_em` UMA vez no `init_db` (setting `dados_desde_clientes_feito`; quem tem fazenda
+  vinculada nao-estimada fica sem data). So' Master ve/edita o campo (rota `@master_required`; o "📅 desde" da aba
+  Usuarios so' aparece pro Master). Teste `DadosDesdeCadastroClienteTest`.
 - **Fazenda ativa/desativada** (`sites.ativo`, `models.set_site_ativo`/
   `get_deactivated_site_names`): esconde fazenda (real ou virtual) de TODAS
   as telas sem apagar — existe por causa do ponto acima (delete nao
