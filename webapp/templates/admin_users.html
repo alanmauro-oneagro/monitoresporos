@@ -18,6 +18,38 @@
 .tabela-usuarios .acoes .btn { font-size: 0.78rem; padding: 0.1rem 0.4rem; }
 .tabela-usuarios .acoes form { display: inline; }
 .tabela-usuarios .form-check-label { font-size: 0.8rem; }
+/* Celular em pe' (pedido do Alan, 23/11/2026): cada usuario vira um cartao com so' o nome; tocar no nome abre
+   as outras informacoes uma embaixo da outra (rolar a pagina pra ver tudo). Deitado: a tabela como no computador. */
+@media (max-width: 767.98px) and (orientation: portrait) {
+    .tabela-larga { width: auto; margin-left: 0; transform: none; overflow: visible; }
+    .tabela-usuarios, .tabela-usuarios tbody { display: block; width: 100%; }
+    .tabela-usuarios thead { display: none; }
+    .tabela-usuarios tr.linha-usuario { display: block; border: 1px solid #dee2e6; border-radius: 0.5rem; margin-bottom: 0.5rem; background: #fff; }
+    .tabela-usuarios tr.linha-usuario.d-none { display: none; }
+    .tabela-usuarios tr.linha-usuario > td { display: none; border: 0; }
+    .tabela-usuarios tr.linha-usuario > td[data-celula="nome"] { display: block; padding: 0.6rem 0.75rem; cursor: pointer; white-space: normal; }
+    .tabela-usuarios tr.linha-usuario > td[data-celula="nome"]::after { content: "▾"; float: right; color: #6c757d; }
+    .tabela-usuarios tr.linha-usuario.aberto > td[data-celula="nome"]::after { content: "▴"; }
+    .tabela-usuarios tr.linha-usuario.aberto > td { display: flex; gap: 0.75rem; align-items: center; padding: 0.3rem 0.75rem;
+        border-top: 1px solid #f1f3f5; white-space: normal; max-width: none; }
+    .tabela-usuarios tr.linha-usuario.aberto > td::before { content: attr(data-label); flex: 0 0 8.5rem; color: #6c757d;
+        font-size: 0.75rem; text-transform: uppercase; }
+    .tabela-usuarios tr.linha-usuario.aberto > td[data-celula="nome"] { display: block; border-top: 0; padding: 0.6rem 0.75rem; }
+    .tabela-usuarios tr.linha-usuario.aberto > td[data-celula="nome"]::before { content: none; }
+    .tabela-usuarios .email { overflow: visible; text-overflow: clip; word-break: break-all; }
+    .tabela-usuarios tr.pessoa-row:not(.d-none), .tabela-usuarios tr.sub-row:not(.d-none) { display: block; }
+    .tabela-usuarios tr.pessoa-row > td, .tabela-usuarios tr.sub-row > td { display: block; }
+}
+/* Celular deitado: tabela inteira na tela, como no computador. */
+@media (max-width: 991.98px) and (orientation: landscape) {
+    .tabela-usuarios { font-size: 0.72rem; }
+    .tabela-usuarios thead th { font-size: 0.65rem; letter-spacing: 0; white-space: normal; vertical-align: bottom; }
+    .tabela-usuarios th, .tabela-usuarios td { padding-left: 0.15rem; padding-right: 0.15rem; }
+    .tabela-usuarios .email { max-width: 6rem; }
+    .tabela-larga { width: calc(100vw - 0.5rem); }
+    .tabela-usuarios .acoes .btn { padding: 0.05rem 0.25rem; }
+    .tabela-usuarios .pausado-rotulo { display: none; }
+}
 </style>
 <h4 class="mb-3">Usuários</h4>
 
@@ -46,15 +78,15 @@
         <tr id="usuario-{{ u.id }}" class="linha-usuario" data-user="{{ u.id }}" data-novo="{{ 1 if pessoa and not pessoa.visto else 0 }}"
             data-cliente="{{ 1 if u.is_cliente else 0 }}" data-incompleto="{{ 1 if pessoa and pessoa.faltando else 0 }}"
             data-situacao="{{ ('bloqueado' if sit.chave in ('bloqueado', 'sem_plano') else sit.chave) if sit else '' }}">
-            <td class="nowrap">{% if pessoa %}<button type="button" class="btn btn-link btn-sm p-0 text-decoration-none pessoa-toggle" data-user="{{ u.id }}" title="Cadastro, assinatura, plano, cortesia, grupo e data limite">
+            <td data-label="Usuário" data-celula="nome" class="nowrap">{% if pessoa %}<button type="button" class="btn btn-link btn-sm p-0 text-decoration-none pessoa-toggle" data-user="{{ u.id }}" title="Cadastro, assinatura, plano, cortesia, grupo e data limite">
                     <span class="toggle-icon">▶</span></button>{% endif %}
                 <span class="nome-usuario">{{ u.username }}</span>{% if pessoa and not pessoa.visto %} <span class="badge bg-danger">Novo</span>{% endif %}
                 {% if pessoa and pessoa.faltando %} <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ pessoa.faltando | join('; ') }}">⚠ Incompleto</span>{% endif %}</td>
-            <td class="text-muted">{{ grupos.get(u.id) or '-' }}</td>
-            <td class="email" title="{{ u.email or '' }}">{{ u.email or '-' }}</td>
-            <td class="nowrap">{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
-            <td class="nowrap">{% if u.is_cliente %}<span class="badge bg-success">Cliente do app</span>{% else %}{{ niveis[nivel_acesso(u)] }}{% endif %}{% if u.dados_desde and not u.is_master and current_user.is_master %}<div class="small text-muted" title="Vê os dados a partir dessa data">📅 desde {{ u.dados_desde | data_br }}</div>{% endif %}</td>
-            <td class="nowrap">
+            <td data-label="Grupo" class="text-muted">{{ grupos.get(u.id) or '-' }}</td>
+            <td data-label="Email" class="email" title="{{ u.email or '' }}">{{ u.email or '-' }}</td>
+            <td data-label="Celular" class="nowrap">{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
+            <td data-label="Acesso" class="nowrap">{% if u.is_cliente %}<span class="badge bg-success">Cliente do app</span>{% else %}{{ niveis[nivel_acesso(u)] }}{% endif %}{% if u.dados_desde and not u.is_master and current_user.is_master %}<div class="small text-muted" title="Vê os dados a partir dessa data">📅 desde {{ u.dados_desde | data_br }}</div>{% endif %}</td>
+            <td data-label="Permissões" class="nowrap">
                 {% if u.is_admin %}
                     <span class="text-muted">Todas</span>
                 {% else %}
@@ -63,7 +95,7 @@
                     </a>
                 {% endif %}
             </td>
-            <td class="nowrap">
+            <td data-label="Recebe relatório" class="nowrap">
                 {% if pode_aba('envios') %}
                 <a href="{{ url_for('whatsapp_gerenciamento') }}" class="text-decoration-none" title="Quem recebe cada fazenda e' marcado na aba Programação de Envios">
                     {{ report_counts.get(u.id, 0) }} fazenda(s)
@@ -72,14 +104,14 @@
                 {{ report_counts.get(u.id, 0) }} fazenda(s)
                 {% endif %}
             </td>
-            <td>
+            <td data-label="WhatsApp">
                 <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp em TODAS as fazendas de uma vez, sem apagar quem recebe cada fazenda (aba Programação de Envios)">
                     <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-user-id="{{ u.id }}"
                         id="pausado_user_{{ u.id }}" {% if u.whatsapp_pausado %}checked{% endif %}>
-                    <label class="form-check-label small" for="pausado_user_{{ u.id }}">Pausado</label>
+                    <label class="form-check-label small pausado-rotulo" for="pausado_user_{{ u.id }}">Pausado</label>
                 </div>
             </td>
-            <td class="nowrap">
+            <td data-label="Subordinados" class="nowrap">
                 {% if subordinado_counts.get(u.id) %}
                 <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none sub-toggle" data-owner="{{ u.id }}" title="Mostrar/ocultar subordinados">
                     <span class="toggle-icon">▶</span>
@@ -89,7 +121,7 @@
                     {% if subordinado_counts.get(u.id) %}{{ subordinado_counts[u.id] }} subordinado(s){% else %}Adicionar{% endif %}
                 </a>
             </td>
-            <td class="acoes">
+            <td data-label="Ações" class="acoes">
                 {% if u.is_cliente %}
                 {# Cliente do app: cadastro, plano, cortesia e exclusao no "▶" da propria linha (23/11/2026). #}
                 <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" onsubmit="return confirm('Redefinir a senha de {{ u.username }} para a senha padrao?');">
@@ -238,6 +270,13 @@ document.querySelectorAll('#filtro-usuarios [data-filtro]').forEach(function (b,
 });
 var alvo = (location.hash.match(/^#usuario-(\d+)$/) || [])[1];
 if (alvo) { abrirPessoa(alvo, true); }
+// Celular em pe': tocar no nome abre/fecha as informacoes do usuario (23/11/2026).
+document.querySelectorAll('tr.linha-usuario > td[data-celula="nome"]').forEach(function (td) {
+    td.addEventListener('click', function (e) {
+        if (e.target.closest('button, a, input') || !window.matchMedia('(max-width: 767.98px) and (orientation: portrait)').matches) return;
+        td.parentElement.classList.toggle('aberto');
+    });
+});
 document.querySelectorAll('.pausar-whatsapp-check').forEach(function (chk) {
     chk.addEventListener('change', function () {
         var url = chk.dataset.userId
