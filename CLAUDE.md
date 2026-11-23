@@ -331,10 +331,11 @@ senao fazenda real = Inteligência. Fazenda de cliente mostra "plano da assinatu
 maiusculas pequeno e cinza, nome em negrito, celular/acesso sem quebrar, e-mail cortado com "..." e o completo no
 `title`), usa a largura da tela ate' 1500 px (`.tabela-larga`), Permissoes = "Todas", Subordinados = "N subordinado(s)"
 ou "Adicionar" e as acoes viraram icones com dica (✏️ Editar cadastro, 🔑 Redefinir senha, 🗑️ Excluir).
-**No celular** (pedido do Alan, 23/11/2026): EM PE' (`max-width: 767.98px` + `orientation: portrait`) cada usuario vira um
-cartao so' com o nome (▾); tocar no nome abre as outras colunas uma embaixo da outra com o rotulo (`td[data-label]`,
-classe `.aberto` na linha) -- rola a pagina pra ver tudo. DEITADO (`max-width: 991.98px` + landscape) a tabela fica
-inteira como no computador (letra 0.72rem, titulos podem quebrar, e-mail cortado, "Pausado" so' a caixa).
+**No celular** (pedido do Alan, 23/11/2026 -- substitui os cartoes do celular em pe'): em pe' OU deitado a tabela e'
+a MESMA do computador, com todas as colunas, rolando de lado dentro dela (`.table-responsive`; ate' 991 px sai o
+deslocamento da `.tabela-larga`). Deitado fica compacta pra caber (letra 0.72rem, titulos podem quebrar, e-mail cortado,
+"Pausado" so' a caixa, botoes menores). Cada icone de acao tem o nome EM CIMA (`.acao` > span: Editar / Senha / Excluir).
+O site nao trava a rotacao (`site.webmanifest` com `orientation: any`); se nao gira, e' o "girar automaticamente" do celular.
 **Mapas de Estudo -- estudo de viabilidade, regua e grupos** (pedido do Alan, 12/11/2026): tipos
 sem parenteses ("🦠 Monitorar doenças", "☁️ Somente clima", "📐 Estudo de viabilidade"). Estudo de
 viabilidade = tabela PROPRIA `pontos_estudo` (`models.criar/atualizar/excluir_ponto_estudo`), so'
