@@ -790,6 +790,11 @@ site tem que entrar la'.
   marcado e DESMARCA o CAR de origem (que fica guardado). Caixa "Usar no NDVI" em cada CAR (`farm_ndvi_car.usar`,
   rota `usar_ndvi_car`, `models.set_farm_ndvi_car_usar`; mudar limpa a imagem guardada): `get_farm_ndvi_cars_kml`
   devolve so' os marcados (Pre-visualizar e envio automatico); nenhum marcado = todos. Teste `NdviCarRecorteTest`.
+  **Aba NDVI so' manual; automatico so' em Programação de Envios** (pedido do Alan, 23/11/2026): o "Nuvens na fazenda
+  até" da aba NDVI virou campo do proprio Pre-visualizar (padrao 5%, NAO grava -- `pre_visualizar_ndvi` usa o valor so'
+  nessa busca) e o "Recebem o NDVI" virou "Enviar por WhatsApp vai para:" junto do envio manual. O limite GRAVADO
+  (`set_ndvi_nuvens`, rota `salvar_ndvi_nuvens`, agora `@aba_required("envios")`, padrao 3%) e' o do envio automatico e
+  fica em Programação de Envios, ao lado da agenda NDVI (data/frequencia/hora) e de quem recebe. Teste `NdviAgendaSoEmEnviosTest`.
 - **PDF da fazenda no modelo "Monitoramento e Manejo"** (pedido do Alan, 16/11/2026; substitui o layout antigo --
   vale no botao PDF, envio por WhatsApp e app; `export_pdf.build_recommendation_pdf`): faixa azul no topo; RESUMO DA
   SEMANA (Entrar com aplicação / Acompanhar / Monitorar + chuva, dia com menos chuva, vento); CLIMA NA FAZENDA (temp.,

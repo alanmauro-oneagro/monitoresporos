@@ -74,7 +74,7 @@
             {% endif %}
 
             <div class="mt-3 pt-3 border-top">
-                <label class="form-label small text-muted d-block mb-1">NDVI -- envio automatico:</label>
+                <label class="form-label small text-muted d-block mb-1">NDVI -- envio automático:</label>
                 {% if site_group.tem_car %}
                 <form method="post" action="{{ url_for('save_ndvi_agendamento') }}" data-autosave
                       class="d-flex align-items-center flex-wrap gap-2">
@@ -96,8 +96,19 @@
                     <span class="autosave-status small ms-2"></span>
                 </form>
                 {% if site_group.ndvi %}
-                <p class="text-muted small mt-1 mb-0">Proximo envio automatico: {{ site_group.ndvi.proxima_execucao | data_br }}, as {{ '%02d'|format(site_group.ndvi.hora) }}h.</p>
+                <p class="text-muted small mt-1 mb-0">Próximo envio automático: {{ site_group.ndvi.proxima_execucao | data_br }}, às {{ '%02d'|format(site_group.ndvi.hora) }}h.</p>
                 {% endif %}
+                <form method="post" action="{{ url_for('salvar_ndvi_nuvens') }}" data-autosave class="mt-2 d-flex align-items-center flex-wrap gap-2">
+                    <input type="hidden" name="site_name" value="{{ site_group.site }}">
+                    <label class="small text-muted mb-0" for="ndvi_nuvens_{{ farm_idx }}">Nuvens na fazenda até:</label>
+                    <select class="form-select form-select-sm" style="width: auto;" id="ndvi_nuvens_{{ farm_idx }}" name="nuvens">
+                        <option value="" {% if site_group.ndvi_nuvens is none %}selected{% endif %}>Padrão ({{ nuvens_padrao_auto }}%)</option>
+                        {% for pct in opcoes_nuvens %}
+                        <option value="{{ pct }}" {% if site_group.ndvi_nuvens == pct %}selected{% endif %}>{{ pct }}%</option>
+                        {% endfor %}
+                    </select>
+                    <span class="autosave-status small"></span>
+                </form>
                 {% if current_user.is_admin and site_group.destinatarios %}
                 <div class="mt-2">
                     <span class="small text-muted me-1">Recebem o NDVI:</span>
@@ -113,7 +124,7 @@
                 {% endif %}
                 {% else %}
                 <p class="text-muted small mb-0">
-                    Anexe um CAR na aba <a href="{{ url_for('ndvi') }}">NDVI</a> pra habilitar o envio automatico.
+                    Anexe um CAR na aba <a href="{{ url_for('ndvi') }}">NDVI</a> para habilitar o envio automático.
                 </p>
                 {% endif %}
             </div>
