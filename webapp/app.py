@@ -7079,6 +7079,8 @@ def admin_users():
         niveis=NIVEIS_ACESSO, nivel_acesso=_nivel_acesso,
         report_counts=report_counts, permission_counts=permission_counts,
         subordinado_counts=subordinado_counts, subordinados_by_owner=subordinados_by_owner, grupos=grupos,
+        fazendas_para_novo=sorted(({"id": i, "nome": _nome_exibicao(n)} for i, n in site_name_by_id.items()),
+                                  key=lambda f: _chave_alfabetica(f["nome"])),
         **extra,
     )
 
@@ -7148,6 +7150,20 @@ def admin_create_user():
             username, models.DEFAULT_PASSWORD, nivel != "usuario", email=email, telefone=telefone,
             is_master=nivel == "master",
         )
+        # Fazendas e data de inicio ja' no cadastro (pedido do Alan, 23/11/2026): cada fazenda marcada fica
+        # liberada e a pessoa recebe o relatorio dela (igual "Ligar" em Gerenciar Fazendas).
+        novo_id = models.get_user_by_username(username)["id"]
+        validos = {s["id"] for s in models.get_all_sites()}
+        ids = [i for i in (request.form.getlist("site_ids", type=int)) if i in validos]
+        if ids:
+            models.set_user_permissions(novo_id, ids)
+            models.set_user_report_permissions(novo_id, ids)
+        desde = (request.form.get("dados_desde") or "").strip()
+        if desde and current_user.is_master and nivel != "master":
+            try:
+                models.set_user_dados_desde(novo_id, datetime.strptime(desde, "%Y-%m-%d").date().isoformat())
+            except ValueError:
+                pass
         flash(
             f"Usuario '{username}' criado com a senha padrao '{models.DEFAULT_PASSWORD}' -- "
             "avise a pessoa pra trocar assim que entrar (botao 'Trocar senha' no menu). "

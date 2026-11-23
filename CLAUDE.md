@@ -323,6 +323,10 @@ sozinho e troca o selo do cartao); gravado em `planos_fazenda` (`plano_id`, `val
 app (dono) continua pela assinatura; senao o plano proprio (`_plano_proprio_da_fazenda`; validade passada = vencido);
 senao fazenda real = Inteligência. Fazenda de cliente mostra "plano da assinatura do cliente (aba Usuários)". Teste
 `PlanoNoMapasDeEstudoTest`.
+**Novo usuário com fazendas e data** (pedido do Alan, 23/11/2026): o "Novo usuário" da aba Usuarios tem a caixa
+"Fazendas que terá acesso" (`site_ids`, de `get_all_sites`; cada marcada = liberada + recebe o relatorio, igual o
+"Ligar") e, so' pro Master, "📅 Ver dados a partir de" (`dados_desde`; ignorado se o novo for Master) -- gravados no
+`admin_create_user`. Teste `NovoUsuarioFazendasTest`.
 **Mapas de Estudo -- estudo de viabilidade, regua e grupos** (pedido do Alan, 12/11/2026): tipos
 sem parenteses ("🦠 Monitorar doenças", "☁️ Somente clima", "📐 Estudo de viabilidade"). Estudo de
 viabilidade = tabela PROPRIA `pontos_estudo` (`models.criar/atualizar/excluir_ponto_estudo`), so'
