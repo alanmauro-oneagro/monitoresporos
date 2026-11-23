@@ -146,6 +146,12 @@
         </div>
         <div class="cad-selos">{{ selos_pessoa(c) }}</div>
         <div class="d-none mt-3" id="cad-body-{{ idx }}">
+        {% if c.faltando %}
+        <div class="alert alert-warning py-2 px-3 small mb-3 falta-cadastro">
+            <strong>⚠ Para completar o cadastro, falta:</strong>
+            <ul class="mb-0 ps-3">{% for item in c.faltando %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
         <dl class="mb-3">
             <dt>Usuário</dt><dd>{{ c.username }}</dd>
             <dt>Grupo econômico</dt><dd>

@@ -1866,3 +1866,25 @@ class DadosDesdeCadastroClienteTest(unittest.TestCase):
             self.assertNotIn("vê os dados a partir", c.get("/admin/users").get_data(as_text=True))
         finally:
             models.delete_user(uid)
+
+
+class CadastroIncompletoVisivelTest(unittest.TestCase):
+    """O que falta no cadastro aparece escrito dentro do cartao (no celular nao ha' o title do selo; 23/11/2026)."""
+
+    def test_lista_no_cartao(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Desde"):
+            models.create_user("Zzz Master Desde", "x", is_master=True)
+        mid = models.get_user_by_username("Zzz Master Desde")["id"]
+        uid = models.criar_cliente("Zzz Cliente Incompleto", "segredo1", "", "5565999990996", "", None)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(mid)
+            s["_fresh"] = True
+        try:
+            h = c.get("/admin/solicitacoes").get_data(as_text=True)
+            self.assertIn("Para completar o cadastro, falta:", h)
+            self.assertIn("<li>plano</li>", h)
+        finally:
+            models.delete_user(uid)
