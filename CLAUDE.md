@@ -327,6 +327,10 @@ senao fazenda real = Inteligência. Fazenda de cliente mostra "plano da assinatu
 "Fazendas que terá acesso" (`site_ids`, de `get_all_sites`; cada marcada = liberada + recebe o relatorio, igual o
 "Ligar") e, so' pro Master, "📅 Ver dados a partir de" (`dados_desde`; ignorado se o novo for Master) -- gravados no
 `admin_create_user`. Teste `NovoUsuarioFazendasTest`.
+**Tabela de Usuarios mais limpa** (pedido do Alan, 23/11/2026): `.tabela-usuarios` (letra 0.85rem, cabecalho em
+maiusculas pequeno e cinza, nome em negrito, celular/acesso sem quebrar, e-mail cortado com "..." e o completo no
+`title`), usa a largura da tela ate' 1500 px (`.tabela-larga`), Permissoes = "Todas", Subordinados = "N subordinado(s)"
+ou "Adicionar" e as acoes viraram icones com dica (✏️ Editar cadastro, 🔑 Redefinir senha, 🗑️ Excluir).
 **Mapas de Estudo -- estudo de viabilidade, regua e grupos** (pedido do Alan, 12/11/2026): tipos
 sem parenteses ("🦠 Monitorar doenças", "☁️ Somente clima", "📐 Estudo de viabilidade"). Estudo de
 viabilidade = tabela PROPRIA `pontos_estudo` (`models.criar/atualizar/excluir_ponto_estudo`), so'
