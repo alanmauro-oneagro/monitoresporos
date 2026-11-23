@@ -20,6 +20,18 @@
                 </form>
                 {% else %}<strong>-</strong>{% endfor %}
             </div>
+            {# "Ver dados a partir de" de cada pessoa ligada (pedido do Alan, 23/11/2026) -- a data e' da pessoa e
+               vale pra todas as fazendas dela (mesmo campo da aba Usuarios). #}
+            {% for u in usuarios_ligados if not u.is_master %}
+            <form method="post" action="{{ url_for('admin_user_dados_desde', user_id=u.id) }}" class="d-flex flex-wrap align-items-center gap-2 mb-1" data-autosave
+                  title="Leituras de esporos anteriores a essa data não aparecem para {{ u.username }} (vale em todas as fazendas dele). Em branco = todo o histórico.">
+                <label class="text-muted mb-0" for="dados_desde_{{ fz.site | replace(' ', '_') | replace('\"', '') }}_{{ u.id }}">📅 {{ u.username }} vê dados a partir de</label>
+                <input class="form-control form-control-sm" style="max-width: 160px;" type="date" name="dados_desde"
+                       id="dados_desde_{{ fz.site | replace(' ', '_') | replace('\"', '') }}_{{ u.id }}" value="{{ u.dados_desde or '' }}">
+                <span class="autosave-status small"></span>
+            </form>
+            {% endfor %}
+            {% if usuarios_ligados %}<div class="mb-2"></div>{% endif %}
             <form method="post" class="d-flex flex-wrap align-items-center gap-1 mb-3 ligar-a-cliente">
                 <input type="hidden" name="site_name" value="{{ fz.site }}">
                 <span class="text-muted me-1">Ligar ao cliente:</span>

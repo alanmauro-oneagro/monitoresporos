@@ -4951,7 +4951,7 @@ def usuarios_ligados_a_fazenda(site_name):
     relatorio -- o "Ligar ao cliente" de um usuario (pedido do Alan, 10/11/2026)."""
     conn = get_db()
     rows = conn.execute(
-        "SELECT u.id, u.username FROM users u JOIN sites s ON s.site_name = ?"
+        "SELECT u.id, u.username, u.is_master, u.dados_desde FROM users u JOIN sites s ON s.site_name = ?"
         " JOIN user_site_permissions p ON p.user_id = u.id AND p.site_id = s.id"
         " JOIN user_report_permissions r ON r.user_id = u.id AND r.site_id = s.id"
         " WHERE u.is_cliente = 0 ORDER BY u.username COLLATE NOCASE", (site_name,)).fetchall()
