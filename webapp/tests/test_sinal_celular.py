@@ -351,7 +351,7 @@ class SinalCelularTest(unittest.TestCase):
         models.criar_cliente_ponto(uid, "Talhao Sinal", -12.5, -55.7)
         models.registrar_cadastro({"username": "Zzz Cliente Sinal", "nome_completo": "Zzz Cliente Sinal", "perfil": "produtor",
                                    "telefone": "5565999990000", "tipo": "cliente", "user_id": uid})
-        html = master.get("/admin/solicitacoes").get_data(as_text=True)
+        html = master.get("/admin/users").get_data(as_text=True)
         # linha de sinal compacta dentro de cada area monitorada (Gerenciar Clientes, 08/11/2026)
         self.assertIn('<span class="fw-semibold">Talhao Sinal</span>', html)
         self.assertIn("Fazendas monitoradas", html)

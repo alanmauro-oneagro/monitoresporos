@@ -1,8 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Usuários - OneAgro App{% endblock %}
 {% block content %}
+{% if pessoa_por_user is defined %}{% import "_gerenciar_cartoes.html" as gc with context %}{{ gc.estilos() }}{% endif %}
 <h4 class="mb-3">Usuários</h4>
 
+{% if pessoa_por_user is defined %}
+{% set ps = pessoa_por_user.values() | list %}
+{% set n_free = ps | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'equalto', 'free') | list | length %}
+{% set n_bloq = ps | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'in', ['bloqueado', 'sem_plano']) | list | length %}
+<div class="btn-group btn-group-sm flex-wrap mb-3" role="group" id="filtro-usuarios">
+    <button type="button" class="btn btn-outline-secondary active" data-filtro="todos">Todos ({{ users | length }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="novo">Novos ({{ ps | selectattr('visto', 'equalto', 0) | list | length }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="cliente">Clientes ({{ users | selectattr('is_cliente') | list | length }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Essencial ({{ n_free }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="bloqueado">Bloqueados / sem plano ({{ n_bloq }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="incompleto">Cadastro incompleto ({{ ps | selectattr('faltando') | list | length }})</button>
+</div>
+{% endif %}
 <div class="table-responsive">
 <table class="table table-sm bg-white shadow-sm">
     <thead>
@@ -10,8 +24,15 @@
     </thead>
     <tbody>
     {% for u in users %}
-        <tr>
-            <td>{{ u.username }}</td>
+        {% set pessoa = pessoa_por_user.get(u.id) if pessoa_por_user is defined else none %}
+        {% set sit = pessoa.situacao if pessoa else none %}
+        <tr id="usuario-{{ u.id }}" class="linha-usuario" data-user="{{ u.id }}" data-novo="{{ 1 if pessoa and not pessoa.visto else 0 }}"
+            data-cliente="{{ 1 if u.is_cliente else 0 }}" data-incompleto="{{ 1 if pessoa and pessoa.faltando else 0 }}"
+            data-situacao="{{ ('bloqueado' if sit.chave in ('bloqueado', 'sem_plano') else sit.chave) if sit else '' }}">
+            <td>{% if pessoa %}<button type="button" class="btn btn-link btn-sm p-0 text-decoration-none pessoa-toggle" data-user="{{ u.id }}" title="Cadastro, assinatura, plano, cortesia, grupo e data limite">
+                    <span class="toggle-icon">▶</span></button>{% endif %}
+                {{ u.username }}{% if pessoa and not pessoa.visto %} <span class="badge bg-danger">Novo</span>{% endif %}
+                {% if pessoa and pessoa.faltando %} <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ pessoa.faltando | join('; ') }}">⚠ Incompleto</span>{% endif %}</td>
             <td>{{ grupos.get(u.id) or '-' }}</td>
             <td>{{ u.email or '-' }}</td>
             <td>{{ u.telefone | telefone_br if u.telefone else '-' }}</td>
@@ -53,10 +74,7 @@
             </td>
             <td class="d-flex gap-2">
                 {% if u.is_cliente %}
-                {# Cliente do app (cadastro pelo site): dados, plano e exclusao ficam em Gerenciar Clientes (10/11/2026). #}
-                {% if current_user.is_master %}
-                <a href="{{ url_for('admin_solicitacoes') }}" class="btn btn-sm btn-outline-primary">Gerenciar Clientes</a>
-                {% endif %}
+                {# Cliente do app: cadastro, plano, cortesia e exclusao no "▶" da propria linha (23/11/2026). #}
                 <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" onsubmit="return confirm('Redefinir a senha de {{ u.username }} para a senha padrao?');">
                     <button type="submit" class="btn btn-sm btn-outline-secondary">Redefinir senha</button>
                 </form>
@@ -78,6 +96,12 @@
                 {% endif %}
             </td>
         </tr>
+        {% if pessoa %}
+        <tr class="pessoa-row d-none" data-pessoa-row="{{ u.id }}"><td colspan="10" class="bg-light">
+            {# Fica na largura da tela mesmo com a tabela rolando de lado (celular). #}
+            <div style="position: sticky; left: 0; max-width: min(46rem, calc(100vw - 2.5rem));">{{ gc.cartao_pessoa(pessoa, 'u' ~ u.id) }}</div>
+        </td></tr>
+        {% endif %}
         {% for sub in subordinados_by_owner.get(u.id, []) %}
         <tr class="table-light sub-row d-none" data-owner-rows="{{ u.id }}">
             <td class="text-muted small ps-4">↳ {{ sub.nome }}{% if u.is_cliente %} <span class="badge bg-light text-secondary border fw-normal" title="{{ 'Indicado pelo cliente no cadastro/app (até 2)' if sub.pelo_cliente else 'Incluído pela equipe OneAgro' }}">{{ 'pelo cliente' if sub.pelo_cliente else 'pela equipe' }}</span>{% endif %}</td>
@@ -106,6 +130,35 @@
     </tbody>
 </table>
 </div>
+
+{% if pessoa_por_user is defined %}
+<details class="card shadow-sm mt-4"><summary class="card-body py-2 fw-semibold text-success" style="cursor: pointer;">+ Novo cliente (ex.: fazendas da BioScout)</summary>
+    <form method="post" action="{{ url_for('admin_cliente_novo') }}" class="card-body pt-0 row g-2" data-autocriar>
+        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">Nome completo</label><input class="form-control form-control-sm" name="nome_completo" required maxlength="80"></div>
+        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Usuário (login)</label><input class="form-control form-control-sm" name="username" required maxlength="60"></div>
+        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Senha (mín. 6)</label><input class="form-control form-control-sm" name="password" type="text" required minlength="6"></div>
+        <div class="col-4 col-md-1"><label class="form-label small text-muted mb-0">DDI</label><input class="form-control form-control-sm" name="codigo_pais" value="55" inputmode="numeric"></div>
+        <div class="col-8 col-md-3"><label class="form-label small text-muted mb-0">Celular</label><input class="form-control form-control-sm" name="numero_telefone" inputmode="tel"></div>
+        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">E-mail</label><input class="form-control form-control-sm" name="email" type="email"></div>
+        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0" title="Opcional">Grupo econômico* <span class="fw-normal">(opcional)</span></label><input class="form-control form-control-sm" name="grupo_economico" maxlength="40" placeholder="ex.: Grupo PIVA" list="lista-grupos"></div>
+        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Plano</label>
+            <select class="form-select form-select-sm" name="plano_id">
+                {% for p in planos %}<option value="{{ p.id }}" {% if p.nome == 'Inteligência' %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
+            </select></div>
+        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Cortesia até (sem cobrança)</label><input class="form-control form-control-sm" name="cortesia_ate" type="date"></div>
+        <div class="col-12"><div class="small text-muted mb-1">Fazendas deste cadastro (ainda sem cadastro):</div>
+            <div class="border rounded p-2 bg-white" style="max-height: 14rem; overflow: auto;">
+            {% for fz in sem_cadastro %}
+            <div class="form-check small"><input class="form-check-input" type="checkbox" name="site" value="{{ fz.site }}" id="novo_{{ loop.index }}">
+                <label class="form-check-label" for="novo_{{ loop.index }}">{{ fz.nome_exibicao }} <span class="text-muted">· {{ {'bioscout': 'BioScout', 'estudo': 'Mapas de Estudo', 'app': 'App'}[fz.origem] }}</span></label></div>
+            {% else %}<div class="small text-muted">Todas as fazendas já têm cadastro.</div>{% endfor %}
+            </div></div>
+        <div class="col-12"><span class="autocriar-status small text-muted">Salva sozinho ao terminar de preencher.</span>
+            <span class="small text-muted ms-2">O cliente entra no app com esse usuário e senha; a cobrança ele faz em Assinatura.</span></div>
+    </form>
+</details>
+<datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>
+{% endif %}
 
 <div class="card shadow-sm mt-4">
     <div class="card-body p-4 form-compact">
@@ -145,7 +198,38 @@
     </div>
 </div>
 
+{% if pessoa_por_user is defined %}{{ gc.scripts() }}{% endif %}
 <script>
+// Cartao da pessoa (cadastro/assinatura) aberto pelo "▶" do nome (23/11/2026); vindo de Gerenciar Fazendas
+// (#usuario-<id>) ja' abre.
+function abrirPessoa(id, abrir) {
+    var linha = document.querySelector('tr[data-pessoa-row="' + id + '"]');
+    var btn = document.querySelector('.pessoa-toggle[data-user="' + id + '"]');
+    if (!linha || !btn) return;
+    var corpo = linha.querySelector('[id^="cad-body-"]');
+    var mostrar = abrir === undefined ? linha.classList.contains('d-none') : abrir;
+    linha.classList.toggle('d-none', !mostrar);
+    if (corpo) { corpo.classList.toggle('d-none', !mostrar); var t = linha.querySelector('.cad-toggle .toggle-icon'); if (t) t.textContent = mostrar ? '▼' : '▶'; }
+    btn.querySelector('.toggle-icon').textContent = mostrar ? '▼' : '▶';
+}
+document.querySelectorAll('.pessoa-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () { abrirPessoa(btn.dataset.user); });
+});
+document.querySelectorAll('#filtro-usuarios [data-filtro]').forEach(function (b, _i, botoes) {
+    b.addEventListener('click', function () {
+        botoes.forEach(function (x) { x.classList.toggle('active', x === b); });
+        var f = b.dataset.filtro;
+        document.querySelectorAll('tr.linha-usuario').forEach(function (tr) {
+            var mostra = f === 'todos' || (f === 'novo' ? tr.dataset.novo === '1' : f === 'cliente' ? tr.dataset.cliente === '1'
+                : f === 'incompleto' ? tr.dataset.incompleto === '1' : tr.dataset.situacao === f);
+            tr.classList.toggle('d-none', !mostra);
+            if (!mostra) { abrirPessoa(tr.dataset.user, false);
+                document.querySelectorAll('tr[data-owner-rows="' + tr.dataset.user + '"]').forEach(function (r) { r.classList.add('d-none'); }); }
+        });
+    });
+});
+var alvo = (location.hash.match(/^#usuario-(\d+)$/) || [])[1];
+if (alvo) { abrirPessoa(alvo, true); }
 document.querySelectorAll('.pausar-whatsapp-check').forEach(function (chk) {
     chk.addEventListener('change', function () {
         var url = chk.dataset.userId

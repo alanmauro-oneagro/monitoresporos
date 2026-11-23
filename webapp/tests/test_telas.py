@@ -151,7 +151,7 @@ class TelasPorNivelTest(unittest.TestCase):
     def test_ocultar_em_manejos(self):
         # Ocultar so' em Gerenciar Clientes (pedido do Alan, 12/11/2026)
         self.assertNotIn("ocultar-manejos", self._cliente("master").get("/fazendas").get_data(as_text=True))
-        self.assertIn("save_site_ativo", "".join(open(os.path.join(os.path.dirname(webapp.__file__), "templates", "admin_solicitacoes.html")).read().split()))
+        self.assertIn("save_site_ativo", "".join(open(os.path.join(os.path.dirname(webapp.__file__), "templates", "_gerenciar_cartoes.html")).read().split()))
         self.assertNotIn("ocultar-manejos", self._cliente("cliente").get("/fazendas", follow_redirects=True).get_data(as_text=True))
 
     def test_salva_sozinho_sem_botao_salvar(self):

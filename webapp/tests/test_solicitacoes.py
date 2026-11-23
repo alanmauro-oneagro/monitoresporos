@@ -145,7 +145,7 @@ class CadastroTest(unittest.TestCase):
         sem = _form(username="Zzz Cad Sem Grupo", numero_telefone="65999990033", grupo_cultura="")
         self.assertEqual(webapp.app.test_client().post("/solicitar-acesso", data=sem).status_code, 200)
         # Gerenciar Clientes: uma linha por cultura com a area dela + tipo
-        html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        html = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
         for linha in ("Soja <span class=\"text-muted\">— 1.000 ha</span>", "Milho <span class=\"text-muted\">— 300 ha</span>"):
             self.assertIn(f'<div class="cultura-area-linha">{linha}</div>', html)
         self.assertIn("Cereais <span class=\"text-muted\">-- área para o preço: 1.000 ha</span>", html)
@@ -437,7 +437,7 @@ class CadastroTest(unittest.TestCase):
             username="Zzz Cad Fone", numero_telefone="(65)99999-0099"))
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(models.get_user_by_username("Zzz Cad Fone")["telefone"], "5565999990099")
-        html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        html = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
         self.assertIn("(65)99999-0099", html)
 
     def test_aceite_libera_botao_e_assinatura_so_com_o_plano_e_mapa(self):
@@ -488,7 +488,7 @@ class CadastroTest(unittest.TestCase):
         conn.execute("UPDATE assinaturas SET criado_em = '2026-01-01 08:00:00' WHERE user_id = ?", (bloq,))
         conn.commit()
         conn.close()
-        html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        html = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
         self.assertIn("Usando o Essencial até", html)            # pago aguardando pagamento
         self.assertIn("Bloqueado", html)                    # passou dos 7 dias
         self.assertIn('data-situacao="free"', html)
@@ -497,7 +497,7 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("Relatório por WhatsApp:</span> texto + PDF", html)  # igual pra todo cliente (14/11/2026)
         self.assertIn('<span class="fw-semibold">Zzz Area Ger</span>', html)  # modelo unico (09/11/2026)
         self.assertIn("✏️ Dados da fazenda", html)
-        self.assertNotIn(" lavoura", html.split("Gerenciar Clientes</h4>", 1)[1])
+        self.assertNotIn(" lavoura", html.split("Usuários</h4>", 1)[1])
 
     def test_grupo_economico_antes_do_nome_da_fazenda(self):
         """Nome do grupo economico no cadastro vai antes do nome de cada fazenda
@@ -567,7 +567,7 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual([fc.get((sede, sf), {}).get("cultura") for sf, _ in models.SAFRAS], ["Soja", "Milho", None])
         self.assertEqual([fc.get((retiro, sf), {}).get("cultura") for sf, _ in models.SAFRAS], ["Soja", None, None])
         # integracao: Gerenciar Clientes, app (Culturas) e Excel
-        adm = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        adm = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
         self.assertIn("Também recebem o relatório", adm)
         self.assertIn("Zzz Gerente · (65)99999-0242 <span class=\"text-muted\">-- Retiro</span>", adm)
         self.assertIn("Soja (500 ha), Milho (200 ha) · 700 ha", adm)
@@ -689,7 +689,7 @@ class CadastroTest(unittest.TestCase):
                     c.post("/app/assinatura/assinar", data={"plano_id": str(premium["id"]), "cpf_cnpj": CPF_VALIDO})
                 self.assertEqual(criar.call_args[0][1], 400.0)  # parcela U$ 80 x 5,00
                 # Gerenciar Clientes: mesmo R$ por ha/ano (U$ 960 x 5,00 / 1.200 ha)
-                adm = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+                adm = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
                 self.assertIn("R$ 4,00 por ha/ano</span>", adm)
         finally:
             models.set_setting("tabela_precificacao", "")
@@ -739,11 +739,11 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(self._logado("Zzz Teste Admin Cad").get("/admin/solicitacoes").status_code, 403)
         master = self._logado("Zzz Teste Master Cad")
         self.assertIn("badge bg-danger", master.get("/mapa").get_data(as_text=True))
-        html = master.get("/admin/solicitacoes").get_data(as_text=True)
+        html = master.get("/admin/users").get_data(as_text=True)
         for trecho in ("Zzz Cad Tela", "Novo", "wa.me/5565999990003", "mailto:tela@t.com", "Liberar fazendas", "Fazenda Zzz"):
             self.assertIn(trecho, html)
         self.assertEqual(models.contar_cadastros_nao_vistos(), 0)  # abrir a tela marca como visto
-        self.assertNotIn(">Novo<", master.get("/admin/solicitacoes").get_data(as_text=True))
+        self.assertNotIn(">Novo<", master.get("/admin/users").get_data(as_text=True))
 
     def test_clientes_e_cadastros_numa_aba_so(self):
         """Novos cadastros + Clientes do app viraram "Gerenciar Clientes";
@@ -752,8 +752,8 @@ class CadastroTest(unittest.TestCase):
             username="Zzz Cad Cliente Junto", modalidade="plano", numero_telefone="65999990013"))
         antigo = models.criar_cliente("Zzz Cliente Antigo", "segredo1", "", "5565999990014", "", self.plano)
         master = self._logado("Zzz Teste Master Cad")
-        html = master.get("/admin/solicitacoes").get_data(as_text=True)
-        self.assertIn("<h4 class=\"mb-2\">Gerenciar Clientes</h4>", html)
+        html = master.get("/admin/users").get_data(as_text=True)
+        self.assertIn("<h4 class=\"mb-3\">Usuários</h4>", html)
         self.assertEqual(html.count("<dd>Zzz Cad Cliente Junto</dd>"), 1)  # uma vez so', com a assinatura junto
         self.assertIn("Zzz Cliente Antigo", html)  # cliente sem registro de cadastro tambem aparece
         self.assertIn("Zzz Plano Cad", html)  # plano do cliente antigo
@@ -762,9 +762,9 @@ class CadastroTest(unittest.TestCase):
         self.assertIn("Cortesia até", html)
         self.assertIn('data-filtro="cliente"', html)
         self.assertIn('class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle"', html)  # recolhido
-        self.assertIn('class="d-none mt-3" id="cad-body-p', html)
+        self.assertIn('class="d-none mt-3" id="cad-body-u', html)
         self.assertNotIn("Todas as contas criadas", html)  # texto do topo saiu
-        self.assertIn(">Gerenciar Clientes", html)  # menu
+        self.assertIn(">Gerenciar Fazendas", html)  # menu
         self.assertIn(">Planos e Valores</a>", html)
         planos = master.get("/admin/planos").get_data(as_text=True)
         self.assertIn("<h4 class=\"mb-2\">Planos e Valores</h4>", planos)
@@ -772,7 +772,7 @@ class CadastroTest(unittest.TestCase):
         self.assertNotIn("Cortesia até", planos)
         # acoes de cliente voltam pra Gerenciar Clientes
         resp = master.post(f"/admin/clientes/{antigo}/cortesia", data={"cortesia_ate": "2030-01-01", "plano_id": ""})
-        self.assertTrue(resp.headers["Location"].endswith("/admin/solicitacoes"))
+        self.assertTrue(resp.headers["Location"].endswith("/admin/users"))
 
     def test_preco_pela_area_no_cartao_do_cliente(self):
         """Area do cadastro busca a faixa da tabela de apoio (1.500 ha -> ate' 2.000)."""
@@ -783,7 +783,7 @@ class CadastroTest(unittest.TestCase):
         models.set_setting("tabela_precificacao", json.dumps([{"ate_ha": 2000, "usd_ha": 0.4}]))
         try:
             with mock.patch.object(cotacao, "dolar", return_value={"valor": 5.0, "data": "2026-11-06"}):
-                html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+                html = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
         finally:
             models.set_setting("tabela_precificacao", "")
         self.assertIn("<dt>Preço pela área</dt>", html)
@@ -816,7 +816,7 @@ class CadastroTest(unittest.TestCase):
         # registro que ficou de antes da regra (conta apagada por outro caminho)
         models.registrar_cadastro({"username": "Zzz Cad Orfao", "nome_completo": "Zzz Orfao", "perfil": "produtor",
                                    "telefone": "5565999990012", "tipo": "usuario", "user_id": 999999})
-        html = self._logado("Zzz Teste Master Cad").get("/admin/solicitacoes").get_data(as_text=True)
+        html = self._logado("Zzz Teste Master Cad").get("/admin/users").get_data(as_text=True)
         self.assertNotIn("Zzz Cad Orfao", html)
         self.assertNotIn("conta excluída", html)
 
