@@ -176,7 +176,7 @@
                 <div id="settingsMenu" class="d-none position-absolute end-0 bg-white shadow rounded mt-2 py-1" style="min-width: 220px; z-index: 1050;">
                     {% for item in menu_config %}
                     <div class="d-flex align-items-center menu-config-item" data-chave="{{ item.chave }}">
-                        <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark flex-grow-1{% if request.endpoint == item.endpoint %} tab-ativa{% endif %}" href="{{ url_for(item.endpoint) }}">{{ item.rotulo }}{% if item.chave == 'cadastros' and solicitacoes_pendentes %} <span class="badge bg-danger">{{ solicitacoes_pendentes }}</span>{% endif %}</a>
+                        <a class="dropdown-item-custom d-block px-3 py-2 text-decoration-none text-dark flex-grow-1{% if request.endpoint == item.endpoint %} tab-ativa{% endif %}" href="{{ url_for(item.endpoint) }}">{{ item.rotulo }}{% if item.chave == 'usuarios' and solicitacoes_pendentes and current_user.is_master %} <span class="badge bg-danger">{{ solicitacoes_pendentes }}</span>{% endif %}</a>
                         {% if pode_ordenar_menu %}<span class="menu-ordem-setas d-none pe-2 text-nowrap"><button type="button" class="btn btn-sm btn-light py-0 px-1" data-mover="-1" aria-label="Subir {{ item.rotulo }}">▲</button><button type="button" class="btn btn-sm btn-light py-0 px-1 ms-1" data-mover="1" aria-label="Descer {{ item.rotulo }}">▼</button></span>{% endif %}
                     </div>
                     {% endfor %}

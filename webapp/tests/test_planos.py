@@ -402,13 +402,14 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         with webapp.app.test_request_context():
             self.assertEqual(webapp._grupo_economico_da_fazenda(e2), "Grupo Zzz Solto")
         tela = master.get("/admin/solicitacoes").get_data(as_text=True)
-        self.assertIn("Fazendas sem cadastro", tela)
-        self.assertIn("+ Novo cliente", tela)
+        self.assertIn("<h4 class=\"mb-2\">Gerenciar Fazendas</h4>", tela)  # ex-Gerenciar Clientes (23/11/2026)
+        self.assertIn("Cadastro incompleto", tela)
+        self.assertIn("+ Novo cliente", master.get("/admin/users").get_data(as_text=True))  # foi pra Usuarios
         # fazenda sem cadastro = cartao igual ao dos produtores, com o selo e o filtro de incompleto (09/11/2026)
         self.assertIn('data-tipo="fazenda"', tela)
         # cartao da fazenda sem cadastro aberto nao repete nome/plano/origem (10/11/2026)
         cartao = tela.split('data-tipo="fazenda"', 1)[1].split('data-tipo=', 1)[0]
-        self.assertEqual(cartao.count("Fazenda sem cadastro"), 1)
+        self.assertNotIn("Fazenda sem cadastro", tela)  # virou Cadastro completo/incompleto (23/11/2026)
         self.assertEqual(cartao.count("selo-plano"), 1)
         clima = models.create_virtual_farm("Zzz Modelo So Clima", -12.44, -55.7, 30, tipo="clima")
         self.assertNotIn(clima, webapp_sem_cadastro())  # ponto so' clima: so' no Mapas de Estudo (09/11/2026)
@@ -416,7 +417,6 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         models.set_site_ativo(oculta, False)
         self.assertNotIn(oculta, webapp_sem_cadastro())  # oculta vai pra Gerenciar Fazendas Ocultas
         self.assertIn("🙈 Ocultar", tela)
-        self.assertNotIn('data-tipo="fazenda" data-novo="0" data-incompleto="1"', tela)  # sem o selo (10/11/2026)
         # fazenda sem cadastro com municipio e culturas: sem o selo de incompleto (09/11/2026)
         with webapp.app.test_request_context():
             fz = webapp._dados_da_fazenda(e1)
@@ -445,9 +445,9 @@ class ModeloUnicoFazendasTest(unittest.TestCase):
         # situacao na caixa fechada, sem abrir (pedido do Alan, 10/11/2026)
         caixa = por_grupo.split("👥 Grupo Zzz Exibir", 1)[1].split("grupo-body-", 1)[0]
         self.assertIn("grupo-resumo", caixa)
-        self.assertIn("Fazenda sem cadastro", caixa)
+        self.assertIn("Cadastro", caixa)
         self.assertIn("grupo-box", master.get("/admin/solicitacoes").get_data(as_text=True))  # lembrado na sessao
-        master.get("/admin/solicitacoes?exibir=produtor")
+        master.get("/admin/solicitacoes?exibir=fazenda")
         avancado = self._plano("Avançado")
         r = master.post("/admin/clientes/novo", data={
             "nome_completo": "Zzz Grupo Modelo Dono", "username": "Zzz Modelo Login", "password": "segredo1",
@@ -1806,7 +1806,7 @@ class ClienteDadosDesdeTest(unittest.TestCase):
         try:
             r = c.post(f"/admin/users/{uid}/dados-desde", data={"dados_desde": "2026-10-01"}, headers={"X-Autosave": "1"})
             self.assertTrue(r.get_json()["ok"])
-            h = c.get("/admin/solicitacoes").get_data(as_text=True)
+            h = c.get("/admin/users").get_data(as_text=True)
             self.assertIn(f"/admin/users/{uid}/dados-desde", h)
             self.assertIn('value="2026-10-01"', h)
         finally:
@@ -1883,8 +1883,57 @@ class CadastroIncompletoVisivelTest(unittest.TestCase):
             s["_user_id"] = str(mid)
             s["_fresh"] = True
         try:
-            h = c.get("/admin/solicitacoes").get_data(as_text=True)
+            h = c.get("/admin/users").get_data(as_text=True)
             self.assertIn("Para completar o cadastro, falta:", h)
             self.assertIn("<li>plano</li>", h)
         finally:
             models.delete_user(uid)
+
+
+class GerenciarFazendasTest(unittest.TestCase):
+    """Gerenciar Fazendas (ex-Gerenciar Clientes) so' com fazendas; pessoas na aba Usuarios (pedido do Alan, 23/11/2026)."""
+
+    def test_completo_e_pessoas_em_usuarios(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Desde"):
+            models.create_user("Zzz Master Desde", "x", is_master=True)
+        mid = models.get_user_by_username("Zzz Master Desde")["id"]
+        if not models.get_user_by_username("Zzz Usuario GF"):
+            models.create_user("Zzz Usuario GF", "x")
+        uid = models.get_user_by_username("Zzz Usuario GF")["id"]
+        cli = models.criar_cliente("Zzz Cliente GF", "segredo1", "", "5565999990998", "", None)
+        nome = "Zzz Fazenda GF"
+        models.create_virtual_farm(nome, -12.5, -55.7, 50, criado_por="Zzz Master Desde")
+        site = [v for v in models.get_all_virtual_farms() if v["nome"] == nome][0]["site_name"]
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(mid)
+            s["_fresh"] = True
+        try:
+            def cartao():
+                h = c.get("/admin/solicitacoes").get_data(as_text=True)
+                self.assertIn("<h4 class=\"mb-2\">Gerenciar Fazendas</h4>", h)
+                return h.split('<span class="toggle-icon">▶</span> ' + nome, 1)[1].split('class="card shadow-sm mb-3 cad-card"', 1)[0]
+            parte = cartao()
+            self.assertIn("⚠ Cadastro incompleto", parte)
+            self.assertIn("<li>ligar a um cliente ou usuário</li>", parte)
+            # dados + alguem ligado = completo (grupo nao e' preciso)
+            c.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"}, data={
+                "site_name": site, "cidade": "Sorriso", "uf": "MT", "grupo_cultura": "cereais", "culturas": ["Soja"],
+                "area_cultura__Soja": "100"})
+            c.post(f"/admin/usuarios/{uid}/ligar-fazenda", data={"site_name": site})
+            parte = cartao()
+            self.assertIn("✔ Cadastro completo", parte)
+            self.assertNotIn("Fazenda sem cadastro", parte)
+            self.assertIn("Grupo econômico*", c.get("/admin/fazendas/dados", query_string={"site": site}).get_data(as_text=True))
+            # Usuarios: cartao da pessoa (assinatura/cortesia) na linha do cliente; menu renomeado
+            u = c.get("/admin/users").get_data(as_text=True)
+            self.assertIn(f'data-pessoa-row="{cli}"', u)
+            self.assertIn("Cortesia até", u)
+            self.assertIn(">Gerenciar Fazendas", u)
+            self.assertNotIn(">Gerenciar Clientes", u)
+            self.assertNotIn("Cortesia até", c.get("/admin/solicitacoes").get_data(as_text=True))
+        finally:
+            models.delete_virtual_farm(site)
+            models.delete_user(cli)

@@ -1,30 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Gerenciar Clientes - OneAgro App{% endblock %}
+{% block title %}Gerenciar Fazendas - OneAgro App{% endblock %}
 {% block content %}
+{% import "_gerenciar_cartoes.html" as gc with context %}
 {% import "_sinal_celular.html" as sinal_cel %}
-<style>
-.cad-card dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 0.75rem; margin: 0; font-size: 0.85rem; }
-.cad-card dt { color: #6c757d; font-weight: 400; }
-.cad-card dd { margin: 0; overflow-wrap: anywhere; }
-/* Tamanhos iguais aos da aba Manejos (pedido do Alan, 13/11/2026 -- ver _tipografia.html). */
-.cad-toggle { text-align: left; }
-.cad-card { margin-bottom: 0.5rem !important; }
-/* Cartoes iguais (pedido do Alan, 10/11/2026): nome sozinho na 1a linha, selos sempre na 2a. */
-.cad-selos { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.3rem; }
-.cad-selos:empty { display: none; }
-.grupo-resumo { margin-top: 0.4rem; }
-.grupo-item { border-top: 1px solid #e9ecef; padding: 0.35rem 0; }
-.grupo-item .cad-selos { margin-top: 0.2rem; }
-.cad-card > .card-body { padding-top: 0.6rem; padding-bottom: 0.6rem; }
-/* Sinal de celular: mesma linha discreta de Manejos (ver _sinal_celular.linha). */
-.sinal-linha { display: flex; flex-wrap: wrap; gap: 0.15rem 0.9rem; margin-top: 0.1rem; font-size: 0.78rem; line-height: 1.35; }
-.sinal-item { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; color: #212529; }
-.sinal-item b { font-weight: 600; }
-.sinal-det { color: #6c757d; }
-.sinal-sem { color: #6c757d; opacity: 0.6; }
-.cad-assinatura { background: #f3faf5; border: 1px solid #cfe8d6; border-radius: 0.5rem; padding: 0.5rem 0.65rem; }
-</style>
-<h4 class="mb-2">Gerenciar Clientes</h4>
+{{ gc.estilos() }}
+<h4 class="mb-2">Gerenciar Fazendas</h4>
 {# Tecnico do setor / Quero representar a OneAgro: so' deixam o contato (pedido do Alan, 13/11/2026). #}
 {% if pedidos_contato %}
 <details class="card shadow-sm mb-3" id="pedidos-contato">
@@ -51,263 +31,60 @@
 </details>
 {% endif %}
 
-{# Fazenda no modelo unico (pedido do Alan, 09/11/2026): mesma linha e mesmo
-   editor pra fazenda da BioScout, do Mapas de Estudo ou do app. #}
-{# `sem_titulo`: no cartao da fazenda sem cadastro o nome e os selos ja' estao no
-   proprio cartao -- nao repetir (pedido do Alan, 10/11/2026). #}
-{% macro linha_fazenda(fz, cliente_id=None, sem_titulo=False) %}
-<div class="border rounded px-2 py-1 mb-1 bg-white fazenda-linha" data-site="{{ fz.site }}">
-    <div class="d-flex flex-wrap align-items-center gap-2">
-        {% if not sem_titulo %}
-        <span class="fw-semibold">{{ fz.nome_exibicao }}</span>
-        {{ selo_plano(fz.site) }}
-        <span class="badge bg-light text-dark border fw-normal">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
-        {% endif %}
-        {% if not fz.ativo %}<span class="badge bg-secondary">Oculta</span>{% endif %}
-        <div class="ms-auto d-flex gap-1">
-            <button type="button" class="btn btn-sm btn-outline-primary py-0 dados-toggle" data-site="{{ fz.site }}" data-idx="{{ fz.idx }}">✏️ Dados da fazenda</button>
-            {# Ocultar daqui: some do site e desta tela, vai pra Gerenciar Fazendas Ocultas (09/11/2026). #}
-            <form method="post" action="{{ url_for('save_site_ativo') }}" class="mb-0"
-                  data-msg="Ocultar {{ fz.nome_exibicao }}? Some do site e desta tela (nada é apagado) -- reativar em Configurações > Gerenciar Fazendas Ocultas."
-                  onsubmit="return confirm(this.dataset.msg);">
-                <input type="hidden" name="site_name" value="{{ fz.site }}"><input type="hidden" name="ativo" value="0">
-                <button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="Ocultar fazenda">🙈 Ocultar</button>
-            </form>
-            {% if cliente_id and fz.ponto and fz.ponto.vinculada %}
-            <form method="post" action="{{ url_for('admin_cliente_desvincular', user_id=cliente_id, ponto_id=fz.ponto.id) }}" class="mb-0"
-                  onsubmit="return confirm('Tirar {{ fz.nome_exibicao }} deste cadastro? A fazenda continua no site.');">
-                <button class="btn btn-sm btn-outline-secondary py-0" type="submit">Desligar</button>
-            </form>
-            {% endif %}
-        </div>
-    </div>
-    {% set partes = [] %}
-    {% if fz.cidade %}{% set _ = partes.append(fz.cidade ~ ('/' ~ fz.uf if fz.uf else '')) %}{% endif %}
-    {% if fz.culturas %}{% set _ = partes.append(fz.culturas ~ (' · ' ~ fz.area_txt if fz.area_txt != '-' else '')) %}{% endif %}
-    <div class="text-muted">{{ partes | join(' · ') if partes else 'Município e culturas ainda não informados' }}</div>
-    {% if fz.estacao_txt %}<div class="text-muted" title="Estação meteorológica de referência (muda em Dados da fazenda)">{{ fz.estacao_txt }}</div>{% endif %}
-    <div class="dados-corpo d-none mt-2 pt-2 border-top"></div>
-</div>
+{# Gerenciar Fazendas (ex-"Gerenciar Clientes"; pedido do Alan, 23/11/2026): so' fazendas -- as pessoas
+   (clientes e cadastros) ficam na aba Usuarios. Toda fazenda tem o mesmo cartao; "Cadastro completo" =
+   municipio/estado, culturas e alguem ligado (cliente ou usuario). Grupo economico e' opcional. #}
+{% macro selos_fazenda(fz) %}
+{% if fz.faltando %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ fz.faltando | join('; ') }}">⚠ Cadastro incompleto</span>
+{% else %}<span class="badge bg-success">✔ Cadastro completo</span>{% endif %}
+{{ selo_plano(fz.site) }}
+<span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
+{% if fz.dono_nome %}<span class="badge bg-light text-dark border fw-normal">👤 {{ fz.dono_nome }}</span>{% endif %}
 {% endmacro %}
 
-<details class="card shadow-sm mb-3"><summary class="card-body py-2 fw-semibold text-success" style="cursor: pointer;">+ Novo cliente (ex.: fazendas da BioScout)</summary>
-    <form method="post" action="{{ url_for('admin_cliente_novo') }}" class="card-body pt-0 row g-2" data-autocriar>
-        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">Nome completo</label><input class="form-control form-control-sm" name="nome_completo" required maxlength="80"></div>
-        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Usuário (login)</label><input class="form-control form-control-sm" name="username" required maxlength="60"></div>
-        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Senha (mín. 6)</label><input class="form-control form-control-sm" name="password" type="text" required minlength="6"></div>
-        <div class="col-4 col-md-1"><label class="form-label small text-muted mb-0">DDI</label><input class="form-control form-control-sm" name="codigo_pais" value="55" inputmode="numeric"></div>
-        <div class="col-8 col-md-3"><label class="form-label small text-muted mb-0">Celular</label><input class="form-control form-control-sm" name="numero_telefone" inputmode="tel"></div>
-        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">E-mail</label><input class="form-control form-control-sm" name="email" type="email"></div>
-        <div class="col-12 col-md-4"><label class="form-label small text-muted mb-0">Grupo econômico</label><input class="form-control form-control-sm" name="grupo_economico" maxlength="40" placeholder="ex.: Grupo PIVA" list="lista-grupos"></div>
-        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Plano</label>
-            <select class="form-select form-select-sm" name="plano_id">
-                {% for p in planos %}<option value="{{ p.id }}" {% if p.nome == 'Inteligência' %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
-            </select></div>
-        <div class="col-6 col-md-4"><label class="form-label small text-muted mb-0">Cortesia até (sem cobrança)</label><input class="form-control form-control-sm" name="cortesia_ate" type="date"></div>
-        <div class="col-12"><div class="small text-muted mb-1">Fazendas deste cadastro (ainda sem cadastro):</div>
-            <div class="border rounded p-2 bg-white" style="max-height: 14rem; overflow: auto;">
-            {% for fz in sem_cadastro %}
-            <div class="form-check small"><input class="form-check-input" type="checkbox" name="site" value="{{ fz.site }}" id="novo_{{ loop.index }}">
-                <label class="form-check-label" for="novo_{{ loop.index }}">{{ fz.nome_exibicao }} <span class="text-muted">· {{ {'bioscout': 'BioScout', 'estudo': 'Mapas de Estudo', 'app': 'App'}[fz.origem] }}</span></label></div>
-            {% else %}<div class="small text-muted">Todas as fazendas já têm cadastro.</div>{% endfor %}
-            </div></div>
-        <div class="col-12"><span class="autocriar-status small text-muted">Salva sozinho ao terminar de preencher.</span>
-            <span class="small text-muted ms-2">O cliente entra no app com esse usuário e senha; a cobrança ele faz em Assinatura.</span></div>
-    </form>
-</details>
-<datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>
-
-{# Selos do cadastro (cartao fechado e resumo da caixa do grupo -- pedido do Alan, 10/11/2026). #}
-{% macro selos_pessoa(c) %}
-{% set sit = c.situacao %}
-{% if not c.visto %}<span class="badge bg-danger">Novo</span>{% endif %}
-<span class="badge {{ 'bg-success' if c.tipo == 'cliente' else 'bg-primary' }}">{{ 'Cliente do app' if c.tipo == 'cliente' else 'Acesso à fazenda cadastrada' }}</span>
-{% for p in (c.perfil or '').split(',') if p in perfis %}<span class="badge bg-light text-dark border">{{ perfis[p] }}</span>{% endfor %}
-{% if c.faltando %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Falta: {{ c.faltando | join('; ') }}">⚠ Cadastro incompleto</span>{% endif %}
-{% if sit %}
-{% set cor = {'ativo': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueado': 'bg-secondary', 'sem_plano': 'bg-light text-dark border'}[sit.chave] %}
-<span class="badge {{ cor }}" title="{{ sit.texto }}">{{ c.cliente.plano_nome or 'Sem plano' }} · {{ {'ativo': 'ativo', 'free': 'Essencial', 'bloqueado': 'bloqueado', 'sem_plano': 'escolher plano'}[sit.chave] }}</span>
-{% endif %}
-{% endmacro %}
-
-{% macro cartao_pessoa(c, idx) %}
-{% set telefone_digitos = (c.telefone or '') | replace('+', '') %}
-{% set cl = c.cliente %}
-{% set sit = c.situacao %}
-<div class="card shadow-sm mb-3 cad-card" data-tipo="{{ 'cliente' if c.tipo == 'cliente' else 'usuario' }}" data-novo="{{ 0 if c.visto else 1 }}"
-     data-incompleto="{{ 1 if c.faltando else 0 }}"
-     data-situacao="{{ ('bloqueado' if sit.chave in ('bloqueado', 'sem_plano') else sit.chave) if sit else '' }}">
-    <div class="card-body">
-        <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-{{ idx }}">
-                <span class="toggle-icon">▶</span> {{ c.nome_completo or c.username }}
-            </button>
-            {% if c.data %}<span class="text-muted small ms-auto text-nowrap">{{ c.data | data_br }}</span>{% endif %}
-        </div>
-        <div class="cad-selos">{{ selos_pessoa(c) }}</div>
-        <div class="d-none mt-3" id="cad-body-{{ idx }}">
-        {% if c.faltando %}
-        <div class="alert alert-warning py-2 px-3 small mb-3 falta-cadastro">
-            <strong>⚠ Para completar o cadastro, falta:</strong>
-            <ul class="mb-0 ps-3">{% for item in c.faltando %}<li>{{ item }}</li>{% endfor %}</ul>
-        </div>
-        {% endif %}
-        <dl class="mb-3">
-            <dt>Usuário</dt><dd>{{ c.username }}</dd>
-            <dt>Grupo econômico</dt><dd>
-                <form method="post" action="{{ url_for('admin_cliente_grupo', user_id=c.user_id) }}" class="d-flex align-items-center gap-2 mb-0" data-autosave>
-                    <input class="form-control form-control-sm" style="max-width: 260px;" name="grupo_economico" value="{{ c.grupo_economico or '' }}" maxlength="40" list="lista-grupos" placeholder="sem grupo" aria-label="Grupo econômico">
-                    <span class="autosave-status small"></span>
-                </form></dd>
-            <dt>Celular</dt><dd>{% if c.telefone %}{{ c.telefone | telefone_br }}{% if telefone_digitos %} -- <a href="https://wa.me/{{ telefone_digitos }}" target="_blank" rel="noopener">abrir no WhatsApp</a>{% endif %}{% else %}-{% endif %}</dd>
-            <dt>E-mail</dt><dd>{% if c.email %}<a href="mailto:{{ c.email }}">{{ c.email }}</a>{% else %}-{% endif %}</dd>
-            {% if c.empresa or c.cidade or c.culturas or c.area_ha or c.mensagem %}
-            <dt>Fazenda/empresa</dt><dd>{{ c.empresa or '-' }}</dd>
-            <dt>Cidade</dt><dd>{{ c.cidade or '-' }}{% if c.uf %}/{{ c.uf }}{% endif %}</dd>
-            {# Area de cada cultura (pedido do Alan, 08/11/2026). #}
-            <dt>Culturas</dt><dd>{% for nome, area in c.culturas_lista %}<div class="cultura-area-linha">{{ nome }}{% if area %} <span class="text-muted">— {{ area }}</span>{% endif %}</div>{% else %}-{% endfor %}</dd>
-            {% if c.grupo_cultura %}<dt>Tipo</dt><dd>{{ c.grupo_cultura | grupos_cultura }}{% if c.area_preco_ha and c.area_preco_ha != c.area_ha %} <span class="text-muted">-- área para o preço: {{ '{:,.0f}'.format(c.area_preco_ha).replace(',', '.') }} ha</span>{% endif %}</dd>{% endif %}
-            <dt>Área total</dt><dd>{% if c.area_ha %}{{ '{:,.0f}'.format(c.area_ha).replace(',', '.') }} ha{% else %}-{% endif %}</dd>
-            {% set pr = c.preco_area %}
-            {% if pr %}<dt>Preço pela área</dt><dd>{% if pr.total_usd is not none %}<strong>{{ pr.total_usd | dinheiro(pr.simbolo) }}</strong>{% if pr.moeda == 'USD' and pr.total_brl is not none %} (≈ {{ pr.total_brl | dinheiro }}){% endif %}
-                <span class="text-muted">· {{ pr.faixa }}, {{ pr.simbolo }} {{ ('%.2f' | format(pr.usd_ha)) | replace('.', ',') }}/ha{% if pr.preco_fixo %} · preço fixo: cobrado por {{ '{:,.0f}'.format(pr.area_cobrada).replace(',', '.') }} ha{% endif %}</span>{% else %}<span class="text-muted">{{ pr.faixa }} -- sem {{ pr.simbolo }}/ha na <a href="{{ url_for('admin_planos') }}#tabela-precificacao">tabela de apoio</a></span>{% endif %}
-                <span class="text-muted">· raio {{ ('%.1f' | format(pr.raio_km)) | replace('.', ',') }} km</span></dd>{% endif %}
-            <dt>Mensagem</dt><dd>{{ c.mensagem or '-' }}</dd>
-            {% endif %}
-        </dl>
-
-        {% if cl %}
-        <div class="cad-assinatura small mb-3">
-            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                <strong>Assinatura:</strong> {{ cl.plano_nome or 'sem plano escolhido' }}
-                {% set pl = c.plano_cliente %}
-                {% if pl and pl.sob_consulta %}<span class="text-muted">preço pela área -- sem valor na tabela de apoio</span>
-                {% elif pl and pl.valor > 0 %}<span class="plano-parcelas"><strong>{{ pl.parcelas }}x de {{ pl.valor_parcela | dinheiro(pl.simbolo) }}</strong>
-                    <span class="text-muted small">(total {{ pl.valor | dinheiro(pl.simbolo) }})</span>
-                    {% if c.por_ha_ano %}<span class="badge rounded-pill text-bg-success bg-opacity-25 text-success-emphasis" title="Total do plano em reais / área plantada total">{{ c.por_ha_ano | dinheiro }} por ha/ano</span>{% endif %}</span>{% elif pl %}<span class="text-muted">grátis</span>{% endif %}
-            </div>
-            <div class="mb-1"><span class="text-muted">Situação:</span> <strong>{{ sit.texto }}</strong></div>
-            <div class="mb-2"><span class="text-muted">Relatório por WhatsApp:</span> {{ sit.formato }}
-                <span class="text-muted">· {{ c.areas | length }} área{{ '' if c.areas | length == 1 else 's' }} monitorada{{ '' if c.areas | length == 1 else 's' }}</span></div>
-            <form method="post" action="{{ url_for('admin_cliente_cortesia', user_id=cl.id) }}" class="d-flex flex-wrap align-items-center gap-1" data-autosave>
-                <label class="text-muted me-1" for="cortesia_{{ cl.id }}">Cortesia até</label>
-                <input class="form-control form-control-sm" style="max-width: 160px;" type="date" name="cortesia_ate" id="cortesia_{{ cl.id }}" value="{{ cl.cortesia_ate or '' }}">
-                <select class="form-select form-select-sm" style="max-width: 190px;" name="plano_id" aria-label="Plano">
-                    <option value="">(mesmo plano)</option>
-                    {% for p in planos %}<option value="{{ p.id }}">{{ p.nome }}{% if p.valor > 0 %} -- {{ p.parcelas }}x de {{ p.valor_parcela | dinheiro(p.simbolo) }}{% endif %}</option>{% endfor %}
-                </select>
-                <span class="autosave-status small ms-1"></span>
-            </form>
-        </div>
-        {% endif %}
-
-        {% if c.fazendas or c.areas or cl %}
-        <div class="small mb-3">
-            <div class="fw-semibold mb-1">Fazendas monitoradas</div>
-            {% for fz in c.fazendas %}{{ linha_fazenda(fz, c.user_id) }}
-            {% set a = (c.areas | selectattr('site_name', 'equalto', fz.site) | first) %}
-            {% if a and a.adicional %}<div class="mb-1"><span class="badge {{ {'paga': 'bg-success', 'free': 'bg-warning text-dark', 'bloqueada': 'bg-danger'}[a.adicional.chave] }}">Fazenda adicional: {{ a.adicional.texto }}</span>{% if a.adicional_total %} <span class="text-muted">{{ a.adicional_total | dinheiro('U$') }}/ano</span>{% endif %}</div>{% endif %}
-            {% if a and a.sinal is not none %}{{ sinal_cel.linha(a.sinal) }}{% endif %}
-            {% endfor %}
-            {% for a in c.areas if not a.site_name %}
-            <div class="border rounded px-2 py-1 mb-1 bg-white">
-                <span class="fw-semibold">{{ a.nome }}</span> <span class="text-muted">· ainda sem fazenda no site</span>
-                {% if a.sinal is not none %}{{ sinal_cel.linha(a.sinal) }}{% endif %}
-            </div>
-            {% endfor %}
-            {% if cl and sem_cadastro %}
-            <form method="post" action="{{ url_for('admin_cliente_vincular', user_id=cl.id) }}" class="d-flex flex-wrap gap-1 mt-1">
-                <select class="form-select form-select-sm" style="max-width: 320px;" name="site_name" aria-label="Fazenda para ligar" required
-                        data-auto-enviar="Ligar &quot;{nome}&quot; a este cadastro?">
-                    <option value="" selected>+ Ligar fazenda a este cadastro...</option>
-                    {% for fz in sem_cadastro %}<option value="{{ fz.site }}">{{ fz.nome_exibicao }} ({{ {'bioscout': 'BioScout', 'estudo': 'Mapas de Estudo', 'app': 'App'}[fz.origem] }})</option>{% endfor %}
-                </select>
-            </form>
-            {% endif %}
-        </div>
-        {% endif %}
-        {% if c.extras %}
-        {# Quem mais recebe o relatorio (indicados pelo cliente no cadastro/app). #}
-        <div class="small mb-3">
-            <div class="fw-semibold mb-1">Também recebem o relatório</div>
-            {% for e in c.extras %}
-            <div>{{ e.nome }} · {{ e.telefone | telefone_br }} <span class="text-muted">-- {{ e.areas | join(', ') if e.areas else 'nenhuma área' }}</span></div>
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        {% for nome, sinal in c.sinal_locais if sinal is not none %}
-        <div class="mb-2"><span class="small text-muted">📶 {{ nome }}</span>{{ sinal_cel.linha(sinal) }}</div>
-        {% endfor %}
-
-        {% if c.user_id %}
-        <form method="post" action="{{ url_for('admin_user_dados_desde', user_id=c.user_id) }}" class="small d-flex flex-wrap align-items-center gap-2 mb-3" data-autosave
-              title="Leituras de esporos anteriores a essa data não aparecem para esta pessoa (Alertas, Gráficos, Recomendações, relatórios e Excel). Em branco = todo o histórico.">
-            <label class="text-muted mb-0" for="dados_desde_{{ idx }}">📅 Ver dados a partir de</label>
-            <input class="form-control form-control-sm" style="max-width: 160px;" type="date" name="dados_desde" id="dados_desde_{{ idx }}"
-                   value="{{ dados_desde_por_user.get(c.user_id, '') }}">
-            <span class="autosave-status small"></span>
-        </form>
-        {% endif %}
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{{ url_for('admin_user_permissions', user_id=c.user_id) }}" class="btn btn-sm btn-outline-primary"
-               title="{{ 'Fazendas que o cliente vê nas abas do site: as estimadas das áreas monitoradas dele (já liberadas) e outras que você liberar, como a fazenda real da estação no Premium + Estação' if cl else 'Fazendas que essa pessoa passa a ver' }}">Liberar fazendas</a>
-            {% if cl %}
-            <form method="post" action="{{ url_for('admin_cliente_excluir', user_id=cl.id) }}" onsubmit="return confirm('Excluir este cliente? A cobrança no Asaas é cancelada.');">
-                <button class="btn btn-sm btn-outline-danger" type="submit">Excluir cliente</button>
-            </form>
-            {% endif %}
-        </div>
-        </div>
-    </div>
-</div>
-{% endmacro %}
-
-{# Fazenda sem cadastro: cartao igual ao dos produtores (pedido do Alan, 09/11/2026). #}
 {% macro cartao_fazenda(fz) %}
-{# Sem o selo "Cadastro incompleto": a fazenda sem cadastro ja' tem o proprio selo (pedido do Alan, 10/11/2026). #}
-<div class="card shadow-sm mb-3 cad-card" data-tipo="fazenda" data-novo="0" data-incompleto="0" data-situacao="">
+<div class="card shadow-sm mb-3 cad-card" data-tipo="fazenda" data-incompleto="{{ 1 if fz.faltando else 0 }}" data-origem="{{ fz.origem }}">
     <div class="card-body">
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-faz-{{ fz.idx }}">
             <span class="toggle-icon">▶</span> {{ fz.nome_exibicao }}
         </button>
-        <div class="cad-selos">
-            <span class="badge bg-secondary">Fazenda sem cadastro</span>
-            {{ selo_plano(fz.site) }}
-            <span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span>
-        </div>
+        <div class="cad-selos">{{ selos_fazenda(fz) }}</div>
         <div class="d-none mt-3 small" id="cad-body-faz-{{ fz.idx }}">
-            {{ linha_fazenda(fz, sem_titulo=True) }}
+            {% if fz.faltando %}
+            <div class="alert alert-warning py-2 px-3 small mb-2 falta-cadastro">
+                <strong>⚠ Para completar o cadastro, falta:</strong>
+                <ul class="mb-0 ps-3">{% for item in fz.faltando %}<li>{{ item }}</li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+            {% if fz.dono %}
+            <div class="mb-2"><span class="text-muted">Cadastro (cliente do app):</span>
+                <strong>{{ fz.dono_nome }}</strong> -- plano, cortesia e dados da pessoa em
+                <a href="{{ url_for('admin_users') }}#usuario-{{ fz.dono }}">Usuários</a></div>
+            {% endif %}
+            {{ gc.linha_fazenda(fz, fz.dono, sem_titulo=True) }}
+            {% if fz.sinal is not none %}{{ sinal_cel.linha(fz.sinal) }}{% endif %}
         </div>
     </div>
 </div>
 {% endmacro %}
+<datalist id="lista-grupos">{% for gr in grupos_economicos() %}<option value="{{ gr }}">{% endfor %}</datalist>
 
-{% set n_novos = pessoas | selectattr('visto', 'equalto', 0) | list | length %}
-{% set n_clientes = pessoas | selectattr('tipo', 'equalto', 'cliente') | list | length %}
+{% set n_incompletas = fazendas | selectattr('faltando') | list | length %}
 <div class="btn-group btn-group-sm flex-wrap mb-3" role="group" id="filtro-pessoas">
-    <button type="button" class="btn btn-outline-secondary active" data-filtro="todos">Todos ({{ pessoas | length }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="novo">Novos ({{ n_novos }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="cliente">Clientes ({{ n_clientes }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="usuario">Acesso à fazenda ({{ pessoas | length - n_clientes }})</button>
-    {% set n_free = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'equalto', 'free') | list | length %}
-    {% set n_bloq = pessoas | selectattr('situacao') | map(attribute='situacao') | selectattr('chave', 'in', ['bloqueado', 'sem_plano']) | list | length %}
-    <button type="button" class="btn btn-outline-secondary" data-filtro="free">No Essencial ({{ n_free }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="bloqueado">Bloqueados / sem plano ({{ n_bloq }})</button>
-    {% set n_incompletos = pessoas | selectattr('faltando') | list | length %}
-    <button type="button" class="btn btn-outline-secondary" data-filtro="incompleto">Cadastro incompleto ({{ n_incompletos }})</button>
-    <button type="button" class="btn btn-outline-secondary" data-filtro="fazenda">Fazendas sem cadastro ({{ sem_cadastro | length }})</button>
+    <button type="button" class="btn btn-outline-secondary active" data-filtro="todos">Todas ({{ fazendas | length }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="completo">Cadastro completo ({{ fazendas | length - n_incompletas }})</button>
+    <button type="button" class="btn btn-outline-secondary" data-filtro="incompleto">Cadastro incompleto ({{ n_incompletas }})</button>
 </div>
 <div class="d-flex align-items-center gap-2 mb-3 small exibir-por">
     <span class="text-muted">Exibir por:</span>
     <div class="btn-group btn-group-sm" role="group">
-        <a class="btn btn-outline-success{{ ' active' if exibir == 'produtor' }}" href="{{ url_for('admin_solicitacoes', exibir='produtor') }}">Nome do produtor</a>
+        <a class="btn btn-outline-success{{ ' active' if exibir != 'grupo' }}" href="{{ url_for('admin_solicitacoes', exibir='fazenda') }}">Nome da fazenda</a>
         <a class="btn btn-outline-success{{ ' active' if exibir == 'grupo' }}" href="{{ url_for('admin_solicitacoes', exibir='grupo') }}">Grupo</a>
     </div>
 </div>
 
-{% if not pessoas and not sem_cadastro %}
-<div class="alert alert-secondary">Nenhum cadastro ainda.</div>
+{% if not fazendas %}
+<div class="alert alert-secondary">Nenhuma fazenda ainda.</div>
 {% endif %}
 
 {% if exibir == 'grupo' %}
@@ -317,99 +94,26 @@
         <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="grupo-body-{{ loop.index0 }}">
             <span class="toggle-icon">▶</span> 👥 {{ gr.nome }}
         </button>
-        {% set n_faz = (gr.pessoas | map(attribute='fazendas') | map('length') | sum) + (gr.fazendas | length) %}
-        <span class="badge bg-light text-secondary border fw-normal">{{ gr.pessoas | length }} cadastro(s) · {{ n_faz }} fazenda(s)</span>
-        {# Situacao de cada cadastro/fazenda sem precisar abrir a caixa (pedido do Alan, 10/11/2026). #}
+        <span class="badge bg-light text-secondary border fw-normal">{{ gr.fazendas | length }} fazenda(s)</span>
         <div class="grupo-resumo">
-            {% for c in gr.pessoas %}
-            <div class="grupo-item"><span class="fw-semibold">{{ c.nome_completo or c.username }}</span>
-                <span class="text-muted">· {{ c.fazendas | length }} fazenda(s)</span>
-                <div class="cad-selos mt-0">{{ selos_pessoa(c) }}</div></div>
-            {% endfor %}
             {% for fz in gr.fazendas %}
             <div class="grupo-item"><span class="fw-semibold">{{ fz.nome_exibicao }}</span>
-                <div class="cad-selos mt-0"><span class="badge bg-secondary">Fazenda sem cadastro</span>{{ selo_plano(fz.site) }}
-                <span class="badge bg-light text-dark border">{{ {'bioscout': '📡 BioScout', 'estudo': '🗺️ Mapas de Estudo', 'app': '📱 App'}[fz.origem] }}</span></div></div>
+                <div class="cad-selos mt-0">{{ selos_fazenda(fz) }}</div></div>
             {% endfor %}
         </div>
         <div class="d-none mt-3" id="grupo-body-{{ loop.index0 }}">
-            {% for c in gr.pessoas %}{{ cartao_pessoa(c, 'g' ~ c.user_id ~ '_' ~ loop.index0) }}{% endfor %}
             {% for fz in gr.fazendas %}{{ cartao_fazenda(fz) }}{% endfor %}
         </div>
     </div>
 </div>
 {% endfor %}
-{% for c in sem_grupo.pessoas %}{{ cartao_pessoa(c, 's' ~ c.user_id ~ '_' ~ loop.index0) }}{% endfor %}
-{% for fz in sem_grupo.fazendas %}{{ cartao_fazenda(fz) }}{% endfor %}
+{% for fz in sem_grupo %}{{ cartao_fazenda(fz) }}{% endfor %}
 {% else %}
-{% for c in pessoas %}{{ cartao_pessoa(c, 'p' ~ c.user_id ~ '_' ~ loop.index0) }}{% endfor %}
-{% for fz in sem_cadastro %}{{ cartao_fazenda(fz) }}{% endfor %}
+{% for fz in fazendas %}{{ cartao_fazenda(fz) }}{% endfor %}
 {% endif %}
 
+{{ gc.scripts() }}
 <script>
-// Editor de dados da fazenda, carregado na hora (pedido do Alan, 09/11/2026).
-document.addEventListener('click', function (e) {
-    var btn = e.target.closest('.dados-toggle');
-    if (!btn) { return; }
-    var corpo = btn.closest('.fazenda-linha').querySelector('.dados-corpo');
-    var abrir = corpo.classList.contains('d-none');
-    corpo.classList.toggle('d-none');
-    if (!abrir || corpo.dataset.carregado) { return; }
-    corpo.textContent = 'Carregando...';
-    fetch('{{ url_for("admin_fazenda_dados") }}?site=' + encodeURIComponent(btn.dataset.site) + '&idx=' + encodeURIComponent(btn.dataset.idx),
-          { credentials: 'same-origin' })
-        .then(function (r) { if (!r.ok) { throw new Error(); } return r.text(); })
-        .then(function (html) {
-            corpo.innerHTML = html; corpo.dataset.carregado = '1';
-            if (window.cidadesIbge) window.cidadesIbge(corpo);
-            corpo.querySelectorAll('.form-culturas').forEach(atualizarCulturas);
-        })
-        .catch(function () { corpo.textContent = 'Não foi possível abrir os dados agora.'; });
-});
-// Culturas no padrao do app dentro de "Dados da fazenda": o tipo mostra as
-// culturas dele, marcar abre a area e a Area total soma (pedido do Alan, 09/11/2026).
-function atualizarCulturas(form) {
-    var tipos = Array.prototype.map.call(form.querySelectorAll('input[name=grupo_cultura]:checked'), function (g) { return g.value; });
-    form.querySelector('.bloco-culturas').classList.toggle('d-none', !tipos.length);
-    var total = 0;
-    form.querySelectorAll('.cultura-linha').forEach(function (linha) {
-        var visivel = tipos.indexOf(linha.dataset.grupo) >= 0;
-        linha.classList.toggle('d-none', !visivel);
-        var caixa = linha.querySelector('input[type=checkbox]');
-        var marcada = visivel && (caixa ? caixa.checked : linha.querySelector('.cultura-outra').value.trim() !== '');
-        linha.querySelector('.cultura-area').classList.toggle('d-none', !marcada);
-        if (marcada) {
-            var v = parseFloat((linha.querySelector('.area').value || '').replace(/\./g, '').replace(',', '.'));
-            if (!isNaN(v)) { total += v; }
-        }
-    });
-    form.querySelector('.area-total').textContent = total ? total.toLocaleString('pt-BR') + ' ha' : '-';
-}
-['change', 'input'].forEach(function (ev) {
-    document.addEventListener(ev, function (e) {
-        var form = e.target.closest('.form-culturas');
-        if (form) { atualizarCulturas(form); }
-    });
-});
-// "Ligar a este cliente" fica dentro do "Dados da fazenda" (carregado depois).
-document.addEventListener('submit', function (e) {
-    var f = e.target.closest('.ligar-a-cliente');
-    if (f) {
-        if (!f.querySelector('select').value) { e.preventDefault(); return; }
-        f.action = f.querySelector('select').value;
-    }
-});
-document.querySelectorAll('.cad-toggle').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-        var corpo = document.getElementById(btn.dataset.target);
-        var aberto = !corpo.classList.contains('d-none');
-        corpo.classList.toggle('d-none');
-        btn.querySelector('.toggle-icon').textContent = aberto ? '▶' : '▼';
-        // Caixa do grupo aberta: os cartoes tomam o lugar do resumo.
-        var resumo = btn.closest('.grupo-box') && btn.closest('.card-body').querySelector(':scope > .grupo-resumo');
-        if (resumo && btn.dataset.target.indexOf('grupo-body-') === 0) { resumo.classList.toggle('d-none', !aberto); }
-    });
-});
 (function () {
     var botoes = document.querySelectorAll('#filtro-pessoas [data-filtro]');
     var cartoes = document.querySelectorAll('.cad-card');
@@ -418,12 +122,9 @@ document.querySelectorAll('.cad-toggle').forEach(function (btn) {
             botoes.forEach(function (x) { x.classList.toggle('active', x === b); });
             var f = b.dataset.filtro;
             cartoes.forEach(function (c) {
-                var mostra = f === 'todos' || (f === 'novo' ? c.dataset.novo === '1'
-                    : f === 'incompleto' ? c.dataset.incompleto === '1'
-                    : (f === 'free' || f === 'bloqueado') ? c.dataset.situacao === f : c.dataset.tipo === f);
+                var mostra = f === 'todos' || (f === 'incompleto' ? c.dataset.incompleto === '1' : c.dataset.incompleto === '0');
                 c.classList.toggle('d-none', !mostra);
             });
-            // Exibir por grupo: caixa do grupo some se nada dentro passou no filtro.
             document.querySelectorAll('.grupo-box').forEach(function (g) {
                 g.classList.toggle('d-none', !g.querySelector('.cad-card:not(.d-none)'));
             });

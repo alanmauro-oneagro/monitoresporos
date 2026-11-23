@@ -297,6 +297,23 @@ OCULTA some de Gerenciar Clientes (sem cadastro e dentro dos cadastros) e
 fica so' em Gerenciar Fazendas Ocultas. Tamanhos dos cartoes = os da aba Manejos (pedido do Alan, 13/11/2026; ver
 "Padrao Manejos" em Tipografia). Mapas de Estudo ficou so' com criar/editar ponto
 (coordenada, raio, tipo) e remover.
+**Gerenciar Fazendas (ex-"Gerenciar Clientes") + pessoas na aba Usuarios** (pedido do Alan, 23/11/2026 -- SUBSTITUI a
+divisao descrita acima): rota/endpoint `admin_solicitacoes`, template `admin_solicitacoes.html` e chave de menu
+`cadastros` continuam com o nome antigo. **Gerenciar Fazendas** = so' fazendas: TODA fazenda (do cliente do app, ligada
+ou sem cadastro) num cartao igual (`cartao_fazenda`, selos `selos_fazenda`): "✔ Cadastro completo" (verde) ou
+"⚠ Cadastro incompleto" + caixa amarela com o que falta (`_faltando_fazenda_completa` = `_faltando_na_fazenda`
+[municipio/estado, culturas] + "ligar a um cliente ou usuário" se nao tem dono nem `usuarios_ligados_a_fazenda`), plano,
+origem e "👤 <dono>"; o selo "Fazenda sem cadastro" SAIU. Filtros Todas/Completo/Incompleto; "Exibir por: Nome da fazenda |
+Grupo" (`session["gerenciar_fazendas_exibir"]`). Pedidos de contato continuam no topo. **Grupo economico e' opcional**:
+rotulo "Grupo econômico*" + "* opcional -- não é preciso para o cadastro completo" (Dados da fazenda, cartao da pessoa,
++ Novo cliente). **Aba Usuarios** (so' Master ve os extras): cada pessoa com cadastro/cliente tem "▶" no nome que abre o
+MESMO cartao de antes (`cartao_pessoa`: assinatura, plano/cortesia, grupo, fazendas, quem recebe, data limite, Liberar,
+Excluir), selos Novo/⚠ Incompleto na linha, filtros Todos/Novos/Clientes/No Essencial/Bloqueados/Cadastro incompleto e o
+"+ Novo cliente" embaixo da tabela; abrir a aba marca os cadastros como vistos e o contador vermelho foi pro item
+Usuarios do menu. `#usuario-<id>` (link do cartao da fazenda) ja' abre a pessoa. Macros comuns em
+`_gerenciar_cartoes.html` (`estilos`, `linha_fazenda`, `selos_pessoa`, `cartao_pessoa`, `scripts`; importar "with
+context"); dados das pessoas em `app._pessoas_para_gerenciar()`. Acoes da pessoa (cortesia, grupo, novo, excluir) voltam
+pra Usuarios; ligar/desligar fazenda volta pra tela de onde veio. Teste `GerenciarFazendasTest`.
 **Mapas de Estudo -- estudo de viabilidade, regua e grupos** (pedido do Alan, 12/11/2026): tipos
 sem parenteses ("🦠 Monitorar doenças", "☁️ Somente clima", "📐 Estudo de viabilidade"). Estudo de
 viabilidade = tabela PROPRIA `pontos_estudo` (`models.criar/atualizar/excluir_ponto_estudo`), so'

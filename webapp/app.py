@@ -4198,7 +4198,7 @@ def editar_ponto_virtual():
         # Ponto de doenca/clima virando estudo: deixa de ser fazenda (sai de
         # todas as telas, envios e permissoes). Fazenda de cliente nao pode.
         if site_name in models.clientes_por_site():
-            return _resposta_ponto("Essa fazenda pertence a um cliente -- desligue em Gerenciar Clientes antes de virar estudo.", False, url_for("mapa_interpolado"))
+            return _resposta_ponto("Essa fazenda pertence a um cliente -- desligue em Gerenciar Fazendas antes de virar estudo.", False, url_for("mapa_interpolado"))
         models.criar_ponto_estudo(nome, lat, lon, raio_km, country_code, criado_por=current_user.username,
                                   grupo_economico=grupo)
         models.delete_virtual_farm(site_name)
@@ -7031,11 +7031,21 @@ def admin_users():
                 vistos.setdefault(n.lower(), n)
         grupos[u["id"]] = ", ".join(sorted(vistos.values(), key=str.lower))
     subordinado_counts = {uid: len(subs) for uid, subs in subordinados_by_owner.items() if subs}
+    # Cartao de cada pessoa (cliente do app ou cadastro do site) com assinatura/plano/cortesia/grupo/data
+    # limite -- veio de Gerenciar Clientes (pedido do Alan, 23/11/2026). So' Master; abrir marca os novos como vistos.
+    extra = {}
+    if current_user.is_master:
+        pessoas, sem_cadastro = _pessoas_para_gerenciar()
+        models.marcar_cadastros_vistos()
+        extra = dict(pessoa_por_user={p["user_id"]: p for p in pessoas if p.get("user_id")}, sem_cadastro=sem_cadastro,
+                     perfis=PERFIS_CADASTRO, planos=models.get_planos(),
+                     dados_desde_por_user=models.dados_desde_por_usuario())
     return render_template(
         "admin_users.html", users=users, default_password=models.DEFAULT_PASSWORD,
         niveis=NIVEIS_ACESSO, nivel_acesso=_nivel_acesso,
         report_counts=report_counts, permission_counts=permission_counts,
         subordinado_counts=subordinado_counts, subordinados_by_owner=subordinados_by_owner, grupos=grupos,
+        **extra,
     )
 
 
@@ -8480,7 +8490,7 @@ def _avisar_master_cadastro(reg):
         f"Celular: {models.fmt_telefone_br(reg['telefone'])}",
         f"{reg['empresa']} -- {reg['cidade']}/{reg['uf']}",
         "",
-        f"Detalhes: {url_for('admin_solicitacoes', _external=True)}",
+        f"Detalhes: {url_for('admin_users', _external=True)}",
     ]
     for telefone in models.get_master_telefones():
         _whatsapp_em_segundo_plano(telefone, "\n".join(linhas))
@@ -9609,18 +9619,11 @@ def _situacao_cliente(cl):
     return {"chave": chave, "texto": texto, "formato": formato}
 
 
-@app.route("/admin/solicitacoes")
-@master_required
-def admin_solicitacoes():
-    """Gerenciar Clientes (ex-"Clientes e cadastros"; pedido do Alan, 01/11/2026 -- junta as antigas
-    "Novos cadastros" e a lista "Clientes do app" de Planos e clientes):
-    uma pessoa por cartao, com os dados do cadastro (/solicitar-acesso) e,
-    se for cliente do app, plano/situacao/pago ate'/cortesia/lavouras.
-    Cliente sem registro de cadastro (criado antes do cadastro direto)
-    entra so' com o que a conta tem. Abrir a tela marca os cadastros como
-    vistos (zera o contador do menu)."""
+def _pessoas_para_gerenciar():
+    """Cartoes das pessoas (cadastros do site + clientes do app) com assinatura, areas, fazendas e o
+    que falta -- mostrados na aba Usuarios (pedido do Alan, 23/11/2026; antes em Gerenciar Clientes).
+    Devolve (pessoas, fazendas sem cadastro)."""
     cadastros = models.get_cadastros()
-    models.marcar_cadastros_vistos()
     clientes = {c["id"]: c for c in models.get_all_clientes()}
     pessoas = []
     for c in cadastros:
@@ -9679,25 +9682,54 @@ def admin_solicitacoes():
     for p in pessoas:
         p["faltando"] = _faltando_no_cadastro(p)
     _preencher_estacoes(sem_cadastro + [fz for p in pessoas for fz in p["fazendas"]])
-    # Exibir por produtor ou por grupo economico (pedido do Alan, 09/11/2026), lembrado na sessao.
-    if request.args.get("exibir") in ("produtor", "grupo"):
-        session["gerenciar_clientes_exibir"] = request.args["exibir"]
-    exibir = session.get("gerenciar_clientes_exibir", "produtor")
-    grupos, sem_grupo = {}, {"pessoas": [], "fazendas": []}
+    return pessoas, sem_cadastro
+
+
+def _faltando_fazenda_completa(fz, ligados):
+    """Gerenciar Fazendas (pedido do Alan, 23/11/2026): completa = municipio/estado, culturas e alguem
+    ligado (cliente do app ou usuario). Grupo economico e' opcional."""
+    falta = _faltando_na_fazenda(fz)
+    if not fz.get("dono") and not ligados:
+        falta.append("ligar a um cliente ou usuário")
+    return falta
+
+
+@app.route("/admin/solicitacoes")
+@master_required
+def admin_solicitacoes():
+    """Gerenciar Fazendas (ex-"Gerenciar Clientes"; pedido do Alan, 23/11/2026): toda fazenda (da BioScout,
+    do Mapas de Estudo e do app) num cartao com "Cadastro completo"/"Cadastro incompleto"; as pessoas
+    (clientes e cadastros) foram pra aba Usuarios. Pedidos de contato continuam aqui."""
+    pessoas, sem_cadastro = _pessoas_para_gerenciar()
+    fazendas = []
     for p in pessoas:
-        nome = (p.get("grupo_economico") or "").strip()
-        alvo = grupos.setdefault(nome.lower(), {"nome": nome, "pessoas": [], "fazendas": []}) if nome else sem_grupo
-        alvo["pessoas"].append(p)
+        for fz in p["fazendas"]:
+            fz["dono_nome"] = p.get("nome_completo") or p["username"]
+            a = next((a for a in p["areas"] if a.get("site_name") == fz["site"]), None)
+            fz["sinal"] = a.get("sinal") if a else None
+            fazendas.append(fz)
     for fz in sem_cadastro:
+        fz["dono_nome"] = ""
+        fz["sinal"] = None
+        fazendas.append(fz)
+    for fz in fazendas:
+        ligados = [] if fz.get("dono") else models.usuarios_ligados_a_fazenda(fz["site"])
+        fz["faltando"] = _faltando_fazenda_completa(fz, ligados)
+    fazendas.sort(key=lambda fz: _chave_alfabetica(fz["nome_exibicao"]))
+    if request.args.get("exibir") in ("fazenda", "grupo"):
+        session["gerenciar_fazendas_exibir"] = request.args["exibir"]
+    exibir = session.get("gerenciar_fazendas_exibir", "fazenda")
+    grupos, sem_grupo = {}, []
+    for fz in fazendas:
         nome = (fz.get("grupo") or "").strip()
-        alvo = grupos.setdefault(nome.lower(), {"nome": nome, "pessoas": [], "fazendas": []}) if nome else sem_grupo
-        alvo["fazendas"].append(fz)
-    return render_template("admin_solicitacoes.html", pessoas=pessoas, perfis=PERFIS_CADASTRO,
+        if nome:
+            grupos.setdefault(nome.lower(), {"nome": nome, "fazendas": []})["fazendas"].append(fz)
+        else:
+            sem_grupo.append(fz)
+    return render_template("admin_solicitacoes.html", fazendas=fazendas, perfis=PERFIS_CADASTRO,
                            planos=models.get_planos(), hoje=_hoje_cuiaba().isoformat(),
                            sem_cadastro=sem_cadastro, exibir=exibir,
                            grupos=sorted(grupos.values(), key=lambda gr: _chave_alfabetica(gr["nome"])), sem_grupo=sem_grupo,
-                           clientes_lista=[{"id": pe["user_id"], "nome": pe.get("nome_completo") or pe["username"]}
-                                           for pe in pessoas if pe.get("cliente")],
                            pedidos_contato=models.pedidos_contato(),
                            dados_desde_por_user=models.dados_desde_por_usuario())
 
@@ -9870,7 +9902,7 @@ MENU_CONFIG = [
     ("ndvi", "Mapas de NDVI", "ndvi", "ndvi"),
     ("envios", "Programação de Envios", "whatsapp_gerenciamento", "envios"),
     ("acessos", "Gerenciar Acessos", "admin_acessos", "master"),
-    ("cadastros", "Gerenciar Clientes", "admin_solicitacoes", "master"),
+    ("cadastros", "Gerenciar Fazendas", "admin_solicitacoes", "master"),
     ("planos", "Planos e Valores", "admin_planos", "master"),
     ("whatsapp", "Gerenciar WhatsApp", "admin_whatsapp", "master"),
     ("exportar", "Gerenciar Exportações", "admin_exportar", "master"),
@@ -10311,7 +10343,7 @@ def admin_cliente_cortesia(user_id):
     if plano_id.isdigit() and models.get_plano(int(plano_id)):
         campos["plano_id"] = int(plano_id)
     models.atualizar_assinatura(user_id, **campos)
-    return _save_response(f"Acesso de {row['username']} atualizado.", "admin_solicitacoes")
+    return _save_response(f"Acesso de {row['username']} atualizado.", "admin_users")
 
 
 # --- Fazendas no modelo unico (Gerenciar Clientes, pedido do Alan, 09/11/2026) ---
@@ -10483,7 +10515,7 @@ def admin_cliente_novo():
     grupo): cria a conta de cliente (com login), o registro do cadastro, o
     plano/cortesia e liga as fazendas escolhidas."""
     f = request.form
-    voltar = redirect(url_for("admin_solicitacoes"))
+    voltar = redirect(url_for("admin_users"))
     nome = (f.get("nome_completo") or "").strip()[:80]
     usuario = (f.get("username") or "").strip()[:60]
     senha = f.get("password") or ""
@@ -10540,7 +10572,7 @@ def admin_cliente_vincular(user_id):
     _vincular(user_id, site)
     _recalcular_cadastro(user_id)
     flash(f"'{_nome_exibicao(site)}' ligada ao cadastro de {row['username']}.", "success")
-    return redirect(url_for("admin_solicitacoes"))
+    return redirect(_caminho_interno(request.referrer) or url_for("admin_solicitacoes"))
 
 
 @app.route("/admin/clientes/<int:user_id>/desvincular/<int:ponto_id>", methods=["POST"])
@@ -10551,7 +10583,7 @@ def admin_cliente_desvincular(user_id, ponto_id):
         abort(404)
     _recalcular_cadastro(user_id)
     flash(f"'{_nome_exibicao(site)}' saiu do cadastro (a fazenda continua no site).", "success")
-    return redirect(url_for("admin_solicitacoes"))
+    return redirect(_caminho_interno(request.referrer) or url_for("admin_solicitacoes"))
 
 
 @app.route("/admin/clientes/<int:user_id>/grupo", methods=["POST"])
@@ -10566,7 +10598,7 @@ def admin_cliente_grupo(user_id):
         models.registrar_cadastro({"username": row["username"], "tipo": "cliente" if row["is_cliente"] else "fazenda",
                                    "user_id": user_id, "email": row["email"], "telefone": row["telefone"]})
     models.atualizar_dados_cadastro(user_id, grupo_economico=grupo or None)
-    return _save_response("Grupo salvo.", "admin_solicitacoes")
+    return _save_response("Grupo salvo.", "admin_users")
 
 
 @app.route("/admin/clientes/<int:user_id>/excluir", methods=["POST"])
@@ -10580,7 +10612,7 @@ def admin_cliente_excluir(user_id):
         flash(f"Não foi possível cancelar a cobrança no Asaas ({erro}) -- nada foi excluído.", "error")
     else:
         flash(f"Cliente {row['username']} excluído.", "success")
-    return redirect(url_for("admin_solicitacoes"))
+    return redirect(url_for("admin_users"))
 
 
 def _bootstrap_once():
