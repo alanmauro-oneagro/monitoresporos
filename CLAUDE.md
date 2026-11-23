@@ -303,8 +303,8 @@ divisao descrita acima): rota/endpoint `admin_solicitacoes`, template `admin_sol
 ou sem cadastro) num cartao igual (`cartao_fazenda`, selos `selos_fazenda`): "✔ Cadastro completo" (verde) ou
 "⚠ Cadastro incompleto" + caixa amarela com o que falta (`_faltando_fazenda_completa` = `_faltando_na_fazenda`
 [municipio/estado, culturas] + "ligar a um cliente ou usuário" se nao tem dono nem `usuarios_ligados_a_fazenda`), plano,
-origem e "👤 <dono>"; o selo "Fazenda sem cadastro" SAIU. Filtros Todas/Completo/Incompleto; "Exibir por: Nome da fazenda |
-Grupo" (`session["gerenciar_fazendas_exibir"]`). Pedidos de contato continuam no topo. **Grupo economico e' opcional**:
+origem e "👤 <dono>"; o selo "Fazenda sem cadastro" SAIU. Filtros Todas/Completo/Incompleto; "Exibir por: Nome da Propriedade |
+Grupo Econômico" (nomes pedidos pelo Alan, 23/11/2026) (`session["gerenciar_fazendas_exibir"]`). Pedidos de contato continuam no topo. **Grupo economico e' opcional**:
 rotulo "Grupo econômico*" + "* opcional -- não é preciso para o cadastro completo" (Dados da fazenda, cartao da pessoa,
 + Novo cliente). **Aba Usuarios** (so' Master ve os extras): cada pessoa com cadastro/cliente tem "▶" no nome que abre o
 MESMO cartao de antes (`cartao_pessoa`: assinatura, plano/cortesia, grupo, fazendas, quem recebe, data limite, Liberar,

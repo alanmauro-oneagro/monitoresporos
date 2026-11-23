@@ -1925,6 +1925,9 @@ class GerenciarFazendasTest(unittest.TestCase):
             c.post(f"/admin/usuarios/{uid}/ligar-fazenda", data={"site_name": site})
             parte = cartao()
             self.assertIn("✔ Cadastro completo", parte)
+            tela = c.get("/admin/solicitacoes").get_data(as_text=True)
+            self.assertIn(">Nome da Propriedade</a>", tela)
+            self.assertIn(">Grupo Econômico</a>", tela)
             self.assertNotIn("Fazenda sem cadastro", parte)
             self.assertIn("Grupo econômico*", c.get("/admin/fazendas/dados", query_string={"site": site}).get_data(as_text=True))
             # Usuarios: cartao da pessoa (assinatura/cortesia) na linha do cliente; menu renomeado
