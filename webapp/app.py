@@ -7276,15 +7276,21 @@ def change_password():
         confirmar = request.form.get("senha_confirmar", "")
         user_row = models.get_user_by_id(int(current_user.id))
         if not check_password_hash(user_row["password_hash"], atual):
-            flash("Senha atual incorreta.", "error")
+            erro = "Senha atual incorreta."
         elif not nova or len(nova) < 6:
-            flash("A nova senha precisa ter pelo menos 6 caracteres.", "error")
+            erro = "A nova senha precisa ter pelo menos 6 caracteres."
         elif nova != confirmar:
-            flash("A confirmação não bate com a nova senha.", "error")
+            erro = "A confirmação não bate com a nova senha."
         else:
+            erro = None
             models.set_user_password(int(current_user.id), nova)
+        # Salvando sozinho (X-Autosave): responde JSON e a tela fica onde esta' (pedido do Alan, 24/11/2026).
+        if request.headers.get("X-Autosave") == "1":
+            return {"ok": not erro, "message": erro or "Senha alterada."}
+        if not erro:
             flash("Senha alterada com sucesso.", "success")
             return redirect(url_for("mapa"))
+        flash(erro, "error")
     return render_template("change_password.html")
 
 
@@ -8758,8 +8764,7 @@ def cliente_forma_pagamento():
         abort(403)
     forma = request.form.get("forma_pagamento", "")
     if forma not in asaas.FORMAS_PAGAMENTO:
-        flash("Escolha PIX ou cartão de crédito.", "error")
-        return redirect(url_for("cliente_assinatura"))
+        return _save_response("Escolha PIX ou cartão de crédito.", "cliente_assinatura", ok=False)
     user_id = int(current_user.id)
     assinatura = models.get_assinatura(user_id) or {}
     subs = [assinatura.get("asaas_subscription_id")] if assinatura.get("status") != "cancelada" else []
@@ -8770,11 +8775,10 @@ def cliente_forma_pagamento():
             try:
                 asaas.alterar_forma_pagamento(sub, forma)
             except asaas.AsaasErro as e:
-                flash(f"Não foi possível trocar a forma de pagamento agora ({e}). Tente de novo em alguns minutos.", "error")
-                return redirect(url_for("cliente_assinatura"))
+                return _save_response(f"Não foi possível trocar a forma de pagamento agora ({e}). Tente de novo em alguns minutos.",
+                                      "cliente_assinatura", ok=False)
     models.atualizar_assinatura(user_id, forma_pagamento=forma)
-    flash(f"Forma de pagamento: {asaas.FORMAS_PAGAMENTO[forma]}.", "success")
-    return redirect(url_for("cliente_assinatura"))
+    return _save_response(f"Forma de pagamento: {asaas.FORMAS_PAGAMENTO[forma]}.", "cliente_assinatura")
 
 
 @app.route("/app/assinatura/fazenda/<int:ponto_id>/cobrar", methods=["POST"])
@@ -8804,14 +8808,17 @@ def cliente_conta():
         atual = request.form.get("senha_atual", "")
         nova = request.form.get("senha_nova", "")
         if not check_password_hash(row["password_hash"], atual):
-            flash("Senha atual incorreta.", "error")
+            erro = "Senha atual incorreta."
         elif len(nova) < 6:
-            flash("A nova senha precisa ter pelo menos 6 caracteres.", "error")
+            erro = "A nova senha precisa ter pelo menos 6 caracteres."
         elif nova != request.form.get("senha_confirmar", ""):
-            flash("A confirmação não bate com a nova senha.", "error")
+            erro = "A confirmação não bate com a nova senha."
         else:
+            erro = None
             models.set_user_password(user_id, nova)
-            flash("Senha alterada.", "success")
+        if request.headers.get("X-Autosave") == "1":
+            return {"ok": not erro, "message": erro or "Senha alterada."}
+        flash(erro or "Senha alterada.", "error" if erro else "success")
     return redirect(url_for("cliente_home"))
 
 

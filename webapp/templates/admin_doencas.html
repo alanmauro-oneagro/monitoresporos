@@ -388,7 +388,12 @@ document.querySelectorAll('.excluir-doenca-btn').forEach(function (btn) {
         var body = new URLSearchParams({ display_name_en: btn.dataset.en });
         fetch('{{ url_for("excluir_doenca") }}', { method: 'POST', body: body, headers: { 'X-Autosave': '1' } })
             .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
-            .then(function () { location.reload(); })
+            .then(function (d) {
+                // Tira o cartao da tela, sem recarregar (pedido do Alan, 24/11/2026).
+                if (d && d.ok === false) { alert(d.message || 'Falha ao excluir.'); return; }
+                var cartao = btn.closest('.doenca-card') || btn.closest('.card');
+                if (cartao) { cartao.remove(); }
+            })
             .catch(function () { alert('Falha ao excluir -- tente de novo.'); });
     });
 });
