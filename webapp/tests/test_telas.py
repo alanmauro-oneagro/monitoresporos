@@ -175,6 +175,107 @@ class TelasPorNivelTest(unittest.TestCase):
         novo = next(p for p in models.get_planos() if p["nome"] == "Zzz Plano Auto")
         models.excluir_plano(novo["id"])
 
+    def test_salvar_sem_recarregar(self):
+        """Salvar nao recarrega a pagina (pedido do Alan, 24/11/2026): todo <form data-autosave> responde
+        JSON sem "reload" (mandando os valores que ja' estao na tela), e as senhas e a forma de pagamento
+        respondem JSON com o header X-Autosave."""
+        from html.parser import HTMLParser
+        from werkzeug.datastructures import MultiDict
+
+        class Forms(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.forms, self.atual, self.sel, self.ta = [], None, None, None
+
+            def handle_starttag(self, tag, a):
+                a = dict(a)
+                if tag == "form":
+                    self.atual = {"a": a, "f": []}
+                    self.forms.append(self.atual)
+                elif self.atual is None or not a.get("name"):
+                    return
+                elif tag == "input":
+                    tipo = a.get("type", "text")
+                    if tipo in ("submit", "button", "file") or (tipo in ("checkbox", "radio") and "checked" not in a):
+                        return
+                    self.atual["f"].append((a["name"], a.get("value", "on" if tipo in ("checkbox", "radio") else "")))
+                elif tag == "select":
+                    self.sel = [a["name"], None, None]
+                elif tag == "textarea":
+                    self.ta = [a["name"], ""]
+
+            def handle_startendtag(self, tag, a):
+                self.handle_starttag(tag, a)
+
+            def handle_data(self, d):
+                if self.ta is not None:
+                    self.ta[1] += d
+
+            def handle_endtag(self, tag):
+                if tag == "form":
+                    self.atual = None
+                elif tag == "select" and self.sel and self.atual is not None:
+                    self.atual["f"].append((self.sel[0], self.sel[1] if self.sel[1] is not None else (self.sel[2] or "")))
+                    self.sel = None
+                elif tag == "textarea" and self.ta and self.atual is not None:
+                    self.atual["f"].append(tuple(self.ta))
+                    self.ta = None
+
+        _orig = Forms.handle_starttag
+
+        def _opcao(self, tag, a):
+            if tag == "option" and self.sel is not None:
+                a = dict(a)
+                if self.sel[2] is None:
+                    self.sel[2] = a.get("value")
+                if "selected" in a:
+                    self.sel[1] = a.get("value")
+                return
+            _orig(self, tag, a)
+        Forms.handle_starttag = _opcao
+
+        vistos = set()
+        for nivel in ("master", "cliente"):
+            c = self._cliente(nivel)
+            for rota in _rotas_get():
+                resp = c.get(rota)
+                if resp.status_code != 200 or "text/html" not in resp.content_type:
+                    continue
+                p = Forms()
+                p.feed(resp.get_data(as_text=True))
+                for fm in p.forms:
+                    if "data-autosave" not in fm["a"]:
+                        continue
+                    acao = fm["a"].get("action") or rota
+                    chave = (acao, tuple(sorted(n for n, _ in fm["f"])))
+                    if chave in vistos:
+                        continue
+                    vistos.add(chave)
+                    r = c.post(acao, data=MultiDict(fm["f"]), headers={"X-Autosave": "1"})
+                    with self.subTest(rota=rota, acao=acao):
+                        self.assertIn("json", r.content_type)
+                        self.assertFalse(r.get_json().get("reload"))
+        self.assertGreater(len(vistos), 10)
+
+        h = {"X-Autosave": "1"}
+        nome = "Zzz Teste Senha Auto"
+        if not models.get_user_by_username(nome):
+            models.create_user(nome, "antiga1")
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username(nome)["id"])
+            s["_fresh"] = True
+        r = c.post("/trocar-senha", data={"senha_atual": "errada", "senha_nova": "nova123", "senha_confirmar": "nova123"}, headers=h)
+        self.assertFalse(r.get_json()["ok"])
+        r = c.post("/trocar-senha", data={"senha_atual": "antiga1", "senha_nova": "nova123", "senha_confirmar": "nova123"}, headers=h)
+        self.assertTrue(r.get_json()["ok"])
+        c = self._cliente("cliente")
+        r = c.post("/app/conta", data={"senha_atual": "errada", "senha_nova": "nova123", "senha_confirmar": "nova123"}, headers=h)
+        self.assertEqual(r.get_json()["message"], "Senha atual incorreta.")
+        r = c.post("/app/assinatura/forma-pagamento", data={"forma_pagamento": "PIX"}, headers=h).get_json()
+        self.assertTrue(r["ok"])
+        self.assertEqual(models.get_assinatura(self.ids["cliente"])["forma_pagamento"], "PIX")
+
     def test_grupo_no_editar_ponto(self):
         c = self._cliente("master")
         base = {"lat": "-12.5", "lon": "-55.7", "raio_km": "30", "country_code": "BR"}

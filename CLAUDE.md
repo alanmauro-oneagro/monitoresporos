@@ -792,6 +792,14 @@ site tem que entrar la'.
   `autosave:ok` no form (Doenças/Culturas usa pra renomear/criar/tirar as caixas "Culturas que a doença ataca").
   So' recarrega quando o tipo do ponto muda (o cartao troca de grupo) e ao criar plano novo (`reload: true`).
   Formularios de CRIAR (`data-autocriar`) ainda enviam a pagina pra mostrar o item novo.
+- **Revisao "salvar sem recarregar" de 24/11/2026** (pedido do Alan): todo `<form data-autosave>` do site responde JSON
+  sem `reload` (teste `test_salvar_sem_recarregar` abre toda tela como Master e Cliente e manda os valores da tela de
+  cada form); Trocar senha (`/trocar-senha`) e a senha do app (`cliente_conta`) gravam por fetch (X-Autosave -> JSON,
+  limpam os campos e mostram "✓ Senha alterada." -- antes iam pro Mapa / recarregavam a Conta); Forma de pagamento
+  (Minha assinatura) salva com `autosaveCliente` (rota via `_save_response`); excluir doenca tira o cartao da tela.
+  Continuam recarregando de proposito: CRIAR algo (`data-autocriar`, plano novo, recorte de CAR, ligar fazenda), trocar
+  o tipo do ponto no Mapas de Estudo (o cartao muda de grupo), acoes (Excluir/Ocultar/Reativar/Fundir) e a "Definir nova
+  senha" do 1o acesso (leva pro site).
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR
   recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e

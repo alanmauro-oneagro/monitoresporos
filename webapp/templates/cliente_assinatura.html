@@ -34,11 +34,11 @@
 {% if plano and (plano.valor > 0 or plano.preco_por_area) and not mostrar_planos %}
 {# Forma de pagamento (pedido do Alan, 08/11/2026): vale pras proximas faturas e as em aberto. #}
 <form method="post" action="{{ url_for('cliente_forma_pagamento') }}" class="card shadow-sm mb-3" id="formFormaPagamento"><div class="card-body py-2">
-    <div class="small fw-semibold mb-1">Forma de pagamento</div>
+    <div class="small fw-semibold mb-1">Forma de pagamento <span id="statusFormaPagamento"></span></div>
     <div class="d-flex gap-2">
         {% for chave, rotulo in formas_pagamento.items() %}
         <input type="radio" class="btn-check" name="forma_pagamento" id="forma_{{ chave }}" value="{{ chave }}" autocomplete="off"
-               {% if assinatura and assinatura.forma_pagamento == chave %}checked{% endif %} onchange="this.form.submit()">
+               {% if assinatura and assinatura.forma_pagamento == chave %}checked{% endif %}>
         <label class="btn btn-outline-success flex-fill" for="forma_{{ chave }}">{{ '⚡ PIX' if chave == 'PIX' else '💳 ' ~ rotulo }}</label>
         {% endfor %}
     </div>
@@ -210,5 +210,10 @@
 <form method="post" action="{{ url_for('cliente_cancelar_assinatura') }}" onsubmit="return confirm('Cancelar a assinatura? O acesso continua até o fim do período já pago.');">
     <button class="btn btn-outline-danger w-100 btn-sm" type="submit">Cancelar assinatura</button>
 </form>
+{% endif %}
+{% if plano and (plano.valor > 0 or plano.preco_por_area) and not mostrar_planos %}
+{# Forma de pagamento salva sozinha, sem recarregar a pagina (pedido do Alan, 24/11/2026). #}
+{% include '_autosave_cliente.html' %}
+<script>autosaveCliente(document.getElementById('formFormaPagamento'), document.getElementById('statusFormaPagamento'));</script>
 {% endif %}
 {% endblock %}

@@ -88,7 +88,7 @@
     </div>
     <div class="small mb-2" id="aviso_{{ campo }}">&nbsp;</div>
     {% endfor %}
-    <div class="small text-muted text-center">A nova senha é salva sozinha quando tudo estiver certo.</div>
+    <div class="small text-muted text-center" id="avisoSenhaFinal">A nova senha é salva sozinha quando tudo estiver certo.</div>
 </div></form>
 {% endblock %}
 {% block extra_scripts %}
@@ -151,7 +151,22 @@
         pronto = atualOk && confOk;
     }
     // Salva sozinho (pedido do Alan, 12/11/2026): ao sair do campo com tudo certo.
-    function salvarSePronto() { if (pronto) { form.submit(); } }
+    // Grava por fetch, sem recarregar a pagina (pedido do Alan, 24/11/2026).
+    function salvarSePronto() {
+        if (!pronto) { return; }
+        pronto = false;
+        var fim = document.getElementById('avisoSenhaFinal');
+        fim.className = 'small text-muted text-center'; fim.textContent = 'Salvando...';
+        fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { 'X-Autosave': '1' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                fim.className = 'small text-center ' + (d.ok ? 'text-success' : 'text-danger');
+                fim.textContent = (d.ok ? '✓ ' : '✗ ') + d.message;
+                if (d.ok) { form.reset(); atualOk = false; [atual, nova, conf].forEach(function (c) { aviso(c, null); }); }
+                else { atualizar(); }
+            })
+            .catch(function () { fim.className = 'small text-danger text-center'; fim.textContent = 'Sem conexão -- não salvou.'; atualizar(); });
+    }
     function conferirAtual() {
         var n = ++pedido;
         atualOk = false; atualizar();
@@ -174,7 +189,7 @@
     conf.addEventListener('input', atualizar);
     nova.addEventListener('change', salvarSePronto);
     conf.addEventListener('change', salvarSePronto);
-    form.addEventListener('submit', function (e) { if (!pronto) { e.preventDefault(); } });
+    form.addEventListener('submit', function (e) { e.preventDefault(); salvarSePronto(); });
 })();
 </script>
 <script>
