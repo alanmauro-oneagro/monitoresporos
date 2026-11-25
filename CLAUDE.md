@@ -305,7 +305,7 @@ ou sem cadastro) num cartao igual (`cartao_fazenda`, selos `selos_fazenda`): "�
 [municipio/estado, culturas e a AREA PLANTADA de pelo menos uma cultura -- "Soja (100 ha)"; cultura sem area, como as
 vindas de Manejos, nao basta (pedido do Alan, 23/11/2026)] + "ligar a um cliente ou usuário" se nao tem dono nem `usuarios_ligados_a_fazenda`), plano,
 origem e "👤 <dono>"; o selo "Fazenda sem cadastro" SAIU. Filtros Todas/Completo/Incompleto; "Exibir por: Nome da Propriedade |
-Grupo Econômico" (nomes pedidos pelo Alan, 23/11/2026) (`session["gerenciar_fazendas_exibir"]`). Pedidos de contato continuam no topo. **Grupo economico e' opcional**:
+Grupo Econômico" (nomes pedidos pelo Alan, 23/11/2026) (`session["gerenciar_fazendas_exibir"]`). **Coordenadas na linha do nome** (pedido do Alan, 25/11/2026): cada cartao mostra "📍 lat, lon" (`.coords-gf`, link pro Google Maps) ao lado do nome na mesma linha (`.linha-nome-fazenda`; nome longo encurta com "..."). Pedidos de contato continuam no topo. **Grupo economico e' opcional**:
 rotulo "Grupo econômico*" + "* opcional -- não é preciso para o cadastro completo" (Dados da fazenda, cartao da pessoa,
 + Novo cliente). **Aba Usuarios** (so' Master ve os extras): cada pessoa com cadastro/cliente tem "▶" no nome que abre o
 MESMO cartao de antes (`cartao_pessoa`: assinatura, plano/cortesia, grupo, fazendas, quem recebe, data limite, Liberar,

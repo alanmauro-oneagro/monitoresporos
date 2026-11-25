@@ -1920,6 +1920,9 @@ class GerenciarFazendasTest(unittest.TestCase):
             parte = cartao()
             self.assertIn("⚠ Cadastro incompleto", parte)
             self.assertIn("<li>ligar a um cliente ou usuário</li>", parte)
+            # coordenadas na mesma linha do nome (25/11/2026)
+            self.assertIn('class="coords-gf"', parte.split('<div class="cad-selos">', 1)[0])
+            self.assertIn("📍 -12.50000, -55.70000", parte)
             # dados + alguem ligado = completo (grupo nao e' preciso)
             c.post("/admin/fazendas/dados/salvar", headers={"X-Autosave": "1"}, data={
                 "site_name": site, "cidade": "Sorriso", "uf": "MT", "grupo_cultura": "cereais", "culturas": ["Soja"],

@@ -4,6 +4,13 @@
 {% import "_gerenciar_cartoes.html" as gc with context %}
 {% import "_sinal_celular.html" as sinal_cel %}
 {{ gc.estilos() }}
+<style>
+.linha-nome-fazenda { display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
+.linha-nome-fazenda .cad-toggle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.coords-gf { flex-shrink: 0; white-space: nowrap; font-size: .8rem; color: #1b5e20; background: #e7f5ea; border-radius: 999px;
+    padding: .05rem .5rem; text-decoration: none; font-variant-numeric: tabular-nums; }
+.coords-gf:hover { background: #d3eed9; color: #1b5e20; }
+</style>
 <h4 class="mb-2">Gerenciar Fazendas</h4>
 {# Tecnico do setor / Quero representar a OneAgro: so' deixam o contato (pedido do Alan, 13/11/2026). #}
 {% if pedidos_contato %}
@@ -45,9 +52,16 @@
 {% macro cartao_fazenda(fz) %}
 <div class="card shadow-sm mb-3 cad-card" data-tipo="fazenda" data-incompleto="{{ 1 if fz.faltando else 0 }}" data-origem="{{ fz.origem }}">
     <div class="card-body">
-        <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-faz-{{ fz.idx }}">
-            <span class="toggle-icon">▶</span> {{ fz.nome_exibicao }}
-        </button>
+        {# Coordenadas na mesma linha do nome (pedido do Alan, 25/11/2026): nome encurta com "..." se faltar espaco. #}
+        <div class="linha-nome-fazenda">
+            <button type="button" class="btn btn-link text-decoration-none p-0 fw-bold cad-toggle" data-target="cad-body-faz-{{ fz.idx }}" title="{{ fz.nome_exibicao }}">
+                <span class="toggle-icon">▶</span> {{ fz.nome_exibicao }}
+            </button>
+            {% if fz.lat is not none and fz.lon is not none %}
+            <a class="coords-gf" href="https://www.google.com/maps?q={{ '%.5f'|format(fz.lat) }},{{ '%.5f'|format(fz.lon) }}"
+               target="_blank" rel="noopener" title="Abrir no mapa">📍 {{ '%.5f'|format(fz.lat) }}, {{ '%.5f'|format(fz.lon) }}</a>
+            {% endif %}
+        </div>
         <div class="cad-selos">{{ selos_fazenda(fz) }}</div>
         <div class="d-none mt-3 small" id="cad-body-faz-{{ fz.idx }}">
             {% if fz.faltando %}
