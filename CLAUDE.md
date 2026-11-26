@@ -816,6 +816,25 @@ site tem que entrar la'.
   26/11/2026 -- o Google exige pra publicar o app OAuth): dados coletados, uso, compartilhamento (Asaas, WhatsApp,
   clima/satelite, hospedagem), secao Google Drive com "Uso Limitado", LGPD e contato comercial. Link no login e no aceite
   do cadastro; livre pro cliente (`_ENDPOINTS_LIVRES_CLIENTE`).
+- **WhatsApp SAIU do site; relatorios vao pro Google Drive pelo plano** (pedido do Alan, 26/11/2026 -- SUBSTITUI tudo
+  que este arquivo diz sobre envio por WhatsApp, agenda de texto/PDF, quem recebe, Gerenciar WhatsApp e aviso de cadastro):
+  sairam os botoes "Enviar por WhatsApp" (Recomendações fazenda/grupo com as caixas PDF/Texto, pontos so' clima, NDVI
+  "Enviar selecionadas", "Enviar teste" do Editar usuario), o `_aviso_whatsapp.html`, a tela Gerenciar WhatsApp
+  (`admin_whatsapp*`, item do menu), as rotas de envio/agenda/destinatarios (`send_site_whatsapp`, `send_grupo_whatsapp`,
+  `alertas_clima_whatsapp`, `enviar_ndvi_historico_whatsapp`, `save_whatsapp_days*`, `save_whatsapp_site_recipients`,
+  `toggle_ndvi_ativo`, `*_whatsapp_pausado`), o envio agendado (`_run_scheduled_whatsapp_sends`, `_send_site_whatsapp` e
+  ajudantes) e os avisos aos Masters (cadastro novo e pedido de contato). Usuarios sem as colunas "Recebe relatório" e
+  "WhatsApp". O agendador so' BUSCA a imagem NDVI nova (`_run_scheduled_ndvi_sends`, sem enviar). Ficaram guardados sem
+  tela: `whatsapp.py`/`whatsapp_cloud_api.py`/`whatsapp_umbler.py`, os webhooks e o "Esqueci a senha" (ainda manda a senha
+  temporaria por WhatsApp). Copiar texto/PDF/imagem continuam. **Plano decide o Drive**: recursos `drive_pdf`/`drive_txt`/
+  `drive_ndvi` (`models.RECURSOS_DRIVE`, linhas "Google Drive: ..." em Planos e Valores; planos que ja' existiam ganharam
+  os 3 UMA vez -- setting `recursos_drive_migrados`); `_arquivos_drive_da_fazenda(site)` = os do plano de
+  `_plano_da_fazenda` (sem plano = nada). Pasta: `Relatórios OneAgro/<PDF|TXT|NDVI>/<cliente>` (`_cliente_drive_da_fazenda`:
+  grupo economico > cliente dono > 1o usuario ligado > "Sem cliente"; `google_drive.subpasta`). Cliente nao ve WhatsApp nem
+  Drive na lista do plano (`models.RECURSOS_PLANO_CLIENTE`). **Programação de Envios** (`whatsapp_gerenciamento`, mesma rota
+  `/whatsapp`) = horario geral do Drive (Master, `salvar_hora_drive`, setting `gdrive_hora`, padrao 5) + tabela por fazenda
+  (plano, o que vai, pasta do cliente, ultimo envio -- setting `gdrive_por_fazenda`) + "Busca automática da imagem NDVI"
+  (agenda e nuvens por fazenda com CAR). Teste `GoogleDriveTest.test_sem_whatsapp_e_drive_nos_planos`.
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR
   recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e

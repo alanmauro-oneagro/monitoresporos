@@ -965,6 +965,18 @@ def init_db():
             if ((nome.startswith("premium") and "esta" in nome) or nome == "inteligência") and "esporos_numero" not in recursos:
                 conn.execute("UPDATE planos SET recursos = ? WHERE id = ?", (json.dumps(recursos + ["esporos_numero"]), row["id"]))
         conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('recursos_esporos_numero_migrados', '1')")
+    # Google Drive no lugar do WhatsApp (26/11/2026): todo plano que ja' existia comeca com os 3 arquivos;
+    # o Master tira em Planos e Valores. So' uma vez.
+    if not conn.execute("SELECT 1 FROM app_settings WHERE key = 'recursos_drive_migrados'").fetchone():
+        for row in conn.execute("SELECT id, recursos FROM planos").fetchall():
+            try:
+                recursos = json.loads(row["recursos"] or "[]")
+            except ValueError:
+                recursos = []
+            novos = recursos + [r for r in RECURSOS_DRIVE if r not in recursos]
+            if novos != recursos:
+                conn.execute("UPDATE planos SET recursos = ? WHERE id = ?", (json.dumps(novos), row["id"]))
+        conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('recursos_drive_migrados', '1')")
     # Free "sem prazo" de antes da regra dos 7 dias passa a valer 7 dias do
     # cadastro tambem (pedido do Alan, 08/11/2026).
     conn.execute(
@@ -4241,16 +4253,25 @@ RECURSOS_PLANO = [
     # Numero de esporos nas caixas (pedido do Alan, 08/11/2026): sem ele o
     # cliente ve so' Alto/Medio/Baixo; padrao so' no Premium + Estacao.
     ("esporos_numero", "Número de esporos (sem ele: Alto, Médio e Baixo)"),
+    # Copia diaria no Google Drive no lugar do WhatsApp (pedido do Alan, 26/11/2026): o plano da fazenda
+    # decide quais arquivos dela vao pro Drive.
+    ("drive_pdf", "Google Drive: relatório em PDF"),
+    ("drive_txt", "Google Drive: relatório em texto (TXT)"),
+    ("drive_ndvi", "Google Drive: imagem NDVI nova"),
 ]
+RECURSOS_DRIVE = ("drive_pdf", "drive_txt", "drive_ndvi")
+# O que o cliente ve na lista do plano (cadastro, /planos, Minha assinatura): sem WhatsApp (saiu em 26/11/2026)
+# nem Google Drive (copia interna da OneAgro).
+RECURSOS_PLANO_CLIENTE = [(c, r) for c, r in RECURSOS_PLANO if not c.startswith(("whatsapp_", "drive_"))]
 _ABAS_SITE = ["site_mapa", "site_alertas", "site_graficos", "site_manejos", "site_recomendacoes"]
 PLANOS_PADRAO = [  # (nome, recursos, lavouras, a venda ja' de inicio)
-    ("Essencial", ["clima", "whatsapp_texto"], 1, True),
-    ("Básico", ["clima", "site_mapa", "site_alertas", "fazenda_estimada", "esporos", "whatsapp_texto"], 3, False),
+    ("Essencial", ["clima", "whatsapp_texto", "drive_pdf", "drive_txt", "drive_ndvi"], 1, True),
+    ("Básico", ["clima", "site_mapa", "site_alertas", "fazenda_estimada", "esporos", "whatsapp_texto", "drive_pdf", "drive_txt", "drive_ndvi"], 3, False),
     ("Avançado", ["clima"] + _ABAS_SITE + ["fazenda_estimada", "esporos", "risco", "fungicidas", "regiao",
-                                          "whatsapp_texto", "whatsapp_pdf", "graficos_app"], 10, False),
+                                          "whatsapp_texto", "whatsapp_pdf", "graficos_app", "drive_pdf", "drive_txt", "drive_ndvi"], 10, False),
     # Fazenda real (estacao BioScout do cliente), liberada pelo Master -- sem fazenda estimada.
     ("Inteligência", ["clima"] + _ABAS_SITE + ["esporos", "risco", "fungicidas", "regiao",
-                                                    "whatsapp_texto", "whatsapp_pdf", "graficos_app", "esporos_numero"], 10, False),
+                                                    "whatsapp_texto", "whatsapp_pdf", "graficos_app", "esporos_numero", "drive_pdf", "drive_txt", "drive_ndvi"], 10, False),
 ]
 # Nomes antigos -> novos (pedido do Alan, 09/11/2026).
 PLANOS_RENOMEADOS = [("Free", "Essencial"), ("Premium", "Avançado"), ("Premium + Estação", "Inteligência")]

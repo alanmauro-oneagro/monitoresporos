@@ -110,7 +110,7 @@ class FazendaAdicionalTest(unittest.TestCase):
         conn.close()
         self.assertNotIn(site, models.get_user_permitted_site_names(uid))
         self.assertIn("O acesso a esta fazenda terminou", c.get(f"/app/pontos/{ponto['id']}").get_data(as_text=True))
-        self.assertEqual(webapp._send_site_whatsapp(site)[2], "Fazenda adicional sem pagamento -- relatório não enviado.")
+        self.assertIn(site, models.sites_bloqueados_de_clientes())
         # o plano continua valendo
         self.assertEqual(c.get("/app/regiao").status_code, 200)
         # pagou (webhook): volta, e o pagamento nao mexe na validade do plano
@@ -312,29 +312,6 @@ class FazendaAdicionalTest(unittest.TestCase):
         self.assertIn("2 fazendas", html)
         self.assertIn("Copiar texto do grupo", html)
         self.assertLess(html.index('data-grupo="Grupo Zzz Rec"'), html.index(f'data-site="{Markup.escape(sites[0])}"'))
-
-        class SemThread:
-            def __init__(self, target, daemon=None):
-                self.target = target
-
-            def start(self):
-                self.target()
-        enviados, pdfs = [], []
-        with mock.patch.object(webapp, "_whatsapp_desconectado", return_value=None), \
-                mock.patch.object(webapp, "_texto_relatorio", side_effect=lambda site, *a, **k: f"texto de {site}"), \
-                mock.patch.object(webapp.threading, "Thread", SemThread), \
-                mock.patch.object(webapp, "_formatos_whatsapp_clientes", return_value={}), \
-                mock.patch.object(webapp.whatsapp, "send_whatsapp", side_effect=lambda tel, txt: enviados.append((tel, txt)) or (True, "ok")), \
-                mock.patch.object(webapp, "_send_site_whatsapp", side_effect=lambda s, **k: pdfs.append((s, k["enviar_pdf"], k["enviar_texto"]))):
-            r = master.post("/recommendations/grupo/whatsapp", data={
-                "safra": "safra1", "grupo": "Grupo Zzz Rec", "site": sites, "enviar_texto": "1", "enviar_pdf": "1",
-                "codigo_pais": "55", "numero_telefone": "65999990777"})
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(len(enviados), 1)  # um texto so' pro grupo
-        self.assertIn(f"texto de {sites[0]}", enviados[0][1])
-        self.assertIn(f"texto de {sites[1]}", enviados[0][1])
-        self.assertEqual(sorted(p[0] for p in pdfs), sorted(sites))  # um PDF por fazenda
-        self.assertTrue(all(p[1] and not p[2] for p in pdfs))
 
 
 if __name__ == "__main__":

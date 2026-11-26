@@ -20,16 +20,9 @@
             <div class="ms-auto d-flex flex-wrap align-items-center gap-2 rec-acoes">
                 <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn acao-copiar" {% if not ponto.whatsapp_text %}disabled{% endif %}
                         data-text="{{ ponto.whatsapp_text }}"
-                        title="Copiar o relatório de clima pra colar manualmente no WhatsApp">
+                        title="Copiar o relatório de clima pra colar onde quiser">
                     📋 <span class="d-none d-sm-inline">Copiar recomendação</span><span class="d-sm-none">Copiar texto</span>
                 </button>
-                <form method="post" action="{{ url_for('alertas_clima_whatsapp', site_name=ponto.site_name) }}" class="mb-0 acao-whats">
-                    <input type="hidden" name="enviar_texto" value="1">
-                    <button type="submit" class="btn btn-sm btn-outline-success" {% if not ponto.whatsapp_destinos or not whatsapp_conectado() %}disabled{% endif %}
-                            title="{% if not whatsapp_conectado() %}WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp{% elif ponto.whatsapp_destinos %}Enviar o texto para {{ ponto.whatsapp_destinos }} número(s){% else %}Nenhum número cadastrado pra esse ponto ainda (aba Programação de Envios){% endif %}">
-                        📲 Enviar por WhatsApp{% if ponto.whatsapp_destinos %} ({{ ponto.whatsapp_destinos }}){% endif %}
-                    </button>
-                </form>
             </div>
         </div>
         <div class="d-none mt-2" id="clima-body-{{ ponto_idx }}">

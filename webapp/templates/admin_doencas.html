@@ -89,7 +89,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
             {% endif %}
         <div class="row gx-2">
             <div class="col-md-5">
-                <label class="form-label small text-muted mb-1" title="Trocar aqui muda o nome em todo o site: Alertas, Manejos, Recomendações, Gráficos, app, WhatsApp e PDF (as anotações vão junto)">✏️ Nome da doença (vale em todo o site)</label>
+                <label class="form-label small text-muted mb-1" title="Trocar aqui muda o nome em todo o site: Alertas, Manejos, Recomendações, Gráficos, app, texto e PDF (as anotações vão junto)">✏️ Nome da doença (vale em todo o site)</label>
                 <input type="text" name="nome_pt" class="form-control form-control-sm" value="{{ d.pt }}" required>
             </div>
             <div class="col-md-5">
@@ -218,7 +218,7 @@ tr.sem-pais > td { background-color: rgba(253, 126, 20, 0.2) !important; }
             <div class="col-12 col-md-9"><textarea name="texto_{{ k }}" rows="2" class="form-control form-control-sm" maxlength="300" aria-label="Orientação do nível">{{ regras_acao.niveis[k].texto }}</textarea></div>
         </div>
         {% endfor %}
-        <div class="small text-muted mt-1">Vale nas Recomendações, no texto do WhatsApp/app e no PDF de todas as fazendas.</div>
+        <div class="small text-muted mt-1">Vale nas Recomendações, no texto (app e Google Drive) e no PDF de todas as fazendas.</div>
         <span class="autosave-status small"></span>
     </div>
 </form>

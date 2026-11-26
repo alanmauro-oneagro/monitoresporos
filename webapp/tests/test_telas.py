@@ -389,7 +389,7 @@ class TelasPorNivelTest(unittest.TestCase):
                     self.assertEqual(self._status(nivel, rota), status)
 
     def test_telas_so_do_master(self):
-        for rota in ("/admin/exportar", "/admin/exportar/backup", "/admin/whatsapp", "/admin/fazendas-ocultas",
+        for rota in ("/admin/exportar", "/admin/exportar/backup", "/admin/fazendas-ocultas",
                      "/admin/acessos", "/admin/planos"):
             for nivel in ("admin", "usuario"):
                 with self.subTest(nivel=nivel, rota=rota):

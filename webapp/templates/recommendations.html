@@ -31,24 +31,9 @@
 /* Pagina com muita tabela/formulario -- reduz a base (rem) pra tudo
    ficar mais compacto numa visualizacao a 100%, sem precisar dar zoom
    out no navegador. */
-/* Escolha de destinatarios do WhatsApp (painel que abre no botao). */
-.whatsapp-destinos > summary { list-style: none; }
-.whatsapp-destinos > summary::-webkit-details-marker { display: none; }
-.whatsapp-destinos { position: relative; }
-.whatsapp-destinos-painel { position: absolute; right: 0; z-index: 20; width: min(18rem, 90vw); }
-@media (max-width: 575.98px) {
-    .whatsapp-destinos[open] { flex-basis: 100%; }
-    .whatsapp-destinos-painel { position: static; width: auto; }
-}
-/* Celular: cabecalho de cada fazenda em linhas alinhadas --
-   [PDF][Texto] (o que vai no envio) / WhatsApp na largura toda /
-   [Recomendacao (PDF)][Copiar] com a mesma largura. */
+/* Celular: [Recomendacao (PDF)][Copiar] lado a lado, com a mesma largura. */
 @media (max-width: 575.98px) {
     .rec-acoes { display: grid !important; grid-template-columns: 1fr 1fr; gap: 0.4rem !important; width: 100%; margin-left: 0 !important; margin-top: 0.25rem; }
-    .rec-acoes .acao-chk-pdf { order: 1; }
-    .rec-acoes .acao-chk-texto { order: 2; }
-    .rec-acoes .acao-whats { order: 3; grid-column: 1 / -1; }
-    .rec-acoes .acao-whats > summary { display: block; width: 100%; text-align: center; }
     .rec-acoes .acao-pdf { order: 4; }
     .rec-acoes .acao-copiar { order: 5; }
     .rec-acoes .acao-pdf, .rec-acoes .acao-copiar { width: 100%; white-space: nowrap; }
@@ -93,16 +78,6 @@
     </div>
 </div>
 
-{% set wa_ok = whatsapp_conectado() %}
-{% include "_aviso_whatsapp.html" %}
-{% if not no_access and not any_whatsapp_configured %}
-<div class="alert alert-warning small">
-    Nenhum número de WhatsApp cadastrado ainda -- um admin precisa marcar, na
-    aba Programação de Envios, quem recebe cada fazenda, e cadastrar o telefone da pessoa na
-    aba Usuários.
-</div>
-{% endif %}
-
 {% if no_access %}
 <div class="alert alert-warning">Seu usuário ainda não tem fazendas liberadas.</div>
 {% elif not sites_data %}
@@ -114,7 +89,6 @@
 {# Grupo economico (pedido do Alan, 09/11/2026): uma caixa com as fazendas do
    grupo; texto do grupo numa mensagem so' e/ou os PDFs juntos. #}
 {% set gr = site_group.grupo %}
-{% set gform = "whatsapp_grupo_" ~ safra ~ "_" ~ gr.id %}
 <div class="card shadow-sm mb-3 border-success grupo-card" data-grupo="{{ gr.nome }}">
     <div class="card-body">
         <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
@@ -124,50 +98,8 @@
             {{ selo_plano(gr.sites[0]) }}
             <span class="badge rounded-pill bg-light text-secondary border fw-normal">{{ gr.sites | length }} fazendas</span>
             <div class="ms-auto d-flex flex-wrap align-items-center gap-2 rec-acoes">
-                <div class="form-check mb-0 acao-chk-pdf" title="Enviar o PDF de cada fazenda do grupo, um atrás do outro">
-                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ gform }}" id="g_pdf_{{ safra }}_{{ gr.id }}"{% if not wa_ok %} disabled{% endif %}>
-                    <label class="form-check-label small" for="g_pdf_{{ safra }}_{{ gr.id }}">PDFs juntos</label>
-                </div>
-                <div class="form-check mb-0 acao-chk-texto" title="Texto de todas as fazendas do grupo numa mensagem só">
-                    <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ gform }}" id="g_txt_{{ safra }}_{{ gr.id }}"{% if not wa_ok %} disabled{% endif %}>
-                    <label class="form-check-label small" for="g_txt_{{ safra }}_{{ gr.id }}">Texto agrupado</label>
-                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn acao-copiar" data-text="{{ gr.texto }}"
                         title="Copiar o texto de todas as fazendas do grupo numa mensagem só">📋 Copiar texto do grupo</button>
-                {% if not wa_ok %}
-                <button type="button" class="btn btn-sm btn-outline-success acao-whats" disabled title="WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp">📲 Enviar grupo por WhatsApp</button>
-                {% else %}
-                <details class="whatsapp-destinos acao-whats">
-                    <summary class="btn btn-sm btn-outline-success">📲 Enviar grupo por WhatsApp{% if gr.whatsapp_lista %} ({{ gr.whatsapp_lista | length }}){% endif %} ▾</summary>
-                    <form method="post" action="{{ url_for('send_grupo_whatsapp') }}" id="{{ gform }}" class="whatsapp-destinos-painel card card-body shadow-sm p-2 mt-1 mb-0">
-                        <input type="hidden" name="safra" value="{{ safra }}">
-                        <input type="hidden" name="grupo" value="{{ gr.nome }}">
-                        {% for s in gr.sites %}<input type="hidden" name="site" value="{{ s }}">{% endfor %}
-                        <div class="small fw-bold mb-1">Enviar para:</div>
-                        {% for d in gr.whatsapp_lista %}
-                        <div class="form-check small">
-                            <input class="form-check-input" type="checkbox" name="destino" value="{{ d.telefone }}" checked id="gdest_{{ safra }}_{{ gr.id }}_{{ loop.index0 }}">
-                            <label class="form-check-label" for="gdest_{{ safra }}_{{ gr.id }}_{{ loop.index0 }}">{{ d.nome }} <span class="text-muted">(…{{ d.telefone[-4:] }})</span></label>
-                        </div>
-                        {% else %}
-                        <div class="small text-muted mb-1">Nenhum número cadastrado nas fazendas do grupo.</div>
-                        {% endfor %}
-                        {% if contatos_whatsapp %}
-                        <details class="mt-2 outros-usuarios">
-                            <summary class="small text-primary">+ Outros usuários</summary>
-                            <input type="search" class="form-control form-control-sm my-1 busca-outros" placeholder="Buscar nome...">
-                            <div class="lista-outros" style="max-height: 12rem; overflow-y: auto;"></div>
-                        </details>
-                        {% endif %}
-                        <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + número, sem espaços -- não fica salvo)</label>
-                        <div class="d-flex gap-2">
-                            <input type="text" name="codigo_pais" value="55" inputmode="numeric" class="form-control form-control-sm" style="max-width: 5.5rem;" aria-label="Codigo do pais">
-                            <input type="tel" name="numero_telefone" inputmode="tel" placeholder="11999999999" class="form-control form-control-sm">
-                        </div>
-                        <button type="submit" class="btn btn-sm btn-success mt-2">📲 Enviar</button>
-                    </form>
-                </details>
-                {% endif %}
             </div>
         </div>
         <div class="d-none mt-3" id="grupo-corpo-{{ safra }}-{{ gr.id }}">
@@ -187,64 +119,15 @@
             </span>
             {% endif %}
             <div class="ms-auto d-flex flex-wrap align-items-center gap-2 rec-acoes">
-                {% set whatsapp_form_id = "whatsapp_form_" ~ safra ~ "_" ~ outer_loop.index0 %}
-                <div class="form-check mb-0 acao-chk-pdf" title="Incluir o PDF no envio por WhatsApp">
-                    <input class="form-check-input" type="checkbox" name="enviar_pdf" value="1" form="{{ whatsapp_form_id }}" id="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}"{% if not wa_ok %} disabled{% endif %}>
-                    <label class="form-check-label small" for="enviar_pdf_{{ safra }}_{{ outer_loop.index0 }}">PDF</label>
-                </div>
                 <a class="btn btn-sm btn-outline-primary acao-pdf" href="{{ url_for('recommendation_pdf', site_name=site_group.site, safra=safra, v=versao_estaticos) }}"
                    title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- PDF vem so' com o clima{% else %}Gerar PDF com clima, recomendacoes, produtos, datas de plantio e de pulverizacao -- pra encaminhar pra alguem{% endif %}">
                     📄 <span class="d-none d-sm-inline">Recomendação (PDF)</span><span class="d-sm-none">Abrir PDF</span>
                 </a>
-                <div class="form-check mb-0 acao-chk-texto" title="Incluir o texto no envio por WhatsApp">
-                    <input class="form-check-input" type="checkbox" name="enviar_texto" value="1" checked form="{{ whatsapp_form_id }}" id="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}"{% if not wa_ok %} disabled{% endif %}>
-                    <label class="form-check-label small" for="enviar_texto_{{ safra }}_{{ outer_loop.index0 }}">Texto</label>
-                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary copy-recomendacao-btn acao-copiar"
                         data-text="{{ site_group.whatsapp_text }}"
-                        title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- copia so' o clima{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e sugestões OneAgro) pra colar manualmente no WhatsApp{% endif %}">
+                        title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- copia so' o clima{% else %}Copiar o relatorio completo (clima, fungos em alta, recomendacoes, produtos e sugestões OneAgro) pra colar onde quiser{% endif %}">
                     📋 <span class="d-none d-sm-inline">Copiar recomendacao</span><span class="d-sm-none">Copiar texto</span>
                 </button>
-                {% if not wa_ok %}
-                <button type="button" class="btn btn-sm btn-outline-success acao-whats" disabled title="WhatsApp desconectado -- conecte de novo em Configurações > Gerenciar WhatsApp">📲 Enviar por WhatsApp</button>
-                {% else %}
-                <details class="whatsapp-destinos acao-whats">
-                    <summary class="btn btn-sm btn-outline-success"
-                             title="{% if site_group.nivel_dados == 'bloqueado' %}Estacao sem leitura nova ha {{ site_group.dias_sem_leitura }} dias -- envia so' o clima{% else %}Escolher quem recebe e enviar os formatos marcados (texto/PDF){% endif %}">
-                        📲 Enviar por WhatsApp{% if site_group.whatsapp_destinos %} ({{ site_group.whatsapp_destinos }}){% endif %} ▾
-                    </summary>
-                    <form method="post" action="{{ url_for('send_site_whatsapp', site_name=site_group.site) }}" id="{{ whatsapp_form_id }}"
-                          class="whatsapp-destinos-painel card card-body shadow-sm p-2 mt-1 mb-0">
-                        <input type="hidden" name="safra" value="{{ safra }}">
-                        <input type="hidden" name="escolher_destinos" value="1">
-                        <div class="small fw-bold mb-1">Enviar para:</div>
-                        {% for d in site_group.whatsapp_lista %}
-                        <div class="form-check small">
-                            <input class="form-check-input" type="checkbox" name="destino" value="{{ d.telefone }}" checked
-                                   id="dest_{{ safra }}_{{ outer_loop.index0 }}_{{ loop.index0 }}">
-                            <label class="form-check-label" for="dest_{{ safra }}_{{ outer_loop.index0 }}_{{ loop.index0 }}">
-                                {{ d.nome }} <span class="text-muted">(…{{ d.telefone[-4:] }})</span>
-                            </label>
-                        </div>
-                        {% else %}
-                        <div class="small text-muted mb-1">Nenhum número cadastrado para essa fazenda.</div>
-                        {% endfor %}
-                        {% if contatos_whatsapp %}
-                        <details class="mt-2 outros-usuarios">
-                            <summary class="small text-primary">+ Outros usuários</summary>
-                            <input type="search" class="form-control form-control-sm my-1 busca-outros" placeholder="Buscar nome...">
-                            <div class="lista-outros" style="max-height: 12rem; overflow-y: auto;"></div>
-                        </details>
-                        {% endif %}
-                        <label class="form-label small text-muted mt-2 mb-1">Outro telefone (DDD + número, sem espaços -- não fica salvo)</label>
-                        <div class="d-flex gap-2">
-                            <input type="text" name="codigo_pais" value="55" inputmode="numeric" class="form-control form-control-sm" style="max-width: 5.5rem;" aria-label="Codigo do pais">
-                            <input type="tel" name="numero_telefone" inputmode="tel" placeholder="11999999999" class="form-control form-control-sm">
-                        </div>
-                        <button type="submit" class="btn btn-sm btn-success mt-2">📲 Enviar</button>
-                    </form>
-                </details>
-                {% endif %}
             </div>
         </div>
         <div class="d-none mt-2" id="rec-body-{{ safra }}-{{ outer_loop.index0 }}">
@@ -699,32 +582,13 @@ document.querySelectorAll('.farm-toggle').forEach(function (btn) {
     });
 });
 
-// Personalizacoes salvas na conta do usuario: fazendas abertas (por
-// safra) e Texto/PDF marcados no envio por WhatsApp (por fazenda).
+// Personalizacoes salvas na conta do usuario: fazendas abertas (por safra).
 var SAFRA_ATUAL = {{ safra | tojson }};
 (function () {
     var abertas = (window.OneAgroPrefs.get('rec_abertas') || {})[SAFRA_ATUAL] || [];
     document.querySelectorAll('.farm-toggle').forEach(function (btn) {
         var body = document.getElementById(btn.dataset.target);
         if (abertas.indexOf(btn.dataset.site) !== -1 && body.classList.contains('d-none')) btn.click();
-    });
-    // Texto/PDF independentes por fazenda: {fazenda: {texto, pdf}}.
-    function formatosSalvos() {
-        var f = window.OneAgroPrefs.get('rec_formatos') || {};
-        return typeof f.texto === 'boolean' || typeof f.pdf === 'boolean' ? {} : f;  // formato antigo (igual pra todas)
-    }
-    ['texto', 'pdf'].forEach(function (tipo) {
-        document.querySelectorAll('.card[data-site] input[name="enviar_' + tipo + '"]').forEach(function (c) {
-            var site = c.closest('.card[data-site]').dataset.site;
-            var daFazenda = formatosSalvos()[site];
-            if (daFazenda && typeof daFazenda[tipo] === 'boolean') c.checked = daFazenda[tipo];
-            c.addEventListener('change', function () {
-                var atual = formatosSalvos();
-                atual[site] = atual[site] || {};
-                atual[site][tipo] = c.checked;
-                window.OneAgroPrefs.set('rec_formatos', atual);
-            });
-        });
     });
 })();
 
@@ -744,29 +608,4 @@ var SAFRA_ATUAL = {{ safra | tojson }};
 </script>
 {% endif %}
 
-{% if contatos_whatsapp %}
-<template id="tpl-outros-usuarios">
-    {% for c in contatos_whatsapp %}
-    <label class="form-check small d-block outro-usuario" data-nome="{{ c.nome | lower }}">
-        <input class="form-check-input" type="checkbox" name="usuario_extra" value="{{ c.chave }}">
-        {{ c.nome }} <span class="text-muted">(…{{ c.telefone[-4:] }})</span>
-    </label>
-    {% endfor %}
-</template>
-<script>
-// "+ Outros usuários" no envio manual: a lista e' montada so' quando a caixa abre (uma copia por painel).
-document.querySelectorAll('.outros-usuarios').forEach(function (box) {
-    box.addEventListener('toggle', function () {
-        var lista = box.querySelector('.lista-outros');
-        if (box.open && !lista.childElementCount) {
-            lista.appendChild(document.getElementById('tpl-outros-usuarios').content.cloneNode(true));
-        }
-    });
-    box.querySelector('.busca-outros').addEventListener('input', function (e) {
-        var termo = e.target.value.trim().toLowerCase();
-        box.querySelectorAll('.outro-usuario').forEach(function (l) { l.style.display = l.dataset.nome.indexOf(termo) !== -1 ? '' : 'none'; });
-    });
-});
-</script>
-{% endif %}
 {% endblock %}

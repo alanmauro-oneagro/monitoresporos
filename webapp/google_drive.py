@@ -155,6 +155,12 @@ def pastas(token):
     return ids
 
 
+def subpasta(token, nome, pai):
+    """Pasta `nome` dentro de `pai` (a do cliente dentro de PDF/TXT/NDVI); cria se nao existir."""
+    nome = " ".join((nome or "Sem cliente").replace("/", "-").split())[:80] or "Sem cliente"
+    return _pasta(token, nome, pai) or _criar_pasta(token, nome, pai)
+
+
 def enviar_arquivo(token, pasta_id, nome, conteudo, mime):
     """Grava `nome` na pasta; se ja' existe um arquivo com esse nome la' (ex.: "Enviar agora" duas vezes no dia),
     substitui o conteudo em vez de criar outro igual."""
