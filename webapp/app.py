@@ -47,6 +47,7 @@ import bioscout_fetch
 import export_excel
 import export_pdf
 import protocolo_manejo
+import google_drive
 import whatsapp
 import whatsapp_cloud_api
 import whatsapp_umbler
@@ -2586,6 +2587,129 @@ def _run_scheduled_ndvi_sends():
             _salvar_ndvi_scheduler_tentados(hoje, tentados)
 
 
+# ---------------------------------------------------------------------------
+# Copia diaria no Google Drive (pedido do Alan, 26/11/2026): todo dia as 5:00 de Cuiaba, o PDF e o TXT do
+# relatorio de TODAS as fazendas (sem os pontos so' clima) e a imagem NDVI nova de cada uma vao pras subpastas
+# PDF / TXT / NDVI da pasta "Relatórios OneAgro" do Google Drive conectado em Gerenciar Exportações.
+HORA_GOOGLE_DRIVE = 5
+_trava_google_drive = threading.Lock()
+
+
+def _google_drive_conectado():
+    return google_drive.configurado() and bool(models.get_setting("gdrive_refresh_token"))
+
+
+def _status_google_drive():
+    try:
+        return json.loads(models.get_setting("gdrive_status") or "{}")
+    except ValueError:
+        return {}
+
+
+def _salvar_status_google_drive(**campos):
+    status = _status_google_drive()
+    status.update(campos)
+    models.set_setting("gdrive_status", json.dumps(status, ensure_ascii=False))
+
+
+def _fazendas_google_drive():
+    clima = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
+    existentes = models.fazendas_existentes()
+    return sorted((s for s in _sites_ativos_para_admin()
+                   if s not in clima and (existentes is None or s in existentes)), key=_ordem_fazenda)
+
+
+def _enviar_relatorios_google_drive():
+    """Gera e grava os arquivos de todas as fazendas. Um por vez (trava): "Enviar agora" no meio do envio
+    automatico nao roda em dobro. NDVI so' quando a imagem mais recente da fazenda e' nova (setting
+    `gdrive_ndvi_enviados` = {fazenda: id do historico ja' gravado})."""
+    if not _trava_google_drive.acquire(blocking=False):
+        return False
+    try:
+        agora = _agora_cuiaba_dt()
+        _salvar_status_google_drive(andamento=True, inicio=agora.strftime("%Y-%m-%d %H:%M"), fim=None,
+                                    pdf=0, txt=0, ndvi=0, fazendas=0, erros=[])
+        refresh = models.get_setting("gdrive_refresh_token")
+        try:
+            pastas = google_drive.pastas(google_drive.token_de_acesso(refresh))
+        except google_drive.ErroDrive as e:
+            _salvar_status_google_drive(andamento=False, fim=_agora_cuiaba_dt().strftime("%Y-%m-%d %H:%M"),
+                                        erros=[f"Conexão com o Google Drive: {e}"])
+            return False
+        try:
+            ndvi_enviados = json.loads(models.get_setting("gdrive_ndvi_enviados") or "{}")
+        except ValueError:
+            ndvi_enviados = {}
+        hoje = agora.strftime("%Y-%m-%d")
+        cont, erros = {"pdf": 0, "txt": 0, "ndvi": 0}, []
+        sites = _fazendas_google_drive()
+        for site in sites:
+            nome = _nome_exibicao(site)
+            try:
+                ctx = _preparar_relatorio(site)
+                texto = _texto_relatorio(site, None, ctx)
+                token = google_drive.token_de_acesso(refresh)
+                google_drive.enviar_arquivo(token, pastas["TXT"], _nome_arquivo("Relatorio", "txt", nome),
+                                            texto.encode("utf-8"), "text/plain; charset=utf-8")
+                cont["txt"] += 1
+                if not ctx["bloqueado"]:
+                    # Fazenda sem leitura recente: so' o texto, como no WhatsApp.
+                    _nome, arquivo_pdf, pdf = _build_site_pdf(
+                        site, ctx["diseases"], ctx["weather"], ctx["produtos"], ctx["cultura"], None,
+                        leitura_bioscout=ctx["leitura_bioscout"], mostrar_secao_doencas=ctx["mostrar_secao_doencas"],
+                        riscos_climaticos=ctx["riscos_climaticos"])
+                    google_drive.enviar_arquivo(token, pastas["PDF"], arquivo_pdf, pdf, "application/pdf")
+                    cont["pdf"] += 1
+                historico = models.get_farm_ndvi_historico(site)
+                if historico and ndvi_enviados.get(site) != historico[0]["id"]:
+                    item = historico[0]
+                    imagem = models.get_farm_ndvi_historico_imagem(item["id"], site)
+                    if imagem:
+                        arquivo = _nome_arquivo("NDVI", "png", nome).replace(hoje, item["data_alvo"][:10])
+                        google_drive.enviar_arquivo(token, pastas["NDVI"], arquivo, imagem, "image/png")
+                        cont["ndvi"] += 1
+                        ndvi_enviados[site] = item["id"]
+                        models.set_setting("gdrive_ndvi_enviados", json.dumps(ndvi_enviados))
+            except Exception as e:
+                erros.append(f"{nome}: {e}")
+            _salvar_status_google_drive(fazendas=len(sites), erros=erros[:30], **cont)
+        models.set_setting("gdrive_ultimo_dia", hoje)
+        _salvar_status_google_drive(andamento=False, fim=_agora_cuiaba_dt().strftime("%Y-%m-%d %H:%M"),
+                                    fazendas=len(sites), erros=erros[:30], **cont)
+        return True
+    finally:
+        _trava_google_drive.release()
+
+
+def _google_drive_em_segundo_plano():
+    def rodar():
+        with app.app_context():
+            try:
+                _enviar_relatorios_google_drive()
+            except Exception as e:
+                _salvar_status_google_drive(andamento=False, erros=[f"Falha: {e}"])
+    threading.Thread(target=rodar, daemon=True).start()
+
+
+def _google_drive_agendado():
+    """No loop do agendador: a partir das 5:00 de Cuiaba, uma vez por dia. Falha de conexao tenta de novo no
+    maximo a cada 30 min. O QAP (banco copiado da producao) nunca grava sozinho."""
+    if AMBIENTE_QAP or not _google_drive_conectado():
+        return
+    agora = _agora_cuiaba_dt()
+    if agora.hour < HORA_GOOGLE_DRIVE or models.get_setting("gdrive_ultimo_dia") == agora.strftime("%Y-%m-%d"):
+        return
+    tentativa = models.get_setting("gdrive_tentativa")
+    if tentativa:
+        try:
+            if agora - datetime.fromisoformat(tentativa) < timedelta(minutes=30):
+                return
+        except ValueError:
+            pass
+    models.set_setting("gdrive_tentativa", agora.isoformat())
+    _google_drive_em_segundo_plano()
+
+
 def _whatsapp_scheduler_loop():
     """Roda a cada minuto, o dia inteiro -- o horario de cada envio
     (relatorio texto/PDF e NDVI agendado) agora e' individual por
@@ -2635,6 +2759,10 @@ def _whatsapp_scheduler_loop():
                 pass
             try:
                 models.fazer_backup_diario()
+            except Exception:
+                pass
+            try:
+                _google_drive_agendado()
             except Exception:
                 pass
         time.sleep(60)
@@ -7437,7 +7565,86 @@ def admin_exportar():
     Envios e o registro de fungicidas por cultura na Biblioteca de
     fungicidas (e no Excel) -- tirados daqui pra nao repetir. So'
     usuario Master tem acesso."""
-    return render_template("admin_exportar.html")
+    status = _status_google_drive()
+    if status.get("andamento") and status.get("inicio"):
+        # Servidor reiniciado no meio do envio: depois de 2 h nao mostra mais "em andamento".
+        try:
+            if _agora_cuiaba_dt() - datetime.fromisoformat(status["inicio"]) > timedelta(hours=2):
+                status["andamento"] = False
+        except ValueError:
+            pass
+    drive = {
+        "configurado": google_drive.configurado(), "conectado": _google_drive_conectado(),
+        "client_id": bool(google_drive.CLIENT_ID), "client_secret": bool(google_drive.CLIENT_SECRET),
+        "email": models.get_setting("gdrive_email") or "", "status": status, "hora": HORA_GOOGLE_DRIVE,
+        "pasta": google_drive.PASTA_RAIZ, "subpastas": google_drive.SUBPASTAS, "redirect_uri": _google_drive_redirect_uri(),
+    }
+    return render_template("admin_exportar.html", drive=drive)
+
+
+def _google_drive_redirect_uri():
+    return url_for("google_drive_retorno", _external=True,
+                   _scheme="http" if request.host.split(":")[0] in ("127.0.0.1", "localhost") else "https")
+
+
+@app.route("/admin/google-drive/conectar")
+@master_required
+def google_drive_conectar():
+    if not google_drive.configurado():
+        flash("Falta colocar GOOGLE_DRIVE_CLIENT_ID e GOOGLE_DRIVE_CLIENT_SECRET nas variáveis do Railway.", "error")
+        return redirect(url_for("admin_exportar"))
+    session["gdrive_state"] = secrets.token_urlsafe(24)
+    return redirect(google_drive.url_autorizacao(_google_drive_redirect_uri(), session["gdrive_state"]))
+
+
+@app.route("/admin/google-drive/retorno")
+@master_required
+def google_drive_retorno():
+    """Volta do login do Google: troca o codigo pela autorizacao permanente e confere a pasta."""
+    if request.args.get("error"):
+        flash("Conexão com o Google Drive cancelada.", "error")
+        return redirect(url_for("admin_exportar"))
+    state = session.pop("gdrive_state", None)
+    if not state or request.args.get("state") != state or not request.args.get("code"):
+        flash("Não foi possível conectar o Google Drive -- tente de novo.", "error")
+        return redirect(url_for("admin_exportar"))
+    try:
+        resp = google_drive.trocar_codigo(request.args["code"], _google_drive_redirect_uri())
+        email = google_drive.email_da_conta(resp["access_token"])
+        google_drive.pastas(resp["access_token"])
+    except google_drive.ErroDrive as e:
+        flash(f"Não foi possível conectar o Google Drive: {e}", "error")
+        return redirect(url_for("admin_exportar"))
+    models.set_setting("gdrive_refresh_token", resp["refresh_token"])
+    models.set_setting("gdrive_email", email)
+    flash(f"Google Drive conectado ({email}). Os relatórios vão para a pasta {google_drive.PASTA_RAIZ} todo dia às "
+          f"{HORA_GOOGLE_DRIVE}:00.", "success")
+    return redirect(url_for("admin_exportar"))
+
+
+@app.route("/admin/google-drive/desconectar", methods=["POST"])
+@master_required
+def google_drive_desconectar():
+    refresh = models.get_setting("gdrive_refresh_token")
+    if refresh:
+        google_drive.revogar(refresh)
+    models.set_setting("gdrive_refresh_token", "")
+    models.set_setting("gdrive_email", "")
+    flash("Google Drive desconectado. Os relatórios não vão mais para o Drive.", "success")
+    return redirect(url_for("admin_exportar"))
+
+
+@app.route("/admin/google-drive/enviar-agora", methods=["POST"])
+@master_required
+def google_drive_enviar_agora():
+    if not _google_drive_conectado():
+        flash("Conecte o Google Drive primeiro.", "error")
+    elif _trava_google_drive.locked():
+        flash("O envio para o Google Drive já está em andamento.", "success")
+    else:
+        _google_drive_em_segundo_plano()
+        flash("Envio para o Google Drive começou. Atualize a página em alguns minutos para ver o resultado.", "success")
+    return redirect(url_for("admin_exportar"))
 
 
 def _historico_envios():

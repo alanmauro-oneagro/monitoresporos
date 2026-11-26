@@ -26,6 +26,49 @@
             </div>
         </div></div>
     </div>
+    {# Copia diaria no Google Drive (pedido do Alan, 26/11/2026). #}
+    <div class="col-12">
+        <div class="card shadow-sm" id="google-drive"><div class="card-body">
+            <h6 class="mb-1">☁️ Google Drive — cópia diária dos relatórios</h6>
+            <p class="text-muted small mb-2">Todo dia às {{ drive.hora }}:00 (Cuiabá), o PDF e o TXT do relatório de todas as
+                fazendas e a imagem NDVI nova de cada uma vão para a pasta <strong>{{ drive.pasta }}</strong>
+                (subpastas {{ drive.subpastas | join(', ') }}).{% if ambiente_qap %} No ambiente de teste o envio automático
+                fica desligado.{% endif %}</p>
+            {% if not drive.configurado %}
+            <div class="small mb-2">Falta colocar nas variáveis do Railway:
+                <span class="ms-1">{{ '✅' if drive.client_id else '⬜' }} <code>GOOGLE_DRIVE_CLIENT_ID</code></span>
+                <span class="ms-2">{{ '✅' if drive.client_secret else '⬜' }} <code>GOOGLE_DRIVE_CLIENT_SECRET</code></span>
+            </div>
+            <div class="small text-muted">Endereço de retorno para cadastrar no Google Cloud:
+                <code class="user-select-all">{{ drive.redirect_uri }}</code></div>
+            {% elif not drive.conectado %}
+            <a href="{{ url_for('google_drive_conectar') }}" class="btn btn-success btn-sm">Conectar Google Drive</a>
+            <div class="small text-muted mt-2">Endereço de retorno cadastrado no Google Cloud:
+                <code class="user-select-all">{{ drive.redirect_uri }}</code></div>
+            {% else %}
+            <div class="small mb-2">✅ Conectado{% if drive.email %}: <strong>{{ drive.email }}</strong>{% endif %}</div>
+            {% set st = drive.status %}
+            {% if st.inicio %}
+            <div class="small mb-2">
+                {% if st.andamento %}🔄 Enviando desde {{ st.inicio[11:16] }} — {{ st.txt or 0 }} de {{ st.fazendas or '…' }} fazendas
+                {% else %}Último envio: <strong>{{ st.inicio[8:10] }}/{{ st.inicio[5:7] }}/{{ st.inicio[:4] }} {{ st.inicio[11:16] }}</strong>
+                    — {{ st.fazendas or 0 }} fazendas · {{ st.pdf or 0 }} PDF · {{ st.txt or 0 }} TXT · {{ st.ndvi or 0 }} NDVI novo(s){% endif %}
+            </div>
+            {% if st.erros %}
+            <details class="small mb-2"><summary class="text-danger">⚠ {{ st.erros | length }} problema(s)</summary>
+                <ul class="mb-0 ps-3">{% for e in st.erros %}<li>{{ e }}</li>{% endfor %}</ul></details>
+            {% endif %}
+            {% else %}<div class="small text-muted mb-2">Nenhum envio ainda.</div>{% endif %}
+            <div class="d-flex flex-wrap gap-2">
+                <form method="post" action="{{ url_for('google_drive_enviar_agora') }}" class="mb-0">
+                    <button class="btn btn-outline-success btn-sm" type="submit">⬆ Enviar agora</button></form>
+                <form method="post" action="{{ url_for('google_drive_desconectar') }}" class="mb-0"
+                      onsubmit="return confirm('Desconectar o Google Drive? Os relatórios param de ir para o Drive.');">
+                    <button class="btn btn-outline-danger btn-sm" type="submit">Desconectar</button></form>
+            </div>
+            {% endif %}
+        </div></div>
+    </div>
 </div>
 
 {% endblock %}

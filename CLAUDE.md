@@ -800,6 +800,18 @@ site tem que entrar la'.
   Continuam recarregando de proposito: CRIAR algo (`data-autocriar`, plano novo, recorte de CAR, ligar fazenda), trocar
   o tipo do ponto no Mapas de Estudo (o cartao muda de grupo), acoes (Excluir/Ocultar/Reativar/Fundir) e a "Definir nova
   senha" do 1o acesso (leva pro site).
+- **Copia diaria no Google Drive** (pedido do Alan, 26/11/2026): `webapp/google_drive.py` (OAuth do Google so' com
+  urllib; escopo `drive` inteiro porque a pasta foi criada pelo Alan). Variaveis do Railway `GOOGLE_DRIVE_CLIENT_ID` /
+  `GOOGLE_DRIVE_CLIENT_SECRET` (cliente OAuth "Aplicativo da Web" no Google Cloud, endereco de retorno
+  `https://oneagroapp.com.br/admin/google-drive/retorno`). Gerenciar Exportações > cartao `#google-drive` (Master):
+  Conectar (`google_drive_conectar` -> `google_drive_retorno`, guarda `gdrive_refresh_token`/`gdrive_email`),
+  "Enviar agora" e Desconectar (revoga). Todo dia a partir das 5:00 de Cuiaba (`HORA_GOOGLE_DRIVE`,
+  `_google_drive_agendado` no loop do agendador; falha = nova tentativa a cada 30 min; QAP nunca grava sozinho)
+  `_enviar_relatorios_google_drive` grava, de TODA fazenda ativa e existente (sem pontos so' clima,
+  `_fazendas_google_drive`), o TXT (mesmo texto do WhatsApp) em `Relatórios OneAgro/TXT`, o PDF em `/PDF` (fazenda sem
+  leitura recente = so' TXT, como no WhatsApp) e a imagem NDVI mais recente em `/NDVI` SO' quando e' nova (setting
+  `gdrive_ndvi_enviados` {fazenda: id do historico}); mesmo nome no mesmo dia substitui o arquivo. Pasta achada pelo
+  nome, subpasta que faltar e' criada. Resultado em `gdrive_status` (contagens + erros na tela). Teste `GoogleDriveTest`.
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR
   recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e

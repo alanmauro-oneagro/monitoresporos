@@ -2027,3 +2027,93 @@ class NovoUsuarioFazendasTest(unittest.TestCase):
             if u:
                 models.delete_user(u["id"])
             models.delete_virtual_farm(site)
+
+
+class GoogleDriveTest(unittest.TestCase):
+    """Copia diaria dos relatorios no Google Drive (pedido do Alan, 26/11/2026): Google simulado."""
+
+    def test_envio_diario_e_conexao(self):
+        import urllib.error
+        import urllib.request
+        import google_drive
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Drive"):
+            models.create_user("Zzz Master Drive", "x", is_master=True)
+        mid = models.get_user_by_username("Zzz Master Drive")["id"]
+        nome = "Zzz Fazenda Drive"
+        models.create_virtual_farm(nome, -12.5, -55.7, 50, criado_por="Zzz Master Drive")
+        site = [v for v in models.get_all_virtual_farms() if v["nome"] == nome][0]["site_name"]
+        gravados = []
+
+        def enviar(token, pasta, arquivo, conteudo, mime):
+            gravados.append((pasta, arquivo, mime))
+            return "id"
+        sem_rede = mock.patch.object(urllib.request, "urlopen", side_effect=urllib.error.URLError("sem rede"))
+        patches = [
+            sem_rede,
+            mock.patch.object(google_drive, "CLIENT_ID", "id"), mock.patch.object(google_drive, "CLIENT_SECRET", "seg"),
+            mock.patch.object(google_drive, "token_de_acesso", return_value="tok"),
+            mock.patch.object(google_drive, "pastas", return_value={"raiz": "R", "PDF": "P", "TXT": "T", "NDVI": "N"}),
+            mock.patch.object(google_drive, "enviar_arquivo", side_effect=enviar),
+            mock.patch.object(webapp, "_fazendas_google_drive", return_value=[site]),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            models.set_setting("gdrive_refresh_token", "rt")
+            with webapp.app.app_context():
+                self.assertTrue(webapp._enviar_relatorios_google_drive())
+            pastas = sorted(p for p, _a, _m in gravados)
+            self.assertEqual(pastas, ["P", "T"])
+            self.assertTrue(any(a.startswith("OneAgro_Relatorio_Zzz_Fazenda_Drive_") and a.endswith(".pdf") for _p, a, _m in gravados))
+            st = webapp._status_google_drive()
+            self.assertEqual((st["pdf"], st["txt"], st["ndvi"], st["andamento"]), (1, 1, 0, False))
+            # NDVI: so' a imagem nova, uma vez
+            models.add_farm_ndvi_historico(site, "2026-11-20", b"\x89PNG fake")
+            gravados.clear()
+            with webapp.app.app_context():
+                webapp._enviar_relatorios_google_drive()
+                webapp._enviar_relatorios_google_drive()
+            ndvi = [a for p, a, _m in gravados if p == "N"]
+            self.assertEqual(ndvi, ["OneAgro_NDVI_Zzz_Fazenda_Drive_2026-11-20.png"])
+            # agendado: antes das 5h nao roda; depois roda uma vez por dia
+            models.set_setting("gdrive_ultimo_dia", "")
+            models.set_setting("gdrive_tentativa", "")
+            from datetime import datetime as dt
+            with mock.patch.object(webapp, "_google_drive_em_segundo_plano") as fundo:
+                with mock.patch.object(webapp, "_agora_cuiaba_dt", return_value=dt(2026, 11, 26, 4, 59)):
+                    webapp._google_drive_agendado()
+                fundo.assert_not_called()
+                with mock.patch.object(webapp, "_agora_cuiaba_dt", return_value=dt(2026, 11, 26, 5, 0)):
+                    webapp._google_drive_agendado()
+                    webapp._google_drive_agendado()
+                self.assertEqual(fundo.call_count, 1)
+            # tela e conexao
+            c = webapp.app.test_client()
+            with c.session_transaction() as s:
+                s["_user_id"] = str(mid)
+                s["_fresh"] = True
+            tela = c.get("/admin/exportar").get_data(as_text=True)
+            self.assertIn("Google Drive — cópia diária", tela)
+            self.assertIn("⬆ Enviar agora", tela)
+            models.set_setting("gdrive_refresh_token", "")
+            r = c.get("/admin/google-drive/conectar")
+            self.assertIn("accounts.google.com", r.headers["Location"])
+            self.assertIn("google-drive%2Fretorno", r.headers["Location"])
+            with c.session_transaction() as s:
+                estado = s["gdrive_state"]
+            with mock.patch.object(google_drive, "trocar_codigo", return_value={"refresh_token": "novo", "access_token": "a"}), \
+                    mock.patch.object(google_drive, "email_da_conta", return_value="zzz@exemplo.com"):
+                c.get("/admin/google-drive/retorno", query_string={"state": estado, "code": "abc"})
+            self.assertEqual(models.get_setting("gdrive_refresh_token"), "novo")
+            self.assertIn("zzz@exemplo.com", c.get("/admin/exportar").get_data(as_text=True))
+            with mock.patch.object(google_drive, "revogar"):
+                c.post("/admin/google-drive/desconectar")
+            self.assertEqual(models.get_setting("gdrive_refresh_token"), "")
+        finally:
+            for p in patches:
+                p.stop()
+            models.set_setting("gdrive_refresh_token", "")
+            models.set_setting("gdrive_status", "")
+            models.delete_virtual_farm(site)
