@@ -1,11 +1,38 @@
 {% extends "base.html" %}
-{% block title %}WhatsApp - OneAgro App{% endblock %}
+{% block title %}Recuperação de senha - OneAgro App{% endblock %}
 {% block content %}
-<h4 class="mb-2">WhatsApp</h4>
-{# So' recuperacao de senha (pedido do Alan, 26/11/2026): pouco uso = menos risco de banimento. #}
-<p class="small text-muted">Usado <strong>só para o "Esqueci minha senha"</strong>: a senha temporária vai para o WhatsApp do
-    cadastro da pessoa. Nenhum relatório sai por aqui.</p>
+<h4 class="mb-2">Recuperação de senha</h4>
+{# So' recuperacao de senha (pedidos do Alan, 26/11/2026): WhatsApp com pouco uso = menos risco de banimento; e-mail
+   pelo Gmail/Google Workspace (API, HTTPS). #}
+<p class="small text-muted">O "Esqueci minha senha" manda a senha temporária pelo <strong>WhatsApp</strong> do cadastro e,
+    se não houver WhatsApp (ou o envio falhar), pelo <strong>e-mail</strong>. Nenhum relatório sai por aqui.</p>
 
+<div class="card shadow-sm mb-4" id="email">
+    <div class="card-body">
+        <h6 class="mb-2">📧 E-mail</h6>
+        {% if gmail_email %}
+        <div class="alert alert-success py-2 small mb-2">✅ Conectado -- as senhas temporárias saem de <strong>{{ gmail_email }}</strong>.</div>
+        <form method="post" action="{{ url_for('gmail_teste') }}" class="d-flex flex-wrap gap-2 mb-2">
+            <input type="email" name="para" class="form-control form-control-sm" style="max-width: 18rem;" placeholder="e-mail para o teste" required>
+            <button type="submit" class="btn btn-sm btn-outline-success">Enviar teste</button>
+        </form>
+        <form method="post" action="{{ url_for('gmail_desconectar') }}" onsubmit="return confirm('Desconectar o e-mail?');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Desconectar</button>
+        </form>
+        {% elif google_ok %}
+        <p class="small mb-2">Conecte a conta Google do e-mail que vai enviar (ex.: contato@oneagro.com.br). O site só
+            ganha permissão para <strong>enviar</strong> e-mails -- não lê a caixa de entrada.</p>
+        <form method="post" action="{{ url_for('gmail_conectar') }}">
+            <button type="submit" class="btn btn-sm btn-success">Conectar e-mail (Google)</button>
+        </form>
+        {% if smtp_ok %}<div class="small text-muted mt-2">Hoje o envio usa o servidor SMTP das variáveis do Railway.</div>{% endif %}
+        {% else %}
+        <div class="small text-danger">Falta o cliente do Google (GOOGLE_DRIVE_CLIENT_ID / GOOGLE_DRIVE_CLIENT_SECRET) nas variáveis do Railway.</div>
+        {% endif %}
+    </div>
+</div>
+
+<h6 class="mb-2">💬 WhatsApp</h6>
 <div id="status-box" class="alert {{ 'alert-success' if status.connected else 'alert-warning' }}">
     {% if status.connected %}
     ✅ Conectado -- as senhas temporárias saem por este número.
