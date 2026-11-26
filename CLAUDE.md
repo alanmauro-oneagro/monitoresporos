@@ -829,7 +829,11 @@ site tem que entrar la'.
   (pedido do Alan, 26/11/2026): usuario + e-mail do cadastro; so' se o e-mail for o da conta (sem diferenciar
   maiusculas) gera a senha temporaria e manda por e-mail em segundo plano (`email_envio.py`, SMTP; variaveis do Railway
   `SMTP_HOST`, `SMTP_PORT` 587/465, `SMTP_USER`, `SMTP_PASSWORD`, opcional `SMTP_FROM`); resposta sempre igual (nao
-  revela se o usuario existe). Teste `EsqueciSenhaEmailTest`. Copiar texto/PDF/imagem continuam. **Plano decide o Drive**: recursos `drive_pdf`/`drive_txt`/
+  revela se o usuario existe). Teste `EsqueciSenhaEmailTest`. **WhatsApp de volta SO' pra recuperar senha** (pedido do
+  Alan, 26/11/2026 -- pouco uso = menos risco de banimento): menu "WhatsApp (recuperar senha)" (`admin_whatsapp`,
+  Master: QR code/codigo de pareamento, teste, trocar numero -- `admin_whatsapp_status/pair_code/test/reset`). O "Esqueci
+  a senha" pede usuario + e-mail OU celular do cadastro (`contato`, `_contato_confere`); a senha vai pelo WhatsApp se a
+  conta tem celular e, se falhar/sem celular, por e-mail. Nenhum relatorio sai pelo WhatsApp. Copiar texto/PDF/imagem continuam. **Plano decide o Drive**: recursos `drive_pdf`/`drive_txt`/
   `drive_ndvi` (`models.RECURSOS_DRIVE`, linhas "Google Drive: ..." em Planos e Valores; planos que ja' existiam ganharam
   os 3 UMA vez -- setting `recursos_drive_migrados`); `_arquivos_drive_da_fazenda(site)` = os do plano de
   `_plano_da_fazenda` (sem plano = nada). Pasta: `Relatórios OneAgro/<PDF|TXT|NDVI>/<cliente>` (`_cliente_drive_da_fazenda`:
