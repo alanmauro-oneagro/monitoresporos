@@ -28,6 +28,12 @@
         <div class="card shadow-sm mt-4 login-card">
             <div class="card-body p-4">
                 <h4 class="mb-3">Esqueci minha senha</h4>
+                {% if google_login and not no_app_loja %}
+                <div class="alert alert-success small py-2">
+                    Tem uma conta Google com o mesmo e-mail do seu cadastro? Entre direto, sem senha:
+                    <a href="{{ url_for('login_google') }}" class="btn btn-light border btn-sm w-100 mt-2">Entrar com Google</a>
+                </div>
+                {% endif %}
                 <p class="text-muted small">
                     Informe seu usuario -- se ele tiver um WhatsApp cadastrado, enviamos
                     uma senha temporaria por la (valida por 30 minutos, so' pra esse

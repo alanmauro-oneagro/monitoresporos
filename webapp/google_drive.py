@@ -90,6 +90,26 @@ def token_de_acesso(refresh_token):
         return resp["access_token"]
 
 
+# "Entrar com Google" no login (pedido do Alan, 26/11/2026): o mesmo cliente OAuth, so' com nome e e-mail.
+ESCOPO_LOGIN = "openid email profile"
+
+
+def url_login(redirect_uri, state):
+    return "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
+        "client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "scope": ESCOPO_LOGIN,
+        "access_type": "online", "prompt": "select_account", "state": state,
+    })
+
+
+def dados_do_login(code, redirect_uri):
+    """Codigo da volta do login -> {"email", "email_verified", "name"} da conta Google escolhida."""
+    resp = _post_form("https://oauth2.googleapis.com/token", {
+        "code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+        "redirect_uri": redirect_uri, "grant_type": "authorization_code",
+    })
+    return _api(resp["access_token"], "GET", "https://openidconnect.googleapis.com/v1/userinfo")
+
+
 def revogar(refresh_token):
     try:
         _post_form("https://oauth2.googleapis.com/revoke", {"token": refresh_token})

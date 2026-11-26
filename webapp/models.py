@@ -4554,6 +4554,17 @@ def marcar_cadastros_vistos():
     conn.close()
 
 
+def usuarios_por_email(email):
+    """Contas com esse e-mail (sem diferenciar maiusculas) -- "Entrar com Google" (pedido do Alan, 26/11/2026)."""
+    email = (email or "").strip().lower()
+    if not email:
+        return []
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM users WHERE lower(trim(email)) = ?", (email,)).fetchall()
+    conn.close()
+    return rows
+
+
 def conta_com_contato(telefone, email="", exceto_user_id=None):
     """Ja' existe conta com esse celular (mesmos digitos, ou os mesmos 11
     ultimos -- com ou sem o 55 na frente) ou e-mail? Usado pra barrar o
