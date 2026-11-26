@@ -33,7 +33,10 @@ import whatsapp_umbler
 # Hospedado (Railway/Render): aponta pro hostname interno do servico do
 # bridge dentro do mesmo projeto (ex.: "http://whatsapp-bridge.railway.internal:3001")
 # -- nunca uma URL publica, ja que o /send do bridge nao tem autenticacao.
-BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "http://127.0.0.1:3001")
+# Tolera espaco/quebra de linha colados no Railway, "/" no fim e endereco sem "http://" (26/11/2026).
+BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "").strip().rstrip("/") or "http://127.0.0.1:3001"
+if "://" not in BRIDGE_URL:
+    BRIDGE_URL = "http://" + BRIDGE_URL
 
 # "bridge" (Baileys, atual, padrao), "umbler" (Umbler Talk, whatsapp_umbler.py) ou "cloud_api" (API oficial da Meta,
 # ver whatsapp_cloud_api.py) -- unico interruptor pra trocar de provedor,
