@@ -66,6 +66,18 @@ let connected = false;
 let sendQueue = Promise.resolve();
 let pairingCodeState = null; // { code, phone } ou null
 
+// Mensagens enviadas, pra reenviar quando o celular de quem recebe pede de novo (26/11/2026). Sem isso a
+// mensagem ficava em "Aguardando mensagem. Essa acao pode levar alguns instantes" no celular do destinatario:
+// ele nao conseguiu abrir a criptografia na 1a vez, pede o reenvio e o bridge nao tinha o que mandar.
+const enviadas = new Map();
+const MAX_ENVIADAS = 500;
+
+function guardarEnviada(msg) {
+    if (!msg || !msg.key || !msg.key.id || !msg.message) return;
+    enviadas.set(msg.key.id, msg.message);
+    if (enviadas.size > MAX_ENVIADAS) enviadas.delete(enviadas.keys().next().value);
+}
+
 function limparSessao() {
     if (fs.existsSync(AUTH_DIR)) {
         fs.readdirSync(AUTH_DIR).forEach((nome) => {
@@ -83,6 +95,7 @@ async function startSock() {
         version,
         browser: ["OneAgro Monitor", "Chrome", "120.0.0"],
         logger: pino({ level: "silent" }),
+        getMessage: async (key) => (key && key.id ? enviadas.get(key.id) : undefined),
     });
     sock = atual;
     atual.ev.on("creds.update", saveCreds);
@@ -154,7 +167,9 @@ async function enviarComRetry(jid, conteudo) {
     let ultimoErro = null;
     for (let tentativa = 1; tentativa <= SEND_RETRIES; tentativa++) {
         try {
-            return await sock.sendMessage(jid, conteudo);
+            const msg = await sock.sendMessage(jid, conteudo);
+            guardarEnviada(msg);
+            return msg;
         } catch (err) {
             ultimoErro = err;
             console.log("Envio falhou (tentativa " + tentativa + "/" + SEND_RETRIES + "): " + (err && err.message));
