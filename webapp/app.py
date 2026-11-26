@@ -6961,8 +6961,14 @@ def google_drive_conectar():
 def google_drive_retorno():
     """Volta do login do Google: troca o codigo pela autorizacao permanente e confere a pasta."""
     if request.args.get("error"):
+        if session.pop("gmail_state", None):
+            flash("Conexão do e-mail cancelada.", "error")
+            return redirect(url_for("admin_whatsapp"))
         flash("Conexão com o Google Drive cancelada.", "error")
         return redirect(url_for("admin_exportar"))
+    estado_email = session.pop("gmail_state", None)
+    if estado_email and request.args.get("state") == estado_email:
+        return _gmail_retorno()
     state = session.pop("gdrive_state", None)
     if not state or request.args.get("state") != state or not request.args.get("code"):
         flash("Não foi possível conectar o Google Drive -- tente de novo.", "error")
@@ -6979,6 +6985,62 @@ def google_drive_retorno():
     flash(f"Google Drive conectado ({email}). Os relatórios vão para a pasta {google_drive.PASTA_RAIZ} todo dia às "
           f"{_hora_google_drive()}:00.", "success")
     return redirect(url_for("admin_exportar"))
+
+
+# E-mail da recuperacao de senha pelo Gmail / Google Workspace (pedido do Alan, 26/11/2026): usa o mesmo cliente OAuth
+# e o MESMO endereco de retorno do Google Drive (ja' autorizado no Google Cloud); so' o escopo de enviar e-mail.
+@app.route("/admin/email/conectar", methods=["POST"])
+@master_required
+def gmail_conectar():
+    if not google_drive.configurado():
+        flash("Falta colocar GOOGLE_DRIVE_CLIENT_ID e GOOGLE_DRIVE_CLIENT_SECRET nas variáveis do Railway.", "error")
+        return redirect(url_for("admin_whatsapp"))
+    session["gmail_state"] = secrets.token_urlsafe(24)
+    return redirect(google_drive.url_autorizacao(_google_drive_redirect_uri(), session["gmail_state"],
+                                                 google_drive.ESCOPO_GMAIL))
+
+
+def _gmail_retorno():
+    if not request.args.get("code"):
+        flash("Não foi possível conectar o e-mail -- tente de novo.", "error")
+        return redirect(url_for("admin_whatsapp"))
+    try:
+        resp = google_drive.trocar_codigo(request.args["code"], _google_drive_redirect_uri())
+        email = google_drive.email_do_token(resp["access_token"])
+    except google_drive.ErroDrive as e:
+        flash(f"Não foi possível conectar o e-mail: {e}", "error")
+        return redirect(url_for("admin_whatsapp"))
+    models.set_setting("gmail_refresh_token", resp["refresh_token"])
+    models.set_setting("gmail_email", email)
+    flash(f"E-mail conectado: as senhas temporárias saem de {email}.", "success")
+    return redirect(url_for("admin_whatsapp"))
+
+
+@app.route("/admin/email/desconectar", methods=["POST"])
+@master_required
+def gmail_desconectar():
+    refresh = models.get_setting("gmail_refresh_token")
+    if refresh:
+        google_drive.revogar(refresh)
+    models.set_setting("gmail_refresh_token", "")
+    models.set_setting("gmail_email", "")
+    flash("E-mail desconectado.", "success")
+    return redirect(url_for("admin_whatsapp"))
+
+
+@app.route("/admin/email/teste", methods=["POST"])
+@master_required
+def gmail_teste():
+    para = request.form.get("para", "").strip()
+    if not _is_valid_email(para):
+        flash("Informe um e-mail válido para o teste.", "error")
+        return redirect(url_for("admin_whatsapp"))
+    ok, msg = email_envio.enviar(para, "OneAgro App - teste de e-mail",
+                                 "Teste do OneAgro App -- se você recebeu este e-mail, a recuperação de senha por "
+                                 "e-mail está funcionando.\n\nOneAgro")
+    flash(f"E-mail de teste enviado para {para}." if ok else f"Falha ao enviar o e-mail de teste: {msg}",
+          "success" if ok else "error")
+    return redirect(url_for("admin_whatsapp"))
 
 
 @app.route("/admin/google-drive/desconectar", methods=["POST"])
@@ -7158,7 +7220,9 @@ def admin_exportar_backup():
 def admin_whatsapp():
     """Conexao do WhatsApp SO' pra recuperar senha (pedido do Alan, 26/11/2026): QR code/codigo de pareamento,
     teste e trocar numero."""
-    return render_template("admin_whatsapp.html", status=whatsapp.get_status())
+    return render_template("admin_whatsapp.html", status=whatsapp.get_status(),
+                           gmail_email=models.get_setting("gmail_email") or "",
+                           google_ok=google_drive.configurado(), smtp_ok=email_envio._smtp_configurado())
 
 
 @app.route("/admin/whatsapp/status")
@@ -9498,7 +9562,7 @@ MENU_CONFIG = [
     ("planos", "Planos e Valores", "admin_planos", "master"),
     ("exportar", "Gerenciar Exportações", "admin_exportar", "master"),
     ("ocultas", "Gerenciar Fazendas Ocultas", "fazendas_ocultas", "master"),
-    ("whatsapp", "WhatsApp (recuperar senha)", "admin_whatsapp", "master"),
+    ("whatsapp", "Recuperação de senha", "admin_whatsapp", "master"),
 ]
 _ORDEM_MENU_KEY = "ordem_menu_config"
 

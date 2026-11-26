@@ -24,7 +24,7 @@ SUBPASTAS = ("PDF", "TXT", "NDVI")
 _PASTA_MIME = "application/vnd.google-apps.folder"
 _TIMEOUT = 60
 
-_cache_token = {"refresh": None, "token": None, "expira": 0}
+_cache_token = {}  # refresh token -> (token de acesso, expira); Drive e e-mail tem autorizacoes separadas
 _trava_token = threading.Lock()
 
 
@@ -36,9 +36,9 @@ def configurado():
     return bool(CLIENT_ID and CLIENT_SECRET)
 
 
-def url_autorizacao(redirect_uri, state):
+def url_autorizacao(redirect_uri, state, escopo=None):
     return "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
-        "client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "scope": ESCOPO,
+        "client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "scope": escopo or ESCOPO,
         "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true", "state": state,
     })
 
@@ -79,14 +79,14 @@ def trocar_codigo(code, redirect_uri):
 
 def token_de_acesso(refresh_token):
     with _trava_token:
-        if _cache_token["refresh"] == refresh_token and _cache_token["expira"] > time.time() + 60:
-            return _cache_token["token"]
+        guardado = _cache_token.get(refresh_token)
+        if guardado and guardado[1] > time.time() + 60:
+            return guardado[0]
         resp = _post_form("https://oauth2.googleapis.com/token", {
             "refresh_token": refresh_token, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
             "grant_type": "refresh_token",
         })
-        _cache_token.update(refresh=refresh_token, token=resp["access_token"],
-                            expira=time.time() + int(resp.get("expires_in", 3600)))
+        _cache_token[refresh_token] = (resp["access_token"], time.time() + int(resp.get("expires_in", 3600)))
         return resp["access_token"]
 
 
@@ -115,7 +115,7 @@ def revogar(refresh_token):
         _post_form("https://oauth2.googleapis.com/revoke", {"token": refresh_token})
     except ErroDrive:
         pass
-    _cache_token.update(refresh=None, token=None, expira=0)
+    _cache_token.pop(refresh_token, None)
 
 
 def _api(token, metodo, url, corpo=None, tipo=None):
@@ -196,3 +196,28 @@ def enviar_arquivo(token, pasta_id, nome, conteudo, mime):
         return _api(token, "PATCH", url, corpo, tipo)["id"]
     url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true"
     return _api(token, "POST", url, corpo, tipo)["id"]
+
+
+# E-mail pelo Gmail / Google Workspace (pedido do Alan, 26/11/2026): a senha temporaria do "Esqueci minha senha" sai
+# pela API do Gmail (HTTPS) -- o Railway bloqueia SMTP nos planos menores. So' o escopo de ENVIAR (nao le nada).
+ESCOPO_GMAIL = "openid email https://www.googleapis.com/auth/gmail.send"
+
+
+def email_do_token(token):
+    return _api(token, "GET", "https://openidconnect.googleapis.com/v1/userinfo").get("email", "")
+
+
+def enviar_gmail(refresh_token, para, assunto, texto, remetente=""):
+    import base64
+    from email.message import EmailMessage
+    from email.utils import formataddr
+    msg = EmailMessage()
+    msg["Subject"] = assunto
+    msg["To"] = para
+    if remetente:
+        msg["From"] = formataddr(("OneAgro", remetente))
+    msg.set_content(texto)
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    token = token_de_acesso(refresh_token)
+    return _api(token, "POST", "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                json.dumps({"raw": raw}).encode(), "application/json").get("id", "")

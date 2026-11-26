@@ -833,7 +833,14 @@ site tem que entrar la'.
   Alan, 26/11/2026 -- pouco uso = menos risco de banimento): menu "WhatsApp (recuperar senha)" (`admin_whatsapp`,
   Master: QR code/codigo de pareamento, teste, trocar numero -- `admin_whatsapp_status/pair_code/test/reset`). O "Esqueci
   a senha" pede usuario + e-mail OU celular do cadastro (`contato`, `_contato_confere`); a senha vai pelo WhatsApp se a
-  conta tem celular e, se falhar/sem celular, por e-mail. Nenhum relatorio sai pelo WhatsApp. Copiar texto/PDF/imagem continuam. **Plano decide o Drive**: recursos `drive_pdf`/`drive_txt`/
+  conta tem celular e, se falhar/sem celular, por e-mail. Nenhum relatorio sai pelo WhatsApp. **E-mail pelo Gmail / Google
+  Workspace** (pedido do Alan, 26/11/2026; contato@oneagro.com.br e' Google Workspace; o Railway bloqueia SMTP nos planos
+  menores): a tela virou "Recuperação de senha" (mesma rota `admin_whatsapp`) com o cartao "📧 E-mail": Conectar
+  (`gmail_conectar`, escopo `google_drive.ESCOPO_GMAIL` = so' enviar, mesmo cliente OAuth e MESMO endereco de retorno do
+  Drive -- `google_drive_retorno` desvia pelo `session["gmail_state"]` pra `_gmail_retorno`; settings
+  `gmail_refresh_token`/`gmail_email`), "Enviar teste" (`gmail_teste`) e Desconectar. `email_envio.enviar` usa o Gmail
+  (API HTTPS, `google_drive.enviar_gmail`) e o SMTP so' de reserva. Precisa da "Gmail API" ativada no projeto do Google
+  Cloud. Teste `EmailPeloGmailTest`. Copiar texto/PDF/imagem continuam. **Plano decide o Drive**: recursos `drive_pdf`/`drive_txt`/
   `drive_ndvi` (`models.RECURSOS_DRIVE`, linhas "Google Drive: ..." em Planos e Valores; planos que ja' existiam ganharam
   os 3 UMA vez -- setting `recursos_drive_migrados`); `_arquivos_drive_da_fazenda(site)` = os do plano de
   `_plano_da_fazenda` (sem plano = nada). Pasta: `Relatórios OneAgro/<PDF|TXT|NDVI>/<cliente>` (`_cliente_drive_da_fazenda`:

@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+import urllib.parse
 from unittest import mock
 
 os.environ.setdefault("BIOSCOUT_DB_PATH", os.path.join(tempfile.mkdtemp(), "teste.db"))
@@ -2353,3 +2354,43 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             self.assertFalse(email_envio.configurado())
             ok, _ = email_envio.enviar("a@b.com", "x", "y")
             self.assertFalse(ok)
+
+
+class EmailPeloGmailTest(unittest.TestCase):
+    """E-mail da recuperacao de senha pelo Gmail / Google Workspace (pedido do Alan, 26/11/2026); Google simulado."""
+
+    def test_conectar_enviar_desconectar(self):
+        import email_envio
+        import google_drive
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Gmail Master"):
+            models.create_user("Zzz Gmail Master", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Gmail Master")["id"])
+            s["_fresh"] = True
+        with mock.patch.object(google_drive, "CLIENT_ID", "id"), mock.patch.object(google_drive, "CLIENT_SECRET", "seg"), \
+                mock.patch.object(webapp.whatsapp, "get_status", return_value={"connected": False, "qr": None}):
+            self.assertIn("Conectar e-mail (Google)", c.get("/admin/whatsapp").get_data(as_text=True))
+            r = c.post("/admin/email/conectar")
+            self.assertIn("gmail.send", urllib.parse.unquote(r.headers["Location"]))
+            self.assertIn("google-drive%2Fretorno", r.headers["Location"])
+            with c.session_transaction() as s:
+                estado = s["gmail_state"]
+            with mock.patch.object(google_drive, "trocar_codigo", return_value={"refresh_token": "rt", "access_token": "at"}), \
+                    mock.patch.object(google_drive, "email_do_token", return_value="contato@oneagro.com.br"):
+                r = c.get("/admin/google-drive/retorno", query_string={"state": estado, "code": "abc"})
+            self.assertTrue(r.headers["Location"].endswith("/admin/whatsapp"))
+            self.assertEqual(models.get_setting("gmail_email"), "contato@oneagro.com.br")
+            self.assertEqual(models.get_setting("gdrive_refresh_token") or "", models.get_setting("gdrive_refresh_token") or "")
+            enviados = []
+            with mock.patch.object(google_drive, "enviar_gmail", side_effect=lambda *a: enviados.append(a) or "id1"):
+                ok, _ = email_envio.enviar("zzz@exemplo.com", "Assunto", "Texto")
+                self.assertTrue(ok)
+                c.post("/admin/email/teste", data={"para": "zzz.teste@exemplo.com"})
+            self.assertEqual(enviados[0][:4], ("rt", "zzz@exemplo.com", "Assunto", "Texto"))
+            self.assertEqual(enviados[1][1], "zzz.teste@exemplo.com")
+            with mock.patch.object(google_drive, "revogar"):
+                c.post("/admin/email/desconectar")
+            self.assertEqual(models.get_setting("gmail_email"), "")

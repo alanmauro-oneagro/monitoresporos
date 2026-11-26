@@ -1,4 +1,4 @@
-"""Envio de e-mail por SMTP (pedido do Alan, 26/11/2026): senha temporaria do "Esqueci a senha" -- o WhatsApp saiu.
+"""Envio de e-mail (Gmail conectado pela tela "Recuperação de senha", ou SMTP) (pedido do Alan, 26/11/2026): senha temporaria do "Esqueci a senha" -- o WhatsApp saiu.
 
 Variaveis no Railway: `SMTP_HOST`, `SMTP_PORT` (587 = STARTTLS, 465 = SSL), `SMTP_USER`, `SMTP_PASSWORD` e, opcional,
 `SMTP_FROM` (remetente; padrao = SMTP_USER). Serve qualquer provedor (Gmail com senha de app, e-mail do dominio...)."""
@@ -21,15 +21,38 @@ def _cfg():
     }
 
 
-def configurado():
+def _smtp_configurado():
     c = _cfg()
     return bool(c["host"] and c["usuario"] and c["senha"])
 
 
+def _gmail():
+    """(refresh token, e-mail) da conta Google conectada em "Recuperação de senha" -- ou (None, "")."""
+    try:
+        import models
+        refresh = models.get_setting("gmail_refresh_token") or ""
+        return (refresh or None), (models.get_setting("gmail_email") or "")
+    except Exception:  # noqa: BLE001
+        return None, ""
+
+
+def configurado():
+    return bool(_gmail()[0]) or _smtp_configurado()
+
+
 def enviar(para, assunto, texto):
-    """(ok, mensagem). Nunca levanta excecao."""
+    """(ok, mensagem). Nunca levanta excecao. Gmail conectado (API, HTTPS) primeiro; senao SMTP."""
+    refresh, remetente = _gmail()
+    if refresh:
+        try:
+            import google_drive
+            google_drive.enviar_gmail(refresh, para, assunto, texto, remetente)
+            return True, "enviado pelo Gmail"
+        except Exception as e:  # noqa: BLE001
+            if not _smtp_configurado():
+                return False, f"Gmail: {e}"
     c = _cfg()
-    if not configurado():
+    if not _smtp_configurado():
         return False, "e-mail não configurado (SMTP_HOST/SMTP_USER/SMTP_PASSWORD)"
     msg = EmailMessage()
     msg["Subject"] = assunto
