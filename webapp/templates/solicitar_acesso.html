@@ -79,13 +79,8 @@
     <input type="hidden" name="modalidade" value="{{ modalidade_sel }}">
     {# Cadastro com a conta Google (pedido do Alan, 26/11/2026). #}
     {% if google_cad %}
-    <div class="alert alert-success small py-2 mb-3">✅ Conta Google: <strong>{{ google_cad.email }}</strong> -- você vai entrar
-        com o Google, sem precisar criar senha.</div>
-    {% elif google_login and not no_app_loja %}
-    <a href="{{ url_for('login_google') }}" class="btn btn-light border w-100 mb-3 d-flex align-items-center justify-content-center gap-2">
-        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.9 6.1C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.2-13.5-10l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
-        Cadastrar com Google
-    </a>
+    <div class="alert alert-success small py-2 mb-3">✅ Conta Google conectada: <strong>{{ google_cad.email }}</strong>
+        -- sem precisar criar senha.</div>
     {% endif %}
 
     {# Etapa 1 (pedido do Alan, 13/11/2026): quem e', dados e fazendas; "Avançar" leva pra etapa 2. #}
@@ -102,6 +97,14 @@
 
     <div id="dados" class="d-none">
     <h6 class="mt-4 mb-2">Seus dados</h6>
+    {# Google depois do "Você é" (pedido do Alan, 26/11/2026): leva a escolha junto e volta com ela marcada. #}
+    {% if google_login and not google_cad and not no_app_loja %}
+    <a href="{{ url_for('login_google') }}" id="botao-google" class="btn btn-light border w-100 mb-2 d-flex align-items-center justify-content-center gap-2">
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.9 6.1C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.2-13.5-10l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
+        Preencher com Google
+    </a>
+    <div class="text-center small text-muted mb-3">ou preencha abaixo</div>
+    {% endif %}
     <label class="form-label small mb-1" for="nome_completo">Nome completo</label>
     <input class="form-control mb-3" name="nome_completo" id="nome_completo" value="{{ form.get('nome_completo', '') }}" autocomplete="name" required>
     <fieldset id="fs-empresa" class="mb-3">
@@ -479,6 +482,13 @@
         if (!soContato()) setTimeout(function () { blocos().forEach(function (b) { if (b._mapa) b._mapa.invalidateSize(); }); }, 50);
     }
     form.querySelectorAll('input[name="perfil"]').forEach(function (r) { r.addEventListener('change', mostrarPerfil); });
+    var botaoGoogle = document.getElementById('botao-google');
+    if (botaoGoogle) {
+        var urlGoogle = botaoGoogle.getAttribute('href');
+        botaoGoogle.addEventListener('click', function () {
+            botaoGoogle.href = urlGoogle + '?perfil=' + encodeURIComponent(perfilAtual());
+        });
+    }
     function etapa1Valida() {
         var campos = Array.prototype.filter.call(etapa1.querySelectorAll('input, select, textarea'), function (c) {
             return !c.disabled && !c.closest('fieldset:disabled') && !c.closest('.d-none');
