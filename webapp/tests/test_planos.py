@@ -2122,7 +2122,7 @@ class GoogleDriveTest(unittest.TestCase):
             envios = c.get("/whatsapp").get_data(as_text=True)
             self.assertIn("Envio para o Google Drive", envios)
             self.assertIn("Zzz Fazenda Drive", envios)
-            self.assertNotIn("WhatsApp", envios)
+            self.assertNotIn("Enviar por WhatsApp", envios)
             r = c.post("/envios/hora-drive", data={"hora": "6"}, headers={"X-Autosave": "1"}).get_json()
             self.assertTrue(r["ok"])
             self.assertEqual(webapp._hora_google_drive(), 6)
@@ -2172,7 +2172,8 @@ class GoogleDriveTest(unittest.TestCase):
         with c.session_transaction() as s:
             s["_user_id"] = str(models.get_user_by_username("Zzz Master Drive")["id"])
             s["_fresh"] = True
-        self.assertEqual(c.get("/admin/whatsapp").status_code, 404)
+        # A tela voltou so' pra recuperar senha (pedido do Alan, 26/11/2026).
+        self.assertIn("Esqueci minha senha", c.get("/admin/whatsapp").get_data(as_text=True))
         for rota in ("/recommendations", "/ndvi", "/admin/users", "/whatsapp"):
             with self.subTest(rota=rota):
                 html = c.get(rota, follow_redirects=True).get_data(as_text=True)
@@ -2284,11 +2285,11 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             webapp._esqueci_senha_ultima_solicitacao.clear()
             c = webapp.app.test_client()
             pag = c.get("/esqueci-senha").get_data(as_text=True)
-            self.assertIn('name="email"', pag)
-            r = c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "email": "outro@exemplo.com"})
+            self.assertIn('name="contato"', pag)
+            r = c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "contato": "outro@exemplo.com"})
             self.assertTrue(r.headers["Location"].endswith("/login"))
             self.assertEqual(enviados, [])
-            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "email": "ZZZ.esqueci@exemplo.com"})
+            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "contato": "ZZZ.esqueci@exemplo.com"})
             self.assertEqual(len(enviados), 1)
             para, assunto, texto = enviados[0]
             self.assertEqual(para, "Zzz.Esqueci@Exemplo.com")
@@ -2298,6 +2299,53 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             self.assertEqual(len(enviados), 1)
         u = models.get_user_by_username("Zzz Esqueci Email")
         models.delete_user(u["id"])
+
+    def test_whatsapp_pelo_celular(self):
+        """Conta com celular: vai pelo WhatsApp (conectado so' pra recuperar senha); falhou = e-mail."""
+        import email_envio
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Esqueci Whats"):
+            models.create_user("Zzz Esqueci Whats", "x", email="zzz.whats@exemplo.com", telefone="5566999990011")
+        whats, emails = [], []
+        with mock.patch.object(webapp.whatsapp, "send_whatsapp", side_effect=lambda *a: whats.append(a) or (True, "ok")), \
+                mock.patch.object(email_envio, "enviar", side_effect=lambda *a: emails.append(a) or (True, "ok")), \
+                mock.patch.object(webapp, "_email_em_segundo_plano", lambda f: f()):
+            webapp._esqueci_senha_ultima_solicitacao.clear()
+            c = webapp.app.test_client()
+            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "(66)99999-0012"})
+            self.assertEqual(whats, [])
+            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "(66)99999-0011"})
+            self.assertEqual(len(whats), 1)
+            self.assertEqual(whats[0][0], "5566999990011")
+            self.assertIn("senha temporária", whats[0][1])
+            self.assertEqual(emails, [])
+        with mock.patch.object(webapp.whatsapp, "send_whatsapp", return_value=(False, "desconectado")), \
+                mock.patch.object(email_envio, "enviar", side_effect=lambda *a: emails.append(a) or (True, "ok")), \
+                mock.patch.object(webapp, "_email_em_segundo_plano", lambda f: f()):
+            webapp._esqueci_senha_ultima_solicitacao.clear()
+            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "zzz.whats@exemplo.com"})
+            self.assertEqual(len(emails), 1)
+        u = models.get_user_by_username("Zzz Esqueci Whats")
+        models.delete_user(u["id"])
+
+    def test_tela_whatsapp_so_master(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Whats Master"):
+            models.create_user("Zzz Whats Master", "x", is_master=True)
+        if not models.get_user_by_username("Zzz Whats Admin"):
+            models.create_user("Zzz Whats Admin", "x", is_admin=True)
+        for nome, esperado in (("Zzz Whats Master", 200), ("Zzz Whats Admin", 403)):
+            c = webapp.app.test_client()
+            with c.session_transaction() as s:
+                s["_user_id"] = str(models.get_user_by_username(nome)["id"])
+                s["_fresh"] = True
+            with mock.patch.object(webapp.whatsapp, "get_status", return_value={"connected": False, "qr": None}):
+                r = c.get("/admin/whatsapp")
+            self.assertIn(r.status_code, (esperado, 302) if esperado != 200 else (200,), nome)
+            if esperado == 200:
+                self.assertIn("Esqueci minha senha", r.get_data(as_text=True))
 
     def test_sem_smtp_nao_envia(self):
         import email_envio

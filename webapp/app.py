@@ -2799,48 +2799,60 @@ def _gerar_senha_temporaria(tamanho=8):
     return "".join(secrets.choice(alfabeto) for _ in range(tamanho))
 
 
+def _contato_confere(row, contato):
+    """E-mail (sem diferenciar maiusculas) ou celular (mesmos digitos ou os 11 ultimos) do cadastro."""
+    if "@" in contato:
+        return (row["email"] or "").strip().lower() == contato.lower()
+    digitos, do_cadastro = re.sub(r"\D", "", contato), re.sub(r"\D", "", row["telefone"] or "")
+    return len(digitos) >= 10 and bool(do_cadastro) and (digitos == do_cadastro or digitos[-11:] == do_cadastro[-11:])
+
+
 def _email_em_segundo_plano(funcao):
     threading.Thread(target=funcao, daemon=True).start()
 
 
 @app.route("/esqueci-senha", methods=["GET", "POST"])
 def esqueci_senha():
-    # Senha temporaria por E-MAIL (pedido do Alan, 26/11/2026 -- o WhatsApp saiu): usuario + e-mail do cadastro.
+    # Senha temporaria (pedidos do Alan, 26/11/2026): usuario + e-mail OU celular do cadastro. Vai pelo WhatsApp
+    # (conectado so' pra isso, tela "WhatsApp (recuperar senha)") quando a conta tem celular; senao por e-mail.
     if request.method == "POST":
         username = request.form.get("username", "").strip()
-        email = request.form.get("email", "").strip()
+        contato = request.form.get("contato", request.form.get("email", "")).strip()
         chave = username.lower()
         agora = datetime.now()
         ultima = _esqueci_senha_ultima_solicitacao.get(chave)
         em_cooldown = ultima and (agora - ultima).total_seconds() < ESQUECI_SENHA_COOLDOWN_SEGUNDOS
-        if not em_cooldown and email:
-            row = models.get_user_by_username(username)
-            if row and (row["email"] or "").strip().lower() == email.lower():
-                _esqueci_senha_ultima_solicitacao[chave] = agora
-                senha_temporaria = _gerar_senha_temporaria()
-                models.set_user_temp_password(row["id"], senha_temporaria, SENHA_TEMPORARIA_VALIDADE_MINUTOS)
-                texto = (
-                    f"Olá, {row['username']}!\n\n"
-                    f"Recebemos um pedido para redefinir a sua senha no OneAgro App.\n\n"
-                    f"Sua senha temporária é: {senha_temporaria}\n\n"
-                    f"Ela vale por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos e só funciona uma vez -- assim que "
-                    f"você entrar com ela ({url_for('login', _external=True)}), o sistema vai pedir para criar uma "
-                    f"senha nova.\n\n"
-                    f"Se você não pediu isso, pode ignorar este e-mail -- sua senha continua a mesma.\n\nOneAgro"
-                )
-                para = row["email"].strip()
+        row = models.get_user_by_username(username) if contato and not em_cooldown else None
+        if row and _contato_confere(row, contato):
+            _esqueci_senha_ultima_solicitacao[chave] = agora
+            senha_temporaria = _gerar_senha_temporaria()
+            models.set_user_temp_password(row["id"], senha_temporaria, SENHA_TEMPORARIA_VALIDADE_MINUTOS)
+            texto = (
+                f"OneAgro App: recebemos um pedido para redefinir a sua senha ({row['username']}).\n\n"
+                f"Sua senha temporária é: {senha_temporaria}\n\n"
+                f"Ela vale por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos e só funciona uma vez -- assim que "
+                f"você entrar com ela ({url_for('login', _external=True)}), o sistema vai pedir para criar uma "
+                f"senha nova.\n\n"
+                f"Se você não pediu isso, pode ignorar esta mensagem -- sua senha continua a mesma."
+            )
+            telefone = (row["telefone"] or "").strip()
+            para_email = (row["email"] or "").strip()
 
-                def _enviar():
-                    ok, msg = email_envio.enviar(para, "OneAgro App - senha temporária", texto)
-                    if not ok:
-                        # So' no log -- nunca aparece pra quem pediu (nao revela se o usuario existe).
-                        print(f"[esqueci-senha] falha ao enviar e-mail pra {username}: {msg}")
-                _email_em_segundo_plano(_enviar)
-        # Mensagem SEMPRE igual, exista o usuario ou nao, confira o e-mail ou nao -- de proposito, pra nao dar
+            def _enviar():
+                ok, msg = False, "sem celular nem e-mail"
+                if telefone:
+                    ok, msg = whatsapp.send_whatsapp(telefone, texto)
+                if not ok and para_email:
+                    ok, msg = email_envio.enviar(para_email, "OneAgro App - senha temporária", texto + "\n\nOneAgro")
+                if not ok:
+                    # So' no log -- nunca aparece pra quem pediu (nao revela se o usuario existe).
+                    print(f"[esqueci-senha] falha ao enviar a senha temporaria de {username}: {msg}")
+            _email_em_segundo_plano(_enviar)
+        # Mensagem SEMPRE igual, exista o usuario ou nao, confira o contato ou nao -- de proposito, pra nao dar
         # pra descobrir se um usuario existe so' pela resposta.
         flash(
-            f"Se o usuário e o e-mail estiverem corretos, enviamos uma senha temporária para esse e-mail "
-            f"(válida por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos). Confira também a caixa de spam.",
+            f"Se o usuário e o contato estiverem corretos, enviamos uma senha temporária para o WhatsApp do cadastro "
+            f"(ou para o e-mail, se não houver WhatsApp), válida por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos.",
             "success",
         )
         return redirect(url_for("login"))
@@ -7141,6 +7153,58 @@ def admin_exportar_backup():
     return send_file(io.BytesIO(conteudo), as_attachment=True, download_name=filename, mimetype="application/gzip")
 
 
+@app.route("/admin/whatsapp")
+@master_required
+def admin_whatsapp():
+    """Conexao do WhatsApp SO' pra recuperar senha (pedido do Alan, 26/11/2026): QR code/codigo de pareamento,
+    teste e trocar numero."""
+    return render_template("admin_whatsapp.html", status=whatsapp.get_status())
+
+
+@app.route("/admin/whatsapp/status")
+@master_required
+def admin_whatsapp_status():
+    """JSON puro pra tela atualizar sozinha (QR code/status de conexao)
+    sem precisar recarregar a pagina inteira."""
+    return whatsapp.get_status()
+
+
+@app.route("/admin/whatsapp/pair-code", methods=["POST"])
+@master_required
+def admin_whatsapp_pair_code():
+    phone = request.form.get("phone", "")
+    ok, resultado = whatsapp.request_pairing_code(phone)
+    return {"ok": ok, "code": resultado if ok else None, "error": None if ok else resultado}
+
+
+@app.route("/admin/whatsapp/test", methods=["POST"])
+@master_required
+def admin_whatsapp_test():
+    phone = _telefone_from_form(request.form)
+    texto = (
+        "Teste do OneAgro App -- se você recebeu esta mensagem, a recuperação de senha "
+        "por WhatsApp está funcionando."
+    )
+    ok, mensagem = whatsapp.send_whatsapp(phone, texto)
+    return _save_response(
+        f"Mensagem de teste enviada para {phone}." if ok else f"Falha ao enviar teste: {mensagem}",
+        "admin_whatsapp", ok=ok,
+    )
+
+
+@app.route("/admin/whatsapp/reset", methods=["POST"])
+@master_required
+def admin_whatsapp_reset():
+    """Desconecta o numero atual pra poder conectar outro (ex.: trocar o
+    WhatsApp corporativo) -- limpa a sessao salva no whatsapp-bridge e
+    gera um QR code novo."""
+    ok, mensagem = whatsapp.reset_session()
+    return _save_response(
+        "Numero desconectado -- escaneie o novo QR code pra conectar outro." if ok else f"Falha ao desconectar: {mensagem}",
+        "admin_whatsapp", ok=ok,
+    )
+
+
 @app.route("/webhooks/whatsapp", methods=["GET", "POST"])
 def whatsapp_webhook():
     """Webhook da API oficial da Meta (pedido do Alan, 13/11/2026). GET = verificacao do painel
@@ -9434,6 +9498,7 @@ MENU_CONFIG = [
     ("planos", "Planos e Valores", "admin_planos", "master"),
     ("exportar", "Gerenciar Exportações", "admin_exportar", "master"),
     ("ocultas", "Gerenciar Fazendas Ocultas", "fazendas_ocultas", "master"),
+    ("whatsapp", "WhatsApp (recuperar senha)", "admin_whatsapp", "master"),
 ]
 _ORDEM_MENU_KEY = "ordem_menu_config"
 

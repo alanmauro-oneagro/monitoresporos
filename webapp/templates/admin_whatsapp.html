@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}WhatsApp - OneAgro App{% endblock %}
+{% block content %}
+<h4 class="mb-2">WhatsApp</h4>
+{# So' recuperacao de senha (pedido do Alan, 26/11/2026): pouco uso = menos risco de banimento. #}
+<p class="small text-muted">Usado <strong>só para o "Esqueci minha senha"</strong>: a senha temporária vai para o WhatsApp do
+    cadastro da pessoa. Nenhum relatório sai por aqui.</p>
+
+<div id="status-box" class="alert {{ 'alert-success' if status.connected else 'alert-warning' }}">
+    {% if status.connected %}
+    ✅ Conectado -- as senhas temporárias saem por este número.
+    {% elif status.error %}
+    ⚠ {{ status.error }}
+    {% else %}
+    🔴 Não conectado -- escaneie o QR code abaixo ou gere um código de pareamento.
+    {% endif %}
+</div>
+
+<div class="row g-4">
+    <div class="col-12 col-md-6" id="qr-section" {% if status.connected %}style="display:none"{% endif %}>
+        <div class="card shadow-sm">
+            <div class="card-body text-center">
+                <h6 class="mb-2">Escanear QR code</h6>
+                <div id="qr-container">
+                    {% if status.qr %}
+                    <img src="{{ status.qr }}" alt="QR code" style="max-width: 220px;">
+                    {% else %}
+                    <p class="text-muted small">Gerando QR code...</p>
+                    {% endif %}
+                </div>
+                <p class="text-muted small mt-2 mb-0">
+                    No WhatsApp do celular remetente: Aparelhos conectados >
+                    Conectar um aparelho. O QR expira rápido -- esta página
+                    atualiza sozinha.
+                </p>
+                <form method="post" action="{{ url_for('admin_whatsapp_reset') }}" class="mt-2"
+                      onsubmit="return confirm('Limpar a sessão salva do WhatsApp e gerar um QR code novo?');">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">🔄 Gerar novo QR code</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-3">
+            <div class="card-body">
+                <h6 class="mb-2">Ou gerar código de pareamento</h6>
+                <form id="pair-code-form">
+                    <label class="form-label small mb-1">Telefone (DDD + número, sem espaços)</label>
+                    <div class="d-flex gap-2">
+                        <input type="text" id="pair-ddi" class="form-control form-control-sm" style="max-width: 5.5rem;" value="55" inputmode="numeric" aria-label="Codigo do pais">
+                        <input type="text" id="pair-phone" class="form-control form-control-sm" placeholder="11999999999" inputmode="tel" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-primary mt-2">Gerar código</button>
+                </form>
+                <div id="pair-code-result" class="mt-2 small"></div>
+                <p class="text-muted small mt-2 mb-0">
+                    Alternativa ao QR -- no WhatsApp, Aparelhos conectados >
+                    Conectar com número de telefone, digite o código gerado.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="mb-2">Enviar mensagem de teste</h6>
+                <form method="post" action="{{ url_for('admin_whatsapp_test') }}">
+                    <label class="form-label small mb-1">Telefone (DDD + número, sem espaços)</label>
+                    <div class="d-flex gap-2">
+                        <input type="text" name="codigo_pais" class="form-control form-control-sm" style="max-width: 5.5rem;" value="55" inputmode="numeric" aria-label="Codigo do pais">
+                        <input type="text" name="numero_telefone" class="form-control form-control-sm" placeholder="11999999999" inputmode="tel" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-success mt-2" {% if not status.connected %}disabled{% endif %}>Enviar teste</button>
+                </form>
+                {% if not status.connected %}
+                <p class="text-muted small mt-2 mb-0">Conecte um número primeiro para poder testar.</p>
+                {% endif %}
+            </div>
+        </div>
+
+
+        {% if status.connected %}
+        <div class="card shadow-sm mt-3">
+            <div class="card-body">
+                <h6 class="mb-2">Trocar número</h6>
+                <form method="post" action="{{ url_for('admin_whatsapp_reset') }}"
+                      onsubmit="return confirm('Desconectar o WhatsApp atual? A recuperação de senha por WhatsApp fica parada até conectar outro número.');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">🔌 Desconectar / Trocar número</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+(function () {
+    var connected = {{ 'true' if status.connected else 'false' }};
+    var timer = null;
+
+    function poll() {
+        fetch('{{ url_for("admin_whatsapp_status") }}')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.connected && !connected) {
+                    // Transicao pra conectado -- recarrega uma vez pra
+                    // mostrar a tela completa (com "Trocar numero" etc.).
+                    location.reload();
+                    return;
+                }
+                connected = data.connected;
+                if (connected) {
+                    clearInterval(timer);
+                    return;
+                }
+                var statusBox = document.getElementById('status-box');
+                statusBox.textContent = data.error
+                    ? '⚠ ' + data.error
+                    : '🔴 Não conectado -- escaneie o QR code abaixo ou gere um código de pareamento.';
+                var container = document.getElementById('qr-container');
+                if (data.qr) {
+                    container.innerHTML = '<img src="' + data.qr + '" alt="QR code" style="max-width: 220px;">';
+                } else {
+                    container.innerHTML = '<p class="text-muted small">Gerando QR code...</p>';
+                }
+            })
+            .catch(function () {});
+    }
+
+    if (!connected) {
+        timer = setInterval(poll, 4000);
+    }
+
+    var pairForm = document.getElementById('pair-code-form');
+    if (pairForm) {
+        pairForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var phone = (document.getElementById('pair-ddi').value + document.getElementById('pair-phone').value).replace(/\D/g, '');
+            var result = document.getElementById('pair-code-result');
+            result.textContent = 'Gerando...';
+            result.className = 'mt-2 small text-muted';
+            var fd = new FormData();
+            fd.append('phone', phone);
+            fetch('{{ url_for("admin_whatsapp_pair_code") }}', { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    result.textContent = data.ok ? ('Código: ' + data.code) : ('Erro: ' + data.error);
+                    result.className = 'mt-2 small ' + (data.ok ? 'text-success fw-bold' : 'text-danger');
+                })
+                .catch(function () {
+                    result.textContent = 'Erro ao gerar código.';
+                    result.className = 'mt-2 small text-danger';
+                });
+        });
+    }
+})();
+</script>
+{% endblock %}
