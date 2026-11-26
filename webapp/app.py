@@ -2702,7 +2702,7 @@ def _google_drive_agendado():
     tentativa = models.get_setting("gdrive_tentativa")
     if tentativa:
         try:
-            if agora - datetime.fromisoformat(tentativa) < timedelta(minutes=30):
+            if agora.replace(tzinfo=None) - datetime.fromisoformat(tentativa).replace(tzinfo=None) < timedelta(minutes=30):
                 return
         except ValueError:
             pass
@@ -7569,7 +7569,8 @@ def admin_exportar():
     if status.get("andamento") and status.get("inicio"):
         # Servidor reiniciado no meio do envio: depois de 2 h nao mostra mais "em andamento".
         try:
-            if _agora_cuiaba_dt() - datetime.fromisoformat(status["inicio"]) > timedelta(hours=2):
+            if _agora_cuiaba_dt().replace(tzinfo=None) - datetime.fromisoformat(status["inicio"]).replace(tzinfo=None) \
+                    > timedelta(hours=2):
                 status["andamento"] = False
         except ValueError:
             pass

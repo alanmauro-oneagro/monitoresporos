@@ -2094,6 +2094,15 @@ class GoogleDriveTest(unittest.TestCase):
             with c.session_transaction() as s:
                 s["_user_id"] = str(mid)
                 s["_fresh"] = True
+            # envio em andamento: a tela abre e mostra o progresso (erro 500 em 26/11/2026)
+            import json as _json
+            agora = webapp._agora_cuiaba_dt().strftime("%Y-%m-%d %H:%M")
+            models.set_setting("gdrive_status", _json.dumps({"andamento": True, "inicio": agora, "txt": 2, "fazendas": 9}))
+            r = c.get("/admin/exportar")
+            self.assertEqual(r.status_code, 200)
+            self.assertIn("🔄 Enviando desde", r.get_data(as_text=True))
+            models.set_setting("gdrive_status", _json.dumps({"andamento": True, "inicio": "2026-01-01 05:00"}))
+            self.assertNotIn("🔄 Enviando desde", c.get("/admin/exportar").get_data(as_text=True))
             tela = c.get("/admin/exportar").get_data(as_text=True)
             self.assertIn("Google Drive — cópia diária", tela)
             self.assertIn("⬆ Enviar agora", tela)
