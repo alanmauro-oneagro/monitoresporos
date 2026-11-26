@@ -32,22 +32,32 @@
     </div>
 </div>
 
-<h6 class="mb-2">💬 WhatsApp</h6>
-<div id="status-box" class="alert {{ 'alert-success' if status.connected else 'alert-warning' }}">
-    {% if status.connected %}
-    ✅ Conectado{% if status.numero %} -- número <strong>{{ status.numero | telefone_br }}</strong>{% if status.nome %} ({{ status.nome }}){% endif %}{% endif %}. As senhas temporárias saem por este número.
-    {% elif status.error %}
-    ⚠ {{ status.error }}
-    {% else %}
-    🔴 Não conectado -- escaneie o QR code abaixo ou gere um código de pareamento.
-    {% endif %}
-</div>
-
-<div class="row g-4">
-    <div class="col-12 col-md-6" id="qr-section" {% if status.connected %}style="display:none"{% endif %}>
-        <div class="card shadow-sm">
-            <div class="card-body text-center">
-                <h6 class="mb-2">Escanear QR code</h6>
+<div class="card shadow-sm" id="whatsapp">
+    <div class="card-body">
+        <h6 class="mb-2">💬 WhatsApp</h6>
+        <div id="status-box" class="alert {{ 'alert-success' if status.connected else 'alert-warning' }} py-2 small mb-2">
+            {% if status.connected %}
+            ✅ Conectado -- as senhas temporárias saem de <strong>{{ status.numero | telefone_br if status.numero else 'este número' }}</strong>{% if status.nome %} ({{ status.nome }}){% endif %}.
+            {% elif status.error %}
+            ⚠ {{ status.error }}
+            {% else %}
+            🔴 Não conectado -- escaneie o QR code abaixo ou gere um código de pareamento.
+            {% endif %}
+        </div>
+        {% if status.connected %}
+        <form method="post" action="{{ url_for('admin_whatsapp_test') }}" class="d-flex flex-wrap gap-2 mb-2">
+            <input type="hidden" name="codigo_pais" value="55">
+            <input type="text" name="numero_telefone" class="form-control form-control-sm" style="max-width: 18rem;" placeholder="celular para o teste (DDD + número)" inputmode="tel" required>
+            <button type="submit" class="btn btn-sm btn-outline-success">Enviar teste</button>
+        </form>
+        <form method="post" action="{{ url_for('admin_whatsapp_reset') }}"
+              onsubmit="return confirm('Desconectar o WhatsApp atual? A recuperação de senha por WhatsApp fica parada até conectar outro número.');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Desconectar</button>
+        </form>
+        {% else %}
+        <div class="row g-3" id="qr-section">
+            <div class="col-12 col-md-6 text-center">
+                <div class="small fw-semibold mb-1">Escanear QR code</div>
                 <div id="qr-container">
                     {% if status.qr %}
                     <img src="{{ status.qr }}" alt="QR code" style="max-width: 220px;">
@@ -55,65 +65,23 @@
                     <p class="text-muted small">Gerando QR code...</p>
                     {% endif %}
                 </div>
-                <p class="text-muted small mt-2 mb-0">
-                    No WhatsApp do celular remetente: Aparelhos conectados >
-                    Conectar um aparelho. O QR expira rápido -- esta página
-                    atualiza sozinha.
-                </p>
-                <form method="post" action="{{ url_for('admin_whatsapp_reset') }}" class="mt-2"
+                <p class="text-muted small mt-2 mb-2">No celular que vai enviar: WhatsApp → Aparelhos conectados → Conectar um
+                    aparelho. O QR muda sozinho a cada poucos segundos.</p>
+                <form method="post" action="{{ url_for('admin_whatsapp_reset') }}"
                       onsubmit="return confirm('Limpar a sessão salva do WhatsApp e gerar um QR code novo?');">
                     <button type="submit" class="btn btn-sm btn-outline-secondary">🔄 Gerar novo QR code</button>
                 </form>
             </div>
-        </div>
-
-        <div class="card shadow-sm mt-3">
-            <div class="card-body">
-                <h6 class="mb-2">Ou gerar código de pareamento</h6>
-                <form id="pair-code-form">
-                    <label class="form-label small mb-1">Telefone (DDD + número, sem espaços)</label>
-                    <div class="d-flex gap-2">
-                        <input type="text" id="pair-ddi" class="form-control form-control-sm" style="max-width: 5.5rem;" value="55" inputmode="numeric" aria-label="Codigo do pais">
-                        <input type="text" id="pair-phone" class="form-control form-control-sm" placeholder="11999999999" inputmode="tel" required>
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-outline-primary mt-2">Gerar código</button>
+            <div class="col-12 col-md-6">
+                <div class="small fw-semibold mb-1">Ou código de pareamento</div>
+                <form id="pair-code-form" class="d-flex flex-wrap gap-2">
+                    <input type="text" id="pair-ddi" class="form-control form-control-sm" style="max-width: 4.5rem;" value="55" inputmode="numeric" aria-label="Código do país">
+                    <input type="text" id="pair-phone" class="form-control form-control-sm" style="max-width: 13rem;" placeholder="DDD + número" inputmode="tel" required>
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Gerar código</button>
                 </form>
                 <div id="pair-code-result" class="mt-2 small"></div>
-                <p class="text-muted small mt-2 mb-0">
-                    Alternativa ao QR -- no WhatsApp, Aparelhos conectados >
-                    Conectar com número de telefone, digite o código gerado.
-                </p>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12 col-md-6">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h6 class="mb-2">Enviar mensagem de teste</h6>
-                <form method="post" action="{{ url_for('admin_whatsapp_test') }}">
-                    <label class="form-label small mb-1">Telefone (DDD + número, sem espaços)</label>
-                    <div class="d-flex gap-2">
-                        <input type="text" name="codigo_pais" class="form-control form-control-sm" style="max-width: 5.5rem;" value="55" inputmode="numeric" aria-label="Codigo do pais">
-                        <input type="text" name="numero_telefone" class="form-control form-control-sm" placeholder="11999999999" inputmode="tel" required>
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-outline-success mt-2" {% if not status.connected %}disabled{% endif %}>Enviar teste</button>
-                </form>
-                {% if not status.connected %}
-                <p class="text-muted small mt-2 mb-0">Conecte um número primeiro para poder testar.</p>
-                {% endif %}
-            </div>
-        </div>
-
-
-        {% if status.connected %}
-        <div class="card shadow-sm mt-3">
-            <div class="card-body">
-                <h6 class="mb-2">Trocar número</h6>
-                <form method="post" action="{{ url_for('admin_whatsapp_reset') }}"
-                      onsubmit="return confirm('Desconectar o WhatsApp atual? A recuperação de senha por WhatsApp fica parada até conectar outro número.');">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">🔌 Desconectar / Trocar número</button>
-                </form>
+                <p class="text-muted small mt-2 mb-0">No WhatsApp: Aparelhos conectados → Conectar com número de telefone, e
+                    digite o código gerado.</p>
             </div>
         </div>
         {% endif %}
