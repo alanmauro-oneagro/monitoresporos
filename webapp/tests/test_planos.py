@@ -2197,3 +2197,49 @@ class GoogleDriveTest(unittest.TestCase):
         self.assertEqual(next(p for p in models.get_planos() if p["id"] == pid)["recursos"], ["clima"])
         models.excluir_plano(pid)
         self.assertTrue(all(set(models.RECURSOS_DRIVE) <= set(r) for _n, r, _l, _v in models.PLANOS_PADRAO))
+
+
+class EntrarComGoogleTest(unittest.TestCase):
+    """Entrar com Google pelo e-mail da conta (pedido do Alan, 26/11/2026); Google simulado."""
+
+    def test_entrar_com_google(self):
+        import google_drive
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Google Um"):
+            models.create_user("Zzz Google Um", "x", email="Zzz.Um@Exemplo.com")
+        for nome in ("Zzz Google Dois", "Zzz Google Tres"):
+            if not models.get_user_by_username(nome):
+                models.create_user(nome, "x", email="zzz.repetido@exemplo.com")
+        with mock.patch.object(google_drive, "CLIENT_ID", ""), mock.patch.object(google_drive, "CLIENT_SECRET", ""):
+            self.assertNotIn("Entrar com Google", webapp.app.test_client().get("/login").get_data(as_text=True))
+        with mock.patch.object(google_drive, "CLIENT_ID", "id"), mock.patch.object(google_drive, "CLIENT_SECRET", "seg"):
+            c = webapp.app.test_client()
+            self.assertIn("Entrar com Google", c.get("/login").get_data(as_text=True))
+            self.assertIn("Entrar com Google", c.get("/esqueci-senha").get_data(as_text=True))
+
+            def entrar(email, verificado=True):
+                c.get("/logout")
+                r = c.get("/login/google")
+                self.assertIn("accounts.google.com", r.headers["Location"])
+                self.assertIn("login%2Fgoogle%2Fretorno", r.headers["Location"])
+                with c.session_transaction() as s:
+                    estado = s["google_login_state"]
+                with mock.patch.object(google_drive, "dados_do_login",
+                                       return_value={"email": email, "email_verified": verificado, "name": "Z"}):
+                    return c.get("/login/google/retorno", query_string={"state": estado, "code": "abc"})
+            r = entrar("zzz.um@exemplo.com")
+            self.assertEqual(r.headers["Location"], "/mapa")
+            with c.session_transaction() as s:
+                self.assertEqual(s.get("_user_id"), str(models.get_user_by_username("Zzz Google Um")["id"]))
+            for email, verificado in (("ninguem@exemplo.com", True), ("zzz.repetido@exemplo.com", True),
+                                      ("zzz.um@exemplo.com", False)):
+                with self.subTest(email=email):
+                    r = entrar(email, verificado)
+                    self.assertTrue(r.headers["Location"].endswith("/login"))
+                    with c.session_transaction() as s:
+                        self.assertIsNone(s.get("_user_id"))
+            # estado errado nao entra
+            c.get("/login/google")
+            r = c.get("/login/google/retorno", query_string={"state": "outro", "code": "abc"})
+            self.assertTrue(r.headers["Location"].endswith("/login"))

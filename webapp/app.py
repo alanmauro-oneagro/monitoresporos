@@ -2729,7 +2729,48 @@ def login():
             session["deve_definir_senha"] = True
             return redirect(url_for("definir_nova_senha"))
         flash("Usuário ou senha inválidos.", "error")
-    return render_template("login.html")
+    return render_template("login.html", google_login=google_drive.configurado())
+
+
+def _google_login_redirect_uri():
+    return url_for("login_google_retorno", _external=True,
+                   _scheme="http" if request.host.split(":")[0] in ("127.0.0.1", "localhost") else "https")
+
+
+@app.route("/login/google")
+def login_google():
+    """"Entrar com Google" (pedido do Alan, 26/11/2026): o mesmo cliente OAuth do Google Drive. So' entra quem ja'
+    tem conta com o mesmo e-mail -- nao cria conta (o cadastro tem as etapas dele)."""
+    if not google_drive.configurado():
+        flash("Entrar com Google ainda não está disponível.", "error")
+        return redirect(url_for("login"))
+    session["google_login_state"] = secrets.token_urlsafe(24)
+    return redirect(google_drive.url_login(_google_login_redirect_uri(), session["google_login_state"]))
+
+
+@app.route("/login/google/retorno")
+def login_google_retorno():
+    state = session.pop("google_login_state", None)
+    if request.args.get("error") or not state or request.args.get("state") != state or not request.args.get("code"):
+        flash("Não foi possível entrar com o Google -- tente de novo.", "error")
+        return redirect(url_for("login"))
+    try:
+        dados = google_drive.dados_do_login(request.args["code"], _google_login_redirect_uri())
+    except google_drive.ErroDrive as e:
+        flash(f"Não foi possível entrar com o Google: {e}", "error")
+        return redirect(url_for("login"))
+    email = (dados.get("email") or "").strip()
+    if not email or not dados.get("email_verified"):
+        flash("A conta Google não tem um e-mail confirmado.", "error")
+        return redirect(url_for("login"))
+    contas = models.usuarios_por_email(email)
+    if len(contas) != 1:
+        flash(f"Nenhuma conta da OneAgro usa o e-mail {email}. Entre com usuário e senha ou crie a sua conta."
+              if not contas else f"Mais de uma conta usa o e-mail {email} -- entre com usuário e senha.", "error")
+        return redirect(url_for("login"))
+    row = contas[0]
+    login_user(User(row), remember=True)
+    return redirect(url_for("index") if row["is_cliente"] else url_for("mapa"))
 
 
 def _senha_temporaria_valida(row):
@@ -2781,7 +2822,7 @@ def esqueci_senha():
             "success",
         )
         return redirect(url_for("login"))
-    return render_template("esqueci_senha.html")
+    return render_template("esqueci_senha.html", google_login=google_drive.configurado())
 
 
 @app.before_request
@@ -7233,7 +7274,7 @@ def admin_user_subordinados(user_id):
 
 _ENDPOINTS_LIVRES_CLIENTE = {
     "static", "service_worker", "index", "login", "logout", "esqueci_senha",
-    "definir_nova_senha", "planos_publico", "politica_privacidade", "cadastro", "solicitar_acesso", "verificar_usuario_cadastro", "asaas_webhook",
+    "definir_nova_senha", "planos_publico", "politica_privacidade", "login_google", "login_google_retorno", "cadastro", "solicitar_acesso", "verificar_usuario_cadastro", "asaas_webhook",
 }
 _CPF_CNPJ_RE = re.compile(r"\D")
 

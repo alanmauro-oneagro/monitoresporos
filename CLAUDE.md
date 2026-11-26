@@ -835,6 +835,12 @@ site tem que entrar la'.
   `/whatsapp`) = horario geral do Drive (Master, `salvar_hora_drive`, setting `gdrive_hora`, padrao 5) + tabela por fazenda
   (plano, o que vai, pasta do cliente, ultimo envio -- setting `gdrive_por_fazenda`) + "Busca automática da imagem NDVI"
   (agenda e nuvens por fazenda com CAR). Teste `GoogleDriveTest.test_sem_whatsapp_e_drive_nos_planos`.
+- **Entrar com Google** (pedido do Alan, 26/11/2026): botao no login (e atalho no "Esqueci a senha"), so' com o cliente
+  OAuth do Drive configurado e fora do app da loja (o Google bloqueia login dentro do app). Rotas `login_google` ->
+  `login_google_retorno` (escopo `openid email profile`, `google_drive.url_login`/`dados_do_login`); entra SO' se o e-mail
+  verificado da conta Google for de UMA conta do site (`models.usuarios_por_email`, sem diferenciar maiusculas); nenhuma ou
+  mais de uma = aviso e volta pro login (nao cria conta). Precisa dos enderecos de retorno
+  `https://oneagroapp.com.br/login/google/retorno` (e o com www) no cliente OAuth. Teste `EntrarComGoogleTest`.
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR
   recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e
