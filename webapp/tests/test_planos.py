@@ -2266,3 +2266,42 @@ class EntrarComGoogleTest(unittest.TestCase):
             c.get("/login/google")
             r = c.get("/login/google/retorno", query_string={"state": "outro", "code": "abc"})
             self.assertTrue(r.headers["Location"].endswith("/login"))
+
+
+class EsqueciSenhaEmailTest(unittest.TestCase):
+    """Senha temporaria por e-mail (pedido do Alan, 26/11/2026)."""
+
+    def test_envia_so_com_usuario_e_email_certos(self):
+        import email_envio
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Esqueci Email"):
+            models.create_user("Zzz Esqueci Email", "x", email="Zzz.Esqueci@Exemplo.com")
+        enviados = []
+
+        with mock.patch.object(email_envio, "enviar", side_effect=lambda *a: enviados.append(a) or (True, "ok")), \
+                mock.patch.object(webapp, "_email_em_segundo_plano", lambda f: f()):
+            webapp._esqueci_senha_ultima_solicitacao.clear()
+            c = webapp.app.test_client()
+            pag = c.get("/esqueci-senha").get_data(as_text=True)
+            self.assertIn('name="email"', pag)
+            r = c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "email": "outro@exemplo.com"})
+            self.assertTrue(r.headers["Location"].endswith("/login"))
+            self.assertEqual(enviados, [])
+            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "email": "ZZZ.esqueci@exemplo.com"})
+            self.assertEqual(len(enviados), 1)
+            para, assunto, texto = enviados[0]
+            self.assertEqual(para, "Zzz.Esqueci@Exemplo.com")
+            self.assertIn("senha temporária", texto)
+            # pedido repetido logo em seguida nao manda de novo
+            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "email": "zzz.esqueci@exemplo.com"})
+            self.assertEqual(len(enviados), 1)
+        u = models.get_user_by_username("Zzz Esqueci Email")
+        models.delete_user(u["id"])
+
+    def test_sem_smtp_nao_envia(self):
+        import email_envio
+        with mock.patch.dict(os.environ, {"SMTP_HOST": "", "SMTP_USER": "", "SMTP_PASSWORD": ""}):
+            self.assertFalse(email_envio.configurado())
+            ok, _ = email_envio.enviar("a@b.com", "x", "y")
+            self.assertFalse(ok)

@@ -35,16 +35,19 @@
                 </div>
                 {% endif %}
                 <p class="text-muted small">
-                    Informe seu usuario -- se ele tiver um WhatsApp cadastrado, enviamos
-                    uma senha temporaria por la (valida por 30 minutos, so' pra esse
-                    primeiro acesso).
+                    Informe o seu usuário e o e-mail do seu cadastro. Enviamos uma senha temporária para esse e-mail
+                    (válida por 30 minutos, só para esse primeiro acesso).
                 </p>
                 <form method="post">
                     <div class="mb-3">
-                        <label class="form-label">Usuário</label>
-                        <input type="text" name="username" class="form-control" required autofocus>
+                        <label class="form-label" for="username">Usuário</label>
+                        <input type="text" name="username" id="username" class="form-control" autocomplete="username" required autofocus>
                     </div>
-                    <button type="submit" class="btn btn-success w-100">Enviar senha temporaria</button>
+                    <div class="mb-3">
+                        <label class="form-label" for="email">E-mail do cadastro</label>
+                        <input type="email" name="email" id="email" class="form-control" autocomplete="email" required>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Enviar senha temporária</button>
                 </form>
                 <div class="text-center mt-3">
                     <a href="{{ url_for('login') }}" class="small">Voltar pro login</a>

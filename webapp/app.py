@@ -48,6 +48,7 @@ import export_excel
 import export_pdf
 import protocolo_manejo
 import google_drive
+import email_envio
 import whatsapp
 import whatsapp_cloud_api
 import whatsapp_umbler
@@ -2798,39 +2799,48 @@ def _gerar_senha_temporaria(tamanho=8):
     return "".join(secrets.choice(alfabeto) for _ in range(tamanho))
 
 
+def _email_em_segundo_plano(funcao):
+    threading.Thread(target=funcao, daemon=True).start()
+
+
 @app.route("/esqueci-senha", methods=["GET", "POST"])
 def esqueci_senha():
+    # Senha temporaria por E-MAIL (pedido do Alan, 26/11/2026 -- o WhatsApp saiu): usuario + e-mail do cadastro.
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
         chave = username.lower()
         agora = datetime.now()
         ultima = _esqueci_senha_ultima_solicitacao.get(chave)
         em_cooldown = ultima and (agora - ultima).total_seconds() < ESQUECI_SENHA_COOLDOWN_SEGUNDOS
-        if not em_cooldown:
+        if not em_cooldown and email:
             row = models.get_user_by_username(username)
-            if row and row["telefone"]:
+            if row and (row["email"] or "").strip().lower() == email.lower():
                 _esqueci_senha_ultima_solicitacao[chave] = agora
                 senha_temporaria = _gerar_senha_temporaria()
                 models.set_user_temp_password(row["id"], senha_temporaria, SENHA_TEMPORARIA_VALIDADE_MINUTOS)
                 texto = (
-                    f"OneAgro Monitor: recebemos uma solicitacao para redefinir sua senha.\n\n"
-                    f"Sua senha temporaria e': *{senha_temporaria}*\n\n"
-                    f"Ela vale por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos e so' funciona uma vez -- "
-                    f"assim que voce entrar com ela, o sistema vai pedir pra criar uma senha nova.\n\n"
-                    f"Se voce nao pediu isso, pode ignorar esta mensagem -- sua senha continua a mesma."
+                    f"Olá, {row['username']}!\n\n"
+                    f"Recebemos um pedido para redefinir a sua senha no OneAgro App.\n\n"
+                    f"Sua senha temporária é: {senha_temporaria}\n\n"
+                    f"Ela vale por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos e só funciona uma vez -- assim que "
+                    f"você entrar com ela ({url_for('login', _external=True)}), o sistema vai pedir para criar uma "
+                    f"senha nova.\n\n"
+                    f"Se você não pediu isso, pode ignorar este e-mail -- sua senha continua a mesma.\n\nOneAgro"
                 )
-                ok, msg = whatsapp.send_whatsapp(row["telefone"], texto)
-                if not ok:
-                    # So' fica registrado pro admin conferir depois -- nunca
-                    # aparece pra quem pediu (evitaria vazar se o username
-                    # existe/tem telefone por diferenca de resposta).
-                    print(f"[esqueci-senha] falha ao enviar WhatsApp pra {username}: {msg}")
-        # Mensagem SEMPRE igual, exista o usuario ou nao, tenha telefone ou
-        # nao, funcione o envio ou nao -- de proposito, pra nao dar pra
-        # descobrir se um username existe so' pela resposta.
+                para = row["email"].strip()
+
+                def _enviar():
+                    ok, msg = email_envio.enviar(para, "OneAgro App - senha temporária", texto)
+                    if not ok:
+                        # So' no log -- nunca aparece pra quem pediu (nao revela se o usuario existe).
+                        print(f"[esqueci-senha] falha ao enviar e-mail pra {username}: {msg}")
+                _email_em_segundo_plano(_enviar)
+        # Mensagem SEMPRE igual, exista o usuario ou nao, confira o e-mail ou nao -- de proposito, pra nao dar
+        # pra descobrir se um usuario existe so' pela resposta.
         flash(
-            f"Se esse usuario existir e tiver WhatsApp cadastrado, enviamos uma senha "
-            f"temporaria por la (valida por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos).",
+            f"Se o usuário e o e-mail estiverem corretos, enviamos uma senha temporária para esse e-mail "
+            f"(válida por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos). Confira também a caixa de spam.",
             "success",
         )
         return redirect(url_for("login"))
