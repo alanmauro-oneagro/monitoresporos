@@ -825,8 +825,11 @@ site tem que entrar la'.
   `toggle_ndvi_ativo`, `*_whatsapp_pausado`), o envio agendado (`_run_scheduled_whatsapp_sends`, `_send_site_whatsapp` e
   ajudantes) e os avisos aos Masters (cadastro novo e pedido de contato). Usuarios sem as colunas "Recebe relatório" e
   "WhatsApp". O agendador so' BUSCA a imagem NDVI nova (`_run_scheduled_ndvi_sends`, sem enviar). Ficaram guardados sem
-  tela: `whatsapp.py`/`whatsapp_cloud_api.py`/`whatsapp_umbler.py`, os webhooks e o "Esqueci a senha" (ainda manda a senha
-  temporaria por WhatsApp). Copiar texto/PDF/imagem continuam. **Plano decide o Drive**: recursos `drive_pdf`/`drive_txt`/
+  tela: `whatsapp.py`/`whatsapp_cloud_api.py`/`whatsapp_umbler.py` e os webhooks. **"Esqueci a senha" por E-MAIL**
+  (pedido do Alan, 26/11/2026): usuario + e-mail do cadastro; so' se o e-mail for o da conta (sem diferenciar
+  maiusculas) gera a senha temporaria e manda por e-mail em segundo plano (`email_envio.py`, SMTP; variaveis do Railway
+  `SMTP_HOST`, `SMTP_PORT` 587/465, `SMTP_USER`, `SMTP_PASSWORD`, opcional `SMTP_FROM`); resposta sempre igual (nao
+  revela se o usuario existe). Teste `EsqueciSenhaEmailTest`. Copiar texto/PDF/imagem continuam. **Plano decide o Drive**: recursos `drive_pdf`/`drive_txt`/
   `drive_ndvi` (`models.RECURSOS_DRIVE`, linhas "Google Drive: ..." em Planos e Valores; planos que ja' existiam ganharam
   os 3 UMA vez -- setting `recursos_drive_migrados`); `_arquivos_drive_da_fazenda(site)` = os do plano de
   `_plano_da_fazenda` (sem plano = nada). Pasta: `Relatórios OneAgro/<PDF|TXT|NDVI>/<cliente>` (`_cliente_drive_da_fazenda`:
