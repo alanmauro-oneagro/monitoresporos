@@ -838,8 +838,12 @@ site tem que entrar la'.
 - **Entrar com Google** (pedido do Alan, 26/11/2026): botao no login (e atalho no "Esqueci a senha"), so' com o cliente
   OAuth do Drive configurado e fora do app da loja (o Google bloqueia login dentro do app). Rotas `login_google` ->
   `login_google_retorno` (escopo `openid email profile`, `google_drive.url_login`/`dados_do_login`); entra SO' se o e-mail
-  verificado da conta Google for de UMA conta do site (`models.usuarios_por_email`, sem diferenciar maiusculas); nenhuma ou
-  mais de uma = aviso e volta pro login (nao cria conta). Precisa dos enderecos de retorno
+  verificado da conta Google for de UMA conta do site (`models.usuarios_por_email`, sem diferenciar maiusculas); mais de
+  uma = aviso e volta pro login. **Nenhuma = cadastro com Google** (pedido do Alan, 26/11/2026): guarda
+  `session["google_cadastro"]` {email, nome} e vai pro "Criar conta" ja' com nome/e-mail (e-mail travado, caixa verde
+  "Conta Google") e SEM senha (campos escondidos/desativados; o servidor gera uma senha aleatoria quando o e-mail e' o
+  do Google); depois a pessoa entra pelo botao do Google. "Criar conta" tambem tem o botao "Cadastrar com Google"
+  (fora do app da loja). Precisa dos enderecos de retorno
   `https://oneagroapp.com.br/login/google/retorno` (e o com www) no cliente OAuth. Teste `EntrarComGoogleTest`.
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR

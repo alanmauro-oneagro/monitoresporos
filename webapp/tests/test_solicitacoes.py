@@ -60,6 +60,23 @@ class CadastroTest(unittest.TestCase):
     def _cadastro(self, username):
         return next((c for c in models.get_cadastros() if c["username"] == username), None)
 
+    def test_cadastro_com_google_sem_senha(self):
+        """Conta nova pelo "Entrar com Google" (pedido do Alan, 26/11/2026): sem senha, e-mail do Google."""
+        c = webapp.app.test_client()
+        dados = _form(username="Zzz Google Cad", numero_telefone="65999990077", email="zzz.gcad@exemplo.com",
+                      senha="", senha_confirmar="")
+        r = c.post("/solicitar-acesso", data=dados)
+        self.assertIsNone(models.get_user_by_username("Zzz Google Cad"))  # sem Google, senha e' obrigatoria
+        with c.session_transaction() as s:
+            s["google_cadastro"] = {"email": "ZZZ.gcad@exemplo.com", "nome": "Zzz G"}
+        r = c.post("/solicitar-acesso", data=dados)
+        self.assertEqual(r.status_code, 302, r.get_data(as_text=True)[:500])
+        u = models.get_user_by_username("Zzz Google Cad")
+        self.assertIsNotNone(u)
+        with c.session_transaction() as s:
+            self.assertNotIn("google_cadastro", s)
+        models.delete_user(u["id"])
+
     def test_links_e_formulario(self):
         c = webapp.app.test_client()
         html = c.get("/solicitar-acesso").get_data(as_text=True)

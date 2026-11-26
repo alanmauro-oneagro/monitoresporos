@@ -2764,9 +2764,14 @@ def login_google_retorno():
         flash("A conta Google não tem um e-mail confirmado.", "error")
         return redirect(url_for("login"))
     contas = models.usuarios_por_email(email)
-    if len(contas) != 1:
-        flash(f"Nenhuma conta da OneAgro usa o e-mail {email}. Entre com usuário e senha ou crie a sua conta."
-              if not contas else f"Mais de uma conta usa o e-mail {email} -- entre com usuário e senha.", "error")
+    if not contas:
+        # Conta nova com o Google (pedido do Alan, 26/11/2026): vai pro "Criar conta" com nome e e-mail ja'
+        # preenchidos e sem senha; depois entra sempre com o Google.
+        session["google_cadastro"] = {"email": email, "nome": " ".join((dados.get("name") or "").split())[:80]}
+        flash(f"Ainda não há conta com {email}. Complete o cadastro -- você vai entrar com o Google, sem senha.", "success")
+        return redirect(url_for("solicitar_acesso"))
+    if len(contas) > 1:
+        flash(f"Mais de uma conta usa o e-mail {email} -- entre com usuário e senha.", "error")
         return redirect(url_for("login"))
     row = contas[0]
     login_user(User(row), remember=True)
@@ -7807,6 +7812,8 @@ def _contexto_cadastro(culturas):
         "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"], "fixo": f["fixo"]} for f in _tabela_precificacao()],
         "moeda_tabela": _moeda_tabela(),
         "cotacao_valor": cot["valor"] if cot else None, "contato_comercial": CONTATO_COMERCIAL, "max_extras": MAX_EXTRAS_RELATORIO,
+        # Cadastro com a conta Google (pedido do Alan, 26/11/2026): nome e e-mail vem do Google e nao pede senha.
+        "google_cad": session.get("google_cadastro"), "google_login": google_drive.configurado(),
     }
 
 
@@ -7849,6 +7856,10 @@ def solicitar_acesso():
         area_ha = sum(a for _c, a in areas)
         extras, erro_extras = _extras_do_form(form, len(locais))
         senha = form.get("senha", "")
+        google_cad = session.get("google_cadastro")
+        com_google = bool(google_cad) and email.lower() == google_cad["email"].lower()
+        if com_google:
+            senha = secrets.token_urlsafe(18)  # entra com o Google; senha aleatoria (pode trocar depois)
         erro = None
         if not perfis:
             erro = "Marque se você é produtor ou técnico do setor."
@@ -7881,9 +7892,9 @@ def solicitar_acesso():
             erro = f"Marque no mapa (ou digite as coordenadas) de: {', '.join(sem_local)}."
         elif erro_extras:
             erro = erro_extras
-        elif len(senha) < 6:
+        elif not com_google and len(senha) < 6:
             erro = "A senha precisa ter pelo menos 6 caracteres."
-        elif senha != form.get("senha_confirmar", ""):
+        elif not com_google and senha != form.get("senha_confirmar", ""):
             erro = "A confirmação não bate com a senha."
         elif not form.get("aceite"):
             erro = "É preciso aceitar os termos de uso para continuar."
@@ -7916,6 +7927,7 @@ def solicitar_acesso():
             }
             models.registrar_cadastro(registro)
             models.concluir_pre_cadastro(telefone, email)
+            session.pop("google_cadastro", None)
             if modalidade == "plano":
                 _criar_locais_e_extras(user_id, username, locais, extras, plano_escolhido)
             login_user(User(models.get_user_by_id(user_id)), remember=True)
@@ -7938,6 +7950,10 @@ def solicitar_acesso():
                 return redirect(url_for("cliente_assinatura"))
             flash("Conta criada! A OneAgro vai liberar as fazendas para você -- assim que isso acontecer, elas aparecem aqui.", "success")
             return redirect(url_for("index"))
+    if not form and session.get("google_cadastro"):
+        g_cad = session["google_cadastro"]
+        from werkzeug.datastructures import MultiDict
+        form = MultiDict({"nome_completo": g_cad.get("nome", ""), "email": g_cad["email"], "perfil": "produtor"})
     return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
                            perfis=PERFIS_CADASTRO, form=form)
 
