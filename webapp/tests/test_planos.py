@@ -2232,8 +2232,19 @@ class EntrarComGoogleTest(unittest.TestCase):
             self.assertEqual(r.headers["Location"], "/mapa")
             with c.session_transaction() as s:
                 self.assertEqual(s.get("_user_id"), str(models.get_user_by_username("Zzz Google Um")["id"]))
-            for email, verificado in (("ninguem@exemplo.com", True), ("zzz.repetido@exemplo.com", True),
-                                      ("zzz.um@exemplo.com", False)):
+            # e-mail sem conta = cadastro com a conta Google, sem senha
+            r = entrar("zzz.novo.google@exemplo.com")
+            self.assertTrue(r.headers["Location"].endswith("/solicitar-acesso"))
+            with c.session_transaction() as s:
+                self.assertEqual(s["google_cadastro"]["email"], "zzz.novo.google@exemplo.com")
+            pag = c.get("/solicitar-acesso").get_data(as_text=True)
+            self.assertIn("Conta Google", pag)
+            self.assertIn('value="zzz.novo.google@exemplo.com"', pag)
+            self.assertNotIn("Cadastrar com Google", pag)
+            with c.session_transaction() as s:
+                s.pop("google_cadastro")
+            self.assertIn("Cadastrar com Google", c.get("/solicitar-acesso").get_data(as_text=True))
+            for email, verificado in (("zzz.repetido@exemplo.com", True), ("zzz.um@exemplo.com", False)):
                 with self.subTest(email=email):
                     r = entrar(email, verificado)
                     self.assertTrue(r.headers["Location"].endswith("/login"))
