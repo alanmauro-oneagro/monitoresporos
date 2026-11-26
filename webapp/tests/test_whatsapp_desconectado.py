@@ -43,53 +43,8 @@ class WhatsappDesconectadoTest(unittest.TestCase):
     def _status(self, conectado):
         return mock.patch.object(whatsapp, "get_status", return_value={"connected": conectado})
 
-    def test_telas_com_botoes_desativados(self):
-        master = self._master()
-        with self._status(False):
-            rec = master.get("/recommendations/safra1", follow_redirects=True).get_data(as_text=True)
-            self.assertIn(AVISO, rec)
-            self.assertNotIn('<details class="whatsapp-destinos', rec)
-            self.assertIn('name="enviar_texto" value="1" checked', rec)
-            self.assertRegex(rec, r'name="enviar_texto"[^>]*disabled>')
-            self.assertIn("conectar de novo", rec)
-            self.assertIn(AVISO, master.get("/ndvi").get_data(as_text=True))
-            uid = models.get_user_by_username("Zzz Teste Alvo Whats")["id"]
-            self.assertIn('value="test" class="btn btn-success" disabled', master.get(f"/admin/users/{uid}/editar").get_data(as_text=True))
-        whatsapp._status_cache["em"] = 0.0
-        with self._status(True):
-            rec = master.get("/recommendations/safra1", follow_redirects=True).get_data(as_text=True)
-            self.assertNotIn("⚠ WhatsApp desconectado", rec)
 
-    def test_cliente_nao_ve_o_aviso(self):
-        """Cliente do app nao ve o aviso do WhatsApp (pedido do Alan, 08/11/2026)."""
-        plano = models.salvar_plano(None, "Zzz Plano Aviso Whats", "", 0, "MONTHLY", 1, 30, ["clima", "site_recomendacoes"], True, 9)
-        uid = models.criar_cliente("Zzz Cli Aviso Whats", "segredo1", "", "5565999990181", "", plano)
-        models.atualizar_assinatura(uid, status="ativa", cortesia_ate="2099-01-01")
-        c = webapp.app.test_client()
-        with c.session_transaction() as s:
-            s["_user_id"] = str(uid)
-            s["_fresh"] = True
-        with self._status(False):
-            resp = c.get("/recommendations/safra1", follow_redirects=True)
-            self.assertEqual(resp.status_code, 200)
-            self.assertNotIn("⚠ WhatsApp desconectado", resp.get_data(as_text=True))
-            self.assertIn("⚠ WhatsApp desconectado", self._master().get("/recommendations/safra1", follow_redirects=True).get_data(as_text=True))
 
-    def test_envio_recusado_sem_conexao(self):
-        master = self._master()
-        with self._status(False), mock.patch.object(whatsapp, "send_whatsapp") as enviar:
-            resp = master.post(f"/alertas-clima/whatsapp/{self.clima}", data={"enviar_texto": "1"}, follow_redirects=True)
-            self.assertIn(AVISO, resp.get_data(as_text=True))
-            resp = master.post("/ndvi/historico/enviar-whatsapp", data={"site_name": self.clima}, follow_redirects=True)
-            self.assertIn(AVISO, resp.get_data(as_text=True))
-            resp = master.post(f"/recommendations/whatsapp/{self.clima}", data={"enviar_texto": "1"}, follow_redirects=True)
-            self.assertIn(AVISO, resp.get_data(as_text=True))
-            uid = models.get_user_by_username("Zzz Teste Alvo Whats")["id"]
-            resp = master.post(f"/admin/users/{uid}/editar", data={"action": "test", "codigo_pais": "55",
-                                                                 "numero_telefone": "65999990077", "nivel": "usuario"},
-                               follow_redirects=True)
-            self.assertIn(AVISO, resp.get_data(as_text=True))
-            enviar.assert_not_called()
 
     def test_cache_do_status(self):
         with self._status(True) as status:
@@ -158,18 +113,6 @@ class ApiOficialMetaTest(unittest.TestCase):
         self.assertEqual(ndvi["template"]["name"], self.w.TEMPLATE_NDVI)
         self.assertEqual(ndvi["template"]["components"][0]["parameters"][0]["image"]["id"], "MEDIA1")
 
-    def test_tela_mostra_parametros_sem_valor(self):
-        if not models.get_user_by_username("Zzz Master Meta"):
-            models.create_user("Zzz Master Meta", "x", is_master=True)
-        c = webapp.app.test_client()
-        with c.session_transaction() as s:
-            s["_user_id"] = str(models.get_user_by_username("Zzz Master Meta")["id"])
-            s["_fresh"] = True
-        with mock.patch.object(self.w, "ACCESS_TOKEN", "zzz-segredo-nao-mostrar"):
-            html = c.get("/admin/whatsapp").get_data(as_text=True)
-        self.assertIn("WHATSAPP_CLOUD_PHONE_NUMBER_ID", html)
-        self.assertIn("/webhooks/whatsapp", html)
-        self.assertNotIn("zzz-segredo-nao-mostrar", html)
 
 
 class UmblerTalkTest(unittest.TestCase):
@@ -286,78 +229,5 @@ class UmblerTalkTest(unittest.TestCase):
         self.assertIsNotNone(rec)
 
 
-class HistoricoStatusTest(unittest.TestCase):
-    """Historico em Gerenciar WhatsApp, quadro de status com Limpar e agendador parado sem WhatsApp
-    (pedido do Alan, 13/11/2026)."""
-
-    @classmethod
-    def setUpClass(cls):
-        models.init_db()
-        webapp.app.config["TESTING"] = True
-        if not models.get_user_by_username("Zzz Master Hist"):
-            models.create_user("Zzz Master Hist", "x", is_master=True)
-
-    def test_quadro_e_limpar(self):
-        site = "Zzz Fazenda Hist"
-        models.log_whatsapp_envio(site, "Zzz A", "5543999990301", True, "enviado [h1]")
-        models.log_whatsapp_envio(site, "Zzz B", "5543999990302", True, "enviado [h2]")
-        models.log_whatsapp_envio(site, "Zzz C", "5543999990303", False, "erro")
-        models.atualizar_status_meta("h2", "read")
-        self.assertEqual(models.contar_status_envio(site), {"enviado": 1, "entregue": 0, "lido": 1, "falhou": 1})
-        c = webapp.app.test_client()
-        with c.session_transaction() as s:
-            s["_user_id"] = str(models.get_user_by_username("Zzz Master Hist")["id"])
-            s["_fresh"] = True
-        h = c.get(f"/admin/whatsapp?site={site}").get_data(as_text=True)
-        self.assertIn('id="historico"', h)
-        self.assertIn("Limpar selecionados", h)
-        self.assertNotIn("Histórico de envios", c.get("/admin/exportar").get_data(as_text=True))
-        r = c.post("/admin/whatsapp/historico/limpar", data={"site": site, "status": ["falhou", "lido"]})
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(models.contar_status_envio(site), {"enviado": 1, "entregue": 0, "lido": 0, "falhou": 0})
-        models.limpar_status_envio(["enviado"], site)
-
-    def test_agendador_nao_tenta_sem_whatsapp(self):
-        chamados = []
-        with mock.patch.object(webapp, "AMBIENTE_QAP", False), \
-                mock.patch.object(webapp.whatsapp, "conectado", return_value=False), \
-                mock.patch.object(webapp, "_run_scheduled_whatsapp_sends", side_effect=lambda: chamados.append(1)), \
-                mock.patch.object(webapp, "_atualizar_open_meteo_diario"), \
-                mock.patch.object(webapp.agrofit_dados, "atualizar_se_necessario"), \
-                mock.patch.object(webapp.sinal_celular, "atualizar_se_necessario"), \
-                mock.patch.object(webapp.time, "sleep", side_effect=StopIteration):
-            try:
-                webapp._whatsapp_scheduler_loop()
-            except StopIteration:
-                pass
-        self.assertEqual(chamados, [])
 
 
-class OutrosUsuariosEnvioTest(unittest.TestCase):
-    """Envio manual pra outros usuarios escolhidos na hora (pedido do Alan, 13/11/2026)."""
-
-    @classmethod
-    def setUpClass(cls):
-        models.init_db()
-        webapp.app.config["TESTING"] = True
-        models.sync_sites(["Zzz Fazenda Outros"])
-        if not models.get_user_by_username("Zzz Master Outros"):
-            models.create_user("Zzz Master Outros", "x", is_master=True)
-        if not models.get_user_by_username("Zzz Avulso Outros"):
-            models.create_user("Zzz Avulso Outros", "x", telefone="5543999990444")
-
-    def test_outro_usuario_recebe(self):
-        avulso = models.get_user_by_username("Zzz Avulso Outros")
-        self.assertIn(f"u:{avulso['id']}", [c["chave"] for c in models.contatos_para_envio()])
-        c = webapp.app.test_client()
-        with c.session_transaction() as s:
-            s["_user_id"] = str(models.get_user_by_username("Zzz Master Outros")["id"])
-            s["_fresh"] = True
-        h = c.get("/recommendations", follow_redirects=True).get_data(as_text=True)
-        self.assertIn("tpl-outros-usuarios", h)
-        with mock.patch.object(webapp.whatsapp, "conectado", return_value=True), \
-                mock.patch.object(webapp, "_enviar_whatsapp_manual_escalonado", return_value=(True, True, "ok")) as env:
-            c.post("/recommendations/whatsapp/Zzz Fazenda Outros",
-                   data={"safra": "safra1", "escolher_destinos": "1", "enviar_texto": "1",
-                         "usuario_extra": [f"u:{avulso['id']}", "u:999999"]})
-        self.assertEqual(env.call_args.kwargs["destinos"], [("5543999990444", "Zzz Avulso Outros")])

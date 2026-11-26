@@ -56,7 +56,7 @@
 <div class="table-responsive tabela-larga">
 <table class="table table-sm table-hover bg-white shadow-sm tabela-usuarios">
     <thead>
-        <tr><th>Usuário</th><th>Grupo</th><th>Email</th><th>Celular</th><th>Acesso</th><th>Permissões</th><th>Recebe relatório</th><th>WhatsApp</th><th>Subordinados</th><th>Ações</th></tr>
+        <tr><th>Usuário</th><th>Grupo</th><th>Email</th><th>Celular</th><th>Acesso</th><th>Permissões</th><th>Subordinados</th><th>Ações</th></tr>
     </thead>
     <tbody>
     {% for u in users %}
@@ -81,22 +81,6 @@
                         Editar fazendas{% if permission_counts.get(u.id) %} ({{ permission_counts[u.id] }}){% endif %}
                     </a>
                 {% endif %}
-            </td>
-            <td data-label="Recebe relatório" class="nowrap">
-                {% if pode_aba('envios') %}
-                <a href="{{ url_for('whatsapp_gerenciamento') }}" class="text-decoration-none" title="Quem recebe cada fazenda e' marcado na aba Programação de Envios">
-                    {{ report_counts.get(u.id, 0) }} fazenda(s)
-                </a>
-                {% else %}
-                {{ report_counts.get(u.id, 0) }} fazenda(s)
-                {% endif %}
-            </td>
-            <td data-label="WhatsApp">
-                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp em TODAS as fazendas de uma vez, sem apagar quem recebe cada fazenda (aba Programação de Envios)">
-                    <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-user-id="{{ u.id }}"
-                        id="pausado_user_{{ u.id }}" {% if u.whatsapp_pausado %}checked{% endif %}>
-                    <label class="form-check-label small pausado-rotulo" for="pausado_user_{{ u.id }}">Pausado</label>
-                </div>
             </td>
             <td data-label="Subordinados" class="nowrap">
                 {% if subordinado_counts.get(u.id) %}
@@ -133,7 +117,7 @@
             </td>
         </tr>
         {% if pessoa %}
-        <tr class="pessoa-row d-none" data-pessoa-row="{{ u.id }}"><td colspan="10" class="bg-light">
+        <tr class="pessoa-row d-none" data-pessoa-row="{{ u.id }}"><td colspan="8" class="bg-light">
             {# Fica na largura da tela mesmo com a tabela rolando de lado (celular). #}
             <div style="position: sticky; left: 0; max-width: min(46rem, calc(100vw - 2.5rem));">{{ gc.cartao_pessoa(pessoa, 'u' ~ u.id) }}</div>
         </td></tr>
@@ -146,16 +130,6 @@
             <td class="text-muted small">{{ sub.telefone | telefone_br }}</td>
             <td class="text-muted small">-</td>
             <td class="text-muted small">-</td>
-            <td class="text-muted small">
-                {{ sub.fazendas or '-' }}
-            </td>
-            <td>
-                <div class="form-check mb-0" title="Pausa o recebimento de WhatsApp desse subordinado em TODAS as fazendas de uma vez, sem apagar as marcacoes dele">
-                    <input class="form-check-input pausar-whatsapp-check" type="checkbox" data-subordinado-id="{{ sub.id }}"
-                        id="pausado_sub_{{ sub.id }}" {% if sub.whatsapp_pausado %}checked{% endif %}>
-                    <label class="form-check-label small" for="pausado_sub_{{ sub.id }}">Pausado</label>
-                </div>
-            </td>
             <td class="text-muted small">-</td>
             <td>
                 <a href="{{ url_for('admin_user_subordinados', user_id=u.id) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
@@ -205,7 +179,7 @@
             {# Fazendas do novo cadastro + data de inicio (pedido do Alan, 23/11/2026). #}
             <div class="mb-3">
                 <label class="form-label mb-1">Fazendas que terá acesso</label>
-                <div class="small text-muted mb-1">Cada fazenda marcada fica liberada e a pessoa recebe o relatório dela. Administrador e Master já veem todas.</div>
+                <div class="small text-muted mb-1">Cada fazenda marcada fica liberada para a pessoa. Administrador e Master já veem todas.</div>
                 <div class="border rounded p-2 bg-white" style="max-height: 14rem; overflow: auto;">
                     {% for fz in fazendas_para_novo %}
                     <div class="form-check small"><input class="form-check-input" type="checkbox" name="site_ids" value="{{ fz.id }}" id="novo_faz_{{ fz.id }}">
@@ -257,17 +231,6 @@ document.querySelectorAll('#filtro-usuarios [data-filtro]').forEach(function (b,
 });
 var alvo = (location.hash.match(/^#usuario-(\d+)$/) || [])[1];
 if (alvo) { abrirPessoa(alvo, true); }
-document.querySelectorAll('.pausar-whatsapp-check').forEach(function (chk) {
-    chk.addEventListener('change', function () {
-        var url = chk.dataset.userId
-            ? '/admin/users/' + chk.dataset.userId + '/whatsapp-pausado'
-            : '/admin/subordinados/' + chk.dataset.subordinadoId + '/whatsapp-pausado';
-        var fd = new FormData();
-        fd.append('pausado', chk.checked ? '1' : '0');
-        fetch(url, { method: 'POST', body: fd })
-            .catch(function () { alert('Falha ao salvar -- tente de novo.'); });
-    });
-});
 document.querySelectorAll('.sub-toggle').forEach(function (btn) {
     btn.addEventListener('click', function () {
         var rows = document.querySelectorAll('tr[data-owner-rows="' + btn.dataset.owner + '"]');

@@ -183,7 +183,7 @@
     <div class="d-none border rounded p-2 mt-2" id="editar-ponto-{{ idx }}" style="background:#fff;">
         {# Salva sozinho e recarrega (pedido do Alan, 12/11/2026); virar estudo pede confirmacao. #}
         <form method="post" action="{{ url_for('editar_ponto_virtual') }}" class="row g-2 align-items-end form-editar-ponto" data-autosave
-              data-tipo-original="{{ ponto.tipo }}" data-msg-estudo="Transformar '{{ ponto.nome }}' em estudo de viabilidade? Ele deixa de ser fazenda: sai de todas as telas e apaga permissões, agenda de WhatsApp e anotações ligadas a ele.">
+              data-tipo-original="{{ ponto.tipo }}" data-msg-estudo="Transformar '{{ ponto.nome }}' em estudo de viabilidade? Ele deixa de ser fazenda: sai de todas as telas e apaga permissões, agenda de envios e anotações ligadas a ele.">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
             <div class="col-12 col-md-3">
                 <label class="form-label small text-muted mb-1">Grupo econômico</label>
@@ -247,7 +247,7 @@
         {% endif %}
         {% endif %}
         <form method="post" action="{{ url_for('remover_ponto_virtual') }}" class="mt-2 text-end"
-              onsubmit="return confirm({% if ponto.tipo == 'estudo' %}'Remover o estudo de viabilidade \'{{ ponto.nome }}\'?'{% else %}'Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga também permissões, agenda de WhatsApp e anotações ligadas a ele.'{% endif %});">
+              onsubmit="return confirm({% if ponto.tipo == 'estudo' %}'Remover o estudo de viabilidade \'{{ ponto.nome }}\'?'{% else %}'Remover o ponto estimado \'{{ ponto.nome }}\'? Isso apaga também permissões, agenda de envios e anotações ligadas a ele.'{% endif %});">
             <input type="hidden" name="site_name" value="{{ ponto.site_name }}">
             <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Remover</button>
         </form>

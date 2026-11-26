@@ -1785,40 +1785,6 @@ JANELA_ENVIO_AGENDADO_MIN = 60
 ENVIO_AUTOMATICO_MINIMO_MIN = 5 * 60 + 30
 
 
-def _enviar_whatsapp_manual_escalonado(site, safra, enviar_texto, enviar_pdf, destinos=None):
-    """Envio manual (botao "Enviar por WhatsApp") pra' uma fazenda: manda
-    pra cada destinatario em sequencia, numa thread de fundo -- a tela
-    responde na hora, e cada mensagem sai so' 15s depois da anterior
-    terminar, sem nunca coincidir com outro envio (agendado ou de outra
-    fazenda), ver `whatsapp._um_envio_por_vez`. Sai SO' neste clique --
-    nao existe fila que dispare depois. `destinos` [(telefone, rotulo)] = so' os escolhidos na tela
-    (e/ou um numero digitado); None = todos os cadastrados da fazenda.
-    Retorna (ok_texto, ok_pdf, mensagem-resumo), mesma assinatura de
-    `_send_site_whatsapp`."""
-    if destinos is None:
-        destinos = _site_whatsapp_destinations(site)
-    if not destinos:
-        return _send_site_whatsapp(site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf)
-
-    def enviar_todos():
-        with app.app_context():
-            for telefone, rotulo in destinos:
-                try:
-                    _send_site_whatsapp(
-                        site, safra=safra, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf,
-                        destinos_override=[(telefone, rotulo)],
-                    )
-                except Exception as exc:
-                    models.log_whatsapp_envio(site, rotulo, telefone, False, f"erro inesperado: {exc}")
-
-    threading.Thread(target=enviar_todos, daemon=True).start()
-    nomes = ", ".join(rotulo for _, rotulo in destinos)
-    return True, True, (
-        f"{len(destinos)} destinatario(s) ({nomes}) -- sai um de cada vez, "
-        f"{whatsapp.INTERVALO_ENTRE_ENVIOS_S}s entre mensagens"
-    )
-
-
 def _all_farm_produtos_cached():
     """Cache por requisicao (ver `_fungicida_ordem_all_cached`) de
     `models.get_all_farm_produtos()` -- `_farm_produtos_estoque` e'
@@ -2054,265 +2020,7 @@ def _texto_relatorio(site, safra=None, ctx=None):
     )
 
 
-def _send_site_whatsapp(site, safra=None, enviar_texto=True, enviar_pdf=True, destinos_override=None):
-    """Monta o relatorio de uma fazenda (Dados de Clima, Fungos em alta
-    quantidade, Recomendacoes das Instituicoes de Pesquisa, Produtos
-    Fazenda e Anotacoes -- ver `_format_whatsapp_message`) e manda pra
-    TODOS os numeros cadastrados que devem recebe-la (uma fazenda pode
-    ter varios -- `_site_whatsapp_destinations`), pelo WhatsApp do
-    administrador (whatsapp-bridge). `enviar_texto`/`enviar_pdf`
-    controlam quais dos dois formatos mandar -- essa e' a UNICA rotina de
-    envio de WhatsApp do sistema: o botao manual "Enviar por WhatsApp"
-    chama com os dois True (manda ambos na hora); o envio agendado
-    semanal (`_run_scheduled_whatsapp_sends`) decide cada flag
-    separadamente, com base em qual agenda (texto/PDF, cada uma com seus
-    proprios dias da semana -- `models.get_all_whatsapp_days`/
-    `get_all_whatsapp_days_pdf`) bate com o dia de hoje pra essa fazenda.
-    Manda mesmo quando a fazenda nao tem nenhuma doenca em Atencao/Perigo
-    no momento -- nesse caso a mensagem e' so o aviso de que esta tudo
-    tranquilo (ver `_format_whatsapp_message`). Retorna (ok_texto,
-    ok_pdf, mensagem-resumo) -- ok_texto/ok_pdf sao True quando aquele
-    formato NEM foi pedido (nada a falhar) OU pelo menos 1 numero
-    recebeu ele. Separados (em vez de um "ok" so') porque
-    `_run_scheduled_whatsapp_sends` precisa marcar texto/PDF como
-    "enviado hoje" de forma independente -- juntar os dois faria uma
-    falha isolada no PDF (com o texto ok) fazer o agendador reenviar o
-    texto de novo no proximo minuto (duplicado), ou o contrario esconder
-    uma falha real de PDF atras de um texto que deu certo.
-    `safra` filtra pela cultura daquela safra (quando chamado a partir de
-    uma das telas de Recomendacoes) e define de qual safra vem os
-    "Produtos Fazenda"; sem `safra` (envio agendado), usa a uniao das
-    culturas e dos produtos das duas safras. Quando a estacao dessa
-    fazenda esta sem leitura nova ha mais de `DADOS_BLOQUEIO_DIAS` (dado
-    de doenca velho demais pra virar recomendacao), NAO bloqueia mais o
-    envio -- em vez disso manda um relatorio SO' de clima, exatamente
-    igual ao dos pontos "so clima" da aba Alertas Clima (`diseases=[]`,
-    mesmo caminho curto de `_format_whatsapp_message`/`_build_site_pdf`),
-    pedido explicito do usuario (antes nao mandava nada nesse caso).
-    Quando os dois formatos sao mandados juntos (texto E pdf True nessa
-    chamada) e o texto cabe na legenda do WhatsApp, manda os dois
-    COMBINADOS num unico envio (PDF com o texto como legenda) em vez de
-    2 mensagens separadas pro mesmo numero -- ver LEGENDA_MAX_CHARS mais
-    abaixo. Reduz o risco de o WhatsApp reter a entrega por padrao de
-    envio automatizado (2+ mensagens em sequencia pro mesmo numero).
-    `destinos_override` manda so' pra essa lista especifica de
-    (telefone, rotulo) em vez de todo mundo cadastrado pra essa fazenda
-    (`_site_whatsapp_destinations`) -- usado pelo envio manual (um
-    destinatario de cada vez, ver `_enviar_whatsapp_manual_escalonado`)
-    e pelo agendado."""
-    if not enviar_texto and not enviar_pdf:
-        return False, False, "Nada a enviar (nem texto nem PDF agendado pra hoje)."
-    if site in models.sites_bloqueados_de_clientes():
-        # Fazenda adicional do cliente sem pagamento depois dos 7 dias (pedido do Alan, 08/11/2026).
-        return True, True, "Fazenda adicional sem pagamento -- relatório não enviado."
-    ctx = _preparar_relatorio(site, safra)
-    is_clima_point, bloqueado = ctx["is_clima_point"], ctx["bloqueado"]
-    if (bloqueado or is_clima_point) and enviar_pdf:
-        # Fazenda sem leitura recente / ponto so' clima: sem PDF (pedido do
-        # Alan). PDF "ok" pro agendador nao tentar de novo a cada minuto.
-        enviar_pdf = False
-        if not enviar_texto:
-            return False, True, "Sem PDF para fazenda sem leitura recente ou ponto so' clima."
-    leitura_bioscout, cultura = ctx["leitura_bioscout"], ctx["cultura"]
-    mostrar_secao_doencas, weather = ctx["mostrar_secao_doencas"], ctx["weather"]
-    diseases, riscos_climaticos, produtos = ctx["diseases"], ctx["riscos_climaticos"], ctx["produtos"]
-
-    destinos = destinos_override if destinos_override is not None else _site_whatsapp_destinations(site)
-    if not destinos:
-        # NAO loga no historico (`models.log_whatsapp_envio`) -- fazenda
-        # sem ninguem cadastrado pra receber nao e' uma FALHA de envio
-        # (nada foi tentado), e' uma lacuna de cadastro. Logar isso
-        # misturava com falhas de verdade no relatorio "Envios por
-        # WhatsApp" (aba Exportar), inflando a contagem de falhas com
-        # fazendas que nunca deveriam ter sido contadas ali. O motivo
-        # ainda aparece pra quem clicou manualmente (flash da rota),
-        # so' nao fica persistido no log.
-        motivo = f"Nenhum usuario marcado pra receber relatorio de '{site}' (ou nenhum tem telefone cadastrado)."
-        return False, False, motivo
-
-    text = None
-    if enviar_texto:
-        text = _texto_relatorio(site, safra, ctx)
-
-    # PDF (mesmo conteudo do texto, mais o grafico de concentracao) e'
-    # gerado uma vez so' e mandado como documento pra cada destinatario --
-    # uma falha ao gerar o PDF NAO impede o envio do texto (so' fica
-    # registrada no log).
-    modelo_oficial = whatsapp.usa_modelo_oficial()
-    pdf_nome_fazenda = pdf_filename = pdf_bytes = None
-    if enviar_pdf or modelo_oficial:
-        try:
-            pdf_nome_fazenda, pdf_filename, pdf_bytes = _build_site_pdf(
-                site, diseases, weather, produtos, cultura, safra, leitura_bioscout=leitura_bioscout,
-                mostrar_secao_doencas=mostrar_secao_doencas,
-                riscos_climaticos=riscos_climaticos,
-            )
-        except Exception as exc:
-            models.log_whatsapp_envio(site, None, None, False, f"Falha ao gerar PDF pra WhatsApp: {exc}")
-
-    # Quando texto E PDF caem no mesmo envio, manda os dois JUNTOS (PDF
-    # com o texto inteiro como legenda) em vez de 2 mensagens separadas
-    # pro mesmo numero -- 2 mensagens automatizadas em sequencia pro
-    # mesmo destinatario e' exatamente o padrao que o WhatsApp penaliza
-    # retendo a entrega (ver comentario de MIN_DELAY_MS em
-    # whatsapp-bridge/index.js; aconteceu de novo em 2026-09-11 mesmo com
-    # o espacamento de 15-25s ja' em vigor). So' combina quando o texto
-    # cabe no limite de legenda do WhatsApp (~1024 caracteres) -- um
-    # relatorio maior que isso continua mandando os dois separados, pra
-    # nunca cortar/perder conteudo.
-    LEGENDA_MAX_CHARS = 1024
-    combinar = bool(text) and bool(pdf_bytes) and len(text) <= LEGENDA_MAX_CHARS
-    if modelo_oficial:
-        variaveis_base = _variaveis_modelo_relatorio(site, diseases, mostrar_secao_doencas, riscos_climaticos)
-
-    sucesso, falha = [], []
-    # Rastreados SEPARADOS de "sucesso" (que exige os dois formatos
-    # pedidos nessa chamada terem funcionado) -- um numero pode falhar so
-    # no PDF com o texto ok, e isso ainda precisa contar como "texto
-    # enviado" pro agendador nao mandar o texto de novo (ver retorno).
-    algum_texto_ok = False
-    algum_pdf_ok = False
-    formatos_cliente = _formatos_whatsapp_clientes()
-    for phone, rotulo in destinos:
-        erros = []
-        ok_texto = True
-        ok_pdf = True
-        # Cliente do app recebe so' o que o plano libera (pedido do Alan,
-        # 08/11/2026): Free = so' texto; Premium/Premium + Estacao = PDF.
-        pode_texto, pode_pdf = formatos_cliente.get(phone, (True, True))
-        texto_dest = text if pode_texto else None
-        pdf_dest = pdf_bytes if pode_pdf else None
-        if texto_dest is None and pdf_dest is None:
-            if text is not None or pdf_bytes:
-                models.log_whatsapp_envio(site, rotulo, phone, True, "Nada enviado: o plano do cliente não inclui esse formato.")
-            sucesso.append(rotulo)
-            continue
-        if modelo_oficial and pdf_dest is None:
-            # API oficial sem PDF (plano so' com texto, ponto so' clima): modelo sem cabecalho.
-            primeiro_nome = (rotulo or "").split()[0] if rotulo else "produtor"
-            ok_texto, message = whatsapp.send_relatorio_texto_modelo(phone, [primeiro_nome] + variaveis_base)
-            models.log_whatsapp_envio(site, rotulo, phone, ok_texto, f"Modelo oficial (resumo): {message}")
-            if not ok_texto:
-                erros.append(message)
-        elif modelo_oficial:
-            # API oficial: um envio so' pelo modelo aprovado (resumo nas
-            # variaveis + PDF completo no cabecalho) -- cobre texto e PDF.
-            primeiro_nome = (rotulo or "").split()[0] if rotulo else "produtor"
-            ok_pdf, message_pdf = whatsapp.send_relatorio_modelo(
-                phone, pdf_bytes, pdf_filename, [primeiro_nome] + variaveis_base,
-            )
-            ok_texto = ok_pdf
-            models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"Modelo oficial (resumo+PDF): {message_pdf}")
-            if not ok_pdf:
-                erros.append(message_pdf)
-        elif combinar and texto_dest is not None and pdf_dest is not None:
-            ok_pdf, message_pdf = whatsapp.send_whatsapp_document(phone, pdf_bytes, pdf_filename, caption=text)
-            ok_texto = ok_pdf  # combinado -- o mesmo envio carrega os dois
-            models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"Texto+PDF combinado num so envio: {message_pdf}")
-            if not ok_pdf:
-                erros.append(f"PDF: {message_pdf}")
-        else:
-            if texto_dest is not None:
-                ok_texto, message = whatsapp.send_whatsapp(phone, texto_dest)
-                models.log_whatsapp_envio(site, rotulo, phone, ok_texto, message)
-                if not ok_texto:
-                    erros.append(message)
-            if pdf_dest:
-                ok_pdf, message_pdf = whatsapp.send_whatsapp_document(
-                    phone, pdf_bytes, pdf_filename,
-                    caption=f"📄 Relatório em PDF - {pdf_nome_fazenda} (mesmo conteudo, com grafico de concentracao)",
-                )
-                models.log_whatsapp_envio(site, rotulo, phone, ok_pdf, f"PDF: {message_pdf}")
-                if not ok_pdf:
-                    erros.append(f"PDF: {message_pdf}")
-        if enviar_texto and ok_texto:
-            algum_texto_ok = True
-        if enviar_pdf and ok_pdf:
-            algum_pdf_ok = True
-        (sucesso if ok_texto and ok_pdf else falha).append(rotulo if (ok_texto and ok_pdf) else f"{rotulo} ({'; '.join(erros)})")
-    resumo = f"{len(sucesso)}/{len(destinos)} numero(s)"
-    if falha:
-        resumo += f" -- falha em: {', '.join(falha)}"
-    ok_texto_geral = (not enviar_texto) or algum_texto_ok
-    ok_pdf_geral = (not enviar_pdf) or algum_pdf_ok
-    return ok_texto_geral, ok_pdf_geral, resumo
-
-
-def _enviar_ndvi(phone, rotulo, imagem, legenda, nome_fazenda, data_br):
-    """Imagem do NDVI: na API oficial vai pelo modelo aprovado (fora da janela de 24h so' modelo
-    sai); no bridge, imagem com legenda como sempre."""
-    if whatsapp.usa_modelo_oficial():
-        primeiro_nome = (rotulo or "").split()[0] if rotulo else "produtor"
-        return whatsapp.send_ndvi_modelo(phone, imagem, [primeiro_nome, nome_fazenda, data_br])
-    return whatsapp.send_whatsapp_image(phone, imagem, caption=legenda)
-
-
-def _variaveis_modelo_relatorio(site, diseases, mostrar_secao_doencas, riscos_climaticos=()):
-    """Variaveis {{2}}..{{4}} do modelo do relatorio na API oficial
-    (`whatsapp_cloud_api.TEMPLATE_RELATORIO`; {{1}} e' o nome de quem
-    recebe): fazenda, data e TODAS as doencas que pedem atencao -- as em
-    alerta de esporos (nivel + risco de infeccao de cada uma) e as com
-    risco de infeccao medio/alto pelo clima (`riscos_climaticos`, maior
-    risco entre hoje e os proximos dias). Pedido do usuario (15/10/2026).
-    O relatorio completo (risco dia a dia) vai no PDF do cabecalho."""
-    ordem = {"vermelho": 3, "amarelo": 2, "verde": 1}
-    partes = []
-    for d in (diseases if mostrar_secao_doencas else []):
-        nivel = "Perigo" if d["status"] == "Perigo" else "Atenção"
-        risco = _risco_label(d.get("risco"))
-        partes.append(f"{d['doenca']} ({nivel}" + (f", risco de infecção {risco})" if risco else ")"))
-    for d in riscos_climaticos or []:
-        riscos = [d.get("risco")] + [p.get("risco") for p in d.get("previsao_risco") or []]
-        maior = max((r for r in riscos if r), key=lambda r: ordem.get(r, 0), default=None)
-        if maior in ("amarelo", "vermelho"):
-            partes.append(f"{d['doenca']} (risco de infecção {_risco_label(maior)})")
-    if partes:
-        doencas = "; ".join(partes)
-    elif mostrar_secao_doencas:
-        doencas = "Nenhuma doença em alerta"
-    else:
-        doencas = "Sem monitoramento de doenças (só clima)"
-    return [_nome_exibicao(site), _hoje_cuiaba().strftime("%d/%m/%Y"), doencas]
-
-
 _SCHEDULER_STATE_KEY = "whatsapp_scheduler_state"
-
-
-def _load_scheduler_enviados(today):
-    """Conjunto de "site::telefone::texto"/"site::telefone::pdf" que ja'
-    receberam o envio agendado HOJE -- persistido no banco
-    (`models.get_setting`/`app_settings`), nao numa variavel em memoria.
-    Uma variavel em memoria zera sozinha se o processo reiniciar
-    (deploy, crash, worker reciclado) no MEIO do dia, fazendo o
-    agendador reenviar de novo pra quem ja' tinha recebido -- por isso o
-    estado precisa sobreviver a reinicio. Chave por TELEFONE (nao pelo
-    indice/posicao do destinatario, mesmo esse indice sendo usado pra
-    calcular o horario escalonado de cada um -- ver
-    `_horario_efetivo_destinatario`): a posicao na lista alfabetica
-    (`_site_whatsapp_destinations`) pode mudar no MEIO do dia se algum
-    destinatario for adicionado/removido daquela fazenda, e uma chave
-    baseada em posicao ficaria associada a pessoa errada depois disso
-    (reenvio duplicado pra quem ja' recebeu, ou fazenda nunca marcada
-    como enviada pra quem esta' esperando). Cada destinatario da mesma
-    fazenda tem seu proprio horario efetivo (escalonado) e texto/PDF
-    continuam podendo ter horarios BASE diferentes tambem -- uma fazenda
-    pode ja' ter mandado o texto pro 1o destinatario e ainda estar
-    esperando a vez do 2o, ou esperando o PDF de todos, no MESMO dia.
-    Reseta sozinho quando o dia muda (registro salvo de um dia anterior
-    e' ignorado)."""
-    bruto = models.get_setting(_SCHEDULER_STATE_KEY)
-    if bruto:
-        try:
-            estado = json.loads(bruto)
-        except ValueError:
-            estado = {}
-        if estado.get("date") == today.isoformat():
-            return set(estado.get("enviados", []))
-    return set()
-
-
-def _salvar_scheduler_enviados(today, enviados):
-    models.set_setting(_SCHEDULER_STATE_KEY, json.dumps({"date": today.isoformat(), "enviados": sorted(enviados)}))
 
 
 def _horario_efetivo_destinatario(hora_site, tipo, idx):
@@ -2365,136 +2073,6 @@ def _horarios_efetivos_por_telefone(candidatos):
             efetivo_anterior = efetivo
             item["efetivo_min"] = efetivo
     return candidatos
-
-
-def _run_scheduled_whatsapp_sends():
-    """Roda a cada minuto (`_whatsapp_scheduler_loop`) -- texto e PDF tem
-    cada um sua propria agenda de dias da semana E seu proprio horario
-    BASE (hora E minuto, aba Fazendas, `models.get_all_whatsapp_schedule_horarios`
-    -- individual por fazenda, pedido explicito do usuario pra poder
-    espalhar os envios ao longo do dia em vez de todo mundo mandar no
-    mesmo horario e parecer um robo). Uma fazenda pode, por exemplo, so
-    mandar o PDF as segundas 15h30 e o texto as sextas 7h05.
-
-    Cada item sai no horario configurado (nunca antes de 5h30, ver
-    `ENVIO_AUTOMATICO_MINIMO_MIN`) -- desde 16/10/2026 sem o
-    escalonamento de 1h por destinatario/numero
-    (`RECIPIENT_STAGGER_HORAS = 0`); o que espaca as mensagens e' o
-    portao de `whatsapp._um_envio_por_vez` (um envio por vez, 15s depois
-    do anterior). Item que nao saiu ate' `JANELA_ENVIO_AGENDADO_MIN`
-    depois do horario fica pro proximo dia programado.
-
-    Texto e PDF de uma MESMA fazenda/destinatario que calhem do MESMO
-    horario desejado (comum -- `_seed_horario_sugerido` sempre configura
-    os dois iguais) viram UM candidato so' com os 2 flags, pra'
-    `_send_site_whatsapp` poder combina-los num unico envio quando
-    couber (`LEGENDA_MAX_CHARS`) -- menos mensagens pro mesmo numero,
-    tambem ajuda contra retencao. Quando os horarios configurados
-    diferem (fazenda customizada a mao), viram 2 candidatos
-    independentes.
-
-    So' dispara um item quando o dia da semana bate E ja passou (>=) do
-    horario EFETIVO dele (depois das 2 camadas acima), E esse (site,
-    telefone, tipo) ainda nao esta' no conjunto "ja' enviado hoje"
-    (`_load_scheduler_enviados`) -- chave por TELEFONE, nunca pelo
-    indice/posicao na lista (que muda se a lista de destinatarios
-    daquela fazenda mudar no meio do dia). Usa ">=" (nao "==") de
-    proposito: so' e' marcado como feito quando REALMENTE deu certo --
-    uma falha precisa continuar tentando nos minutos seguintes, senao o
-    destinatario simplesmente nunca recebe o relatorio naquele dia.
-    Marca e PERSISTE logo apos cada envio (nao so' no final do lote),
-    entao um crash/reinicio no meio da lista retoma so' do que falta,
-    nunca reenvia o que ja' foi. Dentro de cada rodada, pontos "so'
-    clima" (aba Alertas Clima) sempre vao DEPOIS de toda fazenda normal
-    pendente -- pedido explicito do usuario, pra' priorizar o relatorio
-    de recomendacao (doenca) na fila do whatsapp-bridge (ver
-    whatsapp.py) antes de qualquer clima de referencia."""
-    # `_agora_cuiaba_dt()`, NUNCA `datetime.now()` puro -- o container
-    # roda em UTC (sem `TZ` no Dockerfile), entao `datetime.now()` fica
-    # ~4h fora do horario configurado (Cuiaba) usado pra decidir se ja'
-    # e' hora de mandar.
-    agora_dt = _agora_cuiaba_dt()
-    today = agora_dt.date()
-    weekday = today.weekday()
-    agora_hm = (agora_dt.hour, agora_dt.minute)
-    schedule_texto = models.get_all_whatsapp_days()
-    schedule_pdf = models.get_all_whatsapp_days_pdf()
-    horarios = models.get_all_whatsapp_schedule_horarios()
-    hora_default = models.get_whatsapp_send_hour()
-    ja_enviados = _load_scheduler_enviados(today)
-    virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
-
-    candidatos = []
-    existentes = models.fazendas_existentes()
-    for site in set(schedule_texto) | set(schedule_pdf):
-        if existentes is not None and site not in existentes:
-            continue  # fazenda apagada (saiu do BioScout) -- agenda antiga nao envia
-        hora_site = horarios.get(site) or {"texto": hora_default, "texto_min": 0, "pdf": hora_default, "pdf_min": 0}
-        destinos = _site_whatsapp_destinations(site)
-        for idx, (telefone, rotulo) in enumerate(destinos):
-            devido_texto = (
-                weekday in schedule_texto.get(site, set()) and f"{site}::{telefone}::texto" not in ja_enviados
-            )
-            # Ponto "so' clima" nao tem PDF (pedido do Alan).
-            devido_pdf = (
-                site not in virtual_clima_names
-                and weekday in schedule_pdf.get(site, set()) and f"{site}::{telefone}::pdf" not in ja_enviados
-            )
-            if not devido_texto and not devido_pdf:
-                continue
-            desejado_texto = _horario_efetivo_destinatario(hora_site, "texto", idx) if devido_texto else None
-            desejado_pdf = _horario_efetivo_destinatario(hora_site, "pdf", idx) if devido_pdf else None
-            base = {"site": site, "telefone": telefone, "rotulo": rotulo}
-            if devido_texto and devido_pdf and desejado_texto == desejado_pdf:
-                candidatos.append({
-                    **base, "enviar_texto": True, "enviar_pdf": True,
-                    "desejado_min": desejado_texto[0] * 60 + desejado_texto[1],
-                })
-            else:
-                if devido_texto:
-                    candidatos.append({
-                        **base, "enviar_texto": True, "enviar_pdf": False,
-                        "desejado_min": desejado_texto[0] * 60 + desejado_texto[1],
-                    })
-                if devido_pdf:
-                    candidatos.append({
-                        **base, "enviar_texto": False, "enviar_pdf": True,
-                        "desejado_min": desejado_pdf[0] * 60 + desejado_pdf[1],
-                    })
-    if not candidatos:
-        return
-    _horarios_efetivos_por_telefone(candidatos)
-    # So' no horario programado: o que nao saiu ate' JANELA_ENVIO_AGENDADO_MIN
-    # depois dele (servidor/WhatsApp fora do ar) fica pro proximo dia
-    # programado, em vez de sair horas depois (pedido do usuario, 16/10/2026).
-    agora_min = agora_hm[0] * 60 + agora_hm[1]
-    pendentes = [c for c in candidatos if c["efetivo_min"] <= agora_min <= c["efetivo_min"] + JANELA_ENVIO_AGENDADO_MIN]
-    if not pendentes:
-        return
-    # Estavel -- so' empurra os pontos "so' clima" pro final, sem mexer
-    # na ordem relativa entre eles nem entre as demais fazendas.
-    pendentes.sort(key=lambda item: item["site"] in virtual_clima_names)
-    # Aquece o cache de clima de todas as fazendas pendentes em paralelo
-    # antes de mandar (dedup -- varios destinatarios da mesma fazenda so'
-    # precisam de 1 busca) -- sem isso, `_send_site_whatsapp` buscava o
-    # clima de cada fazenda um de cada vez (rede, ~1-1.5s cada), somando
-    # varios segundos so' de espera sequencial toda vez que o agendador roda.
-    sites_pendentes = sorted({item["site"] for item in pendentes})
-    _prefetch_weather(sites_pendentes, _weather_coords_all())
-    for item in pendentes:
-        site, telefone, rotulo = item["site"], item["telefone"], item["rotulo"]
-        enviar_texto, enviar_pdf = item["enviar_texto"], item["enviar_pdf"]
-        ok_texto, ok_pdf, _ = _send_site_whatsapp(
-            site, enviar_texto=enviar_texto, enviar_pdf=enviar_pdf, destinos_override=[(telefone, rotulo)]
-        )
-        # So' marca "enviado hoje" o que realmente deu certo -- o que
-        # falhar e' tentado de novo no proximo minuto, ate' funcionar ou
-        # passar JANELA_ENVIO_AGENDADO_MIN do horario programado.
-        if enviar_texto and ok_texto:
-            ja_enviados.add(f"{site}::{telefone}::texto")
-        if enviar_pdf and ok_pdf:
-            ja_enviados.add(f"{site}::{telefone}::pdf")
-        _salvar_scheduler_enviados(today, ja_enviados)
 
 
 _NDVI_SCHEDULER_STATE_KEY = "ndvi_scheduler_state"
@@ -2570,15 +2148,6 @@ def _run_scheduled_ndvi_sends():
                         site, resultado["data"].isoformat(), imagem, resultado["cobertura_nuvens"], thumbnail
                     )
                     models.save_farm_ndvi_image(site, imagem)
-                    nome_exibicao = _nome_exibicao(site)
-                    data_br = resultado["data"].strftime("%d/%m/%Y")
-                    legenda = f"🛰️ NDVI - {nome_exibicao} - {data_br} (envio automatico)"
-                    ativos = models.get_ndvi_ativos(site)
-                    for phone, rotulo in _site_whatsapp_destinations(site):
-                        if phone not in ativos:
-                            continue
-                        ok, mensagem = _enviar_ndvi(phone, rotulo, imagem, legenda, nome_exibicao, data_br)
-                        models.log_whatsapp_envio(site, rotulo, phone, ok, f"NDVI agendado {data_br}: {mensagem}")
         except Exception:
             pass  # nunca deixa o loop do agendador morrer -- tenta de novo no proximo ciclo
         finally:
@@ -2588,10 +2157,51 @@ def _run_scheduled_ndvi_sends():
 
 
 # ---------------------------------------------------------------------------
-# Copia diaria no Google Drive (pedido do Alan, 26/11/2026): todo dia as 5:00 de Cuiaba, o PDF e o TXT do
-# relatorio de TODAS as fazendas (sem os pontos so' clima) e a imagem NDVI nova de cada uma vao pras subpastas
-# PDF / TXT / NDVI da pasta "Relatórios OneAgro" do Google Drive conectado em Gerenciar Exportações.
-HORA_GOOGLE_DRIVE = 5
+# Copia diaria no Google Drive (pedido do Alan, 26/11/2026; no lugar do WhatsApp): todo dia no horario de
+# Programação de Envios, os arquivos que o PLANO de cada fazenda libera (PDF, TXT e/ou NDVI novo; pontos so' clima
+# fora) vao pra "Relatórios OneAgro/<PDF|TXT|NDVI>/<cliente>" do Google Drive conectado em Gerenciar Exportações.
+HORA_GOOGLE_DRIVE = 5  # padrao; o Master muda em Programação de Envios (setting gdrive_hora)
+ARQUIVOS_DRIVE = (("drive_pdf", "PDF"), ("drive_txt", "TXT"), ("drive_ndvi", "NDVI"))
+
+
+def _hora_google_drive():
+    try:
+        hora = int(models.get_setting("gdrive_hora") or HORA_GOOGLE_DRIVE)
+    except ValueError:
+        hora = HORA_GOOGLE_DRIVE
+    return hora if 0 <= hora <= 23 else HORA_GOOGLE_DRIVE
+
+
+def _arquivos_drive_da_fazenda(site):
+    """Subpastas (PDF/TXT/NDVI) que vao pro Drive dessa fazenda: as que o plano dela libera em Planos e Valores
+    (pedido do Alan, 26/11/2026). Sem plano = nada."""
+    nome = _plano_da_fazenda(site).get("nome")
+    if not nome:
+        return []
+    planos = getattr(g, "_planos_por_nome", None)
+    if planos is None:
+        planos = g._planos_por_nome = {p["nome"]: p for p in models.get_planos()}
+    recursos = (planos.get(nome) or {}).get("recursos") or []
+    return [pasta for chave, pasta in ARQUIVOS_DRIVE if chave in recursos]
+
+
+def _cliente_drive_da_fazenda(site):
+    """Nome da pasta do cliente dentro de PDF/TXT/NDVI: grupo economico, senao o cliente dono (nome completo ou
+    usuario), senao o 1o usuario ligado a ela, senao "Sem cliente"."""
+    grupo = _grupo_economico_da_fazenda(site)
+    if grupo:
+        return grupo
+    dono = models.donos_das_fazendas_clientes().get(site)
+    if dono:
+        cad = models.get_cadastro_do_usuario(dono) or {}
+        usuario = models.get_user_by_id(dono)
+        nome = cad.get("nome_completo") or (usuario["username"] if usuario else "")
+        if nome:
+            return nome
+    ligados = models.usuarios_ligados_a_fazenda(site)
+    if ligados:
+        return ligados[0]["username"]
+    return "Sem cliente"
 _trava_google_drive = threading.Lock()
 
 
@@ -2642,36 +2252,60 @@ def _enviar_relatorios_google_drive():
             ndvi_enviados = {}
         hoje = agora.strftime("%Y-%m-%d")
         cont, erros = {"pdf": 0, "txt": 0, "ndvi": 0}, []
+        try:
+            por_fazenda = json.loads(models.get_setting("gdrive_por_fazenda") or "{}")
+        except ValueError:
+            por_fazenda = {}
         sites = _fazendas_google_drive()
+        subpastas = {}  # (PDF|TXT|NDVI, cliente) -> id, criada uma vez por envio
+
+        def pasta(token, tipo, cliente):
+            if (tipo, cliente) not in subpastas:
+                subpastas[(tipo, cliente)] = google_drive.subpasta(token, cliente, pastas[tipo])
+            return subpastas[(tipo, cliente)]
         for site in sites:
             nome = _nome_exibicao(site)
+            arquivos = _arquivos_drive_da_fazenda(site)  # o plano da fazenda decide (26/11/2026)
+            if not arquivos:
+                continue
+            gravados = []
             try:
-                ctx = _preparar_relatorio(site)
-                texto = _texto_relatorio(site, None, ctx)
+                cliente = _cliente_drive_da_fazenda(site)
                 token = google_drive.token_de_acesso(refresh)
-                google_drive.enviar_arquivo(token, pastas["TXT"], _nome_arquivo("Relatorio", "txt", nome),
-                                            texto.encode("utf-8"), "text/plain; charset=utf-8")
-                cont["txt"] += 1
-                if not ctx["bloqueado"]:
-                    # Fazenda sem leitura recente: so' o texto, como no WhatsApp.
+                ctx = None
+                if "TXT" in arquivos or "PDF" in arquivos:
+                    ctx = _preparar_relatorio(site)
+                if "TXT" in arquivos:
+                    texto = _texto_relatorio(site, None, ctx)
+                    google_drive.enviar_arquivo(token, pasta(token, "TXT", cliente), _nome_arquivo("Relatorio", "txt", nome),
+                                                texto.encode("utf-8"), "text/plain; charset=utf-8")
+                    cont["txt"] += 1
+                    gravados.append("TXT")
+                if "PDF" in arquivos and not ctx["bloqueado"]:
+                    # Fazenda sem leitura recente: so' o texto.
                     _nome, arquivo_pdf, pdf = _build_site_pdf(
                         site, ctx["diseases"], ctx["weather"], ctx["produtos"], ctx["cultura"], None,
                         leitura_bioscout=ctx["leitura_bioscout"], mostrar_secao_doencas=ctx["mostrar_secao_doencas"],
                         riscos_climaticos=ctx["riscos_climaticos"])
-                    google_drive.enviar_arquivo(token, pastas["PDF"], arquivo_pdf, pdf, "application/pdf")
+                    google_drive.enviar_arquivo(token, pasta(token, "PDF", cliente), arquivo_pdf, pdf, "application/pdf")
                     cont["pdf"] += 1
-                historico = models.get_farm_ndvi_historico(site)
+                    gravados.append("PDF")
+                historico = models.get_farm_ndvi_historico(site) if "NDVI" in arquivos else []
                 if historico and ndvi_enviados.get(site) != historico[0]["id"]:
                     item = historico[0]
                     imagem = models.get_farm_ndvi_historico_imagem(item["id"], site)
                     if imagem:
                         arquivo = _nome_arquivo("NDVI", "png", nome).replace(hoje, item["data_alvo"][:10])
-                        google_drive.enviar_arquivo(token, pastas["NDVI"], arquivo, imagem, "image/png")
+                        google_drive.enviar_arquivo(token, pasta(token, "NDVI", cliente), arquivo, imagem, "image/png")
                         cont["ndvi"] += 1
+                        gravados.append("NDVI")
                         ndvi_enviados[site] = item["id"]
                         models.set_setting("gdrive_ndvi_enviados", json.dumps(ndvi_enviados))
             except Exception as e:
                 erros.append(f"{nome}: {e}")
+            if gravados:
+                por_fazenda[site] = {"em": _agora_cuiaba_dt().strftime("%Y-%m-%d %H:%M"), "arquivos": gravados}
+                models.set_setting("gdrive_por_fazenda", json.dumps(por_fazenda, ensure_ascii=False))
             _salvar_status_google_drive(fazendas=len(sites), erros=erros[:30], **cont)
         models.set_setting("gdrive_ultimo_dia", hoje)
         _salvar_status_google_drive(andamento=False, fim=_agora_cuiaba_dt().strftime("%Y-%m-%d %H:%M"),
@@ -2697,7 +2331,7 @@ def _google_drive_agendado():
     if AMBIENTE_QAP or not _google_drive_conectado():
         return
     agora = _agora_cuiaba_dt()
-    if agora.hour < HORA_GOOGLE_DRIVE or models.get_setting("gdrive_ultimo_dia") == agora.strftime("%Y-%m-%d"):
+    if agora.hour < _hora_google_drive() or models.get_setting("gdrive_ultimo_dia") == agora.strftime("%Y-%m-%d"):
         return
     tentativa = models.get_setting("gdrive_tentativa")
     if tentativa:
@@ -2737,18 +2371,13 @@ def _whatsapp_scheduler_loop():
                 _atualizar_open_meteo_diario()
             except Exception:
                 pass
-            # QAP (banco copiado da producao) nunca dispara relatorio agendado; sem WhatsApp conectado
-            # tambem nao tenta (pedido do Alan, 13/11/2026 -- antes tentava todo minuto e enchia o
-            # historico de falhas).
-            if not AMBIENTE_QAP and whatsapp.conectado():
-                try:
-                    _run_scheduled_whatsapp_sends()
-                except Exception:
-                    pass  # nunca deixa o loop do agendador morrer
+            # Sem envio por WhatsApp (pedido do Alan, 26/11/2026): o agendador so' busca a imagem NDVI
+            # nova de cada fazenda (vai pro Google Drive). QAP nunca busca sozinho.
+            if not AMBIENTE_QAP:
                 try:
                     _run_scheduled_ndvi_sends()
                 except Exception:
-                    pass
+                    pass  # nunca deixa o loop do agendador morrer
             try:
                 agrofit_dados.atualizar_se_necessario()
             except Exception:
@@ -4461,23 +4090,6 @@ def _pontos_clima():
     return pontos
 
 
-@app.route("/alertas-clima/whatsapp/<path:site_name>", methods=["POST"])
-@master_required
-def alertas_clima_whatsapp(site_name):
-    _get_clima_virtual_farm_or_404(site_name)
-    if (volta := _whatsapp_desconectado(url_for("recommendations_default") + "#pontos-clima")):
-        return volta
-    enviar_texto = bool(request.form.get("enviar_texto"))
-    ok_texto, _, message = _enviar_whatsapp_manual_escalonado(site_name, None, enviar_texto, False)
-    ok = ok_texto if enviar_texto else True
-    nome_exibicao = _nome_exibicao(site_name)
-    if ok:
-        flash(f"WhatsApp de '{nome_exibicao}' enviado para {message}.", "success")
-    else:
-        flash(f"Falha ao enviar WhatsApp de '{nome_exibicao}': {message}", "error")
-    return redirect(url_for("recommendations_default") + "#pontos-clima")
-
-
 @app.route("/alertas-clima/nota/save", methods=["POST"])
 @master_required
 def save_site_climate_note():
@@ -4730,75 +4342,6 @@ def _juntar_relatorios(textos):
     return "\n".join(linhas + (_RODAPE_TEXTO if com_rodape else []))
 
 
-@app.route("/recommendations/grupo/whatsapp", methods=["POST"])
-@login_required
-def send_grupo_whatsapp():
-    """Envio do grupo economico (pedido do Alan, 09/11/2026): o texto de
-    todas as fazendas numa mensagem so' e/ou os PDFs de cada uma, um atras
-    do outro, pros destinatarios escolhidos (cadastrados em alguma fazenda
-    do grupo ou um numero digitado)."""
-    safra = _safra_or_default(request.form)
-    voltar = redirect(url_for("recommendations", safra=safra))
-    sites = [s for s in request.form.getlist("site") if s]
-    if not current_user.is_admin:
-        permitidas = set(models.get_user_permitted_site_names(int(current_user.id)))
-        if any(s not in permitidas for s in sites):
-            abort(403)
-    if not sites:
-        return voltar
-    if (volta := _whatsapp_desconectado(url_for("recommendations_default"))):
-        return volta
-    enviar_texto, enviar_pdf = bool(request.form.get("enviar_texto")), bool(request.form.get("enviar_pdf"))
-    if not enviar_texto and not enviar_pdf:
-        flash("Marque Texto e/ou PDF para enviar.", "error")
-        return voltar
-    cadastrados = {}
-    for s in sites:
-        for tel, rotulo in _site_whatsapp_destinations(s):
-            cadastrados.setdefault(tel, rotulo)
-    destinos = [(tel, cadastrados[tel]) for tel in request.form.getlist("destino") if tel in cadastrados]
-    for tel, rotulo in _outros_usuarios_do_form():
-        if tel not in dict(destinos):
-            destinos.append((tel, rotulo))
-    if request.form.get("numero_telefone", "").strip():
-        telefone = _telefone_from_form(request.form)
-        if not _is_valid_phone(telefone):
-            flash("Número digitado inválido -- use DDD + número, com o código do país ao lado.", "error")
-            return voltar
-        if telefone not in dict(destinos):
-            destinos.append((telefone, f"numero digitado ({telefone})"))
-    if not destinos:
-        flash("Escolha pelo menos um destinatário ou digite um número.", "error")
-        return voltar
-    texto = _juntar_relatorios([_texto_relatorio(s, safra) for s in sites]) if enviar_texto else None
-    nome_grupo = request.form.get("grupo") or "grupo"
-
-    def enviar_todos():
-        with app.app_context():
-            formatos = _formatos_whatsapp_clientes()
-            for telefone, rotulo in destinos:
-                pode_texto, _ = formatos.get(telefone, (True, True))
-                if texto and pode_texto:
-                    try:
-                        ok, msg = whatsapp.send_whatsapp(telefone, texto)
-                    except Exception as exc:
-                        ok, msg = False, f"erro inesperado: {exc}"
-                    models.log_whatsapp_envio(sites[0], rotulo, telefone, ok, f"Texto do grupo {nome_grupo}: {msg}")
-                if enviar_pdf:
-                    for s in sites:
-                        try:
-                            _send_site_whatsapp(s, safra=safra, enviar_texto=False, enviar_pdf=True,
-                                                destinos_override=[(telefone, rotulo)])
-                        except Exception as exc:
-                            models.log_whatsapp_envio(s, rotulo, telefone, False, f"erro inesperado: {exc}")
-
-    threading.Thread(target=enviar_todos, daemon=True).start()
-    formatos = " + ".join(f for f, sim in (("texto do grupo", enviar_texto), (f"{len(sites)} PDF(s)", enviar_pdf)) if sim)
-    flash(f"Enviando {formatos} de '{nome_grupo}' para {len(destinos)} destinatário(s) -- sai um de cada vez, "
-          f"{whatsapp.INTERVALO_ENTRE_ENVIOS_S}s entre mensagens.", "success")
-    return voltar
-
-
 def _safra_or_default(form):
     safra = form.get("safra", "safra1")
     return safra if safra in SAFRA_LABELS else "safra1"
@@ -4813,71 +4356,6 @@ def _save_response(message, endpoint=None, ok=True, extra=None, **redirect_kwarg
         return {"ok": ok, "message": message, **(extra or {})}
     flash(message, "success" if ok else "error")
     return redirect(url_for(endpoint, **redirect_kwargs)) if endpoint else redirect(request.referrer or url_for("mapa"))
-
-
-@app.route("/recommendations/whatsapp/<path:site_name>", methods=["POST"])
-@login_required
-def send_site_whatsapp(site_name):
-    if not current_user.is_admin:
-        allowed = set(models.get_user_permitted_site_names(int(current_user.id)))
-        if site_name not in allowed:
-            abort(403)
-    if (volta := _whatsapp_desconectado(url_for("recommendations_default"))):
-        return volta
-    safra = _safra_or_default(request.form)
-    # checkboxes "enviar_texto"/"enviar_pdf" na frente dos botoes de PDF/
-    # Copiar (recommendations.html) -- deixam a pessoa escolher, nesse
-    # envio manual especifico, so' texto, so' PDF ou os dois (padrao,
-    # quando os dois vem marcados).
-    enviar_texto = bool(request.form.get("enviar_texto"))
-    enviar_pdf = bool(request.form.get("enviar_pdf"))
-    destinos = None
-    if request.form.get("escolher_destinos"):
-        # Escolha de quem recebe (pedido do usuario, 16/10/2026): so' os
-        # cadastrados marcados -- nunca um telefone qualquer vindo do
-        # formulario por esse campo -- mais, opcionalmente, um numero
-        # digitado na hora (nao fica salvo em lugar nenhum).
-        cadastrados = dict(_site_whatsapp_destinations(site_name))
-        destinos = [(tel, cadastrados[tel]) for tel in request.form.getlist("destino") if tel in cadastrados]
-        for tel, rotulo in _outros_usuarios_do_form():
-            if tel not in dict(destinos):
-                destinos.append((tel, rotulo))
-        numero = request.form.get("numero_telefone", "").strip()
-        if numero:
-            telefone = _telefone_from_form(request.form)
-            if not _is_valid_phone(telefone):
-                flash(f"Número '{numero}' inválido -- use DDD + número (ex.: 65 99999-9999), com o código do país ao lado.", "error")
-                return redirect(url_for("recommendations", safra=safra))
-            if telefone not in dict(destinos):
-                destinos.append((telefone, f"numero digitado ({telefone})"))
-        if not destinos:
-            flash("Escolha pelo menos um destinatário ou digite um número.", "error")
-            return redirect(url_for("recommendations", safra=safra))
-    ok_texto, ok_pdf, message = _enviar_whatsapp_manual_escalonado(site_name, safra, enviar_texto, enviar_pdf, destinos=destinos)
-    ok = (ok_texto if enviar_texto else True) and (ok_pdf if enviar_pdf else True)
-    nome_exibicao = _nome_exibicao(site_name)
-    if ok:
-        flash(f"WhatsApp de '{nome_exibicao}' enviado para {message}.", "success")
-    else:
-        flash(f"Falha ao enviar WhatsApp de '{nome_exibicao}': {message}", "error")
-    return redirect(url_for("recommendations", safra=safra))
-
-
-
-def _outros_usuarios_do_form():
-    """Destinos marcados em "+ Outros usuários" do envio manual (pedido do Alan, 13/11/2026) -- so' pra
-    Administrador/Master; a chave vem do formulario e o telefone sempre do banco."""
-    if not current_user.is_admin:
-        return []
-    marcados = set(request.form.getlist("usuario_extra"))
-    if not marcados:
-        return []
-    destinos = []
-    for c in models.contatos_para_envio():
-        tel = re.sub(r"\D", "", c["telefone"] or "")
-        if c["chave"] in marcados and _is_valid_phone(tel):
-            destinos.append((tel, c["nome"]))
-    return destinos
 
 
 @app.route("/recommendations/pdf/<path:site_name>")
@@ -4925,48 +4403,6 @@ def recommendation_pdf(site_name):
         mostrar_secao_doencas=not bloqueado, riscos_climaticos=riscos_climaticos,
     )
     return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=filename)
-
-
-@app.route("/recommendations/whatsapp-days/save", methods=["POST"])
-@login_required
-def save_whatsapp_days():
-    if current_user.is_admin:
-        allowed_sites = None
-    else:
-        allowed_sites = set(models.get_user_permitted_site_names(int(current_user.id)))
-
-    site_name = request.form.get("site_name")
-    if allowed_sites is not None and site_name not in allowed_sites:
-        abort(403)
-    days = {int(v) for v in request.form.getlist("weekday")}
-    models.set_whatsapp_days(site_name, days)
-    hora = request.form.get("hora")
-    minuto = request.form.get("minuto")
-    minuto_val = int(minuto) if minuto and minuto.isdigit() and 0 <= int(minuto) <= 59 else 0
-    if hora and hora.isdigit() and 0 <= int(hora) <= 23:
-        models.set_whatsapp_schedule_hora(site_name, "texto", int(hora), minuto_val)
-    return _save_response(f"Agenda de WhatsApp (texto) de '{_nome_exibicao(site_name)}' salva.", "whatsapp_gerenciamento")
-
-
-@app.route("/recommendations/whatsapp-days-pdf/save", methods=["POST"])
-@login_required
-def save_whatsapp_days_pdf():
-    if current_user.is_admin:
-        allowed_sites = None
-    else:
-        allowed_sites = set(models.get_user_permitted_site_names(int(current_user.id)))
-
-    site_name = request.form.get("site_name")
-    if allowed_sites is not None and site_name not in allowed_sites:
-        abort(403)
-    days = {int(v) for v in request.form.getlist("weekday")}
-    models.set_whatsapp_days_pdf(site_name, days)
-    hora = request.form.get("hora")
-    minuto = request.form.get("minuto")
-    minuto_val = int(minuto) if minuto and minuto.isdigit() and 0 <= int(minuto) <= 59 else 0
-    if hora and hora.isdigit() and 0 <= int(hora) <= 23:
-        models.set_whatsapp_schedule_hora(site_name, "pdf", int(hora), minuto_val)
-    return _save_response(f"Agenda de WhatsApp (PDF) de '{_nome_exibicao(site_name)}' salva.", "whatsapp_gerenciamento")
 
 
 @app.route("/fazendas")
@@ -5184,98 +4620,49 @@ def save_ndvi_agendamento():
 @app.route("/whatsapp")
 @aba_required("envios")
 def whatsapp_gerenciamento():
-    """Pagina central de envios por WhatsApp -- agenda de texto, PDF e
-    NDVI, mais quem recebe cada fazenda, tudo num lugar so' (antes
-    espalhado entre Manejos, NDVI e Usuarios -- pedido explicito do
-    usuario depois de um bug real ficar dificil de enxergar por causa
-    dessa dispersao: 9 fazendas mandando quase juntas pro mesmo numero,
-    cada uma configurada numa tela diferente, sem visao de conjunto).
-    Mesma regra de acesso de `fazendas()`: admin ve todas as fazendas,
-    usuario comum so' as permitidas. Ordem da lista: primeiro toda
-    fazenda de "Monitorar Doencas" (real ou virtual, ordem alfabetica
-    pelo nome de exibicao), DEPOIS toda fazenda "So Clima" (virtual,
-    tipo='clima', tambem alfabetica) -- pedido explicito do usuario,
-    cada grupo com seu proprio selo visivel no cabecalho do card."""
-    virtual_names = models.virtual_farm_site_names()
-    virtual_clima_names = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
+    """Programação de Envios (pedido do Alan, 26/11/2026 -- sem WhatsApp): horario geral da copia no Google Drive,
+    o que vai de cada fazenda pelo plano dela (Planos e Valores), a pasta do cliente e o ultimo envio; embaixo, a
+    busca automatica da imagem NDVI de cada fazenda com CAR (a imagem nova vai pro Drive)."""
     if current_user.is_admin:
-        sites_set = (set(read_sites()) | virtual_names) - models.get_deactivated_site_names()
+        sites_set = (set(read_sites()) | models.virtual_farm_site_names()) - models.get_deactivated_site_names()
     else:
         sites_set = set(models.get_user_permitted_site_names(int(current_user.id)))
         if not sites_set:
-            return render_template("whatsapp_gerenciamento.html", sites_data=[], no_access=True)
-
-    sites_doenca = sorted(sites_set - virtual_clima_names, key=_ordem_fazenda)
-    sites_clima = sorted(sites_set & virtual_clima_names, key=_ordem_fazenda)
-    sites = sites_doenca + sites_clima
-
-    gerenciamento = models.get_all_whatsapp_gerenciamento()
+            return render_template("whatsapp_gerenciamento.html", fazendas=[], no_access=True)
+    clima = {vf["site_name"] for vf in models.get_all_virtual_farms() if vf.get("tipo") == "clima"}
+    try:
+        por_fazenda = json.loads(models.get_setting("gdrive_por_fazenda") or "{}")
+    except ValueError:
+        por_fazenda = {}
     cars_by_site = models.get_all_farm_ndvi_cars()
-    hora_default = models.get_whatsapp_send_hour()
-    todos_usuarios = models.get_all_users() if current_user.is_admin else []
+    agendas_ndvi = models.get_all_ndvi_agendamentos()
     nuvens_ndvi = models.get_ndvi_nuvens()
-
-    sites_data = []
-    for site in sites:
-        dados = gerenciamento.get(site) or {
-            "dias_texto": set(), "dias_pdf": set(),
-            "horarios": {"texto": hora_default, "texto_min": 0, "pdf": hora_default, "pdf_min": 0},
-            "ndvi": None, "destinatarios": [], "user_ids_recebendo": set(),
-        }
-        sites_data.append({
-            "site": site,
-            "nome_exibicao": _nome_exibicao(site),
-            "so_clima": site in virtual_clima_names,
-            "dias_texto": dados["dias_texto"],
-            "dias_pdf": dados["dias_pdf"],
-            "horarios": dados["horarios"],
-            "ndvi": dados["ndvi"],
-            "tem_car": bool(cars_by_site.get(site)),
-            "destinatarios": dados["destinatarios"],
-            "user_ids_recebendo": dados["user_ids_recebendo"],
-            "ndvi_ativos": models.get_ndvi_ativos(site) if cars_by_site.get(site) else set(),
-            "ndvi_nuvens": nuvens_ndvi.get(site),
+    fazendas = []
+    for site in sorted(sites_set - clima, key=_ordem_fazenda):
+        fazendas.append({
+            "site": site, "nome_exibicao": _nome_exibicao(site), "arquivos": _arquivos_drive_da_fazenda(site),
+            "cliente": _cliente_drive_da_fazenda(site), "ultimo": por_fazenda.get(site),
+            "tem_car": bool(cars_by_site.get(site)), "ndvi": agendas_ndvi.get(site), "ndvi_nuvens": nuvens_ndvi.get(site),
         })
-
     return render_template(
-        "whatsapp_gerenciamento.html", sites_data=sites_data, no_access=False,
-        weekday_labels=list(enumerate(WEEKDAY_LABELS)),
-        hoje=datetime.now(timezone.utc).date().isoformat(),
-        todos_usuarios=todos_usuarios,
+        "whatsapp_gerenciamento.html", fazendas=fazendas, no_access=False, hora_drive=_hora_google_drive(),
+        drive_conectado=_google_drive_conectado(), hoje=datetime.now(timezone.utc).date().isoformat(),
         opcoes_nuvens=NDVI_OPCOES_NUVENS, nuvens_padrao_auto=NDVI_AGENDAMENTO_COBERTURA_MAXIMA,
+        pasta_drive=google_drive.PASTA_RAIZ,
     )
 
 
-@app.route("/whatsapp/destinatarios/save", methods=["POST"])
-@aba_required("envios")
-def save_whatsapp_site_recipients():
-    """So' admin edita quem recebe (mesmo nivel de acesso de
-    `admin_report_permissions`/`admin_user_subordinados` hoje) -- so'
-    mexe em USUARIOS (`models.set_site_whatsapp_user_recipients`);
-    subordinado continua sendo editado na tela do dono dele (ver
-    docstring de `set_site_whatsapp_user_recipients`)."""
-    site_name = request.form.get("site_name")
-    user_ids = [int(v) for v in request.form.getlist("user_ids") if v.isdigit()]
-    models.set_site_whatsapp_user_recipients(site_name, user_ids)
-    return _save_response(f"Destinatarios de '{_nome_exibicao(site_name)}' salvos.", "whatsapp_gerenciamento")
-
-
-@app.route("/ndvi/destinatario/toggle", methods=["POST"])
-@aba_required("envios")
-def toggle_ndvi_ativo():
-    """Marca/desmarca um destinatario como "ativo" pra NDVI dessa
-    fazenda -- persistido (`models.set_ndvi_ativo`), usado tanto pra
-    pre-marcar a caixa no envio manual quanto pra decidir quem recebe o
-    envio automatico agendado. Comeca desmarcado por padrao (pedido
-    explicito do usuario) -- so' fica ativo depois de marcado aqui."""
-    site_name = request.form.get("site_name")
-    _checar_acesso_site(site_name)
-    telefone = request.form.get("telefone", "")
-    ativo = request.form.get("ativo") == "1"
-    if telefone not in {p for p, _ in _site_whatsapp_destinations(site_name)}:
-        return {"ok": False, "error": "Destinatario invalido pra essa fazenda."}, 400
-    models.set_ndvi_ativo(site_name, telefone, ativo)
-    return {"ok": True}
+@app.route("/envios/hora-drive", methods=["POST"])
+@master_required
+def salvar_hora_drive():
+    try:
+        hora = int(request.form.get("hora", ""))
+    except ValueError:
+        hora = -1
+    if not 0 <= hora <= 23:
+        return _save_response("Horário inválido (0 a 23).", "whatsapp_gerenciamento", ok=False)
+    models.set_setting("gdrive_hora", str(hora))
+    return _save_response(f"Envio para o Google Drive todo dia às {hora}:00.", "whatsapp_gerenciamento")
 
 
 @app.route("/ndvi/car/save", methods=["POST"])
@@ -5680,73 +5067,6 @@ def delete_ndvi_historico():
         abort(400)
     models.delete_farm_ndvi_historico_item(historico_id, site_name)
     return _save_response(f"Imagem removida da galeria de '{_nome_exibicao(site_name)}'.", "ndvi")
-
-
-@app.route("/ndvi/historico/enviar-whatsapp", methods=["POST"])
-@aba_required("ndvi")
-def enviar_ndvi_historico_whatsapp():
-    """Manda, por WhatsApp, uma ou mais imagens marcadas na galeria da
-    aba NDVI -- cada imagem selecionada vira uma mensagem separada (o
-    WhatsApp/Baileys nao tem um jeito nativo de agrupar varias fotos
-    numa unica mensagem), mandada em sequencia pros destinatarios
-    marcados no formulario. A lista de destinatarios pra ESCOLHER vem do
-    mesmo cadastro usado por `_send_site_whatsapp` (aba Usuarios >
-    "Receber relatorios") -- o formulario so' deixa marcar/desmarcar
-    quem ja' esta' nessa lista, nunca um numero avulso (o telefone
-    marcado e' conferido contra `_site_whatsapp_destinations` de novo
-    aqui, nao so' confiado no que veio do form). "Enviar agrupadas" aqui
-    significa "escolher varias de uma vez e mandar tudo numa acao so'",
-    nao uma unica mensagem com varias fotos dentro."""
-    if (volta := _whatsapp_desconectado(url_for("ndvi"))):
-        return volta
-    site_name = request.form.get("site_name")
-    _checar_acesso_site(site_name)
-    historico_ids = [int(v) for v in request.form.getlist("historico_ids") if v.isdigit()]
-    if not historico_ids:
-        return _save_response("Selecione pelo menos uma imagem da galeria pra enviar.", "ndvi", ok=False)
-
-    todos_destinos = _site_whatsapp_destinations(site_name)
-    if not todos_destinos:
-        return _save_response(
-            f"Nenhum numero cadastrado pra receber relatorio de '{_nome_exibicao(site_name)}' (aba Usuarios).",
-            "ndvi", ok=False,
-        )
-    telefones_marcados = set(request.form.getlist("destino_telefones"))
-    destinos = [(phone, rotulo) for phone, rotulo in todos_destinos if phone in telefones_marcados]
-    if not destinos:
-        return _save_response("Selecione pelo menos um destinatario pra enviar.", "ndvi", ok=False)
-
-    nome_exibicao = _nome_exibicao(site_name)
-    imagens_enviadas, falhas = 0, []
-    for historico_id in historico_ids:
-        item = models.get_farm_ndvi_historico_item(historico_id, site_name)
-        imagem = models.get_farm_ndvi_historico_imagem(historico_id, site_name)
-        if not item or not imagem:
-            continue
-        data_br = models.fmt_data_br(item["data_alvo"])
-        legenda = f"🛰️ NDVI - {nome_exibicao} - {data_br}"
-        if item.get("cobertura_nuvens") is not None:
-            legenda += f" ({item['cobertura_nuvens']:.0f}% de nuvens)"
-        ok_alguma = False
-        for phone, rotulo in destinos:
-            ok, mensagem = _enviar_ndvi(phone, rotulo, imagem, legenda, nome_exibicao, data_br)
-            models.log_whatsapp_envio(site_name, rotulo, phone, ok, f"NDVI {data_br}: {mensagem}")
-            if ok:
-                ok_alguma = True
-            else:
-                falhas.append(f"{rotulo} ({data_br})")
-        if ok_alguma:
-            imagens_enviadas += 1
-
-    if imagens_enviadas == 0:
-        return _save_response(
-            f"Nao foi possivel enviar nenhuma imagem de '{nome_exibicao}' -- {'; '.join(falhas) or 'erro desconhecido'}.",
-            "ndvi", ok=False,
-        )
-    resumo = f"{imagens_enviadas} imagem(ns) de '{nome_exibicao}' enviada(s) por WhatsApp pra {len(destinos)} numero(s)."
-    if falhas:
-        resumo += f" Falhas: {'; '.join(falhas)}."
-    return _save_response(resumo, "ndvi", ok=not falhas)
 
 
 @app.route("/ndvi/nuvens", methods=["POST"])
@@ -7335,19 +6655,6 @@ def admin_edit_user(user_id):
                 niveis=NIVEIS_ACESSO,
             )
         models.set_user_contato(user_id, email, telefone, is_admin=nivel != "usuario", is_master=nivel == "master")
-        if action == "test" and not whatsapp.conectado():
-            flash(f"Cadastro de '{user_row['username']}' atualizado. " + _AVISO_WHATSAPP_DESCONECTADO, "error")
-            return redirect(url_for("admin_users"))
-        elif action == "test":
-            ok, message = whatsapp.send_whatsapp(
-                telefone, "OneAgro: mensagem de teste. Se voce recebeu isso, o numero esta certo!",
-            )
-            flash(
-                f"Cadastro de '{user_row['username']}' atualizado. "
-                + ("Mensagem de teste enviada!" if ok else f"Falha no teste: {message}"),
-                "success" if ok else "error",
-            )
-            return redirect(url_for("admin_users"))
         return _save_response(f"Cadastro de '{user_row['username']}' atualizado.", "admin_users")
     codigo_pais, numero_telefone = _split_phone(user_row["telefone"] or "")
     return render_template(
@@ -7420,30 +6727,6 @@ def change_password():
             return redirect(url_for("mapa"))
         flash(erro, "error")
     return render_template("change_password.html")
-
-
-@app.route("/admin/users/<int:user_id>/whatsapp-pausado", methods=["POST"])
-@aba_required("usuarios")
-def admin_user_whatsapp_pausado(user_id):
-    """Pausa/retoma o recebimento de WhatsApp desse usuario em TODAS as
-    fazendas de uma vez (ver `models.set_user_whatsapp_pausado`) --
-    checkbox na aba Usuarios, sem precisar desmarcar fazenda por fazenda
-    em Localidades. Fetch direto (nao um form autosave da tabela
-    inteira), resposta JSON pura."""
-    pausado = request.form.get("pausado") == "1"
-    models.set_user_whatsapp_pausado(user_id, pausado)
-    return {"ok": True}
-
-
-@app.route("/admin/subordinados/<int:subordinado_id>/whatsapp-pausado", methods=["POST"])
-@aba_required("usuarios")
-def admin_subordinado_whatsapp_pausado(subordinado_id):
-    """Mesmo padrao de `admin_user_whatsapp_pausado`, pra' subordinado --
-    checkbox direto na linha da aba Usuarios (sem precisar abrir a tela
-    dedicada de Subordinados so' pra isso)."""
-    pausado = request.form.get("pausado") == "1"
-    models.set_subordinado_whatsapp_pausado(subordinado_id, pausado)
-    return {"ok": True}
 
 
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
@@ -7577,7 +6860,7 @@ def admin_exportar():
     drive = {
         "configurado": google_drive.configurado(), "conectado": _google_drive_conectado(),
         "client_id": bool(google_drive.CLIENT_ID), "client_secret": bool(google_drive.CLIENT_SECRET),
-        "email": models.get_setting("gdrive_email") or "", "status": status, "hora": HORA_GOOGLE_DRIVE,
+        "email": models.get_setting("gdrive_email") or "", "status": status, "hora": _hora_google_drive(),
         "pasta": google_drive.PASTA_RAIZ, "subpastas": google_drive.SUBPASTAS, "redirect_uri": _google_drive_redirect_uri(),
     }
     return render_template("admin_exportar.html", drive=drive)
@@ -7619,7 +6902,7 @@ def google_drive_retorno():
     models.set_setting("gdrive_refresh_token", resp["refresh_token"])
     models.set_setting("gdrive_email", email)
     flash(f"Google Drive conectado ({email}). Os relatórios vão para a pasta {google_drive.PASTA_RAIZ} todo dia às "
-          f"{HORA_GOOGLE_DRIVE}:00.", "success")
+          f"{_hora_google_drive()}:00.", "success")
     return redirect(url_for("admin_exportar"))
 
 
@@ -7646,37 +6929,6 @@ def google_drive_enviar_agora():
         _google_drive_em_segundo_plano()
         flash("Envio para o Google Drive começou. Atualize a página em alguns minutos para ver o resultado.", "success")
     return redirect(url_for("admin_exportar"))
-
-
-def _historico_envios():
-    """Historico de envios por WhatsApp (ultimos 7 dias, filtros de fazenda/so' falhas) + quadro de
-    status -- na tela Gerenciar WhatsApp desde 13/11/2026 (antes em Gerenciar Exportações)."""
-    site_name = request.args.get("site") or None
-    apenas_falhas = request.args.get("falhas") == "1"
-    logs = models.get_whatsapp_envio_log(site_name=site_name, apenas_falhas=apenas_falhas, dias=7)
-    for l in logs:
-        l["site_nome"] = _nome_exibicao(l["site_name"])
-    sites = sorted((set(read_sites()) | models.virtual_farm_site_names()) - models.get_deactivated_site_names(), key=_ordem_fazenda)
-    contagem = models.contar_status_envio(site_name)
-    return {
-        "logs": logs, "sites": sites, "nomes_exibicao": {s: _nome_exibicao(s) for s in sites},
-        "site_selecionado": site_name or "", "apenas_falhas": apenas_falhas,
-        "status_envio": [(k, rotulo, contagem[k]) for k, (rotulo, _c) in models.STATUS_ENVIO.items()],
-    }
-
-
-@app.route("/admin/whatsapp/historico/limpar", methods=["POST"])
-@master_required
-def admin_whatsapp_historico_limpar():
-    """Apaga do historico os status marcados no quadro (pedido do Alan, 13/11/2026)."""
-    site_name = request.form.get("site") or None
-    status = request.form.getlist("status")
-    if not status:
-        flash("Marque pelo menos um status para limpar.", "error")
-    else:
-        n = models.limpar_status_envio(status, site_name)
-        flash(f"{n} registro(s) apagado(s) do histórico.", "success")
-    return redirect(url_for("admin_whatsapp", site=site_name or None) + "#historico")
 
 
 @app.route("/admin/estacoes-diagnostico")
@@ -7826,28 +7078,6 @@ def admin_exportar_backup():
     return send_file(io.BytesIO(conteudo), as_attachment=True, download_name=filename, mimetype="application/gzip")
 
 
-@app.route("/admin/whatsapp")
-@master_required
-def admin_whatsapp():
-    """Tela de pareamento do WhatsApp corporativo (QR code/codigo de
-    pareamento, teste de envio, trocar numero) -- so' Master
-    tem acesso, ja que controla o remetente usado por TODAS as fazendas."""
-    return render_template(
-        "admin_whatsapp.html", status=whatsapp.get_status(), parametros_meta=whatsapp_cloud_api.parametros(),
-        # A Meta so' aceita https (o site roda atras do proxy do Railway, que chega aqui como http).
-        webhook_url=url_for("whatsapp_webhook", _external=True, _scheme="http"
-                            if request.host.split(":")[0] in ("127.0.0.1", "localhost") else "https"),
-        recebidas=models.whatsapp_recebidas(),
-        modelos_meta=[whatsapp_cloud_api.TEMPLATE_RELATORIO, whatsapp_cloud_api.TEMPLATE_RELATORIO_TEXTO,
-                      whatsapp_cloud_api.TEMPLATE_NDVI],
-        provedor=whatsapp.WHATSAPP_PROVIDER, parametros_umbler=whatsapp_umbler.parametros(),
-        **_historico_envios(),
-        webhook_umbler_url=url_for("umbler_webhook", _external=True, _scheme="http"
-                                   if request.host.split(":")[0] in ("127.0.0.1", "localhost") else "https")
-        + "?token=SUA_SENHA",
-    )
-
-
 @app.route("/webhooks/whatsapp", methods=["GET", "POST"])
 def whatsapp_webhook():
     """Webhook da API oficial da Meta (pedido do Alan, 13/11/2026). GET = verificacao do painel
@@ -7894,50 +7124,6 @@ def umbler_webhook():
     for telefone, nome, texto in recebidas:
         models.registrar_whatsapp_recebida(telefone, nome, texto)
     return jsonify(ok=True)
-
-
-@app.route("/admin/whatsapp/status")
-@master_required
-def admin_whatsapp_status():
-    """JSON puro pra tela atualizar sozinha (QR code/status de conexao)
-    sem precisar recarregar a pagina inteira."""
-    return whatsapp.get_status()
-
-
-@app.route("/admin/whatsapp/pair-code", methods=["POST"])
-@master_required
-def admin_whatsapp_pair_code():
-    phone = request.form.get("phone", "")
-    ok, resultado = whatsapp.request_pairing_code(phone)
-    return {"ok": ok, "code": resultado if ok else None, "error": None if ok else resultado}
-
-
-@app.route("/admin/whatsapp/test", methods=["POST"])
-@master_required
-def admin_whatsapp_test():
-    phone = _telefone_from_form(request.form)
-    texto = (
-        "Teste do OneAgro Monitor -- se voce recebeu essa mensagem, o envio "
-        "de relatorios por WhatsApp esta funcionando corretamente."
-    )
-    ok, mensagem = whatsapp.send_whatsapp(phone, texto)
-    return _save_response(
-        f"Mensagem de teste enviada para {phone}." if ok else f"Falha ao enviar teste: {mensagem}",
-        "admin_whatsapp", ok=ok,
-    )
-
-
-@app.route("/admin/whatsapp/reset", methods=["POST"])
-@master_required
-def admin_whatsapp_reset():
-    """Desconecta o numero atual pra poder conectar outro (ex.: trocar o
-    WhatsApp corporativo) -- limpa a sessao salva no whatsapp-bridge e
-    gera um QR code novo."""
-    ok, mensagem = whatsapp.reset_session()
-    return _save_response(
-        "Numero desconectado -- escaneie o novo QR code pra conectar outro." if ok else f"Falha ao desconectar: {mensagem}",
-        "admin_whatsapp", ok=ok,
-    )
 
 
 @app.route("/admin/users/<int:user_id>/permissions", methods=["GET", "POST"])
@@ -8276,7 +7462,7 @@ def _iniciar_cobranca(user_id, plano, credito=0):
 
 @app.route("/planos")
 def planos_publico():
-    return render_template("cliente_planos.html", planos=models.get_planos(apenas_ativos=True), recursos=models.RECURSOS_PLANO)
+    return render_template("cliente_planos.html", planos=models.get_planos(apenas_ativos=True), recursos=models.RECURSOS_PLANO_CLIENTE)
 
 
 @app.route("/privacidade")
@@ -8576,7 +7762,7 @@ def _contexto_cadastro(culturas):
     return {
         "culturas": culturas, "grupos": GRUPOS_CULTURA,
         "grupo_de": {c: _grupo_da_cultura(c) for c in culturas},
-        "planos": models.get_planos(apenas_ativos=True), "recursos": models.RECURSOS_PLANO,
+        "planos": models.get_planos(apenas_ativos=True), "recursos": models.RECURSOS_PLANO_CLIENTE,
         "faixas_preco": [{"ate": f["ate_ha"], "usd_ha": f["usd_ha"], "fixo": f["fixo"]} for f in _tabela_precificacao()],
         "moeda_tabela": _moeda_tabela(),
         "cotacao_valor": cot["valor"] if cot else None, "contato_comercial": CONTATO_COMERCIAL, "max_extras": MAX_EXTRAS_RELATORIO,
@@ -8691,7 +7877,6 @@ def solicitar_acesso():
             models.concluir_pre_cadastro(telefone, email)
             if modalidade == "plano":
                 _criar_locais_e_extras(user_id, username, locais, extras, plano_escolhido)
-            _avisar_master_cadastro(registro)
             login_user(User(models.get_user_by_id(user_id)), remember=True)
             if modalidade == "plano" and "tecnico" in perfis:
                 c = CONTATO_COMERCIAL
@@ -8718,7 +7903,7 @@ def solicitar_acesso():
 
 def _pedido_de_contato(perfil, nome_completo, telefone, email, culturas):
     """Tecnico do setor / Quero representar a OneAgro (pedido do Alan, 13/11/2026): sem conta; guarda o
-    pedido, avisa os Masters no WhatsApp e mostra o contato comercial da OneAgro."""
+    pedido e mostra o contato comercial da OneAgro (aviso no WhatsApp saiu, 26/11/2026)."""
     form = request.form
     empresa = " ".join(form.get("empresa", "").split())[:80]
     erro = None
@@ -8735,36 +7920,9 @@ def _pedido_de_contato(perfil, nome_completo, telefone, email, culturas):
         return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR,
                                modalidades=MODALIDADES_CADASTRO, perfis=PERFIS_CADASTRO, form=form)
     models.registrar_pedido_contato(perfil, nome_completo, empresa, telefone, email)
-    linhas = ["🔔 *Pedido de contato - OneAgro*", f"{nome_completo} -- {PERFIS_CADASTRO[perfil]}", f"Empresa: {empresa}",
-              f"Celular: {models.fmt_telefone_br(telefone)}", f"E-mail: {email}", "",
-              f"Ver: {url_for('admin_solicitacoes', _external=True)}"]
-    for tel in models.get_master_telefones():
-        _whatsapp_em_segundo_plano(tel, "\n".join(linhas))
     return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR,
                            modalidades=MODALIDADES_CADASTRO, perfis=PERFIS_CADASTRO, form={},
                            contato_enviado={"nome": nome_completo.split()[0], "perfil": perfil})
-
-
-def _whatsapp_em_segundo_plano(telefone, texto):
-    """O portao de envio (`whatsapp._um_envio_por_vez`) pode segurar a
-    mensagem por varios segundos -- a tela responde na hora."""
-    threading.Thread(target=whatsapp.send_whatsapp, args=(telefone, texto), daemon=True).start()
-
-
-def _avisar_master_cadastro(reg):
-    perfis = " e ".join(PERFIS_CADASTRO[p] for p in reg["perfil"].split(",") if p in PERFIS_CADASTRO)
-    linhas = [
-        "🔔 *Novo cadastro - OneAgro*",
-        f"{reg['nome_completo']} (usuário: {reg['username']})",
-        f"Quer: {'Assinar plano' if reg['tipo'] == 'cliente' else 'Ter acesso à fazenda cadastrada'}",
-        f"Perfil: {perfis}",
-        f"Celular: {models.fmt_telefone_br(reg['telefone'])}",
-        f"{reg['empresa']} -- {reg['cidade']}/{reg['uf']}",
-        "",
-        f"Detalhes: {url_for('admin_users', _external=True)}",
-    ]
-    for telefone in models.get_master_telefones():
-        _whatsapp_em_segundo_plano(telefone, "\n".join(linhas))
 
 
 def _cobrar_ou_avisar(user_id, plano, credito=0):
@@ -8827,7 +7985,7 @@ def cliente_assinatura():
         # Sem nenhuma lavoura ainda: marca no mapa onde sera' a area monitorada.
         pedir_local=not models.get_cliente_pontos(int(current_user.id)), nome_area=cad.get("empresa") or "",
         area_total=(models.get_cadastro_do_usuario(int(current_user.id)) or {}).get("area_ha"),
-        recursos=models.RECURSOS_PLANO, sem_prazo=models.SEM_PRAZO, free_ate=_acesso_cliente()[2],
+        recursos=models.RECURSOS_PLANO_CLIENTE, sem_prazo=models.SEM_PRAZO, free_ate=_acesso_cliente()[2],
         dias_free=models.DIAS_FREE, formas_pagamento=asaas.FORMAS_PAGAMENTO,
         fazendas_adicionais=_fazendas_adicionais(int(current_user.id)),
     )
@@ -10197,7 +9355,6 @@ MENU_CONFIG = [
     ("acessos", "Gerenciar Acessos", "admin_acessos", "master"),
     ("cadastros", "Gerenciar Fazendas", "admin_solicitacoes", "master"),
     ("planos", "Planos e Valores", "admin_planos", "master"),
-    ("whatsapp", "Gerenciar WhatsApp", "admin_whatsapp", "master"),
     ("exportar", "Gerenciar Exportações", "admin_exportar", "master"),
     ("ocultas", "Gerenciar Fazendas Ocultas", "fazendas_ocultas", "master"),
 ]
@@ -10243,26 +9400,6 @@ def salvar_ordem_menu_config():
         abort(400)
     models.set_setting(_ORDEM_MENU_KEY, json.dumps(ordem))
     return jsonify({"ok": True, "ordem": _ordem_menu_config()})
-
-
-@app.context_processor
-def _inject_whatsapp_conectado():
-    """`whatsapp_conectado()` nos templates: so' consulta o servico quando a
-    tela usa (botoes de envio)."""
-    return {"whatsapp_conectado": whatsapp.conectado}
-
-
-_AVISO_WHATSAPP_DESCONECTADO = ("WhatsApp desconectado -- nada foi enviado. Conecte de novo em "
-                                "Configurações > Gerenciar WhatsApp.")
-
-
-def _whatsapp_desconectado(destino):
-    """Envio pedido com o WhatsApp desconectado (botao desativado na tela,
-    mas a pagina pode estar aberta de antes): avisa e volta, sem enviar."""
-    if whatsapp.conectado():
-        return None
-    flash(_AVISO_WHATSAPP_DESCONECTADO, "error")
-    return redirect(request.referrer or destino)
 
 
 @app.context_processor

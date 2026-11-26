@@ -45,7 +45,7 @@ class PlanosTest(unittest.TestCase):
         for nome in ("Essencial", "Básico", "Avançado", "Inteligência"):
             self.assertIn(nome, self.planos)
         free = self.planos["Essencial"]
-        self.assertEqual((free["valor"], free["ativo"], free["recursos"]), (0, 1, ["clima", "whatsapp_texto"]))
+        self.assertEqual((free["valor"], free["ativo"], free["recursos"]), (0, 1, ["clima", "whatsapp_texto", "drive_pdf", "drive_txt", "drive_ndvi"]))
         # PDF por WhatsApp so' nos Premium (pedido do Alan, 08/11/2026)
         self.assertIn("whatsapp_pdf", self.planos["Avançado"]["recursos"])
         self.assertIn("whatsapp_pdf", self.planos["Inteligência"]["recursos"])
@@ -2056,26 +2056,40 @@ class GoogleDriveTest(unittest.TestCase):
             mock.patch.object(google_drive, "token_de_acesso", return_value="tok"),
             mock.patch.object(google_drive, "pastas", return_value={"raiz": "R", "PDF": "P", "TXT": "T", "NDVI": "N"}),
             mock.patch.object(google_drive, "enviar_arquivo", side_effect=enviar),
+            mock.patch.object(google_drive, "subpasta", side_effect=lambda tok, nome, pai: f"{pai}/{nome}"),
             mock.patch.object(webapp, "_fazendas_google_drive", return_value=[site]),
         ]
         for p in patches:
             p.start()
         try:
             models.set_setting("gdrive_refresh_token", "rt")
+            # sem plano = nada vai pro Drive (o plano decide os arquivos, 26/11/2026)
             with webapp.app.app_context():
                 self.assertTrue(webapp._enviar_relatorios_google_drive())
+            self.assertEqual(gravados, [])
+            pid = models.salvar_plano(None, "Zzz Plano Drive", "", 10.0, "MONTHLY", 1, 50, ["clima", "drive_pdf", "drive_txt"], True, 9)
+            models.salvar_plano_fazenda(site, plano_id=pid)
+            with webapp.app.app_context():
+                self.assertEqual(webapp._arquivos_drive_da_fazenda(site), ["PDF", "TXT"])
+                self.assertTrue(webapp._enviar_relatorios_google_drive())
             pastas = sorted(p for p, _a, _m in gravados)
-            self.assertEqual(pastas, ["P", "T"])
+            self.assertEqual(pastas, ["P/Sem cliente", "T/Sem cliente"])
             self.assertTrue(any(a.startswith("OneAgro_Relatorio_Zzz_Fazenda_Drive_") and a.endswith(".pdf") for _p, a, _m in gravados))
             st = webapp._status_google_drive()
             self.assertEqual((st["pdf"], st["txt"], st["ndvi"], st["andamento"]), (1, 1, 0, False))
-            # NDVI: so' a imagem nova, uma vez
+            # NDVI: so' com o plano liberando, e so' a imagem nova, uma vez
             models.add_farm_ndvi_historico(site, "2026-11-20", b"\x89PNG fake")
             gravados.clear()
             with webapp.app.app_context():
                 webapp._enviar_relatorios_google_drive()
+            self.assertEqual([a for p, a, _m in gravados if p.startswith("N")], [])
+            plano = next(p for p in models.get_planos() if p["id"] == pid)
+            models.salvar_plano(pid, plano["nome"], "", 10.0, "MONTHLY", 1, 50, ["clima", "drive_pdf", "drive_txt", "drive_ndvi"], True, 9)
+            gravados.clear()
+            with webapp.app.app_context():
                 webapp._enviar_relatorios_google_drive()
-            ndvi = [a for p, a, _m in gravados if p == "N"]
+                webapp._enviar_relatorios_google_drive()
+            ndvi = [a for p, a, _m in gravados if p == "N/Sem cliente"]
             self.assertEqual(ndvi, ["OneAgro_NDVI_Zzz_Fazenda_Drive_2026-11-20.png"])
             # agendado: antes das 5h nao roda; depois roda uma vez por dia
             models.set_setting("gdrive_ultimo_dia", "")
@@ -2105,6 +2119,15 @@ class GoogleDriveTest(unittest.TestCase):
             self.assertNotIn("🔄 Enviando desde", c.get("/admin/exportar").get_data(as_text=True))
             tela = c.get("/admin/exportar").get_data(as_text=True)
             self.assertIn("Google Drive — cópia diária", tela)
+            envios = c.get("/whatsapp").get_data(as_text=True)
+            self.assertIn("Envio para o Google Drive", envios)
+            self.assertIn("Zzz Fazenda Drive", envios)
+            self.assertNotIn("WhatsApp", envios)
+            r = c.post("/envios/hora-drive", data={"hora": "6"}, headers={"X-Autosave": "1"}).get_json()
+            self.assertTrue(r["ok"])
+            self.assertEqual(webapp._hora_google_drive(), 6)
+            self.assertFalse(c.post("/envios/hora-drive", data={"hora": "25"}, headers={"X-Autosave": "1"}).get_json()["ok"])
+            models.set_setting("gdrive_hora", "")
             self.assertIn("⬆ Enviar agora", tela)
             models.set_setting("gdrive_refresh_token", "")
             r = c.get("/admin/google-drive/conectar")
@@ -2125,7 +2148,12 @@ class GoogleDriveTest(unittest.TestCase):
                 p.stop()
             models.set_setting("gdrive_refresh_token", "")
             models.set_setting("gdrive_status", "")
+            models.set_setting("gdrive_por_fazenda", "")
+            models.set_setting("gdrive_ndvi_enviados", "")
             models.delete_virtual_farm(site)
+            for p in models.get_planos():
+                if p["nome"] == "Zzz Plano Drive":
+                    models.excluir_plano(p["id"])
 
     def test_politica_privacidade_publica(self):
         c = webapp.app.test_client()
@@ -2133,3 +2161,39 @@ class GoogleDriveTest(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("Uso Limitado", r.get_data(as_text=True))
         self.assertIn("/privacidade", c.get("/login").get_data(as_text=True))
+
+    def test_sem_whatsapp_e_drive_nos_planos(self):
+        """WhatsApp saiu do site e o Drive segue o plano (pedido do Alan, 26/11/2026)."""
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Master Drive"):
+            models.create_user("Zzz Master Drive", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Master Drive")["id"])
+            s["_fresh"] = True
+        self.assertEqual(c.get("/admin/whatsapp").status_code, 404)
+        for rota in ("/recommendations", "/ndvi", "/admin/users", "/whatsapp"):
+            with self.subTest(rota=rota):
+                html = c.get(rota, follow_redirects=True).get_data(as_text=True)
+                self.assertNotIn("Enviar por WhatsApp", html)
+                self.assertNotIn("Gerenciar WhatsApp", html)
+        self.assertIn("Google Drive: relatório em PDF", c.get("/admin/planos").get_data(as_text=True))
+        publico = webapp.app.test_client().get("/planos").get_data(as_text=True)
+        self.assertNotIn("Google Drive", publico)
+        self.assertNotIn("WhatsApp", publico)
+        # planos que ja' existiam ganham os 3 arquivos do Drive uma vez so' (o Master tira depois)
+        pid = models.salvar_plano(None, "Zzz Plano Antigo", "", 1.0, "MONTHLY", 1, 50, ["clima"], True, 9)
+        models.set_setting("recursos_drive_migrados", "")
+        conn = models.get_db()
+        conn.execute("DELETE FROM app_settings WHERE key = 'recursos_drive_migrados'")
+        conn.commit()
+        conn.close()
+        models.init_db()
+        antigo = next(p for p in models.get_planos() if p["id"] == pid)
+        self.assertTrue(set(models.RECURSOS_DRIVE) <= set(antigo["recursos"]))
+        models.salvar_plano(pid, antigo["nome"], "", 1.0, "MONTHLY", 1, 50, ["clima"], True, 9)
+        models.init_db()
+        self.assertEqual(next(p for p in models.get_planos() if p["id"] == pid)["recursos"], ["clima"])
+        models.excluir_plano(pid)
+        self.assertTrue(all(set(models.RECURSOS_DRIVE) <= set(r) for _n, r, _l, _v in models.PLANOS_PADRAO))

@@ -9,7 +9,7 @@
         <div class="card shadow-sm h-100"><div class="card-body">
             <h6 class="mb-1">📊 Planilha Excel</h6>
             <p class="text-muted small mb-2">Uma aba por assunto: Fazendas, Clima e Esporos, Manejo, Doenças, Fungicidas,
-                WhatsApp (últimos 90 dias), Usuários, Clientes, Pré-cadastros e Planos.</p>
+                Usuários, Clientes, Pré-cadastros e Planos.</p>
             <a href="{{ url_for('admin_exportar_download') }}" class="btn btn-success btn-sm">Baixar Excel</a>
         </div></div>
     </div>
@@ -30,10 +30,11 @@
     <div class="col-12">
         <div class="card shadow-sm" id="google-drive"><div class="card-body">
             <h6 class="mb-1">☁️ Google Drive — cópia diária dos relatórios</h6>
-            <p class="text-muted small mb-2">Todo dia às {{ drive.hora }}:00 (Cuiabá), o PDF e o TXT do relatório de todas as
-                fazendas e a imagem NDVI nova de cada uma vão para a pasta <strong>{{ drive.pasta }}</strong>
-                (subpastas {{ drive.subpastas | join(', ') }}).{% if ambiente_qap %} No ambiente de teste o envio automático
-                fica desligado.{% endif %}</p>
+            <p class="text-muted small mb-2">Todo dia às {{ drive.hora }}:00 (Cuiabá), os arquivos que o plano de cada fazenda
+                libera (PDF, TXT e imagem NDVI nova) vão para a pasta <strong>{{ drive.pasta }}</strong> (subpastas
+                {{ drive.subpastas | join(', ') }}, com uma pasta por cliente). Horário e lista por fazenda em
+                <a href="{{ url_for('whatsapp_gerenciamento') }}">Programação de Envios</a>.{% if ambiente_qap %} No ambiente de
+                teste o envio automático fica desligado.{% endif %}</p>
             {% if not drive.configurado %}
             <div class="small mb-2">Falta colocar nas variáveis do Railway:
                 <span class="ms-1">{{ '✅' if drive.client_id else '⬜' }} <code>GOOGLE_DRIVE_CLIENT_ID</code></span>

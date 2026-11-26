@@ -42,10 +42,8 @@ class CadastroTest(unittest.TestCase):
         if not models.get_user_by_username("Zzz Teste Admin Cad"):
             models.create_user("Zzz Teste Admin Cad", "x", is_admin=True)
         cls.plano = models.salvar_plano(None, "Zzz Plano Cad", "", 30.0, "MONTHLY", 2, 50, ["clima"], True, 1)
-        cls.enviadas = []
-        cls.patch_whats = mock.patch.object(
-            webapp, "_whatsapp_em_segundo_plano", side_effect=lambda tel, texto: cls.enviadas.append((tel, texto)),
-        )
+        # Aviso de cadastro novo no WhatsApp saiu (26/11/2026): nada pode sair por WhatsApp.
+        cls.patch_whats = mock.patch.object(webapp.whatsapp, "send_whatsapp", side_effect=AssertionError("WhatsApp"))
         cls.patch_whats.start()
 
     @classmethod
@@ -494,7 +492,7 @@ class CadastroTest(unittest.TestCase):
         self.assertIn('data-situacao="free"', html)
         self.assertIn('data-situacao="bloqueado"', html)
         self.assertIn('data-filtro="free"', html)
-        self.assertIn("Relatório por WhatsApp:</span> texto + PDF", html)  # igual pra todo cliente (14/11/2026)
+        self.assertNotIn("Relatório por WhatsApp", html)  # WhatsApp saiu (26/11/2026)
         self.assertIn('<span class="fw-semibold">Zzz Area Ger</span>', html)  # modelo unico (09/11/2026)
         self.assertIn("✏️ Dados da fazenda", html)
         self.assertNotIn(" lavoura", html.split("Usuários</h4>", 1)[1])
@@ -698,7 +696,6 @@ class CadastroTest(unittest.TestCase):
                                 premium["ordem"], premium["moeda"], premium["preco_por_area"])
 
     def test_acesso_a_fazenda_cria_usuario_sem_fazendas(self):
-        self.enviadas.clear()
         c = webapp.app.test_client()
         resp = c.post("/solicitar-acesso", data=_form(username="Zzz Cad Fazenda", perfil=["produtor", "tecnico"]))
         self.assertEqual(resp.status_code, 302)
@@ -710,9 +707,6 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual((reg["tipo"], reg["perfil"], reg["area_ha"], reg["nome_completo"]),
                          ("usuario", "produtor", 1500.0, "Zzz Teste da Silva Cadastro"))  # um perfil so'
 
-        aviso = [t for tel, t in self.enviadas if tel == "5565988887777"]
-        self.assertEqual(len(aviso), 1)
-        self.assertIn("Zzz Cad Fazenda", aviso[0])
         login = webapp.app.test_client().post("/login", data={"username": "Zzz Cad Fazenda", "password": "segredo1"})
         self.assertEqual(login.status_code, 302)
 
