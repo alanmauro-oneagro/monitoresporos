@@ -2361,6 +2361,21 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             if esperado == 200:
                 self.assertIn("Esqueci minha senha", r.get_data(as_text=True))
 
+    def test_numero_conectado_e_pedidos_no_fim(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Whats Master"):
+            models.create_user("Zzz Whats Master", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Whats Master")["id"])
+            s["_fresh"] = True
+        with mock.patch.object(webapp.whatsapp, "get_status",
+                               return_value={"connected": True, "qr": None, "numero": "5543991147595", "nome": "OneAgro"}):
+            html = c.get("/admin/whatsapp").get_data(as_text=True)
+        self.assertIn("(43)99114-7595", html)
+        self.assertGreater(html.index('id="pedidos"'), html.index("💬 WhatsApp"))
+
     def test_sem_smtp_nao_envia(self):
         import email_envio
         with mock.patch.dict(os.environ, {"SMTP_HOST": "", "SMTP_USER": "", "SMTP_PASSWORD": ""}):
