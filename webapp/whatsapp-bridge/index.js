@@ -39,7 +39,15 @@ const {
 const PORT = process.env.PORT || 3001;
 // So usa 0.0.0.0 quando explicitamente pedido (ambiente hospedado).
 const HOST = process.env.HOST || "127.0.0.1";
-const AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || "./auth_info";
+// Sessao no volume do Railway (26/11/2026): sem a variavel certa a sessao ia pra pasta do container e se perdia a
+// cada reinicio (pedia QR de novo). Aceita o nome em minusculas e, sem nenhum, usa o volume montado
+// (RAILWAY_VOLUME_MOUNT_PATH, que o Railway preenche sozinho).
+// Pasta escolhida fora do volume tambem se perderia: com volume, a sessao fica SEMPRE dentro dele.
+const VOLUME = process.env.RAILWAY_VOLUME_MOUNT_PATH || "";
+const PASTA_PEDIDA = process.env.WHATSAPP_AUTH_DIR || process.env.whatsapp_auth_dir || "";
+const AUTH_DIR = VOLUME && !path.resolve(PASTA_PEDIDA || ".").startsWith(path.resolve(VOLUME))
+    ? path.join(VOLUME, "auth_info")
+    : (PASTA_PEDIDA || "./auth_info");
 
 // Espacamento minimo entre envios (+ variacao aleatoria). Configuravel
 // no Railway (WHATSAPP_MIN_DELAY_MS e WHATSAPP_JITTER_MS).
@@ -312,4 +320,6 @@ app.post("/reset", async (req, res) => {
 
 app.listen(PORT, HOST, () => {
     console.log("Bridge do WhatsApp rodando em http://" + HOST + ":" + PORT);
+    console.log("Sessao do WhatsApp guardada em " + path.resolve(AUTH_DIR)
+        + (process.env.RAILWAY_VOLUME_MOUNT_PATH ? " (volume: " + process.env.RAILWAY_VOLUME_MOUNT_PATH + ")" : " (SEM volume -- se perde ao reiniciar)"));
 });
