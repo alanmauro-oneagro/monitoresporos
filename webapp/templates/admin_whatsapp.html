@@ -32,25 +32,10 @@
     </div>
 </div>
 
-<div class="card shadow-sm mb-4" id="pedidos">
-    <div class="card-body">
-        <h6 class="mb-2">🧾 Últimos pedidos de "Esqueci minha senha"</h6>
-        {% if log_recuperacao %}
-        <div class="table-responsive"><table class="table table-sm small mb-0">
-            <thead><tr><th>Quando</th><th>Usuário</th><th>Canal</th><th>Resultado</th></tr></thead>
-            <tbody>{% for p in log_recuperacao %}
-            <tr><td class="text-nowrap">{{ p.em[8:10] }}/{{ p.em[5:7] }} {{ p.em[11:16] }}</td><td>{{ p.usuario }}</td>
-                <td>{{ p.canal }}</td><td>{{ p.resultado }}</td></tr>
-            {% endfor %}</tbody>
-        </table></div>
-        {% else %}<div class="small text-muted">Nenhum pedido ainda.</div>{% endif %}
-    </div>
-</div>
-
 <h6 class="mb-2">💬 WhatsApp</h6>
 <div id="status-box" class="alert {{ 'alert-success' if status.connected else 'alert-warning' }}">
     {% if status.connected %}
-    ✅ Conectado -- as senhas temporárias saem por este número.
+    ✅ Conectado{% if status.numero %} -- número <strong>{{ status.numero | telefone_br }}</strong>{% if status.nome %} ({{ status.nome }}){% endif %}{% endif %}. As senhas temporárias saem por este número.
     {% elif status.error %}
     ⚠ {{ status.error }}
     {% else %}
@@ -132,6 +117,22 @@
             </div>
         </div>
         {% endif %}
+    </div>
+</div>
+
+
+<div class="card shadow-sm mt-4" id="pedidos">
+    <div class="card-body">
+        <h6 class="mb-2">🧾 Últimos pedidos de "Esqueci minha senha"</h6>
+        {% if log_recuperacao %}
+        <div class="table-responsive"><table class="table table-sm small mb-0">
+            <thead><tr><th>Quando</th><th>Usuário</th><th>Canal</th><th>Resultado</th></tr></thead>
+            <tbody>{% for p in log_recuperacao %}
+            <tr><td class="text-nowrap">{{ p.em[8:10] }}/{{ p.em[5:7] }} {{ p.em[11:16] }}</td><td>{{ p.usuario }}</td>
+                <td>{{ p.canal }}</td><td>{{ p.resultado }}</td></tr>
+            {% endfor %}</tbody>
+        </table></div>
+        {% else %}<div class="small text-muted">Nenhum pedido ainda.</div>{% endif %}
     </div>
 </div>
 

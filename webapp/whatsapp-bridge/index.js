@@ -173,6 +173,9 @@ app.get("/status", (req, res) => {
         connected,
         qr: connected ? null : lastQrDataUrl,
         pairingCode: connected ? null : (pairingCodeState ? pairingCodeState.code : null),
+        // Numero conectado (pedido do Alan, 26/11/2026): "5543991147595:12@s.whatsapp.net" -> "5543991147595".
+        numero: connected && sock && sock.user && sock.user.id ? String(sock.user.id).split(/[:@]/)[0] : null,
+        nome: connected && sock && sock.user ? (sock.user.name || sock.user.notify || null) : null,
     });
 });
 
