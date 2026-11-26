@@ -833,7 +833,11 @@ site tem que entrar la'.
   Alan, 26/11/2026 -- pouco uso = menos risco de banimento): menu "WhatsApp (recuperar senha)" (`admin_whatsapp`,
   Master: QR code/codigo de pareamento, teste, trocar numero -- `admin_whatsapp_status/pair_code/test/reset`). O "Esqueci
   a senha" pede usuario + e-mail OU celular do cadastro (`contato`, `_contato_confere`); a senha vai pelo WhatsApp se a
-  conta tem celular e, se falhar/sem celular, por e-mail. Nenhum relatorio sai pelo WhatsApp. **E-mail pelo Gmail / Google
+  conta tem celular e, se falhar/sem celular, por e-mail. Nenhum relatorio sai pelo WhatsApp. **Canal = o que a pessoa
+  digitou** (26/11/2026): e-mail -> e-mail; celular -> WhatsApp (falhou = e-mail do cadastro); usuario sem diferenciar
+  maiusculas (`models.usuario_sem_maiusculas`); cada pedido fica em "🧾 Últimos pedidos" na tela Recuperação de senha
+  (setting `recuperacao_senha_log`, 20 ultimos, `_registrar_recuperacao`: nao encontrado / contato nao confere / repetido
+  em < 5 min / enviado para X / falha -- nunca a senha). **E-mail pelo Gmail / Google
   Workspace** (pedido do Alan, 26/11/2026; contato@oneagro.com.br e' Google Workspace; o Railway bloqueia SMTP nos planos
   menores): a tela virou "Recuperação de senha" (mesma rota `admin_whatsapp`) com o cartao "📧 E-mail": Conectar
   (`gmail_conectar`, escopo `google_drive.ESCOPO_GMAIL` = so' enviar, mesmo cliente OAuth e MESMO endereco de retorno do

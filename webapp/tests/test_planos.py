@@ -3,6 +3,7 @@ liberado na hora e preco/abas editaveis pelo Master.
 
 Rodar a partir de webapp/:  python -m unittest tests.test_planos
 """
+import json
 import os
 import sys
 import tempfile
@@ -2294,7 +2295,7 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             self.assertEqual(len(enviados), 1)
             para, assunto, texto = enviados[0]
             self.assertEqual(para, "Zzz.Esqueci@Exemplo.com")
-            self.assertIn("senha temporária", texto)
+            self.assertIn("Senha temporária", texto)
             # pedido repetido logo em seguida nao manda de novo
             c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "email": "zzz.esqueci@exemplo.com"})
             self.assertEqual(len(enviados), 1)
@@ -2319,14 +2320,26 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "(66)99999-0011"})
             self.assertEqual(len(whats), 1)
             self.assertEqual(whats[0][0], "5566999990011")
-            self.assertIn("senha temporária", whats[0][1])
+            self.assertIn("Senha temporária", whats[0][1])
             self.assertEqual(emails, [])
+        # e-mail digitado = vai por e-mail, mesmo com celular no cadastro (usuario sem diferenciar maiusculas)
+        with mock.patch.object(webapp.whatsapp, "send_whatsapp", side_effect=lambda *a: whats.append(a) or (True, "ok")), \
+                mock.patch.object(email_envio, "enviar", side_effect=lambda *a: emails.append(a) or (True, "ok")), \
+                mock.patch.object(webapp, "_email_em_segundo_plano", lambda f: f()):
+            webapp._esqueci_senha_ultima_solicitacao.clear()
+            c.post("/esqueci-senha", data={"username": "zzz esqueci whats", "contato": "zzz.whats@exemplo.com"})
+            self.assertEqual(len(emails), 1)
+            self.assertEqual(len(whats), 1)
+        # celular digitado e WhatsApp fora do ar = e-mail do cadastro
         with mock.patch.object(webapp.whatsapp, "send_whatsapp", return_value=(False, "desconectado")), \
                 mock.patch.object(email_envio, "enviar", side_effect=lambda *a: emails.append(a) or (True, "ok")), \
                 mock.patch.object(webapp, "_email_em_segundo_plano", lambda f: f()):
             webapp._esqueci_senha_ultima_solicitacao.clear()
-            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "zzz.whats@exemplo.com"})
-            self.assertEqual(len(emails), 1)
+            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "66999990011"})
+            self.assertEqual(len(emails), 2)
+        log = json.loads(models.get_setting("recuperacao_senha_log"))
+        self.assertTrue(log[0]["resultado"].startswith("enviado para zzz.whats"))
+        self.assertNotIn("Senha", json.dumps(log, ensure_ascii=False))
         u = models.get_user_by_username("Zzz Esqueci Whats")
         models.delete_user(u["id"])
 
