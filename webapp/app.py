@@ -2745,6 +2745,12 @@ def login_google():
         flash("Entrar com Google ainda não está disponível.", "error")
         return redirect(url_for("login"))
     session["google_login_state"] = secrets.token_urlsafe(24)
+    # Botao do "Criar conta" manda o "Você é" ja' escolhido (pedido do Alan, 26/11/2026): volta marcado.
+    perfil = request.args.get("perfil", "")
+    if perfil in PERFIS_CADASTRO:
+        session["google_perfil"] = perfil
+    else:
+        session.pop("google_perfil", None)
     return redirect(google_drive.url_login(_google_login_redirect_uri(), session["google_login_state"]))
 
 
@@ -2767,7 +2773,8 @@ def login_google_retorno():
     if not contas:
         # Conta nova com o Google (pedido do Alan, 26/11/2026): vai pro "Criar conta" com nome e e-mail ja'
         # preenchidos e sem senha; depois entra sempre com o Google.
-        session["google_cadastro"] = {"email": email, "nome": " ".join((dados.get("name") or "").split())[:80]}
+        session["google_cadastro"] = {"email": email, "nome": " ".join((dados.get("name") or "").split())[:80],
+                                      "perfil": session.pop("google_perfil", "")}
         flash(f"Ainda não há conta com {email}. Complete o cadastro -- você vai entrar com o Google, sem senha.", "success")
         return redirect(url_for("solicitar_acesso"))
     if len(contas) > 1:
@@ -7953,7 +7960,9 @@ def solicitar_acesso():
     if not form and session.get("google_cadastro"):
         g_cad = session["google_cadastro"]
         from werkzeug.datastructures import MultiDict
-        form = MultiDict({"nome_completo": g_cad.get("nome", ""), "email": g_cad["email"], "perfil": "produtor"})
+        form = MultiDict({"nome_completo": g_cad.get("nome", ""), "email": g_cad["email"]})
+        if g_cad.get("perfil") in PERFIS_CADASTRO:
+            form["perfil"] = g_cad["perfil"]
     return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR, modalidades=MODALIDADES_CADASTRO,
                            perfis=PERFIS_CADASTRO, form=form)
 
@@ -7977,6 +7986,7 @@ def _pedido_de_contato(perfil, nome_completo, telefone, email, culturas):
         return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR,
                                modalidades=MODALIDADES_CADASTRO, perfis=PERFIS_CADASTRO, form=form)
     models.registrar_pedido_contato(perfil, nome_completo, empresa, telefone, email)
+    session.pop("google_cadastro", None)
     return render_template("solicitar_acesso.html", **_contexto_cadastro(culturas), ufs=UFS_BR,
                            modalidades=MODALIDADES_CADASTRO, perfis=PERFIS_CADASTRO, form={},
                            contato_enviado={"nome": nome_completo.split()[0], "perfil": perfil})

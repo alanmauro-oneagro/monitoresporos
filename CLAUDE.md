@@ -842,8 +842,10 @@ site tem que entrar la'.
   uma = aviso e volta pro login. **Nenhuma = cadastro com Google** (pedido do Alan, 26/11/2026): guarda
   `session["google_cadastro"]` {email, nome} e vai pro "Criar conta" ja' com nome/e-mail (e-mail travado, caixa verde
   "Conta Google") e SEM senha (campos escondidos/desativados; o servidor gera uma senha aleatoria quando o e-mail e' o
-  do Google); depois a pessoa entra pelo botao do Google. "Criar conta" tambem tem o botao "Cadastrar com Google"
-  (fora do app da loja). Precisa dos enderecos de retorno
+  do Google); depois a pessoa entra pelo botao do Google. "Criar conta" tem o botao "Preencher com Google" SO' depois
+  do "Você é" (no topo de "Seus dados", fora do app da loja): leva o perfil escolhido (`/login/google?perfil=`,
+  `session["google_perfil"]`) e volta com ele marcado + nome/e-mail; vindo do login, o "Você é" fica pra escolher.
+  Tecnico/Representante com Google = pedido de contato normal (sem conta), limpa o `google_cadastro`. Precisa dos enderecos de retorno
   `https://oneagroapp.com.br/login/google/retorno` (e o com www) no cliente OAuth. Teste `EntrarComGoogleTest`.
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR

@@ -2238,12 +2238,24 @@ class EntrarComGoogleTest(unittest.TestCase):
             with c.session_transaction() as s:
                 self.assertEqual(s["google_cadastro"]["email"], "zzz.novo.google@exemplo.com")
             pag = c.get("/solicitar-acesso").get_data(as_text=True)
-            self.assertIn("Conta Google", pag)
+            self.assertIn("Conta Google conectada", pag)
             self.assertIn('value="zzz.novo.google@exemplo.com"', pag)
-            self.assertNotIn("Cadastrar com Google", pag)
+            self.assertNotIn("Preencher com Google", pag)
+            self.assertNotIn('checked required', pag)  # vindo do login: "Você é" fica pra escolher
             with c.session_transaction() as s:
                 s.pop("google_cadastro")
-            self.assertIn("Cadastrar com Google", c.get("/solicitar-acesso").get_data(as_text=True))
+            self.assertIn("Preencher com Google", c.get("/solicitar-acesso").get_data(as_text=True))
+            # botao do "Criar conta" leva o "Você é" escolhido e volta com ele marcado
+            c.get("/login/google", query_string={"perfil": "tecnico"})
+            with c.session_transaction() as s:
+                estado = s["google_login_state"]
+            with mock.patch.object(google_drive, "dados_do_login",
+                                   return_value={"email": "zzz.tec.google@exemplo.com", "email_verified": True, "name": "Zzz T"}):
+                c.get("/login/google/retorno", query_string={"state": estado, "code": "abc"})
+            pag = c.get("/solicitar-acesso").get_data(as_text=True)
+            self.assertIn('id="perfil_tecnico" value="tecnico" checked', pag)
+            with c.session_transaction() as s:
+                s.pop("google_cadastro")
             for email, verificado in (("zzz.repetido@exemplo.com", True), ("zzz.um@exemplo.com", False)):
                 with self.subTest(email=email):
                     r = entrar(email, verificado)
