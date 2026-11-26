@@ -2389,6 +2389,9 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             r = c.post("/admin/whatsapp/limpar-chaves")
         self.assertTrue(m.called)
         self.assertTrue(r.headers["Location"].endswith("/admin/whatsapp"))
+        with mock.patch.object(webapp.whatsapp, "get_status", return_value={"connected": True, "numero": "556696319500"}):
+            html = c.get("/admin/whatsapp").get_data(as_text=True)
+        self.assertGreater(html.index("Renovar chaves"), html.index('id="whatsapp"'))
 
     def test_sem_smtp_nao_envia(self):
         import email_envio
