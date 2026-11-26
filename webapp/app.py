@@ -8046,7 +8046,7 @@ def admin_user_subordinados(user_id):
 
 _ENDPOINTS_LIVRES_CLIENTE = {
     "static", "service_worker", "index", "login", "logout", "esqueci_senha",
-    "definir_nova_senha", "planos_publico", "cadastro", "solicitar_acesso", "verificar_usuario_cadastro", "asaas_webhook",
+    "definir_nova_senha", "planos_publico", "politica_privacidade", "cadastro", "solicitar_acesso", "verificar_usuario_cadastro", "asaas_webhook",
 }
 _CPF_CNPJ_RE = re.compile(r"\D")
 
@@ -8276,6 +8276,13 @@ def _iniciar_cobranca(user_id, plano, credito=0):
 @app.route("/planos")
 def planos_publico():
     return render_template("cliente_planos.html", planos=models.get_planos(apenas_ativos=True), recursos=models.RECURSOS_PLANO)
+
+
+@app.route("/privacidade")
+def politica_privacidade():
+    """Politica de Privacidade publica (pedido do Alan, 26/11/2026): o Google exige o link pra publicar o app
+    da copia diaria no Google Drive."""
+    return render_template("privacidade.html")
 
 
 @app.route("/cadastro", methods=["GET", "POST"])

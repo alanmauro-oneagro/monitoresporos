@@ -2117,3 +2117,10 @@ class GoogleDriveTest(unittest.TestCase):
             models.set_setting("gdrive_refresh_token", "")
             models.set_setting("gdrive_status", "")
             models.delete_virtual_farm(site)
+
+    def test_politica_privacidade_publica(self):
+        c = webapp.app.test_client()
+        r = c.get("/privacidade")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Uso Limitado", r.get_data(as_text=True))
+        self.assertIn("/privacidade", c.get("/login").get_data(as_text=True))
