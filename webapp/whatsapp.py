@@ -155,6 +155,21 @@ def request_pairing_code(phone):
         return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
 
 
+def limpar_chaves():
+    """Apaga as chaves de criptografia das conversas no bridge, sem desconectar (26/11/2026). (ok, mensagem)."""
+    if WHATSAPP_PROVIDER != "bridge":
+        return False, "So' existe no WhatsApp conectado por QR code."
+    try:
+        req = urllib.request.Request(f"{BRIDGE_URL}/limpar-chaves", data=b"{}",
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = json.load(resp)
+            return (True, f"{body.get('apagados', 0)} conversa(s) renovada(s)") if body.get("ok") \
+                else (False, body.get("error", "falha desconhecida"))
+    except Exception as exc:
+        return False, f"Servico do WhatsApp (whatsapp-bridge) nao respondeu: {exc}"
+
+
 def reset_session():
     """Desconecta o numero atual (se houver) e apaga a sessao salva --
     depois disso, `get_status()` volta a trazer um QR code/codigo de

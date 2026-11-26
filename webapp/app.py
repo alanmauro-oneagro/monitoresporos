@@ -7291,6 +7291,15 @@ def admin_whatsapp_test():
     )
 
 
+@app.route("/admin/whatsapp/limpar-chaves", methods=["POST"])
+@master_required
+def admin_whatsapp_limpar_chaves():
+    ok, msg = whatsapp.limpar_chaves()
+    flash(f"Chaves das conversas renovadas ({msg}). A próxima mensagem já sai com a criptografia nova." if ok
+          else f"Não foi possível renovar as chaves: {msg}", "success" if ok else "error")
+    return redirect(url_for("admin_whatsapp"))
+
+
 @app.route("/admin/whatsapp/reset", methods=["POST"])
 @master_required
 def admin_whatsapp_reset():
