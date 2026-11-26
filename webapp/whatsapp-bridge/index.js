@@ -313,6 +313,27 @@ app.post("/send", (req, res) => {
     })().catch((err) => res.status(500).json({ ok: false, error: String(err) }));
 });
 
+app.post("/limpar-chaves", (req, res) => {
+    // Renova a criptografia das conversas sem desconectar o numero (26/11/2026): apaga as sessoes de cada
+    // contato (session-*.json, sender-key-*.json); a credencial do aparelho (creds.json) fica. No proximo envio o
+    // WhatsApp negocia chaves novas -- resolve o "Aguardando mensagem" que continua aparecendo pra alguem.
+    let apagados = 0;
+    try {
+        if (fs.existsSync(AUTH_DIR)) {
+            fs.readdirSync(AUTH_DIR).forEach((nome) => {
+                if (/^(session-|sender-key-)/.test(nome)) {
+                    try { fs.unlinkSync(path.join(AUTH_DIR, nome)); apagados++; } catch (err) { /* ignora */ }
+                }
+            });
+        }
+        enviadas.clear();
+        console.log("Chaves das conversas limpas: " + apagados + " arquivo(s).");
+        res.json({ ok: true, apagados });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: String(err) });
+    }
+});
+
 app.post("/reset", async (req, res) => {
     // Desconecta o numero atual e limpa a sessao salva (botao "Trocar
     // numero" na tela Configuracoes > WhatsApp do app).

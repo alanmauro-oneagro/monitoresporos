@@ -2376,6 +2376,20 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
         self.assertIn("(43)99114-7595", html)
         self.assertGreater(html.index('id="pedidos"'), html.index("💬 WhatsApp"))
 
+    def test_renovar_chaves(self):
+        models.init_db()
+        webapp.app.config["TESTING"] = True
+        if not models.get_user_by_username("Zzz Whats Master"):
+            models.create_user("Zzz Whats Master", "x", is_master=True)
+        c = webapp.app.test_client()
+        with c.session_transaction() as s:
+            s["_user_id"] = str(models.get_user_by_username("Zzz Whats Master")["id"])
+            s["_fresh"] = True
+        with mock.patch.object(webapp.whatsapp, "limpar_chaves", return_value=(True, "3 conversa(s) renovada(s)")) as m:
+            r = c.post("/admin/whatsapp/limpar-chaves")
+        self.assertTrue(m.called)
+        self.assertTrue(r.headers["Location"].endswith("/admin/whatsapp"))
+
     def test_sem_smtp_nao_envia(self):
         import email_envio
         with mock.patch.dict(os.environ, {"SMTP_HOST": "", "SMTP_USER": "", "SMTP_PASSWORD": ""}):

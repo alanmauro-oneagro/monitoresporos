@@ -19,6 +19,10 @@
         <form method="post" action="{{ url_for('gmail_desconectar') }}" onsubmit="return confirm('Desconectar o e-mail?');">
             <button type="submit" class="btn btn-sm btn-outline-danger">Desconectar</button>
         </form>
+        <form method="post" action="{{ url_for('admin_whatsapp_limpar_chaves') }}" class="mt-2"
+              onsubmit="return confirm('Renovar as chaves de criptografia das conversas? O número continua conectado.');">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">🔑 Renovar chaves (mensagem em &quot;Aguardando mensagem&quot;)</button>
+        </form>
         {% elif google_ok %}
         <p class="small mb-2">Conecte a conta Google do e-mail que vai enviar (ex.: contato@oneagro.com.br). O site só
             ganha permissão para <strong>enviar</strong> e-mails -- não lê a caixa de entrada.</p>
