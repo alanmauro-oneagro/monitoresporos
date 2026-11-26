@@ -208,7 +208,7 @@
 
     <div class="form-check mb-3">
         <input class="form-check-input" type="checkbox" name="aceite" id="aceite" required>
-        <label class="form-check-label small" for="aceite">Concordo com os termos de uso e entendo que as informações são estimativas de apoio à decisão, que não substituem a avaliação de um agrônomo.</label>
+        <label class="form-check-label small" for="aceite">Concordo com os termos de uso e entendo que as informações são estimativas de apoio à decisão, que não substituem a avaliação de um agrônomo. <a href="{{ url_for('politica_privacidade') }}" target="_blank" rel="noopener">Política de Privacidade</a></label>
     </div>
     {# So' libera depois de aceitar os termos (pedido do Alan, 08/11/2026). #}
     <button class="btn btn-success w-100" type="submit" id="botao-criar" {% if not form.get('aceite') %}disabled{% endif %}>Criar conta</button>

@@ -1,0 +1,70 @@
+{% extends "cliente_base.html" %}
+{% block title %}Política de Privacidade - OneAgro App{% endblock %}
+{% block content %}
+<h1 class="titulo">Política de Privacidade</h1>
+<p class="text-muted small">Última atualização: 26/11/2026</p>
+
+<p>Esta política explica como a <strong>OneAgro</strong> trata os dados de quem usa o site e o aplicativo OneAgro
+(oneagroapp.com.br), de acordo com a Lei Geral de Proteção de Dados (Lei 13.709/2018 – LGPD).</p>
+
+<h6>1. Quais dados coletamos</h6>
+<ul>
+    <li><strong>Dados da conta:</strong> nome, usuário, celular (WhatsApp), e-mail, grupo econômico e senha (guardada
+        de forma criptografada).</li>
+    <li><strong>Dados das fazendas:</strong> nome, município, estado, localização (coordenadas), culturas, área plantada
+        e informações de manejo que você ou a equipe OneAgro cadastram.</li>
+    <li><strong>Dados de pagamento:</strong> CPF ou CNPJ e forma de pagamento, usados só para a cobrança da assinatura.
+        Os dados do cartão são digitados direto no sistema de pagamento e não ficam com a OneAgro.</li>
+    <li><strong>Contatos que recebem o relatório:</strong> nome e celular das pessoas que você indica.</li>
+    <li><strong>Dados de uso:</strong> registros técnicos de acesso e de envio de mensagens, para segurança e para
+        corrigir falhas.</li>
+</ul>
+
+<h6>2. Para que usamos</h6>
+<ul>
+    <li>Gerar os relatórios de monitoramento (esporos, clima, risco de doenças e recomendações) de cada fazenda.</li>
+    <li>Enviar os relatórios e avisos pelo WhatsApp para você e para os contatos indicados.</li>
+    <li>Cobrar e controlar a assinatura.</li>
+    <li>Atender você e melhorar o serviço.</li>
+</ul>
+
+<h6>3. Com quem compartilhamos</h6>
+<p>A OneAgro não vende dados. Compartilhamos só o necessário com os serviços que fazem o site funcionar:</p>
+<ul>
+    <li><strong>Pagamento:</strong> Asaas (cobrança da assinatura).</li>
+    <li><strong>Mensagens:</strong> o provedor de WhatsApp usado para entregar os relatórios.</li>
+    <li><strong>Clima, satélite e mapas:</strong> serviços de previsão do tempo, estações meteorológicas oficiais,
+        imagens de satélite e mapas recebem apenas as coordenadas da fazenda, sem dados pessoais.</li>
+    <li><strong>Hospedagem:</strong> o servidor onde o site e o banco de dados ficam guardados.</li>
+</ul>
+
+<h6>4. Google Drive</h6>
+<p>O site pode ser conectado à conta Google da própria OneAgro para guardar, todos os dias, uma cópia dos relatórios
+    (PDF, texto e imagens NDVI) numa pasta do Google Drive da OneAgro. Essa conexão é feita só pela equipe da OneAgro;
+    clientes não precisam conectar nenhuma conta Google. O acesso é usado apenas para encontrar essa pasta e gravar os
+    arquivos nela: o site não lê, não altera e não apaga outros arquivos do Drive, e não compartilha os dados do Google com
+    ninguém. O uso das informações recebidas das APIs do Google segue a
+    <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Política
+    de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de Uso Limitado. A conexão pode ser
+    desfeita a qualquer momento no site ou nas configurações da conta Google.</p>
+
+<h6>5. Por quanto tempo guardamos</h6>
+<p>Os dados ficam guardados enquanto a conta estiver ativa. Quando a conta é excluída, os dados pessoais são apagados,
+    exceto o que a lei obriga a manter (por exemplo, registros de cobrança).</p>
+
+<h6>6. Seus direitos</h6>
+<p>Você pode pedir a qualquer momento: confirmação de quais dados temos, cópia, correção, exclusão da conta e dos dados,
+    e revogação do consentimento. Os dados da conta e das fazendas também podem ser corrigidos no próprio aplicativo,
+    na aba Conta.</p>
+
+<h6>7. Segurança</h6>
+<p>O acesso ao site é protegido por senha e conexão criptografada (HTTPS). Cada pessoa vê só as fazendas liberadas para
+    ela.</p>
+
+<h6>8. Contato</h6>
+<p>Dúvidas ou pedidos sobre os seus dados: <strong>{{ contato_comercial.nome }}</strong> ·
+    <a href="mailto:{{ contato_comercial.email }}">{{ contato_comercial.email }}</a> ·
+    <a href="https://wa.me/{{ contato_comercial.whatsapp }}" target="_blank" rel="noopener">{{ contato_comercial.celular }}</a></p>
+
+<div class="text-center small mt-4 mb-3"><a href="{{ url_for('login') }}">Voltar</a></div>
+{% endblock %}

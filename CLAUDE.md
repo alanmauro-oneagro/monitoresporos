@@ -812,6 +812,10 @@ site tem que entrar la'.
   leitura recente = so' TXT, como no WhatsApp) e a imagem NDVI mais recente em `/NDVI` SO' quando e' nova (setting
   `gdrive_ndvi_enviados` {fazenda: id do historico}); mesmo nome no mesmo dia substitui o arquivo. Pasta achada pelo
   nome, subpasta que faltar e' criada. Resultado em `gdrive_status` (contagens + erros na tela). Teste `GoogleDriveTest`.
+  **Politica de Privacidade** publica (`/privacidade`, `politica_privacidade`, `privacidade.html`; pedido do Alan,
+  26/11/2026 -- o Google exige pra publicar o app OAuth): dados coletados, uso, compartilhamento (Asaas, WhatsApp,
+  clima/satelite, hospedagem), secao Google Drive com "Uso Limitado", LGPD e contato comercial. Link no login e no aceite
+  do cadastro; livre pro cliente (`_ENDPOINTS_LIVRES_CLIENTE`).
 - **Revisao de redundancias** (pedido do Alan, 12/11/2026): Alertas mostra so' "⏸ Sem leitura ha N
   dias" na fazenda bloqueada (o texto longo repetia em cada uma); NDVI com o formulario de CAR
   recolhido em "📎 Anexar CAR" (`<details>`); sairam o template sem uso `cliente_cadastro.html` e
