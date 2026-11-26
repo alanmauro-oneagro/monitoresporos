@@ -7010,6 +7010,12 @@ def _gmail_retorno():
     except google_drive.ErroDrive as e:
         flash(f"Não foi possível conectar o e-mail: {e}", "error")
         return redirect(url_for("admin_whatsapp"))
+    # O Google deixa desmarcar a permissao na tela de autorizacao -- sem ela, todo envio da' 403.
+    if "gmail.send" not in (resp.get("scope") or "gmail.send"):
+        google_drive.revogar(resp["refresh_token"])
+        flash("O Google não deu a permissão de enviar e-mail -- conecte de novo e MARQUE a caixa \"Enviar e-mail em "
+              "seu nome\" na tela de autorização.", "error")
+        return redirect(url_for("admin_whatsapp"))
     models.set_setting("gmail_refresh_token", resp["refresh_token"])
     models.set_setting("gmail_email", email)
     flash(f"E-mail conectado: as senhas temporárias saem de {email}.", "success")
@@ -7038,6 +7044,9 @@ def gmail_teste():
     ok, msg = email_envio.enviar(para, "OneAgro App - teste de e-mail",
                                  "Teste do OneAgro App -- se você recebeu este e-mail, a recuperação de senha por "
                                  "e-mail está funcionando.\n\nOneAgro")
+    if not ok and "insufficient authentication scopes" in msg:
+        msg = ("a conta conectada não deu a permissão de enviar e-mail. Clique em Desconectar, conecte de novo e marque "
+               "a caixa \"Enviar e-mail em seu nome\" na tela do Google.")
     flash(f"E-mail de teste enviado para {para}." if ok else f"Falha ao enviar o e-mail de teste: {msg}",
           "success" if ok else "error")
     return redirect(url_for("admin_whatsapp"))

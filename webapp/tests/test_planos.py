@@ -2383,6 +2383,18 @@ class EmailPeloGmailTest(unittest.TestCase):
                 r = c.get("/admin/google-drive/retorno", query_string={"state": estado, "code": "abc"})
             self.assertTrue(r.headers["Location"].endswith("/admin/whatsapp"))
             self.assertEqual(models.get_setting("gmail_email"), "contato@oneagro.com.br")
+            # permissao desmarcada na tela do Google = nao conecta
+            models.set_setting("gmail_email", "")
+            r = c.post("/admin/email/conectar")
+            with c.session_transaction() as s:
+                estado = s["gmail_state"]
+            with mock.patch.object(google_drive, "trocar_codigo",
+                                   return_value={"refresh_token": "rt2", "access_token": "at", "scope": "openid email"}), \
+                    mock.patch.object(google_drive, "email_do_token", return_value="contato@oneagro.com.br"), \
+                    mock.patch.object(google_drive, "revogar"):
+                c.get("/admin/google-drive/retorno", query_string={"state": estado, "code": "abc"})
+            self.assertEqual(models.get_setting("gmail_email"), "")
+            models.set_setting("gmail_email", "contato@oneagro.com.br")
             self.assertEqual(models.get_setting("gdrive_refresh_token") or "", models.get_setting("gdrive_refresh_token") or "")
             enviados = []
             with mock.patch.object(google_drive, "enviar_gmail", side_effect=lambda *a: enviados.append(a) or "id1"):
