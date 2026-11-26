@@ -2811,25 +2811,47 @@ def _email_em_segundo_plano(funcao):
     threading.Thread(target=funcao, daemon=True).start()
 
 
+_LOG_RECUPERACAO = "recuperacao_senha_log"
+
+
+def _registrar_recuperacao(usuario, canal, resultado):
+    """Ultimos pedidos do "Esqueci minha senha" pra tela Recuperação de senha (Master) -- nunca guarda a senha."""
+    try:
+        log = json.loads(models.get_setting(_LOG_RECUPERACAO) or "[]")
+    except ValueError:
+        log = []
+    log.insert(0, {"em": models._agora_cuiaba(), "usuario": usuario[:60], "canal": canal, "resultado": resultado[:200]})
+    models.set_setting(_LOG_RECUPERACAO, json.dumps(log[:20], ensure_ascii=False))
+
+
 @app.route("/esqueci-senha", methods=["GET", "POST"])
 def esqueci_senha():
-    # Senha temporaria (pedidos do Alan, 26/11/2026): usuario + e-mail OU celular do cadastro. Vai pelo WhatsApp
-    # (conectado so' pra isso, tela "WhatsApp (recuperar senha)") quando a conta tem celular; senao por e-mail.
+    # Senha temporaria (pedidos do Alan, 26/11/2026): usuario + e-mail OU celular do cadastro. Vai pelo canal DIGITADO:
+    # e-mail -> e-mail; celular -> WhatsApp (falhou = e-mail do cadastro, se houver).
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         contato = request.form.get("contato", request.form.get("email", "")).strip()
+        pelo_email = "@" in contato
+        canal = "e-mail" if pelo_email else "WhatsApp"
         chave = username.lower()
         agora = datetime.now()
         ultima = _esqueci_senha_ultima_solicitacao.get(chave)
         em_cooldown = ultima and (agora - ultima).total_seconds() < ESQUECI_SENHA_COOLDOWN_SEGUNDOS
-        row = models.get_user_by_username(username) if contato and not em_cooldown else None
-        if row and _contato_confere(row, contato):
+        row = (models.get_user_by_username(username) or models.usuario_sem_maiusculas(username)) if contato else None
+        if not row:
+            _registrar_recuperacao(username, canal, "usuário não encontrado")
+        elif not _contato_confere(row, contato):
+            _registrar_recuperacao(username, canal, f"o {canal} digitado não é o do cadastro")
+        elif em_cooldown:
+            _registrar_recuperacao(username, canal, "pedido repetido em menos de 5 minutos -- não reenviado")
+        else:
             _esqueci_senha_ultima_solicitacao[chave] = agora
             senha_temporaria = _gerar_senha_temporaria()
             models.set_user_temp_password(row["id"], senha_temporaria, SENHA_TEMPORARIA_VALIDADE_MINUTOS)
             texto = (
-                f"OneAgro App: recebemos um pedido para redefinir a sua senha ({row['username']}).\n\n"
-                f"Sua senha temporária é: {senha_temporaria}\n\n"
+                f"OneAgro App: recebemos um pedido para redefinir a sua senha.\n\n"
+                f"Usuário: {row['username']}\n"
+                f"Senha temporária: {senha_temporaria}\n\n"
                 f"Ela vale por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos e só funciona uma vez -- assim que "
                 f"você entrar com ela ({url_for('login', _external=True)}), o sistema vai pedir para criar uma "
                 f"senha nova.\n\n"
@@ -2837,22 +2859,25 @@ def esqueci_senha():
             )
             telefone = (row["telefone"] or "").strip()
             para_email = (row["email"] or "").strip()
+            usuario = row["username"]
 
             def _enviar():
-                ok, msg = False, "sem celular nem e-mail"
-                if telefone:
-                    ok, msg = whatsapp.send_whatsapp(telefone, texto)
-                if not ok and para_email:
-                    ok, msg = email_envio.enviar(para_email, "OneAgro App - senha temporária", texto + "\n\nOneAgro")
-                if not ok:
-                    # So' no log -- nunca aparece pra quem pediu (nao revela se o usuario existe).
-                    print(f"[esqueci-senha] falha ao enviar a senha temporaria de {username}: {msg}")
+                with app.app_context():
+                    ok, msg, por = False, "sem celular nem e-mail", canal
+                    if not pelo_email and telefone:
+                        ok, msg = whatsapp.send_whatsapp(telefone, texto)
+                    if not ok and para_email:
+                        por = "e-mail"
+                        ok, msg = email_envio.enviar(para_email, "OneAgro App - senha temporária", texto + "\n\nOneAgro")
+                    _registrar_recuperacao(usuario, por, f"enviado para {para_email if por == 'e-mail' else telefone}"
+                                           if ok else f"falha: {msg}")
             _email_em_segundo_plano(_enviar)
         # Mensagem SEMPRE igual, exista o usuario ou nao, confira o contato ou nao -- de proposito, pra nao dar
         # pra descobrir se um usuario existe so' pela resposta.
         flash(
-            f"Se o usuário e o contato estiverem corretos, enviamos uma senha temporária para o WhatsApp do cadastro "
-            f"(ou para o e-mail, se não houver WhatsApp), válida por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos.",
+            f"Se o usuário e o contato estiverem corretos, enviamos uma senha temporária para o "
+            f"{'e-mail' if pelo_email else 'WhatsApp'} informado, válida por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} "
+            f"minutos. Confira também a caixa de spam.",
             "success",
         )
         return redirect(url_for("login"))
@@ -7231,7 +7256,8 @@ def admin_whatsapp():
     teste e trocar numero."""
     return render_template("admin_whatsapp.html", status=whatsapp.get_status(),
                            gmail_email=models.get_setting("gmail_email") or "",
-                           google_ok=google_drive.configurado(), smtp_ok=email_envio._smtp_configurado())
+                           google_ok=google_drive.configurado(), smtp_ok=email_envio._smtp_configurado(),
+                           log_recuperacao=json.loads(models.get_setting(_LOG_RECUPERACAO) or "[]"))
 
 
 @app.route("/admin/whatsapp/status")

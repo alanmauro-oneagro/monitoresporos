@@ -4586,6 +4586,14 @@ def conta_com_contato(telefone, email="", exceto_user_id=None):
     return None
 
 
+def usuario_sem_maiusculas(username):
+    """A conta com esse usuario, sem diferenciar maiusculas ("Esqueci minha senha", 26/11/2026)."""
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM users WHERE lower(username) = lower(?)", (username.strip(),)).fetchall()
+    conn.close()
+    return rows[0] if len(rows) == 1 else None
+
+
 def username_em_uso(username):
     conn = get_db()
     row = conn.execute("SELECT 1 FROM users WHERE lower(username) = lower(?)", (username.strip(),)).fetchone()
