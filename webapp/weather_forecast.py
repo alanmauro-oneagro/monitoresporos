@@ -842,3 +842,60 @@ def get_historico_horario(lat, lon, data_inicio, data_fim):
         dia: [{"temp": v[0], "umidade": v[1], "chuva": v[2] or 0, "vento": v[3]} for v in horas]
         for dia, horas in _horas_observadas_por_dia(lat, lon, data_inicio, data_fim).items()
     }
+
+
+# "🔄 Atualizar" do Alertas (pedido do Alan, 27/11/2026): fora dos horarios das leituras (04:45/11:45/17:45) as
+# ultimas horas guardadas ainda eram PREVISAO feita na leitura anterior -- a chuva "24h" ficava parada. Estas duas
+# buscam so' os ultimos 2 dias e juntam nas horas ja guardadas (o resto da leitura da janela continua igual).
+def atualizar_horas_recentes(lat, lon):
+    chave = _chave(lat, lon)
+    with _lock:
+        registro = _carregar()["pontos"].get(chave)
+    if not registro or not registro.get("horas"):
+        return _ponto(lat, lon, salvar=False) is not None
+    params = {"latitude": lat, "longitude": lon, "hourly": _HOURLY_CAMPOS,
+              "past_days": 2, "forecast_days": 1, "timezone": "auto"}
+    try:
+        data = _abrir_json(f"{OPEN_METEO_URL}?{urllib.parse.urlencode(params)}", timeout=30)
+    except Exception:
+        return False
+    hourly = data.get("hourly", {})
+    colunas = [hourly.get(c) or [] for c in ("temperature_2m", "relative_humidity_2m", "precipitation", "wind_direction_10m")]
+    novas = {t: [col[i] if i < len(col) else None for col in colunas] for i, t in enumerate(hourly.get("time", []))}
+    if not novas:
+        return False
+    with _lock:
+        registro = dict(_store["pontos"].get(chave) or registro)
+        horas = dict(registro.get("horas") or {})
+        horas.update(novas)
+        registro["horas"] = horas
+        _store["pontos"][chave] = registro
+    return True
+
+
+def atualizar_estacao_recente(country_code, codigo, uf):
+    if not estacoes_dados.configurado(country_code):
+        return False
+    chave = f"{country_code}:{codigo}"
+    with _lock:
+        registro = _carregar()["estacoes"].get(chave)
+    if not registro or not registro.get("horas"):
+        return _estacao(country_code, codigo, uf, salvar=False) is not None
+    hoje = _agora_cuiaba().date()
+    try:
+        novas, fonte = estacoes_dados.buscar_horas(country_code, codigo, uf, (hoje - timedelta(days=1)).isoformat(),
+                                                   hoje.isoformat())
+    except Exception:
+        return False
+    with _lock:
+        registro = dict(_store["estacoes"].get(chave) or registro)
+        horas = dict(registro.get("horas") or {})
+        horas.update(novas)
+        registro.update(horas=horas, fonte=fonte)
+        _store["estacoes"][chave] = registro
+    return True
+
+
+def salvar():
+    with _lock:
+        _salvar()

@@ -1377,6 +1377,12 @@ site tem que entrar la'.
   `bioscout_fetch.fetch_recent`; agrofit = bytes baixados / processando; anatel = mapas
   feitos/total) e a pagina recarrega ao terminar. Abrir a tela com a busca ja' rodando (ex.: a
   auto-atualizacao do Alertas) ja' mostra o progresso.
+- **"🔄 Atualizar" do Alertas tambem refaz o clima das ultimas 24h** (pedido do Alan, 27/11/2026): depois da busca do
+  BioScout (progresso ate' 85%), `_atualizar_clima_agora` busca de novo SO' os ultimos 2 dias de cada coordenada de
+  clima (`weather_forecast.atualizar_horas_recentes`, junta nas horas guardadas) e de cada estacao oficial
+  (`atualizar_estacao_recente`), em paralelo (85-99%), grava e limpa `_weather_cache`. Antes, entre as leituras das
+  04:45/11:45/17:45, as ultimas horas eram a PREVISAO da leitura anterior e a "chuva 24h" ficava parada. Teste
+  `AtualizarChuva24hTest`.
 - **Estado primeiro, cidade da lista do IBGE** (pedido do Alan, 13/11/2026): no cadastro (cada Local), em
   Nova/Editar fazenda do app e em "Dados da fazenda" (Gerenciar Clientes) o Estado vem antes e a cidade vira um
   select com os municipios daquela UF (`_cidade_por_estado.html`, incluido em base.html e cliente_base.html: par

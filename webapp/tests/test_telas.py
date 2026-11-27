@@ -353,8 +353,9 @@ class TelasPorNivelTest(unittest.TestCase):
             self.assertIn("botao-atualizar", c.get("/dashboard").get_data(as_text=True))
             self.assertEqual(c.post("/dashboard/atualizar", headers={"X-Progresso": "1"}).get_json(), {"ok": True})
             self.assertTrue(chegou.wait(5))
-            self.assertEqual(c.get("/atualizacao/bioscout/status").get_json(), {"rodando": True, "pct": 50})
-            self.assertIn("Atualizando... 50%", c.get("/dashboard").get_data(as_text=True))
+            # a busca do BioScout vai ate' 85% -- o resto e' o clima das ultimas 24h (27/11/2026)
+            self.assertEqual(c.get("/atualizacao/bioscout/status").get_json(), {"rodando": True, "pct": 42})
+            self.assertIn("Atualizando... 42%", c.get("/dashboard").get_data(as_text=True))
             liberar.set()
             for _ in range(50):
                 if not c.get("/atualizacao/bioscout/status").get_json()["rodando"]:
