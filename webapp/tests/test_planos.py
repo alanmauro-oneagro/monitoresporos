@@ -2297,7 +2297,7 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             self.assertEqual(enviados, [])
             r = c.post("/esqueci-senha", data={"username": "Zzz Esqueci Email", "contato": "ZZZ.esqueci@exemplo.com"},
                        follow_redirects=True)
-            self.assertIn("ZZ***@exemplo.com", r.get_data(as_text=True))
+            self.assertIn("por e-mail para ZZ***@exemplo.com", r.get_data(as_text=True))
             self.assertEqual(len(enviados), 1)
             para, assunto, texto = enviados[0]
             self.assertEqual(para, "Zzz.Esqueci@Exemplo.com")
@@ -2324,7 +2324,10 @@ class EsqueciSenhaEmailTest(unittest.TestCase):
             c = webapp.app.test_client()
             c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "(66)99999-0012"})
             self.assertEqual(whats, [])
-            c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "(66)99999-0011"})
+            r = c.post("/esqueci-senha", data={"username": "Zzz Esqueci Whats", "contato": "(66)99999-0011"},
+                       follow_redirects=True)
+            self.assertIn("pelo WhatsApp para o celular terminado em 0011", r.get_data(as_text=True))
+            self.assertNotIn("e-mail", r.get_data(as_text=True).split("pelo WhatsApp")[1].split("</div>")[0])
             self.assertEqual(len(whats), 1)
             self.assertEqual(whats[0][0], "5566999990011")
             self.assertIn("Senha temporária", whats[0][1])

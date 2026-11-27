@@ -2936,10 +2936,13 @@ def esqueci_senha():
                     _registrar_recuperacao(usuario, por, f"enviado para {para_email if por == 'e-mail' else telefone}"
                                            if ok else f"falha: {msg}")
             _email_em_segundo_plano(_enviar)
-        destino = (_mascarar_email(contato) if pelo_email else _mascarar_celular(contato))
-        flash(f"Pronto! Enviamos uma senha temporária para {destino} -- vale por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} "
-              f"minutos. {'Confira também a caixa de spam.' if pelo_email else 'Se não chegar pelo WhatsApp, vai para o e-mail do cadastro.'}",
-              "success")
+        # Mensagem conforme o canal (pedido do Alan, 27/11/2026).
+        if pelo_email:
+            flash(f"Pronto! Enviamos a senha temporária por e-mail para {_mascarar_email(contato)}. Ela vale por "
+                  f"{SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos -- confira também a caixa de spam.", "success")
+        else:
+            flash(f"Pronto! Enviamos a senha temporária pelo WhatsApp para {_mascarar_celular(contato)}. Ela vale por "
+                  f"{SENHA_TEMPORARIA_VALIDADE_MINUTOS} minutos.", "success")
         return redirect(url_for("login"))
     return render_template("esqueci_senha.html", google_login=google_drive.configurado())
 
