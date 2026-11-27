@@ -837,7 +837,11 @@ site tem que entrar la'.
   digitou** (26/11/2026): e-mail -> e-mail; celular -> WhatsApp (falhou = e-mail do cadastro); usuario sem diferenciar
   maiusculas (`models.usuario_sem_maiusculas`); cada pedido fica em "🧾 Últimos pedidos" na tela Recuperação de senha
   (setting `recuperacao_senha_log`, 20 ultimos, `_registrar_recuperacao`: nao encontrado / contato nao confere / repetido
-  em < 5 min / enviado para X / falha -- nunca a senha). **E-mail pelo Gmail / Google
+  em < 5 min / enviado para X / falha -- nunca a senha). **Erro avisado na tela** (pedido do Alan, 27/11/2026 -- substitui
+  a resposta sempre igual): usuario nao encontrado, e-mail/celular que nao e' o do cadastro e pedido repetido em < 5 min
+  ("aguarde N minuto(s)") aparecem no proprio "Esqueci minha senha", com o que foi digitado de volta nos campos; deu
+  certo = volta pro login com "Enviamos para al***@outlook.com" / "o celular terminado em 7595"
+  (`_mascarar_email`/`_mascarar_celular`). **E-mail pelo Gmail / Google
   Workspace** (pedido do Alan, 26/11/2026; contato@oneagro.com.br e' Google Workspace; o Railway bloqueia SMTP nos planos
   menores): a tela virou "Recuperação de senha" (mesma rota `admin_whatsapp`) com o cartao "📧 E-mail": Conectar
   (`gmail_conectar`, escopo `google_drive.ESCOPO_GMAIL` = so' enviar, mesmo cliente OAuth e MESMO endereco de retorno do
