@@ -759,7 +759,7 @@ def _run_fetch_in_background():
         if BIOSCOUT_USERNAME and BIOSCOUT_PASSWORD:
             erros = bioscout_fetch.fetch_recent(
                 data_reader.DATA_DIR, BIOSCOUT_USERNAME, BIOSCOUT_PASSWORD, log=lambda msg: None,
-                progresso=lambda pct: _fetch_state.update(pct=pct), sem_permissao=sem_permissao,
+                progresso=lambda pct: _fetch_state.update(pct=int(pct * 0.85)), sem_permissao=sem_permissao,
             )
             error = "; ".join(erros)[:300] if erros else None
         else:
@@ -768,6 +768,10 @@ def _run_fetch_in_background():
                 capture_output=True, text=True,
             )
             error = None if result.returncode == 0 else (result.stderr[-300:] or result.stdout[-300:])
+        try:
+            _atualizar_clima_agora(lambda frac: _fetch_state.update(pct=85 + int(14 * frac)))
+        except Exception as exc:  # clima falhou nao estraga a busca do BioScout
+            print(f"[atualizar] clima das ultimas 24h falhou: {exc}")
         with _fetch_lock:
             _fetch_state["last_error"] = error
             _fetch_state["sem_permissao"] = sem_permissao
@@ -781,6 +785,43 @@ def _run_fetch_in_background():
             ULTIMA_BUSCA_MARCA.touch()
         except OSError:
             pass
+
+
+def _atualizar_clima_agora(progresso=None):
+    """Chuva/umidade das ultimas 24h de todas as fazendas, na hora (pedido do Alan, 27/11/2026): roda no fim do
+    "🔄 Atualizar" do Alertas. So' os ultimos 2 dias de cada coordenada e estacao oficial; limpa o cache em memoria."""
+    with app.app_context():
+        coords = _weather_coords_all()
+        pontos, estacoes = set(), set()
+        for site, latlon in coords.items():
+            if not latlon:
+                continue
+            if latlon[0] == INTERPOLACAO_SENTINEL:
+                for par in latlon[1:]:
+                    cc, codigo = par.split(":", 1)
+                    est = next((e for e in countries.get_country(cc)["station_provider"].get_estacoes()
+                                if e["codigo"] == codigo), None)
+                    if est:
+                        pontos.add((round(float(est["lat"]), 4), round(float(est["lon"]), 4)))
+            else:
+                pontos.add((round(float(latlon[0]), 4), round(float(latlon[1]), 4)))
+            oficial = _estacao_oficial_do_site(site)
+            if oficial:
+                estacoes.add(tuple(oficial))
+    tarefas = [(weather_forecast.atualizar_horas_recentes, p) for p in pontos] + \
+              [(weather_forecast.atualizar_estacao_recente, e) for e in estacoes]
+    feitas = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        for fut in concurrent.futures.as_completed([ex.submit(f, *args) for f, args in tarefas]):
+            feitas += 1
+            try:
+                fut.result()
+            except Exception:
+                pass
+            if progresso and tarefas:
+                progresso(feitas / len(tarefas))
+    weather_forecast.salvar()
+    _weather_cache.clear()
 
 
 def _start_fetch_if_not_running():

@@ -2458,3 +2458,27 @@ class EmailPeloGmailTest(unittest.TestCase):
             with mock.patch.object(google_drive, "revogar"):
                 c.post("/admin/email/desconectar")
             self.assertEqual(models.get_setting("gmail_email"), "")
+
+
+class AtualizarChuva24hTest(unittest.TestCase):
+    """"🔄 Atualizar" do Alertas busca de novo as ultimas horas de clima (pedido do Alan, 27/11/2026)."""
+
+    def test_atualiza_pontos_e_estacoes_e_limpa_cache(self):
+        models.init_db()
+        coords = {"Zzz Faz A": (-12.5, -55.7), "Zzz Faz B": (-12.5, -55.7), "Zzz Faz C": (-20.1, -54.2)}
+        pontos, estacoes = [], []
+        webapp._weather_cache["Zzz Faz A"] = (0, (-12.5, -55.7), {"chuva_24h_mm": 1})
+        oficial = {"Zzz Faz C": ("BR", "A917", "MT")}
+        with mock.patch.object(webapp, "_weather_coords_all", return_value=coords), \
+                mock.patch.object(webapp, "_estacao_oficial_do_site", side_effect=lambda s: oficial.get(s)), \
+                mock.patch.object(webapp.weather_forecast, "atualizar_horas_recentes",
+                                  side_effect=lambda lat, lon: pontos.append((lat, lon)) or True), \
+                mock.patch.object(webapp.weather_forecast, "atualizar_estacao_recente",
+                                  side_effect=lambda *a: estacoes.append(a) or True), \
+                mock.patch.object(webapp.weather_forecast, "salvar"):
+            progresso = []
+            webapp._atualizar_clima_agora(progresso.append)
+        self.assertEqual(sorted(pontos), [(-20.1, -54.2), (-12.5, -55.7)])
+        self.assertEqual(estacoes, [("BR", "A917", "MT")])
+        self.assertEqual(progresso[-1], 1.0)
+        self.assertNotIn("Zzz Faz A", webapp._weather_cache)
