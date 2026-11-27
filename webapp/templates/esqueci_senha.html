@@ -35,17 +35,17 @@
                 </div>
                 {% endif %}
                 <p class="text-muted small">
-                    Informe o seu usuário e o e-mail <strong>ou</strong> o celular do seu cadastro. Enviamos uma senha
-                    temporária para o seu WhatsApp (ou e-mail, se não houver WhatsApp), válida por 30 minutos.
+                    Informe o seu usuário e o e-mail <strong>ou</strong> o celular do seu cadastro. A senha temporária vai para o
+                    que você digitar (e-mail ou WhatsApp) e vale por 30 minutos.
                 </p>
                 <form method="post">
                     <div class="mb-3">
                         <label class="form-label" for="username">Usuário</label>
-                        <input type="text" name="username" id="username" class="form-control" autocomplete="username" required autofocus>
+                        <input type="text" name="username" id="username" class="form-control" autocomplete="username" value="{{ username or '' }}" required autofocus>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="contato">E-mail ou celular do cadastro</label>
-                        <input type="text" name="contato" id="contato" class="form-control" placeholder="voce@email.com ou (66)99999-9999" required>
+                        <input type="text" name="contato" id="contato" class="form-control" placeholder="voce@email.com ou (66)99999-9999" value="{{ contato or '' }}" required>
                     </div>
                     <button type="submit" class="btn btn-success w-100">Enviar senha temporária</button>
                 </form>

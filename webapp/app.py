@@ -2807,6 +2807,16 @@ def _contato_confere(row, contato):
     return len(digitos) >= 10 and bool(do_cadastro) and (digitos == do_cadastro or digitos[-11:] == do_cadastro[-11:])
 
 
+def _mascarar_email(email):
+    nome, _, dominio = email.partition("@")
+    return (nome[:2] + "***@" + dominio) if dominio else email
+
+
+def _mascarar_celular(numero):
+    d = re.sub(r"\D", "", numero)
+    return f"o celular terminado em {d[-4:]}" if len(d) >= 4 else "o celular informado"
+
+
 def _email_em_segundo_plano(funcao):
     threading.Thread(target=funcao, daemon=True).start()
 
@@ -2838,12 +2848,25 @@ def esqueci_senha():
         ultima = _esqueci_senha_ultima_solicitacao.get(chave)
         em_cooldown = ultima and (agora - ultima).total_seconds() < ESQUECI_SENHA_COOLDOWN_SEGUNDOS
         row = (models.get_user_by_username(username) or models.usuario_sem_maiusculas(username)) if contato else None
+        # Avisa na hora o que esta' errado (pedido do Alan, 26/11/2026): a pessoa nao fica esperando um envio que
+        # nunca vai chegar. (Antes a resposta era sempre igual, pra nao revelar se o usuario existe.)
+        erro = None
         if not row:
             _registrar_recuperacao(username, canal, "usuário não encontrado")
+            erro = "Usuário não encontrado. Confira como ele foi digitado no cadastro."
         elif not _contato_confere(row, contato):
             _registrar_recuperacao(username, canal, f"o {canal} digitado não é o do cadastro")
+            erro = (f"O {'e-mail' if pelo_email else 'celular'} digitado não é o do cadastro deste usuário. "
+                    f"Confira e tente de novo{'' if pelo_email else ' (DDD + número)'}.")
         elif em_cooldown:
             _registrar_recuperacao(username, canal, "pedido repetido em menos de 5 minutos -- não reenviado")
+            espera = max(1, int((ESQUECI_SENHA_COOLDOWN_SEGUNDOS - (agora - ultima).total_seconds()) // 60) + 1)
+            erro = (f"Já enviamos uma senha temporária há poucos minutos -- confira o {canal}"
+                    f"{' (e a caixa de spam)' if pelo_email else ''}. Para pedir outra, aguarde {espera} minuto(s).")
+        if erro:
+            flash(erro, "error")
+            return render_template("esqueci_senha.html", google_login=google_drive.configurado(),
+                                   username=username, contato=contato)
         else:
             _esqueci_senha_ultima_solicitacao[chave] = agora
             senha_temporaria = _gerar_senha_temporaria()
@@ -2872,14 +2895,10 @@ def esqueci_senha():
                     _registrar_recuperacao(usuario, por, f"enviado para {para_email if por == 'e-mail' else telefone}"
                                            if ok else f"falha: {msg}")
             _email_em_segundo_plano(_enviar)
-        # Mensagem SEMPRE igual, exista o usuario ou nao, confira o contato ou nao -- de proposito, pra nao dar
-        # pra descobrir se um usuario existe so' pela resposta.
-        flash(
-            f"Se o usuário e o contato estiverem corretos, enviamos uma senha temporária para o "
-            f"{'e-mail' if pelo_email else 'WhatsApp'} informado, válida por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} "
-            f"minutos. Confira também a caixa de spam.",
-            "success",
-        )
+        destino = (_mascarar_email(contato) if pelo_email else _mascarar_celular(contato))
+        flash(f"Pronto! Enviamos uma senha temporária para {destino} -- vale por {SENHA_TEMPORARIA_VALIDADE_MINUTOS} "
+              f"minutos. {'Confira também a caixa de spam.' if pelo_email else 'Se não chegar pelo WhatsApp, vai para o e-mail do cadastro.'}",
+              "success")
         return redirect(url_for("login"))
     return render_template("esqueci_senha.html", google_login=google_drive.configurado())
 
