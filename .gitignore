@@ -24,3 +24,4 @@ logs/
 data/open_meteo_diario.json
 data/open_meteo_diario.tmp
 webapp/backups/
+data/.ultima_busca_bioscout
